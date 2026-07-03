@@ -173,11 +173,26 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-status.spot{color:var(--blue)}
 .cp-status .cp-status-caret{font-size:9px;opacity:.55;font-family:var(--sans)}
 
-/* Undo/Skip — below the posters, above the swipe hint, close together near
-   centre rather than pushed to the edges */
-.cp-action-row{display:flex;align-items:center;justify-content:space-evenly;width:100%;padding:0;margin:-14dvh 0 0;flex-shrink:0;position:relative;z-index:2}
+/* Undo/Skip — below the posters, in normal flow (not pulled up under the
+   stage) so leftover space collects below the row instead of above it */
+.cp-action-row{display:flex;align-items:center;justify-content:space-evenly;width:100%;padding:0;margin:16px 0 0;flex-shrink:0;position:relative;z-index:2}
 .cp-action-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);cursor:pointer;touch-action:manipulation;transition:transform .12s,color .12s;background:none;border:none}
 .cp-action-btn:active{transform:scale(.85);color:rgba(255,255,255,.85)}
+/* Save & End is a session-exiting action, not a routine one like Undo/Skip
+   — de-emphasized so it can't be mistaken for an equal-weight peer */
+.cp-action-btn.cp-save{width:36px;height:36px;color:rgba(255,255,255,.32)}
+
+/* Recent-picks strip — fills the leftover space below the action row on
+   taller screens. Hidden below a minimum height rather than compressing
+   the poster stage further, which would risk clipping long titles. */
+.cp-recent-strip{width:100%;padding:0 16px;margin-top:18px;position:relative;z-index:1}
+.cp-recent-strip-label{font-size:11px;font-weight:700;letter-spacing:.04em;color:rgba(216,205,176,.4);text-transform:uppercase;margin-bottom:8px}
+.cp-recent-strip-row{display:flex;gap:8px}
+.cp-recent-strip-item{flex:1;max-width:52px;aspect-ratio:2/3;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:var(--card2);display:flex;align-items:center;justify-content:center}
+.cp-recent-strip-item img{width:100%;height:100%;object-fit:cover;display:block}
+@media (max-height:850px){
+  .cp-recent-strip{display:none}
+}
 
 /* ── Poster ── */
 .poster{width:100%;aspect-ratio:2/3;background:linear-gradient(160deg,var(--card2),var(--card));border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.55);flex-shrink:0}
@@ -332,27 +347,38 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-title-a{text-align:left}
 .cp-title-b{text-align:right}
 
-/* Stage: the two posters */
+/* Stage: the two posters. Fixed px height, not dvh — the card's actual
+   size is driven by viewport WIDTH (46vw capped in px below), which is
+   basically independent of viewport HEIGHT. Sizing this off dvh reserved
+   a block that didn't track what the card actually needed, which is what
+   caused the dead-space gap under the action row. Height is set to fit a
+   worst-case 2-line title so no film pairing can overflow it. */
 .cp-stage{
   position:relative;
   width:100%;
-  height:62dvh;
+  height:450px;
   display:flex;align-items:flex-start;justify-content:center;
-  padding-top:4dvh;
+  padding-top:20px;
   flex-shrink:0;
   z-index:1;
+}
+@media (max-height:700px){
+  .cp-stage{ height:340px; padding-top:14px; }
 }
 
 /* Each card */
 .cp-card{
   position:absolute;
   width:46vw;
-  max-width:210px;
+  max-width:200px;
   cursor:pointer;
   touch-action:none;
   user-select:none;
   transition:transform .25s cubic-bezier(.2,.8,.3,1);
   will-change:transform;
+}
+@media (max-height:700px){
+  .cp-card{ max-width:150px; }
 }
 .cp-card-a{
   left:50%;
@@ -1093,18 +1119,18 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <p class="modal-title">How do you want to compare?</p>
     <div class="msheet-top-row">
       <div class="msheet-top-btn resume" id="msheet-resume" onclick="msheetResume()">
-        <div class="msheet-top-icon">▶</div>
+        <div class="msheet-top-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"/></svg></div>
         <div class="msheet-top-name" id="msheet-resume-label">Resume</div>
         <div class="msheet-top-desc" id="msheet-resume-desc">Last settings</div>
       </div>
       <div class="msheet-top-btn random" onclick="msheetPickRandom()">
-        <div class="msheet-top-icon">🎲</div>
+        <div class="msheet-top-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg></div>
         <div class="msheet-top-name">Random</div>
         <div class="msheet-top-desc">Anything goes</div>
       </div>
     </div>
     <div class="msheet-opt" onclick="msheetPickTier()">
-      <div class="msheet-opt-icon" style="color:var(--accent);font-size:24px">★</div>
+      <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>
       <div><div class="msheet-opt-name">Tier</div><div class="msheet-opt-desc">Compare within one star rating</div></div>
     </div>
     <div class="msheet-opt" onclick="msheetPickFilm()">
@@ -1272,12 +1298,19 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <button class="cp-action-btn" id="cp-undo-btn" onclick="undoLast()" title="Undo">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>
       </button>
-      <button class="cp-action-btn" id="cp-save-btn" onclick="saveNow(this)" title="Save & end session">
+      <button class="cp-action-btn cp-save" id="cp-save-btn" onclick="saveNow(this)" title="Save & end session">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
       </button>
       <button class="cp-action-btn" onclick="skipPair()" title="Skip">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform:scaleX(-1)"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 13 12 5 20"/><polyline points="12 4 20 12 12 20"/></svg>
       </button>
+    </div>
+
+    <!-- Recent picks — last few films chosen this session. Hidden on
+         shorter screens via CSS rather than shrinking the poster stage. -->
+    <div class="cp-recent-strip" id="cp-recent-strip" style="display:none">
+      <div class="cp-recent-strip-label">Recently ranked</div>
+      <div class="cp-recent-strip-row" id="cp-recent-strip-row"></div>
     </div>
 
     <!-- Bottom bar — same frosted style as list screen, same 4 icons -->
@@ -1355,7 +1388,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       </div>
     </div>
     <div class="topbar-r">
-      <button class="nav-btn icon save-btn" id="save-btn-r" onclick="saveNow(this)" title="Save">💾</button>
+      <button class="nav-btn icon save-btn" id="save-btn-r" onclick="saveNow(this)" title="Save"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></button>
       <button class="nav-btn accent" onclick="goTo('compare')">Compare →</button>
     </div>
   </div>
@@ -1367,11 +1400,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   <div class="exp-sec" id="exp-sec">
     <p style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--dim)">Export</p>
     <div class="exp-row">
-      <button class="btn btn-green btn-sm" style="flex:1" onclick="exportList(event)">📋 Ranked List</button>
-      <button class="btn btn-blue  btn-sm" style="flex:1" onclick="exportRatings(event)">⭐ Ratings</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="exportList(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 3V2a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Ranked List</button>
+      <button class="btn btn-blue  btn-sm" style="flex:1" onclick="exportRatings(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>Ratings</button>
     </div>
     <p class="exp-note">Upload both on Letterboxd → Settings → Import &amp; Export</p>
-    <button class="btn btn-ghost btn-sm" style="width:auto;align-self:center;padding:8px 20px" onclick="exportBackup(event)">💾 Save backup</button>
+    <button class="btn btn-ghost btn-sm" style="width:auto;align-self:center;padding:8px 20px" onclick="exportBackup(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Save backup</button>
   </div>
   <div class="chip-row">
     <button class="chip on" id="f-all" onclick="setFilter('all')">Full list</button>
@@ -1406,19 +1439,19 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div class="settings-section">
       <p class="settings-label">Data</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="saveNow(null);closeModal('settings-modal')">💾 Save</button>
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportBackup();closeModal('settings-modal')">📦 Backup</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="saveNow(null);closeModal('settings-modal')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Save</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportBackup();closeModal('settings-modal')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 001 1h12a1 1 0 001-1V8"/><path d="M10 12h4"/></svg>Backup</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px">
-        <button class="btn btn-green btn-sm" style="flex:1" onclick="exportList();closeModal('settings-modal')">📋 Export Ranked List</button>
-        <button class="btn btn-blue btn-sm"  style="flex:1" onclick="exportRatings();closeModal('settings-modal')">⭐ Export Ratings</button>
+        <button class="btn btn-green btn-sm" style="flex:1" onclick="exportList();closeModal('settings-modal')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 3V2a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Export Ranked List</button>
+        <button class="btn btn-blue btn-sm"  style="flex:1" onclick="exportRatings();closeModal('settings-modal')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>Export Ratings</button>
       </div>
       <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="closeModal('settings-modal');goTo('import')">Import CSV / restore backup</button>
     </div>
     <div class="modal-divider"></div>
     <div class="settings-section">
       <p class="settings-label" style="color:var(--red)">Danger zone</p>
-      <button class="btn btn-ghost btn-sm" style="border-color:rgba(216,30,38,.3);color:var(--red)" onclick="confirmReset()">↺ Reset rankings &amp; comparisons</button>
+      <button class="btn btn-ghost btn-sm" style="border-color:rgba(216,30,38,.3);color:var(--red)" onclick="confirmReset()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/></svg>Reset rankings &amp; comparisons</button>
       <p style="font-size:11px;color:var(--dim);line-height:1.5">Keeps your films and ratings. Wipes all comparison history.</p>
     </div>
   </div>
@@ -1510,7 +1543,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <div style="display:flex;gap:8px;margin-top:14px" id="lw-exists-actions">
         <button class="btn btn-ghost btn-sm" style="flex:1" onclick="lwShowStep('pick')">← Search again</button>
         <button class="btn btn-green btn-sm" style="flex:1" onclick="lwUseExisting()">Re-rate it →</button>
-        <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;color:var(--red);border-color:rgba(192,85,85,.3)" onclick="lwDeleteExisting()">🗑</button>
+        <button class="btn btn-ghost btn-sm" style="flex:0 0 auto;color:var(--red);border-color:rgba(192,85,85,.3)" onclick="lwDeleteExisting()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/><path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg></button>
       </div>
     </div>
 
@@ -1543,7 +1576,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
         <div><div class="lw-nf-title" id="lw-choice-title"></div><div class="lw-nf-meta" id="lw-choice-meta"></div></div>
       </div>
       <div class="lw-choice-row">
-        <button class="btn btn-green btn-sm" style="flex:1" onclick="lwConfirmNow()">✓ Confirm now</button>
+        <button class="btn btn-green btn-sm" style="flex:1" onclick="lwConfirmNow()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="4 12 9 17 20 6"/></svg>Confirm now</button>
         <button class="btn btn-blue btn-sm" style="flex:1" onclick="lwStartRefine()">↕ Refine with comparisons</button>
       </div>
       <p class="modal-sub" style="text-align:center">Confirm now locks the exact spot you scrolled to. Refine runs a couple of quick comparisons to double-check.</p>
@@ -1666,7 +1699,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   <div style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:8px">
     <button class="btn btn-green" onclick="dismissSummary()">Keep going</button>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportList();dismissSummary()">📋 Export list</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="exportList();dismissSummary()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 3V2a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Export list</button>
       <button class="btn btn-ghost btn-sm" style="flex:1" onclick="dismissSummaryHome()">⌂ Home</button>
     </div>
   </div>
@@ -1901,6 +1934,7 @@ let S = {
   comparedPairs:{},  // pairKey → true (permanent)
   rivals:{},         // pairKey → {wins_a, wins_b, id_a, id_b}
   recentPairs:[],    // last 20 pair keys
+  recentWinners:[],  // last 5 winner film ids this session (not persisted)
   undoSnap:null,
   mergeMode:'merge', mode:'range', pinnedId:null,
   filter:'all', selectedTier:null,
@@ -2034,7 +2068,7 @@ function renderReconfirmBanner(){
       <div class="reconfirm-meta">Placed at #${pos} ${Math.floor((Date.now()-film.placedAt)/86400000)} days ago. Still feels right?</div>
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-green btn-sm" style="flex:1" onclick="reconfirmKeep('${film.id}')">✓ Still right</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="reconfirmKeep('${film.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="4 12 9 17 20 6"/></svg>Still right</button>
       <button class="btn btn-blue btn-sm" style="flex:1" onclick="reconfirmRefine('${film.id}')">↕ Re-check</button>
     </div>
   </div>`;
@@ -3885,7 +3919,7 @@ function openMyList(){
           <div class="rf-title">${esc(film.title)}</div>
           <div class="rf-year">${esc(film.year)} · ${starsStr(film.rating)}</div>
         </div>
-        <button class="rf-del-btn" title="Delete" onclick="confirmDeleteFromList('${film.id}',el('mylist-row-${film.id}'))">🗑</button>`;
+        <button class="rf-del-btn" title="Delete" onclick="confirmDeleteFromList('${film.id}',el('mylist-row-${film.id}'))"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13"/><path d="M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg></button>`;
       inner.appendChild(d);
     });
   }
@@ -4693,6 +4727,23 @@ function renderPair(){
   cpEnsureGenresAndCloud('a',a);
   cpEnsureGenresAndCloud('b',b);
   updateHeaderMetric();
+  cpRenderRecentStrip();
+}
+
+// Renders the "recently ranked" thumbnail strip from S.recentWinners
+// (most recent first). Hidden entirely until there's at least one pick —
+// CSS also hides it on shorter screens regardless of content.
+function cpRenderRecentStrip(){
+  const wrap=el('cp-recent-strip'),row=el('cp-recent-strip-row');
+  if(!wrap||!row)return;
+  if(!S.recentWinners.length){wrap.style.display='none';return}
+  wrap.style.display='';
+  row.innerHTML=S.recentWinners.slice().reverse().map(id=>{
+    const f=S.films.find(x=>x.id===id);
+    if(!f)return '';
+    const img=f.poster?`<img src="${f.poster}" alt="">`:'<span class="poster-ph" style="font-size:18px">🎬</span>';
+    return `<div class="cp-recent-strip-item" title="${esc(f.title).replace(/"/g,'&quot;')}">${img}</div>`;
+  }).join('');
 }
 
 function cpLoadPoster(slot,film){
@@ -4872,6 +4923,7 @@ function cpChoose(slot){
   const sl=S.films.find(f=>f.id===loser.id);if(sl){sl.score=loser.score;sl.comparisons=loser.comparisons}
   markCompared(a,b);
   S.recentPairs=[...S.recentPairs,pk(a,b)].slice(-20);
+  S.recentWinners=[...S.recentWinners,winner.id].slice(-5);
   S.totalComparisons++;S.sessionDone++;
   persist();markDirty();
   checkNewAchievements();
