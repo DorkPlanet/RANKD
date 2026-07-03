@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(where winget *)",
+      "Bash(winget install *)",
+      "PowerShell(gh auth login --hostname github.com --git-protocol https --web)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); gh auth login --hostname github.com --git-protocol https --web)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(py --version)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)"
+    ]
+  }
+}
