@@ -182,17 +182,70 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
    — de-emphasized so it can't be mistaken for an equal-weight peer */
 .cp-action-btn.cp-save{width:36px;height:36px;color:rgba(255,255,255,.32)}
 
-/* Recent-picks strip — fills the leftover space below the action row on
-   taller screens. Hidden below a minimum height rather than compressing
-   the poster stage further, which would risk clipping long titles. */
-.cp-recent-strip{width:100%;padding:0 16px;margin-top:18px;position:relative;z-index:1}
-.cp-recent-strip-label{font-size:11px;font-weight:700;letter-spacing:.04em;color:rgba(216,205,176,.4);text-transform:uppercase;margin-bottom:8px}
-.cp-recent-strip-row{display:flex;gap:8px}
-.cp-recent-strip-item{flex:1;max-width:52px;aspect-ratio:2/3;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:var(--card2);display:flex;align-items:center;justify-content:center}
-.cp-recent-strip-item img{width:100%;height:100%;object-fit:cover;display:block}
+/* Session panel — progress bar + timeline (recent picks / up next / tier
+   boundary), attached flush to the bottom bar rather than floating above
+   it. Hidden below a minimum height rather than compressing the poster
+   stage further, which would risk clipping long titles. */
+/* Matches the header/bottom-bar's own neutral tone (--nav) rather than a
+   purple tint — keeps chrome neutral and lets colour stay reserved for
+   posters/orbs/accents, and means the panel shares an identical colour
+   with the bottom bar it's flush against, not just a similar one. */
+.cp-session-panel{position:fixed;left:0;right:0;bottom:var(--bottombar-h,63px);max-width:430px;margin:0 auto;z-index:55;display:flex;flex-direction:column;background:var(--nav)}
+.cp-session-panel::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:44px;background:linear-gradient(to top,rgba(8,6,10,.92),rgba(8,6,10,.5) 40%,transparent);pointer-events:none}
 @media (max-height:700px){
-  .cp-recent-strip{display:none}
+  .cp-session-panel{display:none}
 }
+
+.cp-session-progress{padding:8px 16px 8px}
+.cp-session-progress-label{font-size:10px;color:rgba(216,205,176,.4);text-align:center;margin-bottom:5px;letter-spacing:.04em}
+.cp-session-progress-track{height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
+/* Reuses the existing shimmer sweep (already used for poster-loading
+   skeletons) plus a glowing leading-edge dot, echoing the tier divider's
+   gold text-shadow glow already established elsewhere on this screen. */
+.cp-session-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent-dk),var(--accent));border-radius:3px;transition:width .6s var(--ease);position:relative;overflow:visible}
+.cp-session-progress-fill::before{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.6) 50%,transparent 65%);background-size:250% 100%;animation:shimmer 2.4s linear infinite}
+.cp-session-progress-fill::after{content:'';position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:var(--text-hi);box-shadow:0 0 8px 2px rgba(218,165,32,.9),0 0 3px rgba(255,255,255,.7);animation:cpProgressGlowPulse 1.8s ease-in-out infinite}
+@keyframes cpProgressGlowPulse{
+  0%,100%{opacity:.7;transform:translateY(-50%) scale(.9)}
+  50%{opacity:1;transform:translateY(-50%) scale(1.2)}
+}
+
+.cp-timeline{padding:10px 16px 12px;border-top:1px solid rgba(255,255,255,.05)}
+.cp-timeline-row{display:flex;align-items:center;gap:8px;justify-content:center}
+.cp-timeline-item{flex-shrink:0;aspect-ratio:2/3;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:var(--card2);position:relative;display:flex;align-items:center;justify-content:center}
+.cp-timeline-item img{width:100%;height:100%;object-fit:cover;display:block}
+.cp-timeline-item.sz-sm{width:35px}
+.cp-timeline-item.sz-md{width:40px}
+.cp-timeline-item.sz-lg{width:46px}
+.cp-timeline-now{width:2px;align-self:stretch;background:rgba(216,205,176,.3);border-radius:1px;flex-shrink:0}
+/* "Up next" — opal-shimmer border cycling through three cool jewel tones
+   (electric indigo, teal, cyan-blue), deliberately no gold/yellow so it
+   doesn't compete visually with the tier-boundary marker's gold identity */
+.cp-timeline-next{border:1.5px solid #6C4CDB !important;animation:cpTimelineOpalShimmer 3.6s ease-in-out infinite}
+.cp-timeline-next-badge{position:absolute;top:-5px;right:-5px;width:15px;height:15px;border-radius:50%;background:#150F24;border:1.5px solid #6C4CDB;display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;z-index:2;animation:cpTimelineBadgePulse 3.6s ease-in-out infinite}
+@keyframes cpTimelineOpalShimmer{
+  0%,100%{border-color:#6C4CDB;box-shadow:0 0 10px rgba(108,76,219,.6)}
+  33%{border-color:#2DD4BF;box-shadow:0 0 10px rgba(45,212,191,.6)}
+  66%{border-color:#38BDF8;box-shadow:0 0 10px rgba(56,189,248,.6)}
+}
+@keyframes cpTimelineBadgePulse{
+  0%,100%{border-color:#6C4CDB}
+  33%{border-color:#2DD4BF}
+  66%{border-color:#38BDF8}
+}
+/* Tier-boundary marker — vertical divider matching the List screen's tier
+   divider (same gold gradient-fade + glow language, same colour), shown
+   only when the upcoming queue is about to run out of same-tier films */
+.cp-timeline-tier-divider{display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;align-self:stretch;gap:3px;padding:0 2px}
+.cp-timeline-tier-line{width:2px;flex:1;background:linear-gradient(180deg,transparent,rgba(218,165,32,.8))}
+.cp-timeline-tier-line.after{background:linear-gradient(180deg,rgba(218,165,32,.8),transparent)}
+.cp-timeline-tier-label{font-size:9px;color:#DAA520;letter-spacing:.5px;flex-shrink:0;text-shadow:0 0 8px rgba(218,165,32,.5);font-weight:700;white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
+.cp-timeline-boundary{filter:grayscale(.2) brightness(.8);border-color:rgba(218,165,32,.35) !important}
+.cp-timeline-boundary-star{position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#DAA520;color:#150F24;display:flex;align-items:center;justify-content:center;font-size:6.5px;box-shadow:0 1px 4px rgba(0,0,0,.5)}
+
+/* Superseded by .cp-session-progress above — kept in the DOM for JS
+   compatibility (renderPair still updates their content) but never shown. */
+#cp-hint,#cp-inline-progress{display:none !important}
 
 /* ── Poster ── */
 .poster{width:100%;aspect-ratio:2/3;background:linear-gradient(160deg,var(--card2),var(--card));border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.55);flex-shrink:0}
@@ -283,7 +336,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   align-items:center;justify-content:flex-start;
   padding-top:2dvh;
   min-height:100dvh;
-  padding-bottom:calc(80px + env(safe-area-inset-bottom,0px));
+  /* Reserves room for both the fixed bottom bar AND the fixed session
+     panel above it — the panel's real height is measured in JS (same
+     pattern as --bottombar-h) since it varies with content and is 0 when
+     CSS hides it on short screens. */
+  padding-bottom:calc(var(--bottombar-h,63px) + var(--cp-session-panel-h,0px));
   position:relative;
   z-index:53; /* above orbs at z-index:51 */
 }
@@ -356,19 +413,19 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-stage{
   position:relative;
   width:100%;
-  height:450px;
+  height:470px;
   display:flex;align-items:flex-start;justify-content:center;
-  padding-top:20px;
+  padding-top:40px;
   flex-shrink:0;
   z-index:1;
 }
 /* Mid-height tier (most standard phones) — smaller stage so the
    recent-picks strip still has room to show, not just on tall screens */
 @media (max-height:849px){
-  .cp-stage{ height:370px; padding-top:16px; }
+  .cp-stage{ height:386px; padding-top:32px; }
 }
 @media (max-height:700px){
-  .cp-stage{ height:340px; padding-top:14px; }
+  .cp-stage{ height:350px; padding-top:24px; }
 }
 
 /* Each card */
@@ -548,7 +605,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 /* ── LIST-HOME SCREEN (chunk 1: additive, not yet wired as default) ── */
 #listhome-screen{padding:0}
 .lh-header{display:flex;align-items:center;justify-content:center;padding:24px 16px 22px;background:#000;flex-shrink:0;position:relative;z-index:2;overflow:visible}
-.lh-header::after{content:'';position:absolute;left:0;right:0;top:100%;height:32px;background:linear-gradient(to bottom,rgba(0,0,0,.55),transparent);pointer-events:none;z-index:-1}
+/* Starts near-opaque (matching the header's own solid black) rather than
+   jumping straight to 55% — that jump was the hard seam at the header's
+   bottom edge; fading continuously from the header's own tone reads as
+   one smooth transition instead of two distinct blocks. */
+.lh-header::after{content:'';position:absolute;left:0;right:0;top:100%;height:44px;background:linear-gradient(to bottom,rgba(0,0,0,.92),rgba(0,0,0,.5) 40%,transparent);pointer-events:none;z-index:-1}
 .lh-wordmark{font-family:var(--sans);font-size:28px;font-weight:700;color:#f8de8d;letter-spacing:.1em;text-transform:uppercase}
 .rankd-bars{display:flex;gap:2px;justify-content:center;margin-top:5px}
 .rankd-bar{width:24px;height:4px;border-radius:2px}
@@ -740,6 +801,17 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 }
 .lh-header-metric-val{font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.04em}
 .lh-header-metric-lbl{font-size:11px;color:rgba(216,205,176,.4);letter-spacing:.04em}
+
+/* Shorter phones — the header's generous padding/type-size was fixed
+   regardless of available height, competing with the compare screen's
+   poster stage for room. Shrink it on short viewports instead. */
+@media (max-height:700px){
+  .lh-header{padding:12px 16px 10px}
+  .lh-wordmark{font-size:20px}
+  .rankd-bars{margin-top:3px}
+  .rankd-bar{height:3px}
+  .lh-header-metric{margin-top:3px}
+}
 
 /* Stats modal */
 .stats-section{display:flex;flex-direction:column;gap:6px}
@@ -1314,11 +1386,17 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       </button>
     </div>
 
-    <!-- Recent picks — last few films chosen this session. Hidden on
-         shorter screens via CSS rather than shrinking the poster stage. -->
-    <div class="cp-recent-strip" id="cp-recent-strip" style="display:none">
-      <div class="cp-recent-strip-label">Recently ranked</div>
-      <div class="cp-recent-strip-row" id="cp-recent-strip-row"></div>
+    <!-- Session panel — progress bar + timeline (recent picks / up next /
+         tier boundary), anchored to the bottom bar. Hidden on shorter
+         screens via CSS rather than shrinking the poster stage. -->
+    <div class="cp-session-panel" id="cp-session-panel">
+      <div class="cp-session-progress">
+        <div class="cp-session-progress-label" id="cp-session-progress-label"></div>
+        <div class="cp-session-progress-track"><div class="cp-session-progress-fill" id="cp-session-progress-fill"></div></div>
+      </div>
+      <div class="cp-timeline" id="cp-timeline">
+        <div class="cp-timeline-row" id="cp-timeline-row"></div>
+      </div>
     </div>
 
     <!-- Bottom bar — same frosted style as list screen, same 4 icons -->
@@ -4212,6 +4290,12 @@ function cpUpdateTicker(a,b){
   // causing the visible empty gap before the loop restarted.
   const block=pair.repeat(6);
   track.innerHTML=block+block;
+  // Duration was a fixed 22s regardless of content length, so longer
+  // taglines (more px to cover in the same time) scrolled visibly faster —
+  // scale duration to content width instead, for a constant reading speed.
+  const halfWidth=track.scrollWidth/2;
+  const PX_PER_SEC=50;
+  track.style.animationDuration=Math.max(14,halfWidth/PX_PER_SEC)+'s';
 }
 
 function unpin(){
@@ -4735,23 +4819,89 @@ function renderPair(){
   cpEnsureGenresAndCloud('a',a);
   cpEnsureGenresAndCloud('b',b);
   updateHeaderMetric();
-  cpRenderRecentStrip();
+  cpRenderTimeline();
 }
 
-// Renders the "recently ranked" thumbnail strip from S.recentWinners
-// (most recent first). Hidden entirely until there's at least one pick —
-// CSS also hides it on shorter screens regardless of content.
-function cpRenderRecentStrip(){
-  const wrap=el('cp-recent-strip'),row=el('cp-recent-strip-row');
-  if(!wrap||!row)return;
-  if(!S.recentWinners.length){wrap.style.display='none';return}
-  wrap.style.display='';
-  row.innerHTML=S.recentWinners.slice().reverse().map(id=>{
-    const f=S.films.find(x=>x.id===id);
-    if(!f)return '';
-    const img=f.poster?`<img src="${f.poster}" alt="">`:'<span class="poster-ph" style="font-size:18px">🎬</span>';
-    return `<div class="cp-recent-strip-item" title="${esc(f.title).replace(/"/g,'&quot;')}">${img}</div>`;
+// Renders the session panel: progress bar + timeline (recent picks / up
+// next / tier boundary). Sizes form a symmetric pyramid — smallest at
+// both ends, largest at the "now" divider in the middle.
+function cpRenderTimeline(){
+  const progLabel=el('cp-session-progress-label'),progFill=el('cp-session-progress-fill');
+  if(progLabel&&progFill){
+    const info=getProgressInfo();
+    const pct=info.total>0?Math.min(100,Math.round(info.done/info.total*100)):0;
+    progFill.style.width=pct+'%';
+    progLabel.textContent=`${info.done.toLocaleString()} of ${info.total.toLocaleString()} pairs`;
+  }
+
+  const row=el('cp-timeline-row');
+  if(!row)return;
+  if(!currentPair){row.innerHTML='';return}
+
+  const posterTile=(f,sizeCls,opacity)=>{
+    const img=f.poster?`<img src="${esc(f.poster)}" alt="" style="${opacity!=null?`opacity:${opacity}`:''}">`:'<span class="poster-ph" style="font-size:16px">🎬</span>';
+    return `<div class="cp-timeline-item ${sizeCls}" title="${esc(f.title).replace(/"/g,'&quot;')}">${img}</div>`;
+  };
+
+  // Recent picks — oldest to newest, left to right, sized so the one
+  // adjacent to "now" is largest and brightest.
+  const recentFilms=S.recentWinners.slice(-3).map(id=>S.films.find(f=>f.id===id)).filter(Boolean);
+  const recentSizes=['sz-sm','sz-md','sz-lg'].slice(3-recentFilms.length);
+  const recentOpacity={'sz-sm':.5,'sz-md':.72,'sz-lg':1};
+  const recentHtml=recentFilms.map((f,i)=>posterTile(f,recentSizes[i],recentOpacity[recentSizes[i]])).join('');
+
+  // Up next — placeholder approximation only. pickPair() re-rolls fresh
+  // (randomized, mode-dependent) each time, so this is a same-tier guess
+  // for the timeline's sake, not a guarantee of what's actually next —
+  // the real lookahead engine (pre-computing one pair ahead through
+  // pickPair() itself) is a separate follow-up.
+  const currentTier=currentPair[0].rating;
+  const excludeIds=new Set([...S.recentWinners,currentPair[0].id,currentPair[1].id]);
+  const upcomingPool=S.films.filter(f=>f.rating===currentTier&&!excludeIds.has(f.id));
+  const upcoming=upcomingPool.slice(0,3);
+  const upcomingSizes=['sz-lg','sz-md','sz-sm'];
+  const upcomingHtml=upcoming.map((f,i)=>{
+    if(i===0){
+      const img=f.poster?`<img src="${esc(f.poster)}" alt="">`:'<span class="poster-ph" style="font-size:16px">🎬</span>';
+      return `<div class="cp-timeline-item cp-timeline-next ${upcomingSizes[i]}" title="${esc(f.title).replace(/"/g,'&quot;')}"><div class="cp-timeline-next-badge">›</div>${img}</div>`;
+    }
+    return posterTile(f,upcomingSizes[i]);
   }).join('');
+
+  // Tier boundary — only surfaces once the same-tier queue is nearly
+  // exhausted, showing the weakest film of the next tier up as a concrete
+  // preview of what crossing over means. Clicking it doesn't do anything
+  // real yet (no tier-crossing engine wired up) — just says so.
+  let boundaryHtml='';
+  if(upcomingPool.length<=3){
+    const higherRatings=[...new Set(S.films.map(f=>f.rating))].filter(r=>r>currentTier).sort((a,b)=>a-b);
+    const nextTier=higherRatings[0];
+    if(nextTier!==undefined){
+      const pool=S.films.filter(f=>f.rating===nextTier).sort((a,b)=>a.score-b.score);
+      const boundaryFilm=pool[0];
+      if(boundaryFilm){
+        boundaryHtml=`
+          <div class="cp-timeline-tier-divider" onclick="toast('Tier-crossing isn\\'t wired up yet — coming with the full up-next engine')">
+            <div class="cp-timeline-tier-line"></div>
+            <div class="cp-timeline-tier-label">${nextTier}★</div>
+            <div class="cp-timeline-tier-line after"></div>
+          </div>
+          <div class="cp-timeline-item sz-sm cp-timeline-boundary" title="${esc(boundaryFilm.title).replace(/"/g,'&quot;')}">
+            ${boundaryFilm.poster?`<img src="${esc(boundaryFilm.poster)}" alt="">`:'<span class="poster-ph" style="font-size:16px">🎬</span>'}
+            <div class="cp-timeline-boundary-star">★</div>
+          </div>`;
+      }
+    }
+  }
+
+  row.innerHTML=`${recentHtml}<div class="cp-timeline-now"></div>${upcomingHtml}${boundaryHtml}`;
+
+  // Expose the panel's real rendered height (0 when CSS hides it on short
+  // screens) so .cp-arena can reserve exactly enough room — same pattern
+  // as --bottombar-h below, rather than guessing a fixed px value that
+  // could drift out of sync with actual content.
+  const panel=el('cp-session-panel');
+  if(panel)document.documentElement.style.setProperty('--cp-session-panel-h',panel.getBoundingClientRect().height+'px');
 }
 
 function cpLoadPoster(slot,film){
@@ -5226,12 +5376,17 @@ async function fetchFilmData(title,year){
 async function loadFilmData(film,slot){
   const wrap=el('poster-'+slot);if(!wrap)return;
   let data=tmdbCache[film.id]||null;
-  if(!data&&film.poster&&film.genres?.length)data={poster:film.poster,overview:film.overview||null,director:film.director||null,tagline:film.tagline||null,cast:film.cast||[],runtime:film.runtime||null,genres:film.genres||[]};
+  // Shortcut only on an explicit "we already did the real fetch" flag, not on
+  // field truthiness — a genuine "TMDb has no tagline" result and "never
+  // fetched" both look like null/undefined, so checking poster+genres alone
+  // silently skipped the real fetch forever once those two happened to be set.
+  if(!data&&film.metaFetched)data={poster:film.poster,overview:film.overview||null,director:film.director||null,tagline:film.tagline||null,cast:film.cast||[],runtime:film.runtime||null,genres:film.genres||[]};
   if(!data){
     wrap.classList.add('fetching');
     data=await fetchFilmData(film.title,film.year);
     wrap.classList.remove('fetching');
     if(data){
+      data.metaFetched=true;
       tmdbCache[film.id]=data;
       const stored=S.films.find(f=>f.id===film.id);
       if(stored)Object.assign(stored,data);Object.assign(film,data);persist();
