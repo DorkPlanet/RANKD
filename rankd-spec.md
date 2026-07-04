@@ -110,21 +110,48 @@ Source Serif 4 (headings) + Inter (functional UI). Compare screen titles: Bebas 
 
 ## Backlog — reprioritized
 
-**Not yet started:**
-1. Skip/Save/Undo positioning — shelved, needs a fresh screenshot to resume
-2. Reconsider topic-ranking completion threshold (see note above)
-3. Remove the orphaned `ranking-screen` — a whole legacy screen (HTML + `renderRanking()` + `renderRankingMap()`) with zero navigation entries anywhere, fully superseded by the current List screen. Found, not yet removed — bigger removal than the two functions cleaned up this session, deserves its own careful pass
-4. Performance pass (general, beyond the persist()/debounce fixes already done)
-5. Tutorial for first-time users
-6. Stats/gamification ideas
-7. Multi-medium support (books, music) — large scope, explicitly minimal priority
+*Reconsolidated after a dedicated backlog-building + fresh-eyes new-user UX review pass. Items below are grounded against the actual code (function/line references given where relevant), not restated from memory.*
+
+**Needs a design discussion first (not ready to just implement):**
+1. **Compare screen becomes the home/landing screen**, replacing List as the entry point, with a popup button menu shown on arrival (candidate buttons: Spotlight, Tournament, Recent additions, Director/Actor, Resume, List, Add film — open to combination). An IA change, not a small tweak: needs a decision on primary-vs-secondary button hierarchy (mirroring the current mode-sheet's square/full-width-row split), what "Recent additions" means as a mode, and List's role once it's no longer the landing screen.
+2. **Color palette feels too dark.** Current dark palette (`--bg:#150F24`, `--card:#1C1432`, `--card2:#100B21`) needs a few concrete "elegant, not-too-dark, not-light-mode" alternatives proposed and discussed, not a unilateral swap.
+3. **Core ranking mechanic needs re-examination — hasn't been touched since near the start of the project.** `clampScore()` clamps every score to stay strictly within its own tier's range regardless of comparison outcome, so a 2★-vs-5★ comparison (which Random mode can absolutely generate) updates both scores but can *never* move either film's tier — tier changes only happen through the separate Log-a-Watch promotion flow. Nothing in the UI explains this. Bundle with the "confidence" stat below: `confidencePct()` = `tierPairwisePct()` = same-tier pairs completed ÷ same-tier pairs possible — never involves cross-tier comparisons at all, which doesn't match the user's current mental model of what it measures. Needs a real look at whether the mechanic is still right and how to surface it, not a quick patch.
+
+**Ready to implement — grounded, no open design questions:**
+4. **VS badge positioning is a real bug, not just taste.** `.cp-vs` is centered on `.cp-stage` at flat `top:50%/left:50%`, but the two poster cards are offset asymmetrically (`translateX(-98%)` / `translateX(-2%)`) for the fanned look — so stage-center ≠ where the cards visually meet. Recalculate the badge's position to match the real overlap point; make it a touch smaller; give it more visual interest.
+5. **Recent-picks timeline doesn't stay centered with sparse data.** Root cause: `.cp-timeline-row` uses `justify-content:center`, so the "now" divider's screen position shifts with how much recent-pick content exists (0–3 items). Fix: reserve fixed-width slots on the recent side (even empty ones) so "now" anchors at a consistent position regardless of session history.
+6. **"NEW" badge logic is misleading.** Keys off `film.comparisons===0` globally, not scoped to the current mode/tier — a film can show "NEW" in Random mode after being thoroughly compared within its own tier via Tier mode. Recalculate to mean "hasn't been paired against anything in the *currently selected mode/tier scope* yet," using `hasCompared()`/`comparedPairs` scoped correctly per mode.
+7. **Achievements are stale.** All 10 existing achievements (`getAchievements()`) are comparison-count or tier-coverage based — none reward Tournament runs, Spotlight sessions, or Director/Actor/Genre lists. Expand so achievements reflect the app's actual current breadth, doubling as gentle mode-discovery.
+8. **Empty stars should never render.** `starsStr()` pads to 5 chars with hollow `☆` for empty slots, used at 15 call sites; `starsStrFilled()` already exists and does this correctly (filled-only) but is only used for tier dividers. Fix: make `starsStr()` stop emitting `☆` — fixes all 15 call sites at once. Check afterward for any layout relying on the fixed 5-character width for alignment.
+
+**From the fresh new-user UX review (new findings, not previously tracked):**
+- No onboarding/tutorial exists at all (reinforces existing #12 below) — a new user gets one hint line on an empty List screen, then no explanation anywhere of tiers, comparisons, or which mode to start with.
+- Mode Sheet gives no steer on where a new user should start — six modes, equal visual weight, no "start here." Resolve alongside item 1's redesign.
+- No feedback after a choice beyond moving to the next pair — no visible score nudge or confirmation of what just happened. Compounds item 3's "can't tell how this ranks things" feeling.
+- Director/Actor/Genre mode's full round-robin threshold (existing #9 below) is a real fun-vs-tedium problem: 15 films = 105 comparisons before the first payoff.
+- Log-a-Watch is a 6-step flow for "I watched a thing, rate it" — worth a pass on whether every step needs to be sequential for the common case.
+- Stats modal shows full density (hero metrics, confidence, tier breakdown, achievements, most-compared, Your Top) identically whether the user has ranked 2 films or 200 — worth a simpler first-visit state.
+
+**Carried forward, not yet started:**
+9. Reconsider topic-ranking completion threshold (see note above and in the UX review)
+10. Remove the orphaned `ranking-screen` — a whole legacy screen (HTML + `renderRanking()` + `renderRankingMap()`) with zero navigation entries anywhere, fully superseded by the current List screen. Found, not yet removed — bigger removal than the two functions cleaned up earlier, deserves its own careful pass
+11. Performance pass (general, beyond the persist()/debounce fixes already done)
+12. Tutorial for first-time users (see UX review above)
+13. Multi-medium support (books, music) — large scope, explicitly minimal priority
+
+**Resolved since this backlog was last written:**
+- Skip/Save/Undo positioning — action row repositioned, session timeline panel built.
+- "Up next" preview groundwork — recent-picks half shipped (see below for what's still deferred).
+
+**Deferred, partially built:**
+- "Up next" lookahead engine + tier-end star marker for the compare-screen timeline strip — the recent-picks half is live and wired into `renderPair()`; the upcoming-films half is still a placeholder approximation (grabs same-tier films directly rather than a real lookahead), since accurate prediction requires restructuring `pickPair()` to pre-compute one pair ahead instead of re-rolling fresh each call.
 
 **On hold, explicit decision:**
 - Popcorn logo icon — wordmark + bars only for now
 
 **Known technical debt:**
 - Leftover `layout:'v'` field in the persisted state object, dead since the layout-toggle removal earlier this project, never cleaned up
-- The orphaned `ranking-screen` (see backlog #3)
+- The orphaned `ranking-screen` (see backlog #10)
 
 ---
 
