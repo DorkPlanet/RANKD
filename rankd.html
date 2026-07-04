@@ -174,29 +174,31 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-status .cp-status-caret{font-size:9px;opacity:.55;font-family:var(--sans)}
 
 /* Undo/Skip — below the posters, in normal flow (not pulled up under the
-   stage) so leftover space collects below the row instead of above it */
-.cp-action-row{display:flex;align-items:center;justify-content:space-evenly;width:100%;padding:0;margin:16px 0 0;flex-shrink:0;position:relative;z-index:2}
+   stage) so leftover space collects below the row instead of above it.
+   Margin nudged down from 16px — sat noticeably closer to the panel
+   below (21px) than the posters above (37px), reading as "too low". */
+.cp-action-row{display:flex;align-items:center;justify-content:space-evenly;width:100%;padding:0;margin:12px 0 0;flex-shrink:0;position:relative;z-index:2}
 .cp-action-btn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);cursor:pointer;touch-action:manipulation;transition:transform .12s,color .12s;background:none;border:none}
 .cp-action-btn:active{transform:scale(.85);color:rgba(255,255,255,.85)}
 /* Save & End is a session-exiting action, not a routine one like Undo/Skip
    — de-emphasized so it can't be mistaken for an equal-weight peer */
 .cp-action-btn.cp-save{width:36px;height:36px;color:rgba(255,255,255,.32)}
 
-/* Session panel — progress bar + timeline (recent picks / up next / tier
-   boundary), attached flush to the bottom bar rather than floating above
-   it. Hidden below a minimum height rather than compressing the poster
-   stage further, which would risk clipping long titles. */
-/* Matches the header/bottom-bar's own neutral tone (--nav) rather than a
-   purple tint — keeps chrome neutral and lets colour stay reserved for
-   posters/orbs/accents, and means the panel shares an identical colour
-   with the bottom bar it's flush against, not just a similar one. */
-.cp-session-panel{position:fixed;left:0;right:0;bottom:var(--bottombar-h,63px);max-width:430px;margin:0 auto;z-index:55;display:flex;flex-direction:column;background:var(--nav)}
-.cp-session-panel::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:44px;background:linear-gradient(to top,rgba(8,6,10,.92),rgba(8,6,10,.5) 40%,transparent);pointer-events:none}
+/* Session panel — a layout wrapper only, no shared background. Its two
+   children (progress, timeline) are deliberately distinct elements, not
+   two halves of one bar: the progress bar is an inset floating card, the
+   timeline stays flush/square against the bottom bar. Hidden below a
+   minimum height rather than compressing the poster stage further, which
+   would risk clipping long titles. */
+.cp-session-panel{position:fixed;left:0;right:0;bottom:var(--bottombar-h,63px);max-width:430px;margin:0 auto;z-index:55;display:flex;flex-direction:column;gap:7px}
 @media (max-height:700px){
   .cp-session-panel{display:none}
 }
 
-.cp-session-progress{padding:8px 16px 8px}
+/* Its own inset card — margin on the sides and rounded corners set it
+   apart from the timeline's full-width, square-cornered strip below. */
+.cp-session-progress{padding:8px 14px;margin:0 14px;border-radius:12px;background:#161320;position:relative}
+.cp-session-progress::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:36px;background:linear-gradient(to top,rgba(8,6,10,.75),transparent);pointer-events:none}
 .cp-session-progress-label{font-size:10px;color:rgba(216,205,176,.4);text-align:center;margin-bottom:5px;letter-spacing:.04em}
 .cp-session-progress-track{height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
 /* Reuses the existing shimmer sweep (already used for poster-loading
@@ -210,9 +212,12 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   50%{opacity:1;transform:translateY(-50%) scale(1.2)}
 }
 
-.cp-timeline{padding:10px 16px 12px;border-top:1px solid rgba(255,255,255,.05)}
+.cp-timeline{padding:10px 16px 12px;background:#131017}
 .cp-timeline-row{display:flex;align-items:center;gap:8px;justify-content:center}
-.cp-timeline-item{flex-shrink:0;aspect-ratio:2/3;border-radius:6px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:var(--card2);position:relative;display:flex;align-items:center;justify-content:center}
+/* No border — against the panel's flat background a 1px outline read as
+   a stray box rather than part of a cohesive surface. The poster image's
+   own contrast and the rounded corners give enough definition alone. */
+.cp-timeline-item{flex-shrink:0;aspect-ratio:2/3;border-radius:6px;overflow:hidden;background:var(--card2);position:relative;display:flex;align-items:center;justify-content:center}
 .cp-timeline-item img{width:100%;height:100%;object-fit:cover;display:block}
 .cp-timeline-item.sz-sm{width:35px}
 .cp-timeline-item.sz-md{width:40px}
@@ -334,7 +339,10 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-arena{
   display:flex;flex-direction:column;
   align-items:center;justify-content:flex-start;
-  padding-top:2dvh;
+  /* Was 2dvh (~16px) — too little clearance for the header's 44px fade
+     zone to finish before the tagline ticker starts, so the text rendered
+     over the tail of the darkening gradient instead of clean black. */
+  padding-top:34px;
   min-height:100dvh;
   /* Reserves room for both the fixed bottom bar AND the fixed session
      panel above it — the panel's real height is measured in JS (same
@@ -343,6 +351,9 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   padding-bottom:calc(var(--bottombar-h,63px) + var(--cp-session-panel-h,0px));
   position:relative;
   z-index:53; /* above orbs at z-index:51 */
+}
+@media (max-height:700px){
+  .cp-arena{ padding-top:20px; }
 }
 
 @keyframes cpTitleFloat{
@@ -413,7 +424,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-stage{
   position:relative;
   width:100%;
-  height:470px;
+  height:420px;
   display:flex;align-items:flex-start;justify-content:center;
   padding-top:40px;
   flex-shrink:0;
@@ -422,7 +433,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 /* Mid-height tier (most standard phones) — smaller stage so the
    recent-picks strip still has room to show, not just on tall screens */
 @media (max-height:849px){
-  .cp-stage{ height:386px; padding-top:32px; }
+  .cp-stage{ height:378px; padding-top:32px; }
 }
 @media (max-height:700px){
   .cp-stage{ height:350px; padding-top:24px; }
