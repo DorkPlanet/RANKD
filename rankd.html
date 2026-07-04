@@ -4571,31 +4571,60 @@ function ladderPool(){
   if(!tournamentState)return[];
   return S.films.filter(f=>Math.abs(f.rating-tournamentState.tier)<=tournamentState.maxDiff);
 }
-// Lowest-scored film in the pool that hasn't locked in its position yet —
+// Freshly-imported libraries commonly seed dozens of films at the exact
+// same score (23 of 36 tied in one tier isn't unusual) — plain score
+// ordering leaves "who's next" ambiguous and unstable inside a tied
+// cluster. Sorting by score then id gives a fully deterministic total
+// order even among ties, so the same pair is consistently compared
+// instead of an arbitrary member of the cluster each time.
+function ladderStableOrder(pool){
+  return [...pool].sort((a,b)=>a.score-b.score||(a.id<b.id?-1:a.id>b.id?1:0));
+}
+// Lowest-ranked film in the pool that hasn't locked in its position yet —
 // null once every film in range has settled, which is when a tier
 // promotion should be offered.
 function ladderNextClimber(pool){
-  const unlocked=pool.filter(f=>!f.rankLocked).sort((a,b)=>a.score-b.score);
+  const unlocked=ladderStableOrder(pool).filter(f=>!f.rankLocked);
   return unlocked[0]||null;
 }
-// The film immediately above the climber in the pool's score order — its
-// only opponent. null means the climber has nothing left to beat.
+// The film immediately above the climber in stable order — its only
+// opponent. null means the climber has nothing left to beat.
 function ladderNeighborAbove(film,pool){
-  const sorted=[...pool].sort((a,b)=>a.score-b.score);
+  const sorted=ladderStableOrder(pool);
   const idx=sorted.findIndex(f=>f.id===film.id);
   if(idx===-1||idx===sorted.length-1)return null;
   return sorted[idx+1];
 }
-// A win trades score AND rating whole, rather than nudging either value —
-// this is what makes the swap an exact, deterministic one-slot move
-// instead of the old ELO-style nudge that could under- or over-shoot the
-// actual reorder (the "ranks jump around" complaint). Trading rating too
-// means a film that beats a neighbor in a different tier is promoted as
-// a direct consequence of winning, not a separate step.
-function ladderSwap(climber,opponent){
-  const score=climber.score,rating=climber.rating;
-  climber.score=opponent.score;climber.rating=opponent.rating;
-  opponent.score=score;opponent.rating=rating;
+// A win moves the climber up exactly one slot. Within the same tier, a
+// plain value-swap isn't enough when the pair sits inside a large tied
+// cluster (nudging either score by a whisker just leapfrogs the climber
+// past the *whole* cluster, or drops the loser below all of it — not a
+// clean one-slot move, which is what "close but not sequential" was).
+// The fix that actually holds regardless of cluster size: swap the pair's
+// stable-order positions, then redistribute the *entire* pool evenly
+// across the tier's numeric range in that order. Every film ends up with
+// a distinct score matching its exact rank, so ties can't recur and every
+// future win is a guaranteed single-slot move. Crossing a tier boundary
+// (ranging beyond one tier) still trades (score,rating) outright, since
+// promotion-on-win only makes sense there, not an even redistribution
+// across two different tiers' ranges.
+function ladderSwap(climber,opponent,pool){
+  if(climber.rating!==opponent.rating){
+    const score=climber.score,rating=climber.rating;
+    climber.score=opponent.score;climber.rating=opponent.rating;
+    opponent.score=score;opponent.rating=rating;
+    return;
+  }
+  const ordered=ladderStableOrder(pool);
+  const ci=ordered.findIndex(f=>f.id===climber.id);
+  const oi=ordered.findIndex(f=>f.id===opponent.id);
+  if(ci===-1||oi===-1)return;
+  [ordered[ci],ordered[oi]]=[ordered[oi],ordered[ci]];
+  const [mn,mx]=TIER_RANGE[climber.rating]||TIER_RANGE[0.5];
+  const n=ordered.length;
+  ordered.forEach((f,i)=>{
+    f.score=n===1?Math.round((mn+mx)/2):Math.round(mn+(i/(n-1))*(mx-mn));
+  });
 }
 // A win against a locked film doesn't swap automatically — the comparison
 // itself already counted (see cpChoose()), this only gates the position
@@ -4607,7 +4636,7 @@ function ladderOverrideConfirm(){
   const opponent=S.films.find(f=>f.id===pendingLadderOverride.opponentId);
   el('ladder-override-prompt').classList.remove('show');
   if(climber&&opponent){
-    ladderSwap(climber,opponent);
+    ladderSwap(climber,opponent,ladderPool());
     opponent.rankLocked=false;
     tournamentState.filmId=climber.id;
     persist();
@@ -5395,7 +5424,7 @@ function cpChoose(slot){
         el('ladder-override-prompt').classList.add('show');
         return;
       }
-      ladderSwap(climber,opponent);
+      ladderSwap(climber,opponent,ladderPool());
       tournamentState.championSide=slot;
       persist();
       setTimeout(()=>renderPair(),320);
