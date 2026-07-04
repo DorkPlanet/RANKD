@@ -159,7 +159,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-status-row{display:flex;justify-content:center;padding:8px 0 2px;flex-shrink:0}
 .cp-status-row.show{display:flex}
 .cp-status-row:not(.show){display:none}
-.cp-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--serif);font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation}
+.cp-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--serif);font-weight:700;font-size:14px;cursor:pointer;touch-action:manipulation;color:var(--accent)}
 
 /* Ticker — scrolling rating + tagline for both films currently being
    compared. Pure CSS marquee, duplicated content for a seamless loop. */
@@ -169,8 +169,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-ticker-item .stars{color:var(--accent);letter-spacing:1px}
 .cp-ticker-item .sep{opacity:.4}
 @keyframes cpTickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.cp-status.tier{color:var(--accent)}
-.cp-status.spot{color:var(--blue)}
 .cp-status .cp-status-caret{font-size:9px;opacity:.55;font-family:var(--sans)}
 
 /* Undo/Skip — below the posters, in normal flow (not pulled up under the
@@ -197,8 +195,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 
 /* Its own inset card — margin on the sides and rounded corners set it
    apart from the timeline's full-width, square-cornered strip below. */
-.cp-session-progress{padding:8px 14px;margin:0 14px;border-radius:12px;background:#161320;position:relative}
-.cp-session-progress::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:36px;background:linear-gradient(to top,rgba(8,6,10,.75),transparent);pointer-events:none}
+.cp-session-progress{padding:8px 14px;margin:0 14px;border-radius:12px;background:transparent;position:relative}
 .cp-session-progress-label{font-size:10px;color:rgba(216,205,176,.4);text-align:center;margin-bottom:5px;letter-spacing:.04em}
 .cp-session-progress-track{height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden}
 /* Reuses the existing shimmer sweep (already used for poster-loading
@@ -287,11 +284,12 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .d-title{font-family:var(--serif);font-size:17px;font-weight:700;line-height:1.2;color:var(--text-hi);flex-shrink:0}
 .d-tagline{font-family:var(--serif);font-style:italic;font-size:11px;color:rgba(215,198,160,.9);line-height:1.4;flex-shrink:0;padding-left:8px;border-left:2px solid rgba(218,165,32,.4)}
 .d-genres{display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0}
-.genre-chip{padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:rgba(218,165,32,.1);border:1px solid rgba(218,165,32,.22);color:var(--amber);white-space:nowrap}
+.genre-chip{padding:3px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:rgba(218,165,32,.1);border:1px solid rgba(218,165,32,.22);color:var(--amber);white-space:nowrap;cursor:pointer}
 .d-meta{font-size:11px;color:rgba(245,238,220,.75);flex-shrink:0;line-height:1.5}
 .d-syn{font-size:11px;color:rgba(245,238,220,.88);line-height:1.55;flex-shrink:0;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
 .d-cast{display:flex;flex-wrap:wrap;gap:4px;flex-shrink:0}
-.cast-chip{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;background:var(--blue-dim);border:1px solid rgba(90,130,232,.2);color:var(--blue);white-space:nowrap}
+.cast-chip{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;background:var(--blue-dim);border:1px solid rgba(90,130,232,.2);color:var(--blue);white-space:nowrap;cursor:pointer}
+.director-tag{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:2px;text-decoration-color:rgba(216,205,176,.4)}
 .d-matchup{font-size:10px;font-weight:700;letter-spacing:.04em;flex-shrink:0;padding:4px 8px;border-radius:5px;align-self:flex-start}
 .d-matchup.first{background:rgba(100,120,136,.1);color:var(--dim);border:1px solid var(--border)}
 .d-matchup.rematched{background:var(--green-dim);color:var(--green);border:1px solid rgba(0,163,163,.2)}
@@ -424,7 +422,10 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-stage{
   position:relative;
   width:100%;
-  height:420px;
+  /* Shrinks by however tall the status row currently is — that row sits
+     above the stage and isn't always present, so without this its 30-38px
+     pushes the action row straight into the fixed session panel below. */
+  height:calc(420px - var(--cp-status-row-h,0px));
   display:flex;align-items:flex-start;justify-content:center;
   padding-top:40px;
   flex-shrink:0;
@@ -433,10 +434,10 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 /* Mid-height tier (most standard phones) — smaller stage so the
    recent-picks strip still has room to show, not just on tall screens */
 @media (max-height:849px){
-  .cp-stage{ height:378px; padding-top:32px; }
+  .cp-stage{ height:calc(378px - var(--cp-status-row-h,0px)); padding-top:32px; }
 }
 @media (max-height:700px){
-  .cp-stage{ height:350px; padding-top:24px; }
+  .cp-stage{ height:calc(350px - var(--cp-status-row-h,0px)); padding-top:24px; }
 }
 
 /* Each card */
@@ -497,6 +498,22 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   100%{text-shadow:0 0 16px rgba(255,45,140,.85),0 0 30px rgba(255,45,140,.4)}
 }
 #cp-card-b .cp-poster-wrap{animation-delay:3.8s}
+/* Current list rank — corner chip anchored to the poster's own top-left,
+   not added to the card's document flow (.cp-stage has a fixed height
+   tuned per device-height tier, so growing the card taller risks
+   overlapping the action row below it). Echoes the circular champion
+   badge already used on this same card rather than the list screen's
+   rectangular porthole, since a small round chip reads cleaner sitting
+   directly on a poster corner. */
+.cp-rank-badge{
+  position:absolute;top:8px;left:8px;
+  display:flex;align-items:center;justify-content:center;
+  min-width:26px;height:26px;padding:0 7px;
+  background:rgba(8,6,10,.88);border:1.5px solid rgba(255,255,255,.28);border-radius:13px;
+  box-shadow:0 2px 8px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);
+  font-family:var(--serif);font-size:12px;font-weight:700;color:var(--accent);
+  z-index:2;pointer-events:none;
+}
 .cp-poster{
   width:100%;
   aspect-ratio:2/3;
@@ -575,23 +592,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   border-radius:2px;transition:width .6s var(--ease);
 }
 
-@keyframes vsGlimmer{
-  0%,100%{box-shadow:0 0 0 2px rgba(218,165,32,.3),0 0 16px rgba(218,165,32,.2),0 2px 8px rgba(0,0,0,.6)}
-  50%{box-shadow:0 0 0 2px rgba(218,165,32,.8),0 0 28px rgba(218,165,32,.5),0 2px 8px rgba(0,0,0,.6)}
-}
-/* VS badge */
-.cp-vs{
-  position:absolute;top:50%;left:50%;
-  transform:translate(-50%,-50%);
-  width:42px;height:42px;border-radius:50%;
-  background:var(--nav);
-  border:1.5px solid rgba(218,165,32,.6);
-  display:flex;align-items:center;justify-content:center;
-  font-size:11px;font-weight:800;letter-spacing:.08em;
-  color:rgba(238,225,195,.9);z-index:10;
-  animation:vsGlimmer 2.5s ease-in-out infinite;
-}
-
 
 /* Mode row — in normal flow inside arena, above the bottom bar padding */
 .cp-controls{
@@ -642,9 +642,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .lh-row::after{content:'';position:absolute;bottom:0;left:5%;right:5%;height:1px;background:linear-gradient(90deg,transparent,rgba(215,198,160,.22) 30%,rgba(215,198,160,.28) 50%,rgba(215,198,160,.22) 70%,transparent)}
 .lh-row.no-divider::after{display:none}
 .lh-row:active{background:rgba(218,165,32,.06)}
-.lh-row.lh-gold{background:rgba(255,215,0,.04);border-bottom-color:rgba(255,215,0,.12)}
-.lh-row.lh-silver{background:rgba(190,200,215,.03);border-bottom-color:rgba(190,200,215,.1)}
-.lh-row.lh-bronze{background:rgba(212,131,56,.03);border-bottom-color:rgba(212,131,56,.1)}
 
 @keyframes posterJiggle{
   0%{transform:rotate(-4deg)}
@@ -734,19 +731,27 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
   text-shadow:0 0 12px rgba(218,165,32,.4);
 }
 
-/* Tier-crossing prompt — same modal-sheet style as existing confirm dialogs */
-#lh-tier-prompt{position:fixed;top:0;left:0;right:0;bottom:var(--bottombar-h,64px);z-index:90;background:rgba(0,0,0,.12);display:flex;align-items:flex-end;justify-content:center;opacity:0;visibility:hidden;pointer-events:none;overflow:hidden;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear .28s}
-#lh-tier-prompt.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear 0s}
-#lh-tier-prompt .sheet{width:100%;max-width:430px;background:var(--nav);border-radius:20px 20px 0 0;padding:24px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 48px rgba(0,0,0,.65),0 -4px 16px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.04);transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.3,1)}
-#lh-tier-prompt.show .sheet{transform:translateY(0)}
+/* Bottom-sheet confirm dialog — shared by the tier-crossing prompt and the
+   tag-click-to-rank prompt, so both stay visually identical by construction
+   rather than by copy-pasted CSS. */
+.bottom-confirm-sheet{position:fixed;top:0;left:0;right:0;bottom:var(--bottombar-h,64px);z-index:90;background:rgba(0,0,0,.12);display:flex;align-items:flex-end;justify-content:center;opacity:0;visibility:hidden;pointer-events:none;overflow:hidden;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear .28s}
+.bottom-confirm-sheet.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear 0s}
+.bottom-confirm-sheet .sheet{width:100%;max-width:430px;background:var(--nav);border-radius:20px 20px 0 0;padding:24px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 -12px 48px rgba(0,0,0,.65),0 -4px 16px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.04);transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+.bottom-confirm-sheet.show .sheet{transform:translateY(0)}
 
 .lh-row-wrap .lh-row{margin-bottom:0;transition:transform .32s cubic-bezier(.2,.7,.3,1),opacity .32s ease}
 .lh-row-wrap .lh-row.lh-swiping{transition:none}
 .lh-swipe-reveal{position:absolute;inset:0;display:flex;align-items:center;pointer-events:none;z-index:0;transition:opacity .18s ease;opacity:0}
 .lh-swipe-reveal.lh-reveal-delete{justify-content:flex-end;padding-right:24px;background:linear-gradient(90deg,transparent 20%,rgba(200,40,40,.92) 60%)}
-.lh-swipe-reveal.lh-reveal-spotlight{justify-content:flex-start;padding-left:24px;background:linear-gradient(90deg,rgba(90,130,232,.92) 40%,transparent 80%)}
+.lh-swipe-reveal.lh-reveal-spotlight{justify-content:flex-start;padding-left:24px;background:linear-gradient(90deg,rgba(218,165,32,.92) 40%,transparent 80%)}
 .lh-swipe-reveal.show{opacity:1}
 .lh-swipe-reveal .reveal-symbol{font-size:24px;color:#fff;line-height:1}
+.lh-swipe-reveal .reveal-symbol svg{display:block}
+.lh-reveal-spotlight .reveal-symbol{animation:lhSparkleTwinkle 1s ease-in-out infinite}
+@keyframes lhSparkleTwinkle{
+  0%,100%{transform:scale(1);text-shadow:0 0 8px rgba(255,255,255,.6)}
+  50%{transform:scale(1.18);text-shadow:0 0 16px rgba(255,255,255,.95),0 0 26px rgba(218,165,32,.8)}
+}
 
 /* Inline delete confirm shown after a committed swipe-left, replacing the row content */
 .lh-row-delconfirm{padding:14px}
@@ -826,6 +831,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 
 /* Stats modal */
 .stats-section{display:flex;flex-direction:column;gap:6px}
+.stats-low-data-hint{font-size:12px;color:rgba(216,205,176,.4);text-align:center;padding:4px 8px;line-height:1.5}
 .stats-section-title{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(216,205,176,.45);margin-bottom:2px}
 .stats-hero{display:flex;gap:10px;margin-bottom:4px}
 .stats-hero-cell{flex:1;background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px 12px;text-align:center}
@@ -1240,7 +1246,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 </div>
 
 <!-- DRAG-TO-REORDER: Tier-crossing confirmation prompt -->
-<div id="lh-tier-prompt">
+<div id="lh-tier-prompt" class="bottom-confirm-sheet">
   <div class="sheet">
     <div class="modal-handle"></div>
     <p style="font-size:16px;font-weight:700;color:var(--text-hi)" id="lh-tier-prompt-title"></p>
@@ -1248,6 +1254,20 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" style="flex:1" onclick="lhDragDeclineTier()">No, keep as <span id="lh-tier-prompt-keep"></span></button>
       <button class="btn btn-green btn-sm" style="flex:1" onclick="lhDragConfirmTier()">Yes, update</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tag-click confirmation — tapping a genre/actor/director tag offers to
+     start a scoped ranking session for that category. -->
+<div id="tag-rank-prompt" class="bottom-confirm-sheet">
+  <div class="sheet">
+    <div class="modal-handle"></div>
+    <p style="font-size:16px;font-weight:700;color:var(--text-hi)" id="tag-rank-prompt-title"></p>
+    <p style="font-size:13px;color:var(--dim);line-height:1.6" id="tag-rank-prompt-sub"></p>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="tagRankCancel()">Cancel</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="tagRankConfirm()">Start Ranking</button>
     </div>
   </div>
 </div>
@@ -1348,9 +1368,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 
     <!-- Poster stage -->
     <div class="cp-stage" id="cp-stage">
-      <!-- VS badge -->
-      <div class="cp-vs">VS</div>
-
       <!-- Left poster -->
       <div class="cp-card cp-card-a" id="cp-card-a"
         oncontextmenu="return false"
@@ -1364,6 +1381,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <div class="cp-new-badge" id="cp-new-a">NEW</div>
           <div class="cp-swipe-glow cp-glow-left" id="cp-glow-a"></div>
           <div class="poster cp-poster" id="poster-a"><span class="poster-ph">🎬</span></div>
+          <div class="cp-rank-badge" id="cp-rank-a"></div>
         </div>
       </div>
 
@@ -1380,6 +1398,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <div class="cp-new-badge" id="cp-new-b">NEW</div>
           <div class="cp-swipe-glow cp-glow-right" id="cp-glow-b"></div>
           <div class="poster cp-poster" id="poster-b"><span class="poster-ph">🎬</span></div>
+          <div class="cp-rank-badge" id="cp-rank-b"></div>
         </div>
       </div>
     </div>
@@ -1389,8 +1408,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <button class="cp-action-btn" id="cp-undo-btn" onclick="undoLast()" title="Undo">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>
       </button>
-      <button class="cp-action-btn cp-save" id="cp-save-btn" onclick="saveNow(this)" title="Save & end session">
+      <button class="cp-action-btn cp-save" id="cp-save-btn" onclick="saveNow(this)" title="Save">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+      </button>
+      <button class="cp-action-btn" onclick="stopSession()" title="Stop session">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
       </button>
       <button class="cp-action-btn" onclick="skipPair()" title="Skip">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 13 12 5 20"/><polyline points="12 4 20 12 12 20"/></svg>
@@ -1469,51 +1491,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div id="tier-banner-lbl"></div>
   </div>
 
-</div>
-
-<!-- RANKING -->
-<div id="ranking-screen" class="screen">
-  <div class="topbar">
-    <div style="display:flex;flex-direction:column;align-items:flex-start">
-      <span class="wordmark">Rankd<span class="wordmark-sub">my list</span></span>
-      <div class="rankd-bars sm">
-        <div class="rankd-bar" style="background:#D81E26"></div>
-        <div class="rankd-bar" style="background:#DAA520"></div>
-        <div class="rankd-bar" style="background:#00A3A3"></div>
-        <div class="rankd-bar" style="background:#1E3A8A"></div>
-        <div class="rankd-bar" style="background:#6B4E9E"></div>
-      </div>
-    </div>
-    <div class="topbar-r">
-      <button class="nav-btn icon save-btn" id="save-btn-r" onclick="saveNow(this)" title="Save"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></button>
-      <button class="nav-btn accent" onclick="goTo('compare')">Compare →</button>
-    </div>
-  </div>
-  <div class="stats-bar">
-    <div class="stat-cell"><div class="stat-n" id="s-films">0</div><div class="stat-l">Films</div></div>
-    <div class="stat-cell"><div class="stat-n" id="s-comps">0</div><div class="stat-l">Compared</div></div>
-    <div class="stat-cell"><div class="stat-n" id="s-conf">0%</div><div class="stat-l">Confidence</div></div>
-  </div>
-  <div class="exp-sec" id="exp-sec">
-    <p style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--dim)">Export</p>
-    <div class="exp-row">
-      <button class="btn btn-green btn-sm" style="flex:1" onclick="exportList(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M9 3V2a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>Ranked List</button>
-      <button class="btn btn-blue  btn-sm" style="flex:1" onclick="exportRatings(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>Ratings</button>
-    </div>
-    <p class="exp-note">Upload both on Letterboxd → Settings → Import &amp; Export</p>
-    <button class="btn btn-ghost btn-sm" style="width:auto;align-self:center;padding:8px 20px" onclick="exportBackup(event)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>Save backup</button>
-  </div>
-  <div class="chip-row">
-    <button class="chip on" id="f-all" onclick="setFilter('all')">Full list</button>
-    <button class="chip"    id="f-top" onclick="setFilter('top')">Export list</button>
-    <button class="chip"    id="f-adj" onclick="setFilter('adj')">Rating changes</button>
-    <button class="chip"    id="f-new" onclick="setFilter('new')">Not yet compared<span class="new-dot"></span></button>
-  </div>
-  <div class="scroll-body" id="rank-list"></div>
-  <div class="list-foot" style="display:flex;gap:8px">
-    <button class="btn btn-ghost" style="flex:1" onclick="goTo('import')">Import CSV</button>
-    <button class="btn btn-ghost" style="flex:1" onclick="goTo('list')">⌂ Home</button>
-  </div>
 </div>
 
 <!-- SETTINGS MODAL -->
@@ -1763,18 +1740,22 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <div class="stats-section-title">Confidence</div>
       <div id="stats-confidence"></div>
     </div>
+    <!-- Hidden until there's enough data for these to mean anything —
+         all-zero tier bars / all-locked achievements / a "most compared"
+         list of one film aren't useful on a near-empty first visit. -->
+    <p class="stats-low-data-hint" id="stats-low-data-hint" style="display:none">Keep comparing to unlock tier breakdown, achievements, and more.</p>
     <!-- Tier breakdown -->
-    <div class="stats-section">
+    <div class="stats-section" id="stats-tiers-section">
       <div class="stats-section-title">By Tier</div>
       <div id="stats-tiers"></div>
     </div>
     <!-- Achievements -->
-    <div class="stats-section">
+    <div class="stats-section" id="stats-achievements-section">
       <div class="stats-section-title">Achievements</div>
       <div class="achievement-grid" id="stats-achievements"></div>
     </div>
     <!-- Most compared -->
-    <div class="stats-section">
+    <div class="stats-section" id="stats-topfilms-section">
       <div class="stats-section-title">Most Compared</div>
       <div id="stats-top-films"></div>
     </div>
@@ -1900,7 +1881,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 const STORAGE_KEY = 'rankd-v1';
 const LIST_CAP    = 2000;
 const TMDB_KEY    = '630395eded5cc3ad09997b49bce640c7';
-const RECENCY_DAYS = 60; // flag films rated within this many days
 
 // Tier ranges: star rating → [min, max] score
 const TIER_RANGE = {
@@ -2034,13 +2014,15 @@ let S = {
   recentWinners:[],  // last 5 winner film ids this session (not persisted)
   undoSnap:null,
   mergeMode:'merge', mode:'range', pinnedId:null,
-  filter:'all', selectedTier:null,
+  selectedTier:null,
   homeMode:'range', rangeSteps:0,
   sessionDone:0, sessionSnap:null,
   layout:'v',
   slotInQueue:[],          // film ids imported but not yet placed via Log a Watch
   provisionalEnabled:true, // global toggle for recency-bias reconfirm
   savedTopicLists:[],      // {id,label,name,filmIds (ranked order),createdAt}
+  completedTournaments:0,
+  canResume:true, // false after Stop — cleared again once a new mode starts
 };
 let currentPair = null;
 let lhDetailFilmId = null;
@@ -2051,6 +2033,19 @@ let pinnedSide = 'a'; // which side the Spotlight pinned film last rendered on
 // Director/Actor/Genre ranking — fully isolated from the main film scores.
 // null when inactive. Never touches S.films directly.
 let topicRankState = null; // {label, scores:{filmId:num}, comparedPairs:{}, recentPairs:[]}
+// Only one ranking mode should ever be "live" at once. Every function that
+// commits to starting a mode calls this first — otherwise pickPair() and
+// cpUpdateStatus() (which both check tournamentState/topicRankState before
+// anything else) keep honoring a mode the user just left, since navigating
+// within the compare screen (not away from it) never triggers goTo()'s
+// leave-compare cleanup.
+function clearCompetingModeState(){
+  tournamentState=null;
+  topicRankState=null;
+  // Starting any mode means there's now a real "last used settings" to
+  // resume later — re-enables Resume after a prior Stop suppressed it.
+  S.canResume=true;
+}
 const tmdbCache = {};
 
 /* ════════════════════════════════
@@ -2066,6 +2061,8 @@ function persist(){
     provisionalEnabled: S.provisionalEnabled,
     unlockedAchs: S.unlockedAchs||{},
     savedTopicLists: S.savedTopicLists||[],
+    completedTournaments: S.completedTournaments||0,
+    canResume: S.canResume,
   });
   try{ localStorage.setItem(STORAGE_KEY, p) }catch(e){}
   try{ localStorage.setItem('final-cut-v5', p) }catch(e){} // migration compat
@@ -2112,7 +2109,6 @@ function goTo(name){
   if(name==='compare') {
     renderPair();
   }
-  if(name==='ranking') renderRanking();
   if(name==='list')    { renderListHome(); lhRegisterUserActivity(); }
   if(name==='import'){
     const saved=loadSaved();
@@ -2208,6 +2204,7 @@ function reconfirmRefine(filmId){
 function startSession(evt){
   addRipple(evt);
   if(!S.films.length){toast('Import your films first');return}
+  clearCompetingModeState();
   S.mode=S.homeMode; S.sessionDone=0;
   S.sessionSnap={};
   S.films.forEach(f=>{S.sessionSnap[f.id]={score:f.score,rating:f.rating}});
@@ -2620,12 +2617,12 @@ function lwRenderRefineSide(slot,film,posLabel){
   el('title-'+slot).textContent=film.title;
   const tagEl=el('tag-'+slot);if(tagEl)tagEl.textContent=film.tagline?`"${film.tagline}"`:'';
   const genreEl=el('genres-'+slot);
-  if(genreEl)genreEl.innerHTML=film.genres?.length?film.genres.map(g=>`<span class="genre-chip">${esc(g)}</span>`).join(''):'';
+  if(genreEl)genreEl.innerHTML=film.genres?.length?film.genres.map(g=>`<span class="genre-chip" onclick="tagClickConfirm('genre','${esc(g).replace(/'/g,"\\'")}')">${esc(g)}</span>`).join(''):'';
   const metaEl=el('meta-'+slot);
   if(metaEl){const p=[film.year];if(film.runtime)p.push(film.runtime+'m');if(film.director)p.push('dir. '+film.director);metaEl.textContent=p.join(' · ')}
   const synEl=el('syn-'+slot);if(synEl)synEl.textContent=film.overview||'';
   const castEl=el('cast-'+slot);
-  if(castEl)castEl.innerHTML=film.cast?.length?film.cast.map(n=>`<span class="cast-chip">${esc(n)}</span>`).join(''):'';
+  if(castEl)castEl.innerHTML=film.cast?.length?film.cast.map(n=>`<span class="cast-chip" onclick="tagClickConfirm('cast','${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`).join(''):'';
   const posterWrap=el('poster-'+slot);if(posterWrap&&!film.poster)posterWrap.innerHTML='<span class="poster-ph">🎬</span>';
   loadFilmData(film,slot);
 }
@@ -2825,10 +2822,9 @@ function renderListHome(){
   ranked.forEach((film,i)=>{
     const gp=i+1;
     let pCls='';
-    let rowGlowCls='';
-    if(gp===1){pCls='gold';rowGlowCls=' lh-gold'}
-    else if(gp===2){pCls='silver';rowGlowCls=' lh-silver'}
-    else if(gp===3){pCls='bronze';rowGlowCls=' lh-bronze'}
+    if(gp===1)pCls='gold';
+    else if(gp===2)pCls='silver';
+    else if(gp===3)pCls='bronze';
     else if(gp<=10)pCls='top10';
 
     // Inject a subtle tier boundary line when the star rating changes.
@@ -2846,11 +2842,11 @@ function renderListHome(){
     html+=`<div class="lh-drop-indicator" id="lh-drop-${gp}"></div>
     <div class="lh-row-wrap" id="lh-wrap-${film.id}" data-rank="${gp}"
       ontouchstart="lhDragTouchStart(event,'${film.id}')" ontouchmove="lhDragTouchMove(event)" ontouchend="lhDragTouchEnd(event)">
-      <div class="lh-swipe-reveal lh-reveal-delete" id="lh-reveal-del-${film.id}"><span class="reveal-symbol">✕</span></div>
+      <div class="lh-swipe-reveal lh-reveal-delete" id="lh-reveal-del-${film.id}"><span class="reveal-symbol"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span></div>
       <div class="lh-swipe-reveal lh-reveal-spotlight" id="lh-reveal-spot-${film.id}"><span class="reveal-symbol">✦</span></div>
-      <div class="lh-row${rowGlowCls}${precedesBoundary?' no-divider':''}" id="lh-row-${film.id}" data-pos="${gp}" data-film-id="${film.id}"
+      <div class="lh-row${precedesBoundary?' no-divider':''}" id="lh-row-${film.id}" data-pos="${gp}" data-film-id="${film.id}"
         ontouchstart="lhSwipeStart(event,'${film.id}')" ontouchmove="lhSwipeMove(event,'${film.id}')" ontouchend="lhSwipeEnd(event,'${film.id}')"
-        onclick="lhRowTap(event,'${film.id}')">
+        onclick="lhRowTap(event,'${film.id}')" onanimationend="this.style.animation='none'">
         <div class="lh-poster${film.poster?'':' lh-needs-poster'}" id="lh-poster-${film.id}" data-film-id="${film.id}">${posterInner}</div>
         <div class="lh-body">
           <div class="lh-title"><span class="lh-title-inner">${esc(film.title)}</span></div>
@@ -2864,6 +2860,9 @@ function renderListHome(){
     // #10 is clearly the last film inside the top 10, not the first one past it).
     // Milestone banners removed
   });
+  // One more indicator after the final row — without it, dragging past
+  // the last item had nowhere to show the drop line.
+  html+=`<div class="lh-drop-indicator" id="lh-drop-${ranked.length+1}"></div>`;
   listEl.innerHTML=html;
   lhSetupPosterObserver();
   updateHeaderMetric();
@@ -3152,14 +3151,14 @@ function openFilmDetail(filmId,rowY){
   el('stars-detail').textContent=starsStr(film.rating);
   const tagEl=el('tag-detail');if(tagEl)tagEl.textContent=film.tagline?`"${film.tagline}"`:'';
   const genreEl=el('genres-detail');
-  if(genreEl)genreEl.innerHTML=film.genres?.length?film.genres.map(g=>`<span class="genre-chip">${esc(g)}</span>`).join(''):'';
+  if(genreEl)genreEl.innerHTML=film.genres?.length?film.genres.map(g=>`<span class="genre-chip" onclick="tagClickConfirm('genre','${esc(g).replace(/'/g,"\\'")}')">${esc(g)}</span>`).join(''):'';
   const metaEl=el('meta-detail');
   if(metaEl){const p=[film.year];if(film.runtime)p.push(film.runtime+'m');metaEl.textContent=p.join(' · ')}
   const dirEl=el('director-detail');
-  if(dirEl)dirEl.textContent=film.director||'';
+  if(dirEl)dirEl.innerHTML=film.director?`<span class="director-tag" onclick="tagClickConfirm('director','${esc(film.director).replace(/'/g,"\\'")}')">${esc(film.director)}</span>`:'';
   const synEl=el('syn-detail');if(synEl)synEl.textContent=film.overview||'';
   const castEl=el('cast-detail');
-  if(castEl)castEl.innerHTML=film.cast?.length?film.cast.map(n=>`<span class="cast-chip">${esc(n)}</span>`).join(''):'';
+  if(castEl)castEl.innerHTML=film.cast?.length?film.cast.map(n=>`<span class="cast-chip" onclick="tagClickConfirm('cast','${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`).join(''):'';
   const wrap=el('poster-detail');if(wrap&&!film.poster)wrap.innerHTML='<span class="poster-ph">🎬</span>';
   const modal=el('detail-modal');
   const sheet=modal?.querySelector('.modal-sheet');
@@ -3206,6 +3205,7 @@ function closeFilmDetail(evt){
 function lhSpotlightFromSwipe(filmId){
   const film=S.films.find(f=>f.id===filmId);
   if(!film)return;
+  clearCompetingModeState();
   S.pinnedId=film.id;S.mode='spot';S.homeMode='spot';
   const st=el('spot-title');if(st)st.textContent='Film: '+film.title;
   const sb=el('spot-banner');if(sb)sb.classList.add('show');
@@ -3731,6 +3731,10 @@ function openModeSheet(){
     }
     resumeDesc.textContent=desc;
   }
+  // Stop explicitly ends a session — don't offer to resume it until a new
+  // mode has actually been started again (cleared in clearCompetingModeState).
+  const resumeRow=el('msheet-resume')?.closest('.msheet-top-row');
+  if(resumeRow)resumeRow.style.display=S.canResume?'':'none';
   // First-time steer: with zero comparisons made, six modes give a new
   // user no signal on where to start. Tournament gives a clearer
   // beginning/middle/end structure than open-ended comparing, so it's the
@@ -3854,10 +3858,43 @@ function startTopicRanking(){
   const ids=(btn?.dataset.filmIds||'').split(',').filter(Boolean);
   if(ids.length<2)return;
   const label=el('topic-search')?.value.trim()||topicSelectedGenre||'Selection';
-  const scores={};ids.forEach(id=>scores[id]=0);
-  topicRankState={label,filmIds:ids,scores,comparedPairs:{},recentPairs:[]};
   closeModal('topic-modal');
+  beginTopicRanking(label,ids);
+}
+
+// Shared entry point into Director/Actor/Genre ranking — both the topic
+// search modal and the tag-click-to-rank flow land here.
+function beginTopicRanking(label,filmIds){
+  const scores={};filmIds.forEach(id=>scores[id]=0);
+  clearCompetingModeState();
+  topicRankState={label,filmIds,scores,comparedPairs:{},recentPairs:[]};
   goTo('compare');
+}
+
+// Tag-click-to-rank — clicking a genre/actor/director tag anywhere offers
+// to start a scoped ranking session for every film sharing that tag.
+let pendingTagRank=null;
+function tagClickConfirm(type,value){
+  const matches=type==='genre'?S.films.filter(f=>(f.genres||[]).includes(value))
+    :type==='cast'?S.films.filter(f=>(f.cast||[]).includes(value))
+    :S.films.filter(f=>f.director===value);
+  if(matches.length<2){toast(`Need at least 2 films tagged "${value}" to rank this category`);return}
+  const typeLabel=type==='genre'?'genre':type==='cast'?'actor':'director';
+  pendingTagRank={label:value,filmIds:matches.map(f=>f.id)};
+  el('tag-rank-prompt-title').textContent=`Rank by ${typeLabel}: "${value}"?`;
+  el('tag-rank-prompt-sub').textContent=`Starts a separate ranking session for the ${matches.length} films tagged with this ${typeLabel} — apart from your main tiers.`;
+  el('tag-rank-prompt').classList.add('show');
+}
+function tagRankConfirm(){
+  if(!pendingTagRank)return;
+  el('tag-rank-prompt').classList.remove('show');
+  closeFilmDetail();
+  beginTopicRanking(pendingTagRank.label,pendingTagRank.filmIds);
+  pendingTagRank=null;
+}
+function tagRankCancel(){
+  el('tag-rank-prompt').classList.remove('show');
+  pendingTagRank=null;
 }
 
 function topicPairKey(idA,idB){return[idA,idB].sort().join('|')}
@@ -3947,6 +3984,7 @@ function saveTopicList(){
     filmIds:pendingTopicSave.filmIds,
     createdAt:Date.now(),
   });
+  checkNewAchievements();
   persist();
   toast(`"${name}" saved ✓`);
   pendingTopicSave=null;
@@ -4114,6 +4152,7 @@ function startTournament(tier){
   const group=S.films.filter(f=>f.rating===tier).sort((a,b)=>a.score-b.score);
   if(group.length<2){toast(`Need at least 2 films in the ${tier}★ tier to start a tournament`);return}
   const champion=group[0];
+  clearCompetingModeState();
   tournamentState={championId:champion.id,queue:group.slice(1).map(f=>f.id),tier,championSide:'a'};
   S.sessionDone=0;S.sessionSnap={};
   S.films.forEach(f=>{S.sessionSnap[f.id]={score:f.score,rating:f.rating}});
@@ -4149,6 +4188,8 @@ function tournamentAdvanceTier(){
 function tournamentEnd(){
   const champion=S.films.find(f=>f.id===tournamentState?.championId);
   tournamentState=null;
+  S.completedTournaments=(S.completedTournaments||0)+1;
+  checkNewAchievements();
   persist();
   if(champion)toast(`🏆 ${champion.title} is the tier champion!`);
   showSessionSummary();
@@ -4200,6 +4241,7 @@ function selectTier(r){
   const tl=el('settings-tier-lbl');if(tl)tl.textContent=r===null?'All ratings':r+'★ films';
   if(S.mode!=='range')return;
   if(el('compare-screen')?.classList.contains('active')){
+    clearCompetingModeState();
     renderPair();
   }else{
     startSession({currentTarget:document.body,clientX:0,clientY:0});
@@ -4235,6 +4277,7 @@ function renderPickerList(q){
 }
 function pinFilm(film){
   if(!film)return;
+  clearCompetingModeState();
   S.pinnedId=film.id;S.mode='spot';S.homeMode='spot';
   el('spot-title').textContent='Film: '+film.title;
   el('spot-banner').classList.add('show');
@@ -4250,31 +4293,47 @@ function pinFilm(film){
 // Drives the quiet status text above the poster stage — only shown when
 // the current comparison scope is actually narrowed (a specific tier or
 // a pinned film), since the broad default state needs no explanation.
+// One consistent template for every mode — leading icon, label, progress
+// fraction, and a caret only where tapping actually reopens a picker
+// (Range/Spotlight). Previously each mode built its own markup from
+// scratch (different icon styles, an arbitrary gold/blue split with no
+// real meaning, some with a caret/counter and some without).
 function cpUpdateStatus(){
   const row=el('cp-status-row');const status=el('cp-status');
   if(!row||!status)return;
+  const render=(icon,label,done,total,tappable)=>{
+    status.className='cp-status';
+    const caret=tappable?' <span class="cp-status-caret">▾</span>':'';
+    const iconPart=icon?`${icon} `:'';
+    status.innerHTML=`${iconPart}${label} · ${done}/${total}${caret}`;
+    row.classList.add('show');
+  };
   if(topicRankState){
     const total=topicRankState.filmIds.length*(topicRankState.filmIds.length-1)/2;
     const done=Object.keys(topicRankState.comparedPairs).length;
-    status.className='cp-status spot';
-    status.innerHTML=`🔍 ${esc(topicRankState.label)} · ${done}/${total}`;
-    row.classList.add('show');
+    render('🔍',esc(topicRankState.label),done,total,false);
   }else if(tournamentState){
-    status.className='cp-status tier';
-    status.innerHTML=`👑 ${tournamentState.tier}★ tier · ${tournamentState.queue.length} left`;
-    row.classList.add('show');
+    const total=S.films.filter(f=>f.rating===tournamentState.tier).length-1;
+    const done=total-tournamentState.queue.length;
+    render('👑',starsStrFilled(tournamentState.tier),done,total,false);
   }else if(S.mode==='range'&&S.selectedTier!==null){
-    status.className='cp-status tier';
-    status.innerHTML=`★ ${S.selectedTier}★ tier <span class="cp-status-caret">▾</span>`;
-    row.classList.add('show');
+    const g=S.films.filter(f=>f.rating===S.selectedTier);
+    const total=g.length*(g.length-1)/2;
+    const done=countDonePairs(g);
+    render('',starsStrFilled(S.selectedTier),done,total,true);
   }else if(S.mode==='spot'&&S.pinnedId){
     const pf=S.films.find(f=>f.id===S.pinnedId);
-    status.className='cp-status spot';
-    status.innerHTML=`${pf?esc(pf.title):'Film'} <span class="cp-status-caret">▾</span>`;
-    row.classList.add('show');
+    const opps=pf?S.films.filter(f=>f.id!==pf.id&&f.rating===pf.rating):[];
+    const done=pf?opps.filter(f=>hasCompared(pf,f)).length:0;
+    render('🎯',pf?esc(pf.title):'Film',done,opps.length,true);
   }else{
     row.classList.remove('show');
   }
+  // .cp-arena's bottom padding only reserves room for the fixed bottom bar
+  // and session panel — it has no idea this row just grew the content
+  // above them, so without this it pushes the action row straight into
+  // the reserved zone whenever the status row is showing.
+  document.documentElement.style.setProperty('--cp-status-row-h',row.getBoundingClientRect().height+'px');
 }
 
 function cpStatusTap(){
@@ -4322,6 +4381,13 @@ function unpin(){
 function pk(a,b){ return [a.id,b.id].sort().join('|') }
 function hasCompared(a,b){ return !!S.comparedPairs[pk(a,b)] }
 function markCompared(a,b){ S.comparedPairs[pk(a,b)]=true }
+// The raw lifetime comparisons counter is global — a film promoted into a
+// new tier via Log a Watch would wrongly read as "not new" there even
+// though it's never faced any of its peers in that tier. "New" should mean
+// "hasn't been compared against any current tier-peer yet."
+function isNewInTier(film){
+  return !S.films.some(f=>f.id!==film.id&&f.rating===film.rating&&hasCompared(film,f));
+}
 function avgComps(arr){ return arr.reduce((s,f)=>s+f.comparisons,0)/arr.length }
 
 // Weighted random pick — films with fewer comparisons get more weight
@@ -4489,23 +4555,6 @@ function updateRivals(winner, loser){
   if(r.id_a===winner.id) r.wins_a++; else r.wins_b++;
 }
 
-function getRival(film){
-  // Find the film this one has been compared against most
-  let best=null, bestTotal=0;
-  for(const [key,r] of Object.entries(S.rivals)){
-    if(r.id_a!==film.id&&r.id_b!==film.id)continue;
-    const total=r.wins_a+r.wins_b;
-    if(total>bestTotal){bestTotal=total;best={key,r,total}}
-  }
-  if(!best||best.total<2)return null;
-  const r=best.r;
-  const rivalId=r.id_a===film.id?r.id_b:r.id_a;
-  const rivalFilm=S.films.find(f=>f.id===rivalId);
-  if(!rivalFilm)return null;
-  const filmWins=r.id_a===film.id?r.wins_a:r.wins_b;
-  const rivalWins=best.total-filmWins;
-  return{film:rivalFilm,filmWins,rivalWins,total:best.total};
-}
 
 /* ════════════════════════════════
    RANKING & CONFIDENCE
@@ -4548,17 +4597,21 @@ function getAchievements(){
     for(let i=0;i<films.length;i++)for(let j=i+1;j<films.length;j++)if(!S.comparedPairs[pk(films[i],films[j])])return false;
     return true;
   }).length;
+  const tournaments=S.completedTournaments||0;
+  const topicLists=S.savedTopicLists?.length||0;
   return[
-    {id:'first_cut',   icon:'🎬',name:'First Cut',     desc:'Make your first comparison',    unlocked:comps>=1},
-    {id:'on_a_roll',   icon:'⚡',name:'On a Roll',     desc:'50 comparisons',                 unlocked:comps>=50},
-    {id:'century',     icon:'🏆',name:'Century',        desc:'100 comparisons',                unlocked:comps>=100},
-    {id:'five_hundred',icon:'💎',name:'Five Hundred',   desc:'500 comparisons',                unlocked:comps>=500},
-    {id:'thousand',    icon:'🌟',name:'Thousand',       desc:'1,000 comparisons',              unlocked:comps>=1000},
-    {id:'tier_master', icon:'🎯',name:'Tier Master',    desc:'Fully resolve one tier',         unlocked:tiersCompleted>=1},
-    {id:'completionist',icon:'👑',name:'Completionist', desc:'Resolve 3 tiers fully',          unlocked:tiersCompleted>=3},
-    {id:'half_way',    icon:'📊',name:'Half Way',       desc:'50% of films ranked',            unlocked:oncePct>=50},
-    {id:'nearly_there',icon:'🚀',name:'Nearly There',   desc:'75% of films ranked',            unlocked:oncePct>=75},
-    {id:'all_in',      icon:'✨',name:'All In',         desc:'Every film compared at least once',unlocked:oncePct>=100},
+    {id:'first_cut',   icon:'🎬',name:'First Cut',     desc:'Make your first comparison',    unlocked:comps>=1,          progress:comps>=1?null:`${comps}/1`},
+    {id:'on_a_roll',   icon:'⚡',name:'On a Roll',     desc:'50 comparisons',                 unlocked:comps>=50,         progress:comps>=50?null:`${comps}/50`},
+    {id:'century',     icon:'🏆',name:'Century',        desc:'100 comparisons',                unlocked:comps>=100,        progress:comps>=100?null:`${comps}/100`},
+    {id:'five_hundred',icon:'💎',name:'Five Hundred',   desc:'500 comparisons',                unlocked:comps>=500,        progress:comps>=500?null:`${comps}/500`},
+    {id:'thousand',    icon:'🌟',name:'Thousand',       desc:'1,000 comparisons',              unlocked:comps>=1000,       progress:comps>=1000?null:`${comps}/1,000`},
+    {id:'tier_master', icon:'🎯',name:'Tier Master',    desc:'Fully resolve one tier',         unlocked:tiersCompleted>=1, progress:tiersCompleted>=1?null:`${tiersCompleted}/1 tiers`},
+    {id:'completionist',icon:'👑',name:'Completionist', desc:'Resolve 3 tiers fully',          unlocked:tiersCompleted>=3, progress:tiersCompleted>=3?null:`${tiersCompleted}/3 tiers`},
+    {id:'half_way',    icon:'📊',name:'Half Way',       desc:'50% of films ranked',            unlocked:oncePct>=50,       progress:oncePct>=50?null:`${oncePct}%/50%`},
+    {id:'nearly_there',icon:'🚀',name:'Nearly There',   desc:'75% of films ranked',            unlocked:oncePct>=75,       progress:oncePct>=75?null:`${oncePct}%/75%`},
+    {id:'all_in',      icon:'✨',name:'All In',         desc:'Every film compared at least once',unlocked:oncePct>=100,    progress:oncePct>=100?null:`${oncePct}%/100%`},
+    {id:'champion',    icon:'🏅',name:'Champion',       desc:'Complete a Tournament run',      unlocked:tournaments>=1,    progress:tournaments>=1?null:`${tournaments}/1`},
+    {id:'curator',     icon:'📚',name:'Curator',        desc:'Save a Director/Actor/Genre list',unlocked:topicLists>=1,    progress:topicLists>=1?null:`${topicLists}/1`},
   ];
 }
 
@@ -4621,6 +4674,14 @@ function openStatsModal(){
   if(el('stats-modal')?.classList.contains('show')){closeModal('stats-modal');return}
   closeAllDrawers();
   if(!S.films.length){toast('Import your films first');return}
+  // Tier breakdown / achievements / most-compared are all noise on a
+  // near-empty first visit — an all-zero tier bar, all-locked achievements,
+  // and a "most compared" film with one comparison don't tell you anything.
+  const hasEnoughData=S.totalComparisons>=10;
+  ['stats-tiers-section','stats-achievements-section','stats-topfilms-section'].forEach(id=>{
+    const sec=el(id);if(sec)sec.style.display=hasEnoughData?'':'none';
+  });
+  const hint=el('stats-low-data-hint');if(hint)hint.style.display=hasEnoughData?'none':'';
   const ranked=rankedFilms();
   const conf=confidencePct();
   const oncePct=filmsComparedOncePct();
@@ -4682,27 +4743,8 @@ function openStatsModal(){
     </div>`;
   }).join('');
 
-  // Achievements
-  const comps=S.totalComparisons;
-  const tiersCompleted=HS.filter(r=>{
-    const films=S.films.filter(f=>f.rating===r);
-    if(films.length<2)return false;
-    for(let i=0;i<films.length;i++)for(let j=i+1;j<films.length;j++)if(!S.comparedPairs[pk(films[i],films[j])])return false;
-    return true;
-  }).length;
-
-  const achievements=[
-    {icon:'🎬',name:'First Cut',desc:'Make your first comparison',unlocked:comps>=1,progress:comps>=1?null:`${comps}/1`},
-    {icon:'⚡',name:'On a Roll',desc:'50 comparisons',unlocked:comps>=50,progress:comps>=50?null:`${comps}/50`},
-    {icon:'🏆',name:'Century',desc:'100 comparisons',unlocked:comps>=100,progress:comps>=100?null:`${comps}/100`},
-    {icon:'💎',name:'Five Hundred',desc:'500 comparisons',unlocked:comps>=500,progress:comps>=500?null:`${comps}/500`},
-    {icon:'🌟',name:'Thousand',desc:'1,000 comparisons',unlocked:comps>=1000,progress:comps>=1000?null:`${comps}/1,000`},
-    {icon:'🎯',name:'Tier Master',desc:'Fully resolve one tier',unlocked:tiersCompleted>=1,progress:tiersCompleted>=1?null:`${tiersCompleted}/1 tiers`},
-    {icon:'👑',name:'Completionist',desc:'Resolve 3 tiers fully',unlocked:tiersCompleted>=3,progress:tiersCompleted>=3?null:`${tiersCompleted}/3 tiers`},
-    {icon:'📊',name:'Half Way',desc:'50% of films ranked',unlocked:oncePct>=50,progress:oncePct>=50?null:`${oncePct}%/50%`},
-    {icon:'🚀',name:'Nearly There',desc:'75% of films ranked',unlocked:oncePct>=75,progress:oncePct>=75?null:`${oncePct}%/75%`},
-    {icon:'✨',name:'All In',desc:'Every film compared at least once',unlocked:oncePct>=100,progress:oncePct>=100?null:`${oncePct}%/100%`},
-  ];
+  // Achievements — single source of truth, shared with the unlock-popup system
+  const achievements=getAchievements();
 
   el('stats-achievements').innerHTML=achievements.map(a=>`
     <div class="achievement${a.unlocked?' unlocked':''}">
@@ -4725,31 +4767,6 @@ function openStatsModal(){
 
   renderTopicListsSection();
   el('stats-modal').classList.add('show');
-}
-
-/* ════════════════════════════════
-   RATING SUGGESTIONS
-   Flag when a film has drifted to
-   top/bottom 50pts of its tier
-   after 5+ comparisons
-════════════════════════════════ */
-function getRatingSuggestion(film){
-  if(film.comparisons<5)return null;
-  const mn=tierMin(film.rating), mx=tierMax(film.rating);
-  const range=mx-mn;
-  if(film.score>=mx-50&&film.rating<5) return 'up';
-  if(film.score<=mn+50&&film.rating>0.5) return 'down';
-  return null;
-}
-
-/* ════════════════════════════════
-   RECENCY BIAS
-════════════════════════════════ */
-function isRecent(film){
-  if(!film.date)return false;
-  const d=new Date(film.date);
-  if(isNaN(d))return false;
-  return (Date.now()-d.getTime())<RECENCY_DAYS*24*60*60*1000;
 }
 
 /* ════════════════════════════════
@@ -4789,10 +4806,16 @@ function renderPair(){
     const badgeTitle=tournamentState?'Reigning champion':'Focus film';
     const badgeA=cardA.querySelector('.cp-champion-badge');if(badgeA)badgeA.title=badgeTitle;
     const badgeB=cardB.querySelector('.cp-champion-badge');if(badgeB)badgeB.title=badgeTitle;
-    // Ghost "NEW" badge — visible confirmation that a film with zero
-    // comparisons is actually being surfaced, not just weighted-and-hoped-for.
-    el('cp-new-a')?.classList.toggle('show',a.comparisons===0);
-    el('cp-new-b')?.classList.toggle('show',b.comparisons===0);
+    // Ghost "NEW" badge — visible confirmation that a film with no
+    // comparisons against its current tier-peers is actually being
+    // surfaced, not just weighted-and-hoped-for.
+    el('cp-new-a')?.classList.toggle('show',isNewInTier(a));
+    el('cp-new-b')?.classList.toggle('show',isNewInTier(b));
+    // Current list rank, shown beneath each poster during a duel.
+    const ranked=rankedFilms();
+    const rankA=el('cp-rank-a'),rankB=el('cp-rank-b');
+    if(rankA)rankA.textContent=ranked.indexOf(a)+1;
+    if(rankB)rankB.textContent=ranked.indexOf(b)+1;
   }
 
   // Load posters and titles
@@ -4852,21 +4875,36 @@ function cpRenderTimeline(){
   };
 
   // Recent picks — oldest to newest, left to right, sized so the one
-  // adjacent to "now" is largest and brightest.
+  // adjacent to "now" is largest and brightest. Always reserve 3 slots
+  // (padding with invisible placeholders when history is sparse) so the
+  // "now" divider anchors at a consistent position instead of drifting
+  // with however much session history happens to exist yet.
   const recentFilms=S.recentWinners.slice(-3).map(id=>S.films.find(f=>f.id===id)).filter(Boolean);
-  const recentSizes=['sz-sm','sz-md','sz-lg'].slice(3-recentFilms.length);
+  const recentSizes=['sz-sm','sz-md','sz-lg'];
   const recentOpacity={'sz-sm':.5,'sz-md':.72,'sz-lg':1};
-  const recentHtml=recentFilms.map((f,i)=>posterTile(f,recentSizes[i],recentOpacity[recentSizes[i]])).join('');
+  const recentPad=3-recentFilms.length;
+  const recentPlaceholders=recentSizes.slice(0,recentPad).map(sz=>`<div class="cp-timeline-item ${sz}" style="visibility:hidden"></div>`).join('');
+  const recentHtml=recentPlaceholders+recentFilms.map((f,i)=>posterTile(f,recentSizes[recentPad+i],recentOpacity[recentSizes[recentPad+i]])).join('');
 
-  // Up next — placeholder approximation only. pickPair() re-rolls fresh
-  // (randomized, mode-dependent) each time, so this is a same-tier guess
-  // for the timeline's sake, not a guarantee of what's actually next —
-  // the real lookahead engine (pre-computing one pair ahead through
-  // pickPair() itself) is a separate follow-up.
+  // Up next. Tournament mode's queue order is genuinely deterministic —
+  // whoever wins each round, queue[1]/[2]/[3] are exactly who's challenged
+  // next. queue[0] is excluded here since that's the opponent already in
+  // the current duel (see pickPair()'s tournament branch), not "upcoming".
+  // Every other mode (range/spot/topic) picks its next pair with real
+  // randomization at choice-time, so there is no true "next" to preview
+  // yet — those still show a same-tier guess for the timeline's sake,
+  // not a guarantee.
   const currentTier=currentPair[0].rating;
-  const excludeIds=new Set([...S.recentWinners,currentPair[0].id,currentPair[1].id]);
-  const upcomingPool=S.films.filter(f=>f.rating===currentTier&&!excludeIds.has(f.id));
-  const upcoming=upcomingPool.slice(0,3);
+  let upcoming,upcomingRemaining;
+  if(tournamentState){
+    upcoming=tournamentState.queue.slice(1,4).map(id=>S.films.find(f=>f.id===id)).filter(Boolean);
+    upcomingRemaining=tournamentState.queue.length-1;
+  }else{
+    const excludeIds=new Set([...S.recentWinners,currentPair[0].id,currentPair[1].id]);
+    const upcomingPool=S.films.filter(f=>f.rating===currentTier&&!excludeIds.has(f.id));
+    upcoming=upcomingPool.slice(0,3);
+    upcomingRemaining=upcomingPool.length;
+  }
   const upcomingSizes=['sz-lg','sz-md','sz-sm'];
   const upcomingHtml=upcoming.map((f,i)=>{
     if(i===0){
@@ -4874,14 +4912,14 @@ function cpRenderTimeline(){
       return `<div class="cp-timeline-item cp-timeline-next ${upcomingSizes[i]}" title="${esc(f.title).replace(/"/g,'&quot;')}"><div class="cp-timeline-next-badge">›</div>${img}</div>`;
     }
     return posterTile(f,upcomingSizes[i]);
-  }).join('');
+  }).join('')+upcomingSizes.slice(upcoming.length).map(sz=>`<div class="cp-timeline-item ${sz}" style="visibility:hidden"></div>`).join('');
 
   // Tier boundary — only surfaces once the same-tier queue is nearly
   // exhausted, showing the weakest film of the next tier up as a concrete
   // preview of what crossing over means. Clicking it doesn't do anything
   // real yet (no tier-crossing engine wired up) — just says so.
   let boundaryHtml='';
-  if(upcomingPool.length<=3){
+  if(upcomingRemaining<=3){
     const higherRatings=[...new Set(S.films.map(f=>f.rating))].filter(r=>r>currentTier).sort((a,b)=>a-b);
     const nextTier=higherRatings[0];
     if(nextTier!==undefined){
@@ -5082,7 +5120,7 @@ function cpChoose(slot){
   el('cp-card-'+slot)?.classList.add('chosen');
   el('cp-card-'+(slot==='a'?'b':'a'))?.classList.add('unchosen');
   // Undo snap
-  S.undoSnap={films:JSON.parse(JSON.stringify(S.films)),rivals:JSON.parse(JSON.stringify(S.rivals)),comparedPairs:{...S.comparedPairs},totalComparisons:S.totalComparisons,sessionDone:S.sessionDone};
+  S.undoSnap={films:JSON.parse(JSON.stringify(S.films)),rivals:JSON.parse(JSON.stringify(S.rivals)),comparedPairs:{...S.comparedPairs},totalComparisons:S.totalComparisons,sessionDone:S.sessionDone,recentPairs:[...S.recentPairs],recentWinners:[...S.recentWinners]};
   updateScores(winner,loser);
   updateRivals(winner,loser);
   const sw=S.films.find(f=>f.id===winner.id);if(sw){sw.score=winner.score;sw.wins=winner.wins;sw.comparisons=winner.comparisons}
@@ -5172,6 +5210,8 @@ function undoLast(){
   S.comparedPairs  = S.undoSnap.comparedPairs;
   S.totalComparisons = S.undoSnap.totalComparisons;
   S.sessionDone    = S.undoSnap.sessionDone;
+  S.recentPairs    = S.undoSnap.recentPairs;
+  S.recentWinners  = S.undoSnap.recentWinners;
   S.undoSnap       = null;
   persist();renderPair();toast('Undone ✓');
 }
@@ -5415,106 +5455,10 @@ async function loadFilmData(film,slot){
   const metaEl=el('meta-'+slot);
   if(metaEl&&data){const p=[film.year];if(data.runtime)p.push(data.runtime+'m');if(data.director&&slot!=='detail')p.push('dir. '+data.director);metaEl.textContent=p.join(' · ')}
   const dirEl=el('director-'+slot);
-  if(dirEl&&data?.director&&!dirEl.textContent)dirEl.textContent=data.director;
+  if(dirEl&&data?.director&&!dirEl.textContent)dirEl.innerHTML=`<span class="director-tag" onclick="tagClickConfirm('director','${esc(data.director).replace(/'/g,"\\'")}')">${esc(data.director)}</span>`;
   const synEl=el('syn-'+slot);if(synEl&&data?.overview&&!synEl.textContent)synEl.textContent=data.overview;
-  const castEl=el('cast-'+slot);if(castEl&&data?.cast?.length&&!castEl.innerHTML)castEl.innerHTML=data.cast.map(n=>`<span class="cast-chip">${esc(n)}</span>`).join('');
-  const genreEl=el('genres-'+slot);if(genreEl&&data?.genres?.length&&!genreEl.innerHTML)genreEl.innerHTML=data.genres.map(g=>`<span class="genre-chip">${esc(g)}</span>`).join('');
-}
-
-/* ════════════════════════════════
-   RENDER RANKING
-════════════════════════════════ */
-function setFilter(f){
-  S.filter=f;
-  ['all','top','adj','new'].forEach(id=>{const c=el('f-'+id);if(c)c.classList.toggle('on',id===f)});
-  renderRanking();
-}
-
-function renderRanking(){
-  const ranked=rankedFilms();const conf=tierPairwisePct();
-  const newCount=S.films.filter(f=>f.comparisons===0).length;
-  el('s-films').textContent=S.films.length;
-  el('s-comps').textContent=S.totalComparisons;
-  el('s-conf').textContent=conf+'%';
-  el('exp-sec').classList.toggle('show',S.totalComparisons>0);
-  const nc=el('f-new');if(nc)nc.innerHTML=`New arrivals (${newCount})<span class="new-dot"></span>`;
-
-  // Ranking map
-  renderRankingMap(ranked);
-
-  let films=ranked;
-  if(S.filter==='top')films=ranked.slice(0,LIST_CAP);
-  if(S.filter==='adj')films=ranked.filter(f=>f.rating!==f.origRating);
-  if(S.filter==='new')films=ranked.filter(f=>f.comparisons===0);
-
-  const list=el('rank-list');
-  if(!films.length){
-    const msg={adj:'No ratings adjusted yet.',new:'No new arrivals — every film has been compared at least once.'}[S.filter]||'No films here yet.';
-    list.innerHTML=`<div class="empty"><div style="font-size:36px;opacity:.25">🎬</div><p style="color:var(--dim);font-size:13px">${msg}</p></div>`;
-    return;
-  }
-
-  let html='';
-  films.forEach((film,i)=>{
-    const gp=ranked.indexOf(film)+1;
-    const diff=+(film.rating-film.origRating).toFixed(1);const chg=diff!==0;
-    const bCls=diff>0?'badge badge-up':'badge badge-dn';const bTxt=diff>0?`+${diff}`:`${diff}`;
-    let pCls='';
-    if(gp===1)pCls=' gold';else if(gp===2)pCls=' silver';else if(gp===3)pCls=' bronze';else if(gp<=10)pCls=' top10';
-    if(S.filter==='all'&&gp===LIST_CAP+1)html+=`<div class="cut-div"><span>top 2,000 export cut-off</span></div>`;
-
-    // Extra badges
-    const suggest=getRatingSuggestion(film);
-    const recent=isRecent(film);
-    const rival=getRival(film);
-    const suggestBadge=suggest==='up'?`<span class="badge badge-suggest" title="Consistently outperforms ${film.rating}★ peers — consider raising rating">↑ Consider ${+(film.rating+.5).toFixed(1)}★</span>`
-      :suggest==='down'?`<span class="badge badge-suggest" title="Consistently loses to ${film.rating}★ peers — consider lowering rating">↓ Consider ${+(film.rating-.5).toFixed(1)}★</span>`:'';
-    const recentBadge=recent?`<span class="badge badge-recent" title="Rated within ${RECENCY_DAYS} days — recency bias possible">🕐 Fresh rating</span>`:'';
-    const rivalBadge=rival?`<span class="badge badge-rival" title="${rival.film.title}: ${rival.filmWins}–${rival.rivalWins}">⚔ vs ${esc(rival.film.title.split(' ').slice(0,2).join(' '))}</span>`:'';
-
-    html+=`<div class="rf" style="animation-delay:${Math.min(i,20)*.018}s">
-      <div class="rf-pos${pCls}">${gp}</div>
-      <div class="rf-body">
-        <div class="rf-title">${esc(film.title)}${chg?`<span class="${bCls}">${bTxt}</span>`:''}${gp>LIST_CAP?`<span class="badge badge-out">outside top 2k</span>`:''}</div>
-        <div class="rf-year">${esc(film.year)}</div>
-        ${suggestBadge||recentBadge||rivalBadge?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin:4px 0">${suggestBadge}${recentBadge}${rivalBadge}</div>`:''}
-        <div class="rf-was">${chg?`was ${film.origRating}★`:''}</div>
-        <div class="rating-ctrl sm" style="margin-top:7px">
-          <button class="r-ud dn" onclick="nudgeFromList('${film.id}',-.5)">▼</button>
-          <div class="r-disp"><span class="stars r-stars" id="lstar-${film.id}">${starsStr(film.rating)}</span><span class="r-val" id="lval-${film.id}">${film.rating}★</span></div>
-          <button class="r-ud up" onclick="nudgeFromList('${film.id}',.5)">▲</button>
-        </div>
-      </div>
-    </div>`;
-  });
-  list.innerHTML=html;
-}
-
-function renderRankingMap(ranked){
-  const mapEl=el('rank-map');const rowsEl=el('rank-map-rows');
-  if(!mapEl||!rowsEl)return;
-  if(S.totalComparisons===0){mapEl.classList.remove('show');return}
-  mapEl.classList.add('show');
-  const HS=[5,4.5,4,3.5,3,2.5,2,1.5,1,0.5];
-  const maxCount=Math.max(...HS.map(r=>S.films.filter(f=>f.rating===r).length),1);
-  rowsEl.innerHTML=HS.map(r=>{
-    const tierFilms=S.films.filter(f=>f.rating===r);
-    if(!tierFilms.length)return'';
-    const count=tierFilms.length;
-    const newCount=tierFilms.filter(f=>f.comparisons===0).length;
-    const pct=Math.round(count/maxCount*100);
-    const resolved=Math.round((count-newCount)/count*100);
-    return`<div class="tier-row-map" onclick="closeModal('rank-map');S.selectedTier=${r};S.mode='range';S.rangeSteps=0;updateModeBanner();goTo('compare')">
-      <div class="tier-map-stars">${starsStr(r)}</div>
-      <div class="tier-map-bar">
-        <div class="tier-map-fill" style="width:${pct}%">
-          <div style="position:absolute;left:0;top:0;bottom:0;width:${resolved}%;background:rgba(0,163,163,.35);border-radius:4px"></div>
-        </div>
-        <div class="tier-map-count">${count} films · ${resolved}% resolved</div>
-      </div>
-      <div class="tier-map-new">${newCount>0?`+${newCount}`:''}</div>
-    </div>`;
-  }).join('');
+  const castEl=el('cast-'+slot);if(castEl&&data?.cast?.length&&!castEl.innerHTML)castEl.innerHTML=data.cast.map(n=>`<span class="cast-chip" onclick="tagClickConfirm('cast','${esc(n).replace(/'/g,"\\'")}')">${esc(n)}</span>`).join('');
+  const genreEl=el('genres-'+slot);if(genreEl&&data?.genres?.length&&!genreEl.innerHTML)genreEl.innerHTML=data.genres.map(g=>`<span class="genre-chip" onclick="tagClickConfirm('genre','${esc(g).replace(/'/g,"\\'")}')">${esc(g)}</span>`).join('');
 }
 
 /* ════════════════════════════════
@@ -5702,9 +5646,17 @@ function saveNow(btn){
   }
   ['save-btn-c','save-btn-r'].forEach(id=>{const b=el(id);if(b)b.classList.remove('dirty')});
   toast('Saved','saved');
-  if(S.sessionDone>0)setTimeout(()=>showSessionSummary(),400);
 }
 function markDirty(){ ['save-btn-c','save-btn-r'].forEach(id=>{const b=el(id);if(b)b.classList.add('dirty')}) }
+
+// Stop — unlike Save (which just persists and keeps the session live),
+// this ends the session outright: shows the summary, returns to the list,
+// and suppresses Resume until a new mode is actually started again.
+function stopSession(){
+  persist();
+  S.canResume=false;
+  showSessionSummary();
+}
 
 /* ════════════════════════════════
    DELETE FILM
@@ -5824,10 +5776,10 @@ function toast(msg,type){
 /* ════════════════════════════════
    HELPERS
 ════════════════════════════════ */
-function starsStr(r){ let s='';for(let i=1;i<=5;i++){if(r>=i)s+='★';else if(r>=i-.5)s+='½';else s+='☆'}return s }
-// Filled-only variant for tier divider labels — a "2★ tier" divider should
-// read as "★★", not "★★☆☆☆" padded out to 5 like a rating display does.
+// Hollow stars never render — a rating always reads as just its filled
+// stars (e.g. "2★" is "★★", not "★★☆☆☆" padded out to 5).
 function starsStrFilled(r){ let s='';for(let i=1;i<=Math.ceil(r);i++){if(r>=i)s+='★';else if(r>=i-.5)s+='½'}return s }
+function starsStr(r){ return starsStrFilled(r) }
 function addRipple(evt){
   if(!evt)return;const btn=evt?.currentTarget;if(!btn)return;
   const r=document.createElement('span');r.className='rpl';
@@ -5853,6 +5805,8 @@ function esc2(s){ return String(s).replace(/"/g,'""') }
     S.provisionalEnabled=saved.provisionalEnabled!==undefined?saved.provisionalEnabled:true;
     S.savedTopicLists=Array.isArray(saved.savedTopicLists)?saved.savedTopicLists:[];
     S.unlockedAchs=saved.unlockedAchs||{};
+    S.completedTournaments=saved.completedTournaments||0;
+    S.canResume=saved.canResume!==undefined?saved.canResume:true;
     S.films.forEach(migrateScore);
   }
   goTo('list');

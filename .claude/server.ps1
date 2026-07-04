@@ -26,6 +26,7 @@ while ($listener.IsListening) {
             default { "application/octet-stream" }
         }
         $response.ContentType = $contentType
+        $response.KeepAlive = $false
         $response.ContentLength64 = $bytes.Length
         $response.OutputStream.Write($bytes, 0, $bytes.Length)
     } else {
