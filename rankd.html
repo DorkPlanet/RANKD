@@ -1107,22 +1107,27 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .mode-sheet-inner{width:100%;max-width:430px;background:var(--nav);border-radius:20px 20px 0 0;padding:20px 18px 28px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -12px 48px rgba(0,0,0,.65),0 -4px 16px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.04);transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.3,1)}
 #mode-sheet.show .mode-sheet-inner{transform:translateY(0)}
 .mode-sheet-handle{width:44px;height:5px;border-radius:3px;background:var(--border2);align-self:center;margin-bottom:4px}
-.msheet-opt{display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;cursor:pointer;transition:all .14s}
+.msheet-opt{position:relative;display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;cursor:pointer;transition:all .14s}
 .msheet-opt:active{transform:scale(.98)}
 .msheet-opt.resume{border-color:rgba(0,163,163,.3);background:var(--green-dim)}
 .msheet-opt-icon{font-size:20px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .msheet-opt-name{font-size:14px;font-weight:600;color:var(--text-hi)}
 .msheet-opt-desc{font-size:11px;color:var(--dim);margin-top:1px}
 .msheet-top-row{display:flex;gap:8px;margin-bottom:8px}
-.msheet-top-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border-radius:12px;cursor:pointer;transition:all .14s}
+.msheet-top-btn{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;border-radius:12px;cursor:pointer;transition:all .14s}
 .msheet-top-btn:active{transform:scale(.97)}
 .msheet-top-btn.resume{background:var(--green-dim);border:1px solid rgba(0,163,163,.35)}
-.msheet-top-btn.random{background:rgba(90,130,232,.12);border:1px solid rgba(90,130,232,.35)}
 .msheet-top-btn.resume .msheet-top-icon,.msheet-top-btn.resume .msheet-top-name{color:var(--green)}
-.msheet-top-btn.random .msheet-top-icon,.msheet-top-btn.random .msheet-top-name{color:var(--blue)}
 .msheet-top-icon{font-size:18px}
 .msheet-top-name{font-size:12px;font-weight:700}
 .msheet-top-desc{font-size:9px;color:var(--dim);text-align:center}
+/* Recommended-for-new-users treatment — only applied while the user has
+   made zero comparisons yet (see openModeSheet()), so it steers a
+   first-time user without permanently editorializing once they've
+   found their own rhythm. Shared between the top square boxes and the
+   full-width option rows so either can carry the recommendation. */
+.msheet-top-btn.recommended,.msheet-opt.recommended{border-color:var(--accent);box-shadow:0 0 0 1px rgba(218,165,32,.18),0 0 16px rgba(218,165,32,.35)}
+.msheet-top-btn.recommended::after,.msheet-opt.recommended::after{content:'START HERE';position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:8px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:8px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4)}
 
 /* ── LOG A WATCH FULLSCREEN REFINE OVERLAY ── */
 #lwr-overlay{display:none;position:fixed;inset:0;z-index:280;background:var(--bg);flex-direction:column;max-width:430px;margin:0 auto}
@@ -1214,11 +1219,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
         <div class="msheet-top-name" id="msheet-resume-label">Resume</div>
         <div class="msheet-top-desc" id="msheet-resume-desc">Last settings</div>
       </div>
-      <div class="msheet-top-btn random" onclick="msheetPickRandom()">
-        <div class="msheet-top-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="8" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="16" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/></svg></div>
-        <div class="msheet-top-name">Random</div>
-        <div class="msheet-top-desc">Anything goes</div>
-      </div>
     </div>
     <div class="msheet-opt" onclick="msheetPickTier()">
       <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>
@@ -1228,7 +1228,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <svg class="msheet-opt-icon" width="20" height="26" viewBox="0 0 18 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><rect x="1" y="1" width="16" height="22" rx="2"/></svg>
       <div><div class="msheet-opt-name">Film</div><div class="msheet-opt-desc">Pin one film, rank it against its tier</div></div>
     </div>
-    <div class="msheet-opt" onclick="msheetPickTournament()">
+    <div class="msheet-opt" id="msheet-tournament-btn" onclick="msheetPickTournament()">
       <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16M5 18l-1-9 4 3 4-6 4 6 4-3-1 9"/></svg>
       <div><div class="msheet-opt-name">Tournament</div><div class="msheet-opt-desc">Start from the bottom of a tier, climb until you lose</div></div>
     </div>
@@ -2218,7 +2218,7 @@ function startSession(evt){
 
 function updateModeBanner(){
   const rangeStr=S.rangeSteps===0?'same rating':RANGE_LABELS[S.rangeSteps]||'by similarity';
-  const labels={range:rangeStr,chaos:'surprise me',spot:'focus film'};
+  const labels={range:rangeStr,spot:'focus film'};
   const lbl=el('mode-label');if(lbl)lbl.textContent=labels[S.mode]||S.mode;
   el('tier-banner').classList.toggle('show',S.mode==='range'&&S.rangeSteps===0&&S.selectedTier!==null);
   updateSettingsModeButtons();
@@ -3725,13 +3725,17 @@ function openModeSheet(){
     let desc='Last settings';
     const mode=S.homeMode||'range';
     if(mode==='range'&&S.selectedTier!==null)desc=S.selectedTier+'★ tier';
-    else if(mode==='chaos')desc='Random';
     else if(mode==='spot'&&S.pinnedId){
       const pf=S.films.find(f=>f.id===S.pinnedId);
       if(pf)desc=pf.title;
     }
     resumeDesc.textContent=desc;
   }
+  // First-time steer: with zero comparisons made, six modes give a new
+  // user no signal on where to start. Tournament gives a clearer
+  // beginning/middle/end structure than open-ended comparing, so it's the
+  // recommended first move — clears once they've made a real choice.
+  el('msheet-tournament-btn')?.classList.toggle('recommended', S.totalComparisons===0);
   el('mode-sheet').classList.add('show');
   lhStopAutoScroll();
 }
@@ -3747,11 +3751,6 @@ function msheetResume(){
   startSession({currentTarget:document.body,clientX:0,clientY:0});
 }
 
-function msheetPickRandom(){
-  closeModeSheet();
-  S.homeMode='chaos';S.mode='chaos';
-  startSession({currentTarget:document.body,clientX:0,clientY:0});
-}
 function msheetPickTier(){
   closeModeSheet();
   S.homeMode='range';S.mode='range';
@@ -4389,8 +4388,6 @@ function pickPair(){
   }
 
   // CHAOS
-  if(S.mode==='chaos') return freshTwoWeighted(S.films,recent)||[S.films[0],S.films[1]];
-
   // RANGE
   const maxDiff=S.rangeSteps*0.5;
   if(maxDiff===0){
