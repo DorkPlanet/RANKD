@@ -1107,12 +1107,31 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 #q-film{font-size:13px;color:var(--dim);margin-bottom:44px}
 .q-tap{font-size:11px;color:var(--dim);letter-spacing:1px}
 
-/* ── MODE-PICK SHEET ── */
-#mode-sheet{position:fixed;top:0;left:0;right:0;bottom:var(--bottombar-h,64px);z-index:70;background:rgba(0,0,0,.12);display:flex;align-items:flex-end;justify-content:center;opacity:0;visibility:hidden;pointer-events:none;overflow:hidden;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear .28s}
-#mode-sheet.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear 0s}
-.mode-sheet-inner{width:100%;max-width:430px;background:var(--nav);border-radius:20px 20px 0 0;padding:20px 18px 28px;display:flex;flex-direction:column;gap:10px;box-shadow:0 -12px 48px rgba(0,0,0,.65),0 -4px 16px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.04);transform:translateY(100%);transition:transform .28s cubic-bezier(.2,.8,.3,1)}
-#mode-sheet.show .mode-sheet-inner{transform:translateY(0)}
-.mode-sheet-handle{width:44px;height:5px;border-radius:3px;background:var(--border2);align-self:center;margin-bottom:4px}
+/* Range stepper — widens Tournament/Spotlight matchmaking to include
+   nearby tiers instead of the exact one only. Reuses the same
+   rangeSteps/RANGE_LABELS system Range mode's matchmaking already
+   understands, just finally exposed with a real control. */
+.range-stepper{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:8px 10px;flex-shrink:0}
+.range-stepper-btn{width:28px;height:28px;border-radius:8px;background:var(--nav);border:1px solid var(--border2);color:var(--text-hi);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;user-select:none}
+.range-stepper-btn:active{transform:scale(.92)}
+.range-stepper-label{flex:1;text-align:center;font-size:12px;font-weight:600;color:var(--text-hi)}
+
+/* ── MODE-PICK OVERLAY / DRAWER ── */
+/* Two presentations of the same bubble-grid content: a true centered
+   overlay (default — auto-shown on launch and arriving at Compare) that
+   fades/scales in place, and a bottom-drawer variant (.drawer-style,
+   toggled on by openModeDrawer() for the bottom bar's Mode button) that
+   slides up from the screen edge like the original mode sheet did. */
+#mode-sheet{position:fixed;top:0;left:0;right:0;bottom:var(--bottombar-h,64px);z-index:70;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;visibility:hidden;pointer-events:none;overflow:hidden;transition:opacity .22s ease,visibility 0s linear .22s}
+#mode-sheet.show{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .22s ease,visibility 0s linear 0s}
+.mode-sheet-inner{width:100%;max-width:400px;max-height:100%;overflow-y:auto;background:var(--nav);border-radius:20px;padding:20px 18px 24px;display:flex;flex-direction:column;gap:10px;box-shadow:0 20px 60px rgba(0,0,0,.7),0 4px 16px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.06);transform:scale(.92);opacity:0;transition:transform .22s cubic-bezier(.2,.8,.3,1),opacity .22s ease}
+#mode-sheet.show .mode-sheet-inner{transform:scale(1);opacity:1}
+.mode-sheet-handle{display:none}
+#mode-sheet.drawer-style{background:rgba(0,0,0,.12);align-items:flex-end;padding:0;transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear .28s}
+#mode-sheet.drawer-style.show{transition:opacity .28s cubic-bezier(.2,.8,.3,1),visibility 0s linear 0s}
+#mode-sheet.drawer-style .mode-sheet-inner{max-width:430px;max-height:none;border-radius:20px 20px 0 0;padding:20px 18px 28px;box-shadow:0 -12px 48px rgba(0,0,0,.65),0 -4px 16px rgba(0,0,0,.5),0 -1px 0 rgba(255,255,255,.04);transform:translateY(100%);opacity:1;transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+#mode-sheet.drawer-style.show .mode-sheet-inner{transform:translateY(0)}
+#mode-sheet.drawer-style .mode-sheet-handle{display:block;width:44px;height:5px;border-radius:3px;background:var(--border2);align-self:center;margin-bottom:4px}
 .msheet-opt{position:relative;display:flex;align-items:center;gap:14px;padding:13px 14px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;cursor:pointer;transition:all .14s}
 .msheet-opt:active{transform:scale(.98)}
 .msheet-opt.resume{border-color:rgba(0,163,163,.3);background:var(--green-dim)}
@@ -1130,10 +1149,18 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 /* Recommended-for-new-users treatment — only applied while the user has
    made zero comparisons yet (see openModeSheet()), so it steers a
    first-time user without permanently editorializing once they've
-   found their own rhythm. Shared between the top square boxes and the
-   full-width option rows so either can carry the recommendation. */
-.msheet-top-btn.recommended,.msheet-opt.recommended{border-color:var(--accent);box-shadow:0 0 0 1px rgba(218,165,32,.18),0 0 16px rgba(218,165,32,.35)}
-.msheet-top-btn.recommended::after,.msheet-opt.recommended::after{content:'START HERE';position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:8px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:8px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+   found their own rhythm. Shared between the resume box and the bubble
+   grid tiles so either can carry the recommendation. */
+.msheet-top-btn.recommended,.msheet-bubble.recommended{border-color:var(--accent);box-shadow:0 0 0 1px rgba(218,165,32,.18),0 0 16px rgba(218,165,32,.35)}
+.msheet-top-btn.recommended::after,.msheet-bubble.recommended::after{content:'START HERE';position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--bg);font-size:8px;font-weight:800;letter-spacing:.05em;padding:2px 8px;border-radius:8px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+/* Bubble grid — replaces the old vertical list of full-width mode rows.
+   Square tiles read faster at a glance than a stack of text rows, and
+   match the arcade-selector treatment already validated for this screen. */
+.msheet-bubble-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.msheet-bubble{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:16px 6px;border-radius:16px;background:var(--card2);border:1.5px solid transparent;cursor:pointer;transition:all .14s;text-align:center}
+.msheet-bubble:active{transform:scale(.96)}
+.msheet-bubble-icon{font-size:24px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.msheet-bubble-name{font-size:11.5px;font-weight:600;color:var(--text-hi);line-height:1.2}
 
 /* ── LOG A WATCH FULLSCREEN REFINE OVERLAY ── */
 #lwr-overlay{display:none;position:fixed;inset:0;z-index:280;background:var(--bg);flex-direction:column;max-width:430px;margin:0 auto}
@@ -1184,7 +1211,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div id="lh-list"></div>
   </div>
   <div class="lh-bottombar">
-    <button class="lh-bar-btn" onclick="goTo('compare')" title="Compare">
+    <button class="lh-bar-btn" onclick="goToCompareLanding()" title="Compare">
       <svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="1.6">
         <circle cx="11" cy="11" r="9"/>
         <text x="11" y="14.5" text-anchor="middle" font-size="8" font-weight="700" fill="currentColor" stroke="none" font-family="sans-serif">VS</text>
@@ -1226,21 +1253,27 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
         <div class="msheet-top-desc" id="msheet-resume-desc">Last settings</div>
       </div>
     </div>
-    <div class="msheet-opt" onclick="msheetPickTier()">
-      <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6.2.6-4.6 4.2 1.3 6.1L12 16.8 6.5 19.5l1.3-6.1L3.2 9.2l6.2-.6L12 3z"/></svg>
-      <div><div class="msheet-opt-name">Tier</div><div class="msheet-opt-desc">Compare within one star rating</div></div>
-    </div>
-    <div class="msheet-opt" onclick="msheetPickFilm()">
-      <svg class="msheet-opt-icon" width="20" height="26" viewBox="0 0 18 24" fill="none" stroke="var(--accent)" stroke-width="1.6"><rect x="1" y="1" width="16" height="22" rx="2"/></svg>
-      <div><div class="msheet-opt-name">Film</div><div class="msheet-opt-desc">Pin one film, rank it against its tier</div></div>
-    </div>
-    <div class="msheet-opt" id="msheet-tournament-btn" onclick="msheetPickTournament()">
-      <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18h16M5 18l-1-9 4 3 4-6 4 6 4-3-1 9"/></svg>
-      <div><div class="msheet-opt-name">Tournament</div><div class="msheet-opt-desc">Start from the bottom of a tier, climb until you lose</div></div>
-    </div>
-    <div class="msheet-opt" onclick="openTopicSearch()">
-      <svg class="msheet-opt-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="7"/><line x1="21" y1="21" x2="15.5" y2="15.5"/></svg>
-      <div><div class="msheet-opt-name">Director / Actor / Genre</div><div class="msheet-opt-desc">Rank films from your list on their own, separate scale</div></div>
+    <div class="msheet-bubble-grid">
+      <div class="msheet-bubble" onclick="msheetPickFilm()">
+        <div class="msheet-bubble-icon">🎯</div>
+        <div class="msheet-bubble-name">Spotlight</div>
+      </div>
+      <div class="msheet-bubble" onclick="openTopicSearch()">
+        <div class="msheet-bubble-icon">🔍</div>
+        <div class="msheet-bubble-name">Director / Actor / Genre</div>
+      </div>
+      <div class="msheet-bubble" id="msheet-tier-btn" onclick="msheetPickTier()">
+        <div class="msheet-bubble-icon">👑</div>
+        <div class="msheet-bubble-name">Tier</div>
+      </div>
+      <div class="msheet-bubble" id="msheet-recent-btn" onclick="msheetPickRecent()">
+        <div class="msheet-bubble-icon">✨</div>
+        <div class="msheet-bubble-name">Recent Additions</div>
+      </div>
+      <div class="msheet-bubble" onclick="closeModeSheet();openLogWatch()">
+        <div class="msheet-bubble-icon">＋</div>
+        <div class="msheet-bubble-name">Add Film</div>
+      </div>
     </div>
   </div>
 </div>
@@ -1268,6 +1301,34 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div style="display:flex;gap:8px">
       <button class="btn btn-ghost btn-sm" style="flex:1" onclick="tagRankCancel()">Cancel</button>
       <button class="btn btn-green btn-sm" style="flex:1" onclick="tagRankConfirm()">Start Ranking</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ladder override — a win against a locked-in film needs confirmation
+     before it's allowed to actually displace it. -->
+<div id="ladder-override-prompt" class="bottom-confirm-sheet">
+  <div class="sheet">
+    <div class="modal-handle"></div>
+    <p style="font-size:16px;font-weight:700;color:var(--text-hi)" id="ladder-override-title"></p>
+    <p style="font-size:13px;color:var(--dim);line-height:1.6" id="ladder-override-sub"></p>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="ladderOverrideDecline()">No, keep it locked</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="ladderOverrideConfirm()">Yes, let it pass</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tier promotion — offered once every film in range has locked in its
+     position, rather than auto-advancing silently. -->
+<div id="promo-prompt" class="bottom-confirm-sheet">
+  <div class="sheet">
+    <div class="modal-handle"></div>
+    <p style="font-size:16px;font-weight:700;color:var(--text-hi)" id="promo-prompt-title"></p>
+    <p style="font-size:13px;color:var(--dim);line-height:1.6" id="promo-prompt-sub"></p>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" style="flex:1" onclick="declineTierPromotion()">No, stop here</button>
+      <button class="btn btn-green btn-sm" style="flex:1" onclick="confirmTierPromotion()">Yes, promote</button>
     </div>
   </div>
 </div>
@@ -1444,7 +1505,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <line x1="8" y1="17" x2="19" y2="17"/>
         </svg>
       </button>
-      <button class="lh-bar-btn" onclick="openModeSheet()" title="Mode">
+      <button class="lh-bar-btn" onclick="openModeDrawer()" title="Mode">
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
           <rect x="1" y="3" width="12" height="16" rx="2" fill="currentColor" opacity=".9"/>
           <rect x="9" y="6" width="12" height="16" rx="2" fill="currentColor" opacity=".55"/>
@@ -1537,6 +1598,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div class="modal-handle"></div>
     <div class="modal-title">★ Choose a Tier</div>
     <p class="modal-sub">Focus on one star rating, or compare across all tiers.</p>
+    <div class="range-stepper" id="tier-range-stepper">
+      <div class="range-stepper-btn" onclick="adjustRangeSteps(-1)">−</div>
+      <div class="range-stepper-label" id="tier-range-label"></div>
+      <div class="range-stepper-btn" onclick="adjustRangeSteps(1)">+</div>
+    </div>
     <div class="modal-list" id="tier-list"></div>
   </div>
 </div>
@@ -1547,6 +1613,11 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div class="modal-handle"></div>
     <div class="modal-title">✦ Spotlight Mode</div>
     <p class="modal-sub">Pin one film and pit everything in its tier against it.</p>
+    <div class="range-stepper" id="spot-range-stepper">
+      <div class="range-stepper-btn" onclick="adjustRangeSteps(-1)">−</div>
+      <div class="range-stepper-label" id="spot-range-label"></div>
+      <div class="range-stepper-btn" onclick="adjustRangeSteps(1)">+</div>
+    </div>
     <div style="display:flex;gap:8px;flex-shrink:0">
       <button class="btn btn-ghost btn-sm" style="flex:1" onclick="showFilmPicker()">I'll choose</button>
       <button class="btn btn-green btn-sm" style="flex:1" onclick="pinRandom()">Random pick</button>
@@ -1931,7 +2002,10 @@ function migrateScore(film){
   film.score = clampScore(film.score, film.rating);
 }
 
-const RANGE_LABELS = ['Same rating only','Half a star apart','Up to 1 star apart','Up to 1.5 stars apart','Up to 2 stars apart','Up to 2.5 stars apart'];
+// Tiers run 0.5-5 in half-star steps, so 4.5 apart already spans the
+// entire scale — the last step is labeled as the true "no limit" it is,
+// rather than a specific number that undersells what it actually covers.
+const RANGE_LABELS = ['Same rating only','Half a star apart','Up to 1 star apart','Up to 1.5 stars apart','Up to 2 stars apart','Up to 2.5 stars apart','Up to 3 stars apart','Up to 3.5 stars apart','Up to 4 stars apart','No limit — any tier'];
 const TYPE_LABELS  = {quote:'🎬 Movie Quote',director:'🎥 From the Director',term:'📽 Did You Know',philosophy:'💭 Film Thought'};
 
 /* ════════════════════════════════
@@ -2026,9 +2100,8 @@ let S = {
 };
 let currentPair = null;
 let lhDetailFilmId = null;
-// Tournament run state — entirely transient, not persisted. null when inactive.
-let tournamentState = null; // {championId, queue:[ids], tier, championSide:'a'|'b'}
-let pendingTournamentStart = false;
+// Ladder run state — entirely transient, not persisted. null when inactive.
+let tournamentState = null; // {tier, maxDiff, filmId, championSide:'a'|'b'}
 let pinnedSide = 'a'; // which side the Spotlight pinned film last rendered on
 // Director/Actor/Genre ranking — fully isolated from the main film scores.
 // null when inactive. Never touches S.films directly.
@@ -2114,6 +2187,17 @@ function goTo(name){
     const saved=loadSaved();
     if(saved?.films?.length) el('merge-box').classList.add('show');
   }
+}
+
+// Deliberately switching into Compare from List (the bottom bar's Compare
+// button, or app launch) is the "landing" moment — the mode-pick overlay
+// greets you there. Internal navigations to compare (e.g. after already
+// picking a mode from that overlay) go through plain goTo('compare')
+// instead, so the overlay doesn't immediately reappear over a session
+// that just started.
+function goToCompareLanding(){
+  goTo('compare');
+  openModeSheet();
 }
 
 /* ════════════════════════════════
@@ -3714,10 +3798,12 @@ function lhDragReset(keepPending){
    resume their last session with
    one tap.
 ════════════════════════════════ */
-function openModeSheet(){
-  if(el('mode-sheet')?.classList.contains('show')){closeModeSheet();return}
+// Shared content prep for both presentations — the actual bubble grid,
+// Resume box, and recommendation logic are identical either way; only the
+// container's look (overlay vs drawer, toggled by the caller) differs.
+function prepModeSheetContent(){
   closeAllDrawers();
-  if(!S.films.length){toast('Import your films first');return}
+  if(!S.films.length){toast('Import your films first');return false}
   // Update Resume description to reflect the actual last-used settings —
   // kept short since this now lives in a compact box, not a full-width row.
   const resumeDesc=el('msheet-resume-desc');
@@ -3735,11 +3821,32 @@ function openModeSheet(){
   // mode has actually been started again (cleared in clearCompetingModeState).
   const resumeRow=el('msheet-resume')?.closest('.msheet-top-row');
   if(resumeRow)resumeRow.style.display=S.canResume?'':'none';
-  // First-time steer: with zero comparisons made, six modes give a new
-  // user no signal on where to start. Tournament gives a clearer
-  // beginning/middle/end structure than open-ended comparing, so it's the
-  // recommended first move — clears once they've made a real choice.
-  el('msheet-tournament-btn')?.classList.toggle('recommended', S.totalComparisons===0);
+  // First-time steer: with zero comparisons made, modes give a new user
+  // no signal on where to start, so Tier (clearer beginning/middle/end
+  // ladder than open-ended comparing) is recommended by default. A
+  // pending batch of never-compared films is a more specific, personal
+  // signal than that generic default, so Recent Additions wins if both
+  // apply — e.g. a returning user who just imported more films.
+  const pendingNew=S.films.filter(f=>f.comparisons===0).length>=2;
+  el('msheet-recent-btn')?.classList.toggle('recommended', pendingNew);
+  el('msheet-tier-btn')?.classList.toggle('recommended', S.totalComparisons===0&&!pendingNew);
+  return true;
+}
+// Auto-shown overlay — every app launch and every arrival at the Compare
+// screen (see goTo()), so it reads as the actual landing experience.
+function openModeSheet(){
+  if(el('mode-sheet')?.classList.contains('show')){closeModeSheet();return}
+  if(!prepModeSheetContent())return;
+  el('mode-sheet').classList.remove('drawer-style');
+  el('mode-sheet').classList.add('show');
+  lhStopAutoScroll();
+}
+// Manually reopening via the bottom bar's Mode button — the original
+// bottom-drawer presentation, kept separate from the auto-shown overlay.
+function openModeDrawer(){
+  if(el('mode-sheet')?.classList.contains('show')){closeModeSheet();return}
+  if(!prepModeSheetContent())return;
+  el('mode-sheet').classList.add('drawer-style');
   el('mode-sheet').classList.add('show');
   lhStopAutoScroll();
 }
@@ -3765,10 +3872,15 @@ function msheetPickFilm(){
   S.homeMode='spot';
   openSpotlight();
 }
-function msheetPickTournament(){
+// Recent Additions — ranks only films never yet compared, regardless of
+// tier. Reuses the Director/Actor/Genre isolated-pool system rather than
+// inventing a separate mechanism, since "rank this specific pool against
+// itself" is exactly what that system already does.
+function msheetPickRecent(){
   closeModeSheet();
-  pendingTournamentStart=true;
-  openTierPicker();
+  const ids=S.films.filter(f=>f.comparisons===0).map(f=>f.id);
+  if(ids.length<2){toast('No new additions to rank right now');return}
+  beginTopicRanking('Recent additions',ids);
 }
 
 // Director/Actor/Genre search — isolated ranking pool, entirely separate
@@ -4140,58 +4252,103 @@ function updateFsBtn(){
 /* ════════════════════════════════
    TIER PICKER
 ════════════════════════════════ */
-function openTierPicker(){ renderTierList(); el('tier-modal').classList.add('show') }
+function openTierPicker(){
+  renderTierList();
+  // Picking a specific tier always starts the champion-ladder now, so the
+  // range selector applies every time, not just for a separate Tournament
+  // flow — reset fresh each time the picker opens.
+  S.rangeSteps=0;
+  renderRangeSteppers();
+  el('tier-modal').classList.add('show');
+}
+// Shared by the Tier and Spotlight range steppers — same
+// rangeSteps/RANGE_LABELS pool Range mode's matchmaking already uses.
+function adjustRangeSteps(delta){
+  S.rangeSteps=Math.max(0,Math.min(RANGE_LABELS.length-1,S.rangeSteps+delta));
+  renderRangeSteppers();
+}
+function renderRangeSteppers(){
+  const label=S.rangeSteps===0?'Same tier only':RANGE_LABELS[S.rangeSteps];
+  const a=el('tier-range-label');if(a)a.textContent=label;
+  const b=el('spot-range-label');if(b)b.textContent=label;
+}
 
-// Tournament — starts with the lowest-scored film in the chosen tier as
-// champion, then works upward through the rest of that tier (ascending by
-// score), and continues into the next tier up if it clears the whole
-// starting tier. Winner of every match carries forward as champion,
-// regardless of whether that's the original film or a challenger that
-// beat it — this is a continuous cascade, not "does film X survive."
+// Starts a ladder run: the lowest-scored unlocked film in the pool climbs
+// by challenging its immediate neighbor one slot up, over and over, until
+// it loses (auto-locking it in place) — see the ladderPool/ladderNextClimber
+// helpers above and the tournamentState branch in pickPair()/cpChoose().
 function startTournament(tier){
-  const group=S.films.filter(f=>f.rating===tier).sort((a,b)=>a.score-b.score);
-  if(group.length<2){toast(`Need at least 2 films in the ${tier}★ tier to start a tournament`);return}
-  const champion=group[0];
+  const maxDiff=S.rangeSteps*0.5;
+  const pool=S.films.filter(f=>Math.abs(f.rating-tier)<=maxDiff);
+  if(pool.length<2){toast(`Need at least 2 films in range to start ranking`);return}
   clearCompetingModeState();
-  tournamentState={championId:champion.id,queue:group.slice(1).map(f=>f.id),tier,championSide:'a'};
+  tournamentState={tier,maxDiff,filmId:null,championSide:'a'};
+  const climber=ladderNextClimber(pool);
+  if(!climber){
+    tournamentState=null;
+    promptTierPromotion(tier,maxDiff);
+    return;
+  }
+  tournamentState.filmId=climber.id;
   S.sessionDone=0;S.sessionSnap={};
   S.films.forEach(f=>{S.sessionSnap[f.id]={score:f.score,rating:f.rating}});
-  toast(`Tournament started — climbing the ${tier}★ tier`);
+  const rangeNote=maxDiff>0?` (±${maxDiff}★)`:'';
+  toast(`Ranking started — climbing the ${tier}★ tier${rangeNote}`);
   goTo('compare');
 }
 
-// Advances the tournament to the next tier up once the current one is
-// cleared. Reuses the exact promotion mechanics Log a Watch already uses
-// for moving a film between tiers (seed score at the new tier's bottom
-// edge), rather than inventing a separate rating-transition path.
-function tournamentAdvanceTier(){
-  const champion=S.films.find(f=>f.id===tournamentState.championId);
-  if(!champion)return false;
-  const tiers=[0.5,1,1.5,2,2.5,3,3.5,4,4.5,5];
-  const idx=tiers.indexOf(tournamentState.tier);
-  const nextTier=tiers[idx+1];
-  if(nextTier===undefined)return false; // already at the top — nowhere left to climb
-  champion.rating=nextTier;
-  champion.score=tierMin(nextTier);
-  const stored=S.films.find(f=>f.id===champion.id);
-  if(stored){stored.rating=champion.rating;stored.score=champion.score}
-  const group=S.films.filter(f=>f.rating===nextTier&&f.id!==champion.id).sort((a,b)=>a.score-b.score);
-  if(!group.length)return tournamentAdvanceTier(); // empty tier, skip straight to the one above
-  tournamentState.tier=nextTier;
-  tournamentState.queue=group.map(f=>f.id);
-  return true;
-}
-
-// Ends the tournament — either the champion ran out of tiers to climb
-// (reached #1 overall) or was interrupted. Reuses the existing session
-// summary screen rather than a bespoke result screen.
-function tournamentEnd(){
-  const champion=S.films.find(f=>f.id===tournamentState?.championId);
-  tournamentState=null;
+// Every film in range has locked in its position — offer to promote the
+// top one to the next tier up rather than doing it silently. Reuses the
+// same promotion mechanics Log a Watch already uses for moving a film
+// between tiers (seed score at the new tier's bottom edge).
+let pendingPromotion=null;
+function promptTierPromotion(tier,maxDiff){
+  const pool=S.films.filter(f=>Math.abs(f.rating-tier)<=maxDiff);
+  const top=[...pool].sort((a,b)=>b.score-a.score)[0];
   S.completedTournaments=(S.completedTournaments||0)+1;
   checkNewAchievements();
+  const tiers=[0.5,1,1.5,2,2.5,3,3.5,4,4.5,5];
+  const nextTier=tiers[tiers.indexOf(tier)+1];
+  if(!top||nextTier===undefined){
+    if(top)toast(`🏆 ${top.title} is the tier champion!`);
+    tournamentState=null;
+    persist();
+    showSessionSummary();
+    return;
+  }
+  pendingPromotion={filmId:top.id,tier,maxDiff,nextTier};
+  el('promo-prompt-title').textContent=`Every ${tier}★ film is locked in!`;
+  el('promo-prompt-sub').textContent=`Promote "${top.title}" to ${nextTier}★?`;
+  el('promo-prompt').classList.add('show');
+}
+function confirmTierPromotion(){
+  if(!pendingPromotion)return;
+  const {filmId,nextTier}=pendingPromotion;
+  const film=S.films.find(f=>f.id===filmId);
+  el('promo-prompt').classList.remove('show');
+  if(film){
+    film.rating=nextTier;
+    film.score=tierMin(nextTier);
+    film.rankLocked=false;
+  }
+  pendingPromotion=null;
   persist();
-  if(champion)toast(`🏆 ${champion.title} is the tier champion!`);
+  startTournament(nextTier);
+}
+function declineTierPromotion(){
+  el('promo-prompt').classList.remove('show');
+  pendingPromotion=null;
+  tournamentState=null;
+  persist();
+  showSessionSummary();
+}
+
+// Ends the run outright — used when there's nowhere left to climb (top
+// tier, fully locked) rather than every promotion decline, which now
+// goes straight to the summary from declineTierPromotion() instead.
+function tournamentEnd(){
+  tournamentState=null;
+  persist();
   showSessionSummary();
 }
 
@@ -4225,13 +4382,6 @@ function renderTierList(){
   el('tier-list').innerHTML=html;
 }
 function selectTier(r){
-  if(pendingTournamentStart){
-    pendingTournamentStart=false;
-    closeModal('tier-modal');
-    if(r===null){toast('Pick a specific tier to start a tournament');return}
-    startTournament(r);
-    return;
-  }
   S.selectedTier=r;
   closeModal('tier-modal');
   const lbl=r===null?'Comparing all ratings':`Comparing your ${r}★ films`;
@@ -4240,6 +4390,11 @@ function selectTier(r){
   const hv=el('home-tier-val');if(hv)hv.textContent=r===null?'All ratings':`${r}★ films only`;
   const tl=el('settings-tier-lbl');if(tl)tl.textContent=r===null?'All ratings':r+'★ films';
   if(S.mode!=='range')return;
+  // Picking a specific tier runs a champion-stays ladder (lowest-ranked
+  // film climbs against successively higher-ranked challengers) — the
+  // default way any tier gets compared. "All tiers" has no single
+  // starting point for a ladder, so it keeps the old cross-tier matching.
+  if(r!==null){startTournament(r);return}
   if(el('compare-screen')?.classList.contains('active')){
     clearCompetingModeState();
     renderPair();
@@ -4256,6 +4411,8 @@ function openSpotlight(){
     const saved=loadSaved();
     if(saved?.films?.length){S.films=saved.films;S.comparedPairs=saved.comparedPairs||{};S.totalComparisons=saved.totalComparisons||0;S.rivals=saved.rivals||{}}
   }
+  S.rangeSteps=0;
+  renderRangeSteppers();
   el('film-picker').style.display='none';
   el('spot-modal').classList.add('show');
 }
@@ -4313,9 +4470,9 @@ function cpUpdateStatus(){
     const done=Object.keys(topicRankState.comparedPairs).length;
     render('🔍',esc(topicRankState.label),done,total,false);
   }else if(tournamentState){
-    const total=S.films.filter(f=>f.rating===tournamentState.tier).length-1;
-    const done=total-tournamentState.queue.length;
-    render('👑',starsStrFilled(tournamentState.tier),done,total,false);
+    const pool=ladderPool();
+    const done=pool.filter(f=>f.rankLocked).length;
+    render('👑',starsStrFilled(tournamentState.tier),done,pool.length,false);
   }else if(S.mode==='range'&&S.selectedTier!==null){
     const g=S.films.filter(f=>f.rating===S.selectedTier);
     const total=g.length*(g.length-1)/2;
@@ -4323,7 +4480,7 @@ function cpUpdateStatus(){
     render('',starsStrFilled(S.selectedTier),done,total,true);
   }else if(S.mode==='spot'&&S.pinnedId){
     const pf=S.films.find(f=>f.id===S.pinnedId);
-    const opps=pf?S.films.filter(f=>f.id!==pf.id&&f.rating===pf.rating):[];
+    const opps=pf?spotlightOpponents(pf):[];
     const done=pf?opps.filter(f=>hasCompared(pf,f)).length:0;
     render('🎯',pf?esc(pf.title):'Film',done,opps.length,true);
   }else{
@@ -4388,6 +4545,92 @@ function markCompared(a,b){ S.comparedPairs[pk(a,b)]=true }
 function isNewInTier(film){
   return !S.films.some(f=>f.id!==film.id&&f.rating===film.rating&&hasCompared(film,f));
 }
+// Spotlight's opponent pool — same tier only by default, widened to
+// nearby tiers when a range is set via the Spotlight picker's stepper.
+function spotlightOpponents(pinned){
+  const maxDiff=S.rangeSteps*0.5;
+  return S.films.filter(f=>f.id!==pinned.id&&Math.abs(f.rating-pinned.rating)<=maxDiff);
+}
+
+/* ════════════════════════════════
+   TIER LADDER
+   Insertion-style placement: the
+   lowest-ranked unlocked film in the
+   pool climbs by challenging its
+   immediate neighbor one slot up.
+   A win swaps positions (score+rating
+   traded whole, so this also carries
+   a film across a tier boundary when
+   ranging beyond one tier); a loss
+   locks it in at its current spot.
+════════════════════════════════ */
+// Live pool for the active ladder — recomputed from current S.films each
+// time rather than snapshotted, since ratings can shift mid-session as
+// films swap across tier boundaries.
+function ladderPool(){
+  if(!tournamentState)return[];
+  return S.films.filter(f=>Math.abs(f.rating-tournamentState.tier)<=tournamentState.maxDiff);
+}
+// Lowest-scored film in the pool that hasn't locked in its position yet —
+// null once every film in range has settled, which is when a tier
+// promotion should be offered.
+function ladderNextClimber(pool){
+  const unlocked=pool.filter(f=>!f.rankLocked).sort((a,b)=>a.score-b.score);
+  return unlocked[0]||null;
+}
+// The film immediately above the climber in the pool's score order — its
+// only opponent. null means the climber has nothing left to beat.
+function ladderNeighborAbove(film,pool){
+  const sorted=[...pool].sort((a,b)=>a.score-b.score);
+  const idx=sorted.findIndex(f=>f.id===film.id);
+  if(idx===-1||idx===sorted.length-1)return null;
+  return sorted[idx+1];
+}
+// A win trades score AND rating whole, rather than nudging either value —
+// this is what makes the swap an exact, deterministic one-slot move
+// instead of the old ELO-style nudge that could under- or over-shoot the
+// actual reorder (the "ranks jump around" complaint). Trading rating too
+// means a film that beats a neighbor in a different tier is promoted as
+// a direct consequence of winning, not a separate step.
+function ladderSwap(climber,opponent){
+  const score=climber.score,rating=climber.rating;
+  climber.score=opponent.score;climber.rating=opponent.rating;
+  opponent.score=score;opponent.rating=rating;
+}
+// A win against a locked film doesn't swap automatically — the comparison
+// itself already counted (see cpChoose()), this only gates the position
+// change itself behind a confirmation.
+let pendingLadderOverride=null;
+function ladderOverrideConfirm(){
+  if(!pendingLadderOverride||!tournamentState)return;
+  const climber=S.films.find(f=>f.id===pendingLadderOverride.climberId);
+  const opponent=S.films.find(f=>f.id===pendingLadderOverride.opponentId);
+  el('ladder-override-prompt').classList.remove('show');
+  if(climber&&opponent){
+    ladderSwap(climber,opponent);
+    opponent.rankLocked=false;
+    tournamentState.filmId=climber.id;
+    persist();
+  }
+  pendingLadderOverride=null;
+  renderPair();
+}
+function ladderOverrideDecline(){
+  if(!pendingLadderOverride||!tournamentState){el('ladder-override-prompt').classList.remove('show');return}
+  const climber=S.films.find(f=>f.id===pendingLadderOverride.climberId);
+  el('ladder-override-prompt').classList.remove('show');
+  if(climber)climber.rankLocked=true;
+  pendingLadderOverride=null;
+  persist();
+  const nextClimber=ladderNextClimber(ladderPool());
+  if(!nextClimber){
+    promptTierPromotion(tournamentState.tier,tournamentState.maxDiff);
+    return;
+  }
+  tournamentState.filmId=nextClimber.id;
+  tournamentState.championSide='a';
+  renderPair();
+}
 function avgComps(arr){ return arr.reduce((s,f)=>s+f.comparisons,0)/arr.length }
 
 // Weighted random pick — films with fewer comparisons get more weight
@@ -4424,21 +4667,32 @@ function pickPair(){
     return null;
   }
   if(tournamentState){
-    const champion=S.films.find(f=>f.id===tournamentState.championId);
-    const next=S.films.find(f=>f.id===tournamentState.queue[0]);
-    if(champion&&next){
-      return tournamentState.championSide==='b'?[next,champion]:[champion,next];
+    const climber=S.films.find(f=>f.id===tournamentState.filmId);
+    if(!climber){tournamentState=null;return pickPair()}
+    const pool=ladderPool();
+    const opponent=ladderNeighborAbove(climber,pool);
+    if(!opponent){
+      // Nothing left above it — it's the best in range. Lock it in and
+      // move straight to whichever unlocked film is lowest next.
+      climber.rankLocked=true;
+      const nextClimber=ladderNextClimber(pool);
+      if(!nextClimber){
+        setTimeout(()=>promptTierPromotion(tournamentState.tier,tournamentState.maxDiff),50);
+        return null;
+      }
+      tournamentState.filmId=nextClimber.id;
+      return pickPair();
     }
-    tournamentState=null; // something's missing — bail out of the run safely
+    return tournamentState.championSide==='b'?[opponent,climber]:[climber,opponent];
   }
   if(S.films.length<2)return null;
   const recent=new Set(S.recentPairs);
 
-  // SPOTLIGHT — same tier only
+  // SPOTLIGHT — same tier by default, widened by the range stepper
   if(S.mode==='spot'&&S.pinnedId){
     const pinned=S.films.find(f=>f.id===S.pinnedId);
     if(!pinned){unpin();return pickPair()}
-    const opps=S.films.filter(f=>f.id!==S.pinnedId&&f.rating===pinned.rating);
+    const opps=spotlightOpponents(pinned);
     if(!opps.length){ setTimeout(()=>toast(`No other ${pinned.rating}★ films to compare against.`),300); return null }
     const fresh=opps.filter(f=>!hasCompared(pinned,f));
     const allDone=fresh.length===0;
@@ -4798,12 +5052,12 @@ function renderPair(){
     cardA.style.transform='';cardB.style.transform='';
     const ga=el('cp-glow-a'),gb=el('cp-glow-b');
     if(ga)ga.style.opacity='0';if(gb)gb.style.opacity='0';
-    // Tournament champion, or Spotlight pinned film — same visual treatment
-    const isChampA=(!!tournamentState&&a.id===tournamentState.championId)||(S.mode==='spot'&&a.id===S.pinnedId);
-    const isChampB=(!!tournamentState&&b.id===tournamentState.championId)||(S.mode==='spot'&&b.id===S.pinnedId);
+    // Ladder climber, or Spotlight pinned film — same visual treatment
+    const isChampA=(!!tournamentState&&a.id===tournamentState.filmId)||(S.mode==='spot'&&a.id===S.pinnedId);
+    const isChampB=(!!tournamentState&&b.id===tournamentState.filmId)||(S.mode==='spot'&&b.id===S.pinnedId);
     cardA.classList.toggle('cp-champion',isChampA);
     cardB.classList.toggle('cp-champion',isChampB);
-    const badgeTitle=tournamentState?'Reigning champion':'Focus film';
+    const badgeTitle=tournamentState?'Currently climbing':'Focus film';
     const badgeA=cardA.querySelector('.cp-champion-badge');if(badgeA)badgeA.title=badgeTitle;
     const badgeB=cardB.querySelector('.cp-champion-badge');if(badgeB)badgeB.title=badgeTitle;
     // Ghost "NEW" badge — visible confirmation that a film with no
@@ -4886,19 +5140,21 @@ function cpRenderTimeline(){
   const recentPlaceholders=recentSizes.slice(0,recentPad).map(sz=>`<div class="cp-timeline-item ${sz}" style="visibility:hidden"></div>`).join('');
   const recentHtml=recentPlaceholders+recentFilms.map((f,i)=>posterTile(f,recentSizes[recentPad+i],recentOpacity[recentSizes[recentPad+i]])).join('');
 
-  // Up next. Tournament mode's queue order is genuinely deterministic —
-  // whoever wins each round, queue[1]/[2]/[3] are exactly who's challenged
-  // next. queue[0] is excluded here since that's the opponent already in
-  // the current duel (see pickPair()'s tournament branch), not "upcoming".
-  // Every other mode (range/spot/topic) picks its next pair with real
-  // randomization at choice-time, so there is no true "next" to preview
-  // yet — those still show a same-tier guess for the timeline's sake,
-  // not a guarantee.
+  // Up next. The ladder's climb order is genuinely deterministic — if the
+  // climber keeps winning, the next opponents are exactly whoever sits
+  // above the current one, in score order. The current opponent itself is
+  // excluded since that's already in the duel, not "upcoming". Every other
+  // mode (range/spot/topic) picks its next pair with real randomization at
+  // choice-time, so there is no true "next" to preview yet — those still
+  // show a same-tier guess for the timeline's sake, not a guarantee.
   const currentTier=currentPair[0].rating;
   let upcoming,upcomingRemaining;
   if(tournamentState){
-    upcoming=tournamentState.queue.slice(1,4).map(id=>S.films.find(f=>f.id===id)).filter(Boolean);
-    upcomingRemaining=tournamentState.queue.length-1;
+    const pool=[...ladderPool()].sort((a,b)=>a.score-b.score);
+    const climber=S.films.find(f=>f.id===tournamentState.filmId);
+    const climberIdx=climber?pool.findIndex(f=>f.id===climber.id):-1;
+    upcoming=climberIdx===-1?[]:pool.slice(climberIdx+2,climberIdx+5);
+    upcomingRemaining=climberIdx===-1?0:Math.max(0,pool.length-climberIdx-2);
   }else{
     const excludeIds=new Set([...S.recentWinners,currentPair[0].id,currentPair[1].id]);
     const upcomingPool=S.films.filter(f=>f.rating===currentTier&&!excludeIds.has(f.id));
@@ -5110,6 +5366,53 @@ function cpChoose(slot){
     },320);
     return;
   }
+  // Ladder placement — also isolated from the ELO-style updateScores()
+  // below. A win swaps the climber's (score,rating) with its neighbor's
+  // outright (an exact one-slot move, not a nudge that could under- or
+  // over-shoot); a loss locks the climber in at its current spot.
+  if(tournamentState){
+    const climber=S.films.find(f=>f.id===tournamentState.filmId);
+    const opponent=a.id===tournamentState.filmId?b:a;
+    if(!climber){tournamentState=null;renderPair();return}
+    el('cp-card-'+slot)?.classList.add('chosen');
+    el('cp-card-'+(slot==='a'?'b':'a'))?.classList.add('unchosen');
+    S.undoSnap={films:JSON.parse(JSON.stringify(S.films)),rivals:JSON.parse(JSON.stringify(S.rivals)),comparedPairs:{...S.comparedPairs},totalComparisons:S.totalComparisons,sessionDone:S.sessionDone,recentPairs:[...S.recentPairs],recentWinners:[...S.recentWinners]};
+    updateRivals(winner,loser);
+    winner.comparisons++;loser.comparisons++;
+    if(winner.id===climber.id)winner.wins++;
+    markCompared(a,b);
+    S.recentPairs=[...S.recentPairs,pk(a,b)].slice(-20);
+    S.recentWinners=[...S.recentWinners,winner.id].slice(-5);
+    S.totalComparisons++;S.sessionDone++;
+    persist();markDirty();
+    checkNewAchievements();
+    const climberWon=winner.id===climber.id;
+    if(climberWon){
+      if(opponent.rankLocked){
+        pendingLadderOverride={climberId:climber.id,opponentId:opponent.id};
+        el('ladder-override-title').textContent=`"${opponent.title}" is locked in`;
+        el('ladder-override-sub').textContent=`Let "${climber.title}" take its spot instead?`;
+        el('ladder-override-prompt').classList.add('show');
+        return;
+      }
+      ladderSwap(climber,opponent);
+      tournamentState.championSide=slot;
+      persist();
+      setTimeout(()=>renderPair(),320);
+      return;
+    }
+    climber.rankLocked=true;
+    persist();
+    const nextClimber=ladderNextClimber(ladderPool());
+    if(!nextClimber){
+      setTimeout(()=>promptTierPromotion(tournamentState.tier,tournamentState.maxDiff),320);
+      return;
+    }
+    tournamentState.filmId=nextClimber.id;
+    tournamentState.championSide='a';
+    setTimeout(()=>renderPair(),320);
+    return;
+  }
   // Preserve visual side continuity — whichever slot a "stays in place"
   // film (tournament champion, or the Spotlight pinned film) currently
   // occupies should be the side it renders on next time too.
@@ -5131,22 +5434,6 @@ function cpChoose(slot){
   S.totalComparisons++;S.sessionDone++;
   persist();markDirty();
   checkNewAchievements();
-  if(tournamentState){
-    // Winner always carries forward as champion — whether that's the film
-    // that started the run or a challenger that just beat it.
-    tournamentState.championId=winner.id;
-    tournamentState.championSide=slot;
-    tournamentState.queue.shift();
-    if(!tournamentState.queue.length){
-      const advanced=tournamentAdvanceTier();
-      if(!advanced){
-        setTimeout(()=>tournamentEnd(),320);
-        return;
-      }
-    }
-    setTimeout(()=>renderPair(),320);
-    return;
-  }
   // Show trivia every 10, else next pair
   setTimeout(()=>{
     if(S.sessionDone%10===0){showTrivia();}
@@ -5170,7 +5457,7 @@ function getProgressInfo(){
   if(S.mode==='spot'&&S.pinnedId){
     const pinned=S.films.find(f=>f.id===S.pinnedId);
     if(pinned){
-      const opps=S.films.filter(f=>f.id!==S.pinnedId&&f.rating===pinned.rating);
+      const opps=spotlightOpponents(pinned);
       const done=opps.filter(f=>hasCompared(pinned,f)).length;
       const title=pinned.title.length>18?pinned.title.slice(0,16)+'…':pinned.title;
       return{done,total:opps.length,label:`${title} · ${done}/${opps.length} compared`};
@@ -5809,7 +6096,16 @@ function esc2(s){ return String(s).replace(/"/g,'""') }
     S.canResume=saved.canResume!==undefined?saved.canResume:true;
     S.films.forEach(migrateScore);
   }
-  goTo('list');
+  // Compare is the landing screen once there's actually a library to rank —
+  // it renders behind the mode picker so there's a real duel visible as a
+  // backdrop, rather than a blank screen. A genuinely empty library has
+  // nothing to show there, so List (with its own import prompt) stays the
+  // right landing spot until films exist.
+  if(S.films.length){
+    goToCompareLanding();
+  }else{
+    goTo('list');
+  }
   randomizeListScrollOnce();
   setTimeout(attachLongPress, 100);
   // Measure the actual rendered bottom bar height (varies by device safe-area)
