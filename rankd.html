@@ -4282,14 +4282,14 @@ function startTournament(tier){
   const pool=S.films.filter(f=>Math.abs(f.rating-tier)<=maxDiff);
   if(pool.length<2){toast(`Need at least 2 films in range to start ranking`);return}
   clearCompetingModeState();
-  tournamentState={tier,maxDiff,filmId:null,championSide:'a'};
+  tournamentState={tier,maxDiff,filmId:null,championSide:'a',lo:0,hi:0,capped:false,streak:0,skipN:0};
   const climber=ladderNextClimber(pool);
   if(!climber){
     tournamentState=null;
     promptTierPromotion(tier,maxDiff);
     return;
   }
-  tournamentState.filmId=climber.id;
+  ladderInitContender(climber.id);
   S.sessionDone=0;S.sessionSnap={};
   S.films.forEach(f=>{S.sessionSnap[f.id]={score:f.score,rating:f.rating}});
   const rangeNote=maxDiff>0?` (±${maxDiff}★)`:'';
@@ -4587,78 +4587,106 @@ function ladderNextClimber(pool){
   const unlocked=ladderStableOrder(pool).filter(f=>!f.rankLocked);
   return unlocked[0]||null;
 }
-// The film immediately above the climber in stable order — its only
-// opponent. null means the climber has nothing left to beat.
-function ladderNeighborAbove(film,pool){
-  const sorted=ladderStableOrder(pool);
-  const idx=sorted.findIndex(f=>f.id===film.id);
-  if(idx===-1||idx===sorted.length-1)return null;
-  return sorted[idx+1];
+// ── Contender placement: insertion with skip + binary settle ──
+// The contender is inserted among the films ABOVE it in stable order.
+// lo = how many of those it has surely beaten (its floor); hi = how many
+// it could still beat (its cap). It locks at position lo once lo===hi.
+// Normal play tests one film up (a climb); a skip tests N films up at
+// once; and a loss after a skip caps hi so the remaining window bisects —
+// an overshoot always settles back DOWN instead of getting stuck.
+function ladderAbove(){
+  if(!tournamentState)return[];
+  const ordered=ladderStableOrder(ladderPool());
+  const ci=ordered.findIndex(f=>f.id===tournamentState.filmId);
+  return ci===-1?[]:ordered.slice(ci+1);
 }
-// A win moves the climber up exactly one slot. Within the same tier, a
-// plain value-swap isn't enough when the pair sits inside a large tied
-// cluster (nudging either score by a whisker just leapfrogs the climber
-// past the *whole* cluster, or drops the loser below all of it — not a
-// clean one-slot move, which is what "close but not sequential" was).
-// The fix that actually holds regardless of cluster size: swap the pair's
-// stable-order positions, then redistribute the *entire* pool evenly
-// across the tier's numeric range in that order. Every film ends up with
-// a distinct score matching its exact rank, so ties can't recur and every
-// future win is a guaranteed single-slot move. Crossing a tier boundary
-// (ranging beyond one tier) still trades (score,rating) outright, since
-// promotion-on-win only makes sense there, not an even redistribution
-// across two different tiers' ranges.
-function ladderSwap(climber,opponent,pool){
-  if(climber.rating!==opponent.rating){
-    const score=climber.score,rating=climber.rating;
-    climber.score=opponent.score;climber.rating=opponent.rating;
-    opponent.score=score;opponent.rating=rating;
-    return;
-  }
-  const ordered=ladderStableOrder(pool);
-  const ci=ordered.findIndex(f=>f.id===climber.id);
-  const oi=ordered.findIndex(f=>f.id===opponent.id);
-  if(ci===-1||oi===-1)return;
-  [ordered[ci],ordered[oi]]=[ordered[oi],ordered[ci]];
-  const [mn,mx]=TIER_RANGE[climber.rating]||TIER_RANGE[0.5];
-  const n=ordered.length;
-  ordered.forEach((f,i)=>{
-    f.score=n===1?Math.round((mn+mx)/2):Math.round(mn+(i/(n-1))*(mx-mn));
+function ladderInitContender(id){
+  const st=tournamentState; st.filmId=id;
+  st.lo=0; st.hi=ladderAbove().length; st.capped=false; st.streak=0; st.skipN=0;
+}
+// Which film above the contender to test next (index into ladderAbove()).
+// -1 means the window has collapsed — the contender has found its slot.
+function ladderProbeIndex(){
+  const st=tournamentState; if(!st||st.lo>=st.hi)return -1;
+  if(st.skipN>0)return Math.min(st.hi-1, st.lo+st.skipN-1);   // skip ahead
+  if(st.capped)return st.lo+Math.floor((st.hi-1-st.lo)/2);    // binary settle
+  return st.lo;                                                // climb one
+}
+// Even-spaces each rating's films across that rating's own score band in
+// the given order — bands don't overlap, so global order is preserved and
+// every film keeps a score valid for its tier (handles mixed-tier pools
+// from ranging, not just a single tier).
+function ladderRedistribute(ordered){
+  const byR={};
+  ordered.forEach(f=>{(byR[f.rating]=byR[f.rating]||[]).push(f)});
+  Object.keys(byR).forEach(r=>{
+    const grp=byR[r]; const rng=TIER_RANGE[r]||TIER_RANGE[0.5]; const mn=rng[0],mx=rng[1]; const n=grp.length;
+    grp.forEach((f,i)=>{ f.score = n===1?Math.round((mn+mx)/2):Math.round(mn+(i/(n-1))*(mx-mn)); });
   });
 }
-// A win against a locked film doesn't swap automatically — the comparison
-// itself already counted (see cpChoose()), this only gates the position
-// change itself behind a confirmation.
-let pendingLadderOverride=null;
-function ladderOverrideConfirm(){
-  if(!pendingLadderOverride||!tournamentState)return;
-  const climber=S.films.find(f=>f.id===pendingLadderOverride.climberId);
-  const opponent=S.films.find(f=>f.id===pendingLadderOverride.opponentId);
-  el('ladder-override-prompt').classList.remove('show');
-  if(climber&&opponent){
-    ladderSwap(climber,opponent,ladderPool());
-    opponent.rankLocked=false;
-    tournamentState.filmId=climber.id;
-    persist();
+// Locks the contender at its found slot, redistributes, then advances to
+// the next-lowest unlocked film — auto-locking any film that has nothing
+// left above it (it's the tier top) without a redundant comparison.
+function ladderSettleAndNext(){
+  const st=tournamentState; if(!st)return;
+  const contender=S.films.find(f=>f.id===st.filmId);
+  if(contender){
+    const ordered=ladderStableOrder(ladderPool());
+    const ci=ordered.findIndex(f=>f.id===contender.id);
+    if(ci!==-1){
+      ordered.splice(ci,1);
+      ordered.splice(ci+st.lo,0,contender);
+      const idx=ordered.indexOf(contender);
+      const below=ordered[idx-1], above=ordered[idx+1];
+      if(below&&below.rating!==contender.rating)contender.rating=below.rating;
+      else if(above&&above.rating!==contender.rating)contender.rating=above.rating;
+      ladderRedistribute(ordered);
+    }
+    contender.rankLocked=true;
   }
-  pendingLadderOverride=null;
+  persist();
+  let next=ladderNextClimber(ladderPool());
+  while(next){
+    ladderInitContender(next.id);
+    if(tournamentState.hi>0)break;      // has opponents above — ready to play
+    next.rankLocked=true; persist();     // nothing above — it's the tier top
+    next=ladderNextClimber(ladderPool());
+  }
+  if(!next){ setTimeout(()=>promptTierPromotion(st.tier,st.maxDiff),320); return; }
+  setTimeout(()=>renderPair(),320);
+}
+function ladderApplyWin(j){
+  const st=tournamentState; st.lo=j+1; st.streak++; st.skipN=0;
+  if(st.lo>=st.hi)ladderSettleAndNext(); else setTimeout(()=>renderPair(),320);
+}
+function ladderApplyLoss(j){
+  const st=tournamentState; st.hi=j; st.capped=true; st.streak=0; st.skipN=0;
+  if(st.lo>=st.hi)ladderSettleAndNext(); else setTimeout(()=>renderPair(),320);
+}
+// Skip ahead — the next comparison tests a film N slots up instead of the
+// immediate neighbor. Consumed after one comparison.
+function ladderSkip(n){
+  if(!tournamentState)return;
+  tournamentState.skipN=Math.max(1,n);
   renderPair();
 }
-function ladderOverrideDecline(){
-  if(!pendingLadderOverride||!tournamentState){el('ladder-override-prompt').classList.remove('show');return}
-  const climber=S.films.find(f=>f.id===pendingLadderOverride.climberId);
+// Beating a locked film needs a nod before it's bumped from its spot.
+let pendingLadderOverride=null;
+function ladderOverrideConfirm(){
   el('ladder-override-prompt').classList.remove('show');
-  if(climber)climber.rankLocked=true;
-  pendingLadderOverride=null;
-  persist();
-  const nextClimber=ladderNextClimber(ladderPool());
-  if(!nextClimber){
-    promptTierPromotion(tournamentState.tier,tournamentState.maxDiff);
-    return;
+  if(pendingLadderOverride&&tournamentState){
+    const opp=S.films.find(f=>f.id===pendingLadderOverride.opponentId);
+    if(opp)opp.rankLocked=false;     // bumped — it re-ranks itself later
+    ladderApplyWin(pendingLadderOverride.j);
   }
-  tournamentState.filmId=nextClimber.id;
-  tournamentState.championSide='a';
-  renderPair();
+  pendingLadderOverride=null;
+}
+function ladderOverrideDecline(){
+  el('ladder-override-prompt').classList.remove('show');
+  if(pendingLadderOverride&&tournamentState){
+    ladderApplyLoss(pendingLadderOverride.j);   // settle just below the locked film
+  }
+  pendingLadderOverride=null;
 }
 function avgComps(arr){ return arr.reduce((s,f)=>s+f.comparisons,0)/arr.length }
 
@@ -4696,23 +4724,18 @@ function pickPair(){
     return null;
   }
   if(tournamentState){
-    const climber=S.films.find(f=>f.id===tournamentState.filmId);
-    if(!climber){tournamentState=null;return pickPair()}
-    const pool=ladderPool();
-    const opponent=ladderNeighborAbove(climber,pool);
-    if(!opponent){
-      // Nothing left above it — it's the best in range. Lock it in and
-      // move straight to whichever unlocked film is lowest next.
-      climber.rankLocked=true;
-      const nextClimber=ladderNextClimber(pool);
-      if(!nextClimber){
-        setTimeout(()=>promptTierPromotion(tournamentState.tier,tournamentState.maxDiff),50);
-        return null;
-      }
-      tournamentState.filmId=nextClimber.id;
-      return pickPair();
+    const contender=S.films.find(f=>f.id===tournamentState.filmId);
+    if(!contender){tournamentState=null;return pickPair()}
+    const above=ladderAbove();
+    const j=ladderProbeIndex();
+    if(j<0||j>=above.length){
+      // Window collapsed with no opponent to test — the contender has
+      // found its slot. Settle it and advance (async re-render follows).
+      ladderSettleAndNext();
+      return currentPair;
     }
-    return tournamentState.championSide==='b'?[opponent,climber]:[climber,opponent];
+    // Contender always on the left; whatever it faces on the right.
+    return [contender,above[j]];
   }
   if(S.films.length<2)return null;
   const recent=new Set(S.recentPairs);
@@ -5395,51 +5418,43 @@ function cpChoose(slot){
     },320);
     return;
   }
-  // Ladder placement — also isolated from the ELO-style updateScores()
-  // below. A win swaps the climber's (score,rating) with its neighbor's
-  // outright (an exact one-slot move, not a nudge that could under- or
-  // over-shoot); a loss locks the climber in at its current spot.
+  // Ladder placement — isolated from the ELO-style updateScores() below.
+  // The comparison narrows the contender's insertion window (lo/hi); the
+  // actual score move happens only once the window collapses and it locks
+  // (ladderSettleAndNext), so a win is always an exact, tie-proof reorder.
   if(tournamentState){
-    const climber=S.films.find(f=>f.id===tournamentState.filmId);
+    const contender=S.films.find(f=>f.id===tournamentState.filmId);
     const opponent=a.id===tournamentState.filmId?b:a;
-    if(!climber){tournamentState=null;renderPair();return}
+    if(!contender){tournamentState=null;renderPair();return}
     el('cp-card-'+slot)?.classList.add('chosen');
     el('cp-card-'+(slot==='a'?'b':'a'))?.classList.add('unchosen');
-    S.undoSnap={films:JSON.parse(JSON.stringify(S.films)),rivals:JSON.parse(JSON.stringify(S.rivals)),comparedPairs:{...S.comparedPairs},totalComparisons:S.totalComparisons,sessionDone:S.sessionDone,recentPairs:[...S.recentPairs],recentWinners:[...S.recentWinners]};
+    S.undoSnap={films:JSON.parse(JSON.stringify(S.films)),rivals:JSON.parse(JSON.stringify(S.rivals)),comparedPairs:{...S.comparedPairs},totalComparisons:S.totalComparisons,sessionDone:S.sessionDone,recentPairs:[...S.recentPairs],recentWinners:[...S.recentWinners],tournamentState:JSON.parse(JSON.stringify(tournamentState))};
     updateRivals(winner,loser);
     winner.comparisons++;loser.comparisons++;
-    if(winner.id===climber.id)winner.wins++;
+    if(winner.id===contender.id)winner.wins++;
     markCompared(a,b);
     S.recentPairs=[...S.recentPairs,pk(a,b)].slice(-20);
     S.recentWinners=[...S.recentWinners,winner.id].slice(-5);
     S.totalComparisons++;S.sessionDone++;
     persist();markDirty();
     checkNewAchievements();
-    const climberWon=winner.id===climber.id;
-    if(climberWon){
+    // Which above-index did we just test? (the opponent's slot)
+    const j=ladderAbove().findIndex(f=>f.id===opponent.id);
+    if(j===-1){ setTimeout(()=>renderPair(),320); return; }
+    const contenderWon=winner.id===contender.id;
+    if(contenderWon){
       if(opponent.rankLocked){
-        pendingLadderOverride={climberId:climber.id,opponentId:opponent.id};
+        // Beating a settled film — confirm before bumping it from its slot.
+        pendingLadderOverride={opponentId:opponent.id,j};
         el('ladder-override-title').textContent=`"${opponent.title}" is locked in`;
-        el('ladder-override-sub').textContent=`Let "${climber.title}" take its spot instead?`;
+        el('ladder-override-sub').textContent=`Let "${contender.title}" take its spot instead?`;
         el('ladder-override-prompt').classList.add('show');
         return;
       }
-      ladderSwap(climber,opponent,ladderPool());
-      tournamentState.championSide=slot;
-      persist();
-      setTimeout(()=>renderPair(),320);
-      return;
+      ladderApplyWin(j);
+    }else{
+      ladderApplyLoss(j);
     }
-    climber.rankLocked=true;
-    persist();
-    const nextClimber=ladderNextClimber(ladderPool());
-    if(!nextClimber){
-      setTimeout(()=>promptTierPromotion(tournamentState.tier,tournamentState.maxDiff),320);
-      return;
-    }
-    tournamentState.filmId=nextClimber.id;
-    tournamentState.championSide='a';
-    setTimeout(()=>renderPair(),320);
     return;
   }
   // Preserve visual side continuity — whichever slot a "stays in place"
@@ -5528,6 +5543,9 @@ function undoLast(){
   S.sessionDone    = S.undoSnap.sessionDone;
   S.recentPairs    = S.undoSnap.recentPairs;
   S.recentWinners  = S.undoSnap.recentWinners;
+  // Ladder runs also rewind their placement window, so undo puts you back
+  // on the exact comparison you just made rather than a re-derived one.
+  if(S.undoSnap.tournamentState!==undefined)tournamentState=S.undoSnap.tournamentState;
   S.undoSnap       = null;
   persist();renderPair();toast('Undone ✓');
 }
