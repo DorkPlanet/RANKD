@@ -182,6 +182,73 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
    — de-emphasized so it can't be mistaken for an equal-weight peer */
 .cp-action-btn.cp-save{width:36px;height:36px;color:rgba(255,255,255,.32)}
 
+/* ── Ladder placing band ─────────────────────────────────────────────
+   Shown only during a ladder run (#compare-screen.ladder-run). Sits in
+   normal flow below the posters; the stage shrinks by this band's
+   live-measured height (--cp-ladder-band-h) so it never collides with
+   the fixed session panel below — same pattern as --cp-status-row-h.
+   The standalone action row is hidden and its buttons live in here. */
+.cp-ladder-band{display:none;flex-direction:column;align-items:center;gap:5px;width:100%;padding:6px 14px 2px;flex-shrink:0;position:relative;z-index:2}
+#compare-screen.ladder-run .cp-ladder-band{display:flex}
+#compare-screen.ladder-run .cp-action-row{display:none}
+/* Posters are absolutely-positioned and overflow the stage, so the band
+   can't just subtract from the stage height (that pulls it up INTO the
+   art). Instead, during a run, cap the posters and give the stage a fixed
+   height that fits them — the band then flows cleanly below. */
+#compare-screen.ladder-run .cp-stage{height:350px;padding-top:34px}
+#compare-screen.ladder-run .cp-card{max-width:165px}
+/* Titles clamp to one line during a run so both cards are the same height
+   (a 2-line title would make one card taller and poke its rotated corner
+   into the band) — the band already carries the contender's full title. */
+#compare-screen.ladder-run .cp-card-title{-webkit-line-clamp:1;min-height:0;font-size:26px;margin-bottom:8px}
+@media (max-height:849px){
+  #compare-screen.ladder-run .cp-stage{height:335px;padding-top:30px}
+  #compare-screen.ladder-run .cp-card{max-width:158px}
+}
+@media (max-height:700px){
+  #compare-screen.ladder-run .cp-stage{height:312px;padding-top:22px}
+  #compare-screen.ladder-run .cp-card{max-width:146px}
+}
+/* Old duel chrome has no place during a placement run. */
+#compare-screen.ladder-run .cp-rank-badge,
+#compare-screen.ladder-run .cp-new-badge{display:none}
+
+.cp-lb-head{display:flex;align-items:center;gap:8px;max-width:100%;font-family:var(--sans)}
+.cp-lb-tag{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--accent);white-space:nowrap}
+.cp-lb-title{font-size:13px;font-weight:700;color:var(--text-hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44vw}
+.cp-lb-streak{font-size:12px;font-weight:700;color:var(--accent);white-space:nowrap}
+.cp-lb-streak:empty{display:none}
+
+.cp-lb-mid{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap}
+.cp-lb-rank{display:flex;align-items:baseline;gap:10px;font-family:var(--serif);font-weight:700;line-height:1}
+.cp-lb-cur,.cp-lb-tgt{font-size:27px;letter-spacing:.01em}
+.cp-lb-cur{color:var(--text-hi)}
+.cp-lb-tgt{color:var(--dim)}
+.cp-lb-sep{font-size:18px;color:var(--dim);opacity:.7}
+/* Tick pulse — watching this one number move is the whole legibility fix:
+   up (win) glows teal-green and rises, down (settle) glows gold and drops. */
+.cp-lb-cur.tick-up{animation:cpTickUp .55s var(--ease)}
+.cp-lb-cur.tick-down{animation:cpTickDown .55s var(--ease)}
+@keyframes cpTickUp{0%{color:var(--green);transform:translateY(7px) scale(1.28)}100%{color:var(--text-hi);transform:none}}
+@keyframes cpTickDown{0%{color:var(--amber);transform:translateY(-7px) scale(1.28)}100%{color:var(--text-hi);transform:none}}
+
+/* Always-on skip controls — the repetition-killer on big tiers. */
+.cp-lb-skiprow{display:flex;align-items:center;gap:8px}
+.cp-lb-skipbtn{font-size:12px;font-weight:700;color:var(--accent);border:1px solid rgba(218,165,32,.4);border-radius:14px;padding:4px 12px;background:rgba(218,165,32,.08);transition:transform .13s,background .13s,color .13s}
+.cp-lb-skipbtn:active{transform:scale(.9);background:var(--accent);color:var(--bg)}
+
+.cp-lb-actions{display:flex;align-items:center;justify-content:space-evenly;width:100%;margin-top:2px}
+
+/* Role badges — caption pill under each poster during a ladder run:
+   left = the contender (YOUR PICK), right = the opponent. */
+.cp-role-badge{display:none;position:absolute;left:50%;bottom:-11px;transform:translateX(-50%);white-space:nowrap;font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.07em;padding:3px 9px;border-radius:11px;z-index:3;pointer-events:none}
+#compare-screen.ladder-run .cp-role-badge{display:block}
+.cp-role-badge.role-pick{color:var(--bg);background:var(--accent);box-shadow:0 2px 10px rgba(218,165,32,.4)}
+.cp-role-badge.role-challenger{color:var(--text-hi);background:rgba(20,15,36,.9);border:1px solid rgba(255,255,255,.2)}
+.cp-role-badge.role-holding{color:var(--accent);background:rgba(20,15,36,.92);border:1px solid var(--accent)}
+/* Gold ring on a locked opponent's poster. */
+.cp-poster.holding-ring{box-shadow:0 0 0 3px var(--accent),0 4px 20px rgba(218,165,32,.45)}
+
 /* Session panel — a layout wrapper only, no shared background. Its two
    children (progress, timeline) are deliberately distinct elements, not
    two halves of one bar: the progress bar is an inset floating card, the
@@ -1443,6 +1510,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <div class="cp-swipe-glow cp-glow-left" id="cp-glow-a"></div>
           <div class="poster cp-poster" id="poster-a"><span class="poster-ph">🎬</span></div>
           <div class="cp-rank-badge" id="cp-rank-a"></div>
+          <div class="cp-role-badge" id="cp-role-a"></div>
         </div>
       </div>
 
@@ -1460,7 +1528,49 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <div class="cp-swipe-glow cp-glow-right" id="cp-glow-b"></div>
           <div class="poster cp-poster" id="poster-b"><span class="poster-ph">🎬</span></div>
           <div class="cp-rank-badge" id="cp-rank-b"></div>
+          <div class="cp-role-badge" id="cp-role-b"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- Ladder placing band — shown only during a ladder run (body.ladder-run).
+         Carries the "now placing" headline, the current▸target rank, the two
+         skip-control variants, and the folded-in action icons, so it reads as
+         one control surface below the posters. -->
+    <div class="cp-ladder-band" id="cp-ladder-band">
+      <div class="cp-lb-head">
+        <span class="cp-lb-tag">▲ NOW PLACING</span>
+        <span class="cp-lb-title" id="cp-lb-title"></span>
+        <span class="cp-lb-streak" id="cp-lb-streak"></span>
+      </div>
+      <!-- Rank + always-on skip controls share one row. -->
+      <div class="cp-lb-mid">
+        <div class="cp-lb-rank">
+          <span class="cp-lb-cur" id="cp-lb-cur">#—</span>
+          <span class="cp-lb-sep">▸</span>
+          <span class="cp-lb-tgt" id="cp-lb-tgt">#—</span>
+        </div>
+        <div class="cp-lb-skiprow" id="cp-lb-skiprow">
+          <button class="cp-lb-skipbtn" onclick="ladderSkip(5)">+5</button>
+          <button class="cp-lb-skipbtn" onclick="ladderSkip(10)">+10</button>
+          <button class="cp-lb-skipbtn" onclick="ladderSkip(50)">+50</button>
+        </div>
+      </div>
+      <!-- Action icons folded in (mirrors .cp-action-row; that row is hidden
+           during a ladder run). No ids — saveNow(this) works on any button. -->
+      <div class="cp-lb-actions">
+        <button class="cp-action-btn" onclick="undoLast()" title="Undo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 015.5 5.5v0a5.5 5.5 0 01-5.5 5.5H11"/></svg>
+        </button>
+        <button class="cp-action-btn cp-save" onclick="saveNow(this)" title="Save">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 3v5h8V3"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+        </button>
+        <button class="cp-action-btn" onclick="stopSession()" title="Stop session">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
+        </button>
+        <button class="cp-action-btn" onclick="skipPair()" title="Skip">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 4 13 12 5 20"/><polyline points="12 4 20 12 12 20"/></svg>
+        </button>
       </div>
     </div>
 
@@ -4470,9 +4580,10 @@ function cpUpdateStatus(){
     const done=Object.keys(topicRankState.comparedPairs).length;
     render('🔍',esc(topicRankState.label),done,total,false);
   }else if(tournamentState){
-    const pool=ladderPool();
-    const done=pool.filter(f=>f.rankLocked).length;
-    render('👑',starsStrFilled(tournamentState.tier),done,pool.length,false);
+    // The placement band below the posters now carries all run context
+    // (tier, contender, rank), so the old top status row stays hidden —
+    // it would just be redundant chrome during a placement run.
+    row.classList.remove('show');
   }else if(S.mode==='range'&&S.selectedTier!==null){
     const g=S.films.filter(f=>f.rating===S.selectedTier);
     const total=g.length*(g.length-1)/2;
@@ -5157,6 +5268,74 @@ function renderPair(){
   cpEnsureGenresAndCloud('b',b);
   updateHeaderMetric();
   cpRenderTimeline();
+
+  // Ladder-run face: the placement band + role badges below the posters,
+  // with the old duel chrome hidden via the .ladder-run class.
+  const cs=el('compare-screen');
+  if(tournamentState){
+    cs?.classList.add('ladder-run');
+    cpRenderLadder();
+  }else{
+    cs?.classList.remove('ladder-run');
+    prevLadderCur=null; prevLadderKey=null;
+  }
+}
+
+// Placement band renderer — the compare screen's ladder-run face. Writes the
+// contender's title/streak, its rank as #cur ▸ #tgt (the single number the
+// whole mechanic is about), the streak banner, and the YOUR PICK / CHALLENGER
+// / 🔒 HOLDING role badges. Purely presentational: reads state, moves no
+// scores. cur climbs on a win, and drops when the next contender settles in.
+let prevLadderCur=null, prevLadderKey=null;
+function cpRenderLadder(){
+  const st=tournamentState; if(!st||!currentPair)return;
+  const[a,b]=currentPair;
+  // pickPair may hand back a stale pair while a settle is mid-flight (a
+  // fresh renderPair follows in ~320ms) — bail rather than render garbage.
+  if(a.id!==st.filmId&&b.id!==st.filmId)return;
+  const contender=a.id===st.filmId?a:b;
+  const opponent=contender===a?b:a;
+  const cSlot=contender===a?'a':'b', oSlot=cSlot==='a'?'b':'a';
+
+  const pool=ladderPool();
+  const ordered=ladderStableOrder(pool);
+  const ci=ordered.findIndex(f=>f.id===st.filmId);
+  const j=ladderProbeIndex();
+  const cur=pool.length-(ci+st.lo);
+  const oppRank=pool.length-ordered.findIndex(f=>f.id===opponent.id);
+  const tgt=j<0?cur:oppRank;
+
+  const tEl=el('cp-lb-title'); if(tEl)tEl.textContent=contender.title;
+  const sEl=el('cp-lb-streak'); if(sEl)sEl.textContent=st.streak>=2?`🔥${st.streak}`:'';
+
+  // Rank line + tick: only the contender's own number (cur) animates. A win
+  // raises it (up, teal); a new contender settling below reads as down, gold.
+  const curEl=el('cp-lb-cur'), tgtEl=el('cp-lb-tgt');
+  if(curEl){
+    curEl.textContent='#'+cur;
+    curEl.classList.remove('tick-up','tick-down');
+    if(prevLadderKey===st.filmId&&prevLadderCur!==null&&cur!==prevLadderCur){
+      // A win climbs the ladder → the rank numeral DROPS toward #1, shown as
+      // an upward green tick. (A loss doesn't move cur, so this only fires up.)
+      void curEl.offsetWidth;
+      curEl.classList.add(cur<prevLadderCur?'tick-up':'tick-down');
+    }else if(prevLadderKey!==null&&prevLadderKey!==st.filmId){
+      void curEl.offsetWidth;
+      curEl.classList.add('tick-down');   // previous pick locked, new one drops in below
+    }
+    prevLadderCur=cur; prevLadderKey=st.filmId;
+  }
+  if(tgtEl)tgtEl.textContent='#'+tgt;
+
+  // Role badges + gold ring on a locked opponent.
+  const roleC=el('cp-role-'+cSlot), roleO=el('cp-role-'+oSlot);
+  if(roleC){roleC.className='cp-role-badge role-pick';roleC.textContent='YOUR PICK';}
+  if(roleO){
+    if(opponent.rankLocked){roleO.className='cp-role-badge role-holding';roleO.textContent='🔒 HOLDING #'+oppRank;}
+    else{roleO.className='cp-role-badge role-challenger';roleO.textContent='CHALLENGER · #'+oppRank;}
+  }
+  el('poster-'+oSlot)?.classList.toggle('holding-ring',!!opponent.rankLocked);
+  el('poster-'+cSlot)?.classList.remove('holding-ring');
 }
 
 // Renders the session panel: progress bar + timeline (recent picks / up
