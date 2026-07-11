@@ -4,8 +4,9 @@
     {
       "name": "rankd",
       "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/server.ps1", "-Port", "8080"],
-      "port": 8080
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/server.ps1"],
+      "port": 8080,
+      "autoPort": true
     }
   ]
 }
