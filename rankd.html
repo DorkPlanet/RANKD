@@ -188,26 +188,29 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
    live-measured height (--cp-ladder-band-h) so it never collides with
    the fixed session panel below — same pattern as --cp-status-row-h.
    The standalone action row is hidden and its buttons live in here. */
-.cp-ladder-band{display:none;flex-direction:column;align-items:center;gap:5px;width:100%;padding:6px 14px 2px;flex-shrink:0;position:relative;z-index:2}
+.cp-ladder-band{display:none;flex-direction:column;align-items:center;gap:4px;width:100%;padding:3px 14px 2px;flex-shrink:0;position:relative;z-index:2}
+/* Compact action icons inside the band so the posters get more room. */
+.cp-lb-actions .cp-action-btn{width:40px;height:40px}
+.cp-lb-actions .cp-action-btn.cp-save{width:34px;height:34px}
 #compare-screen.ladder-run .cp-ladder-band{display:flex}
 #compare-screen.ladder-run .cp-action-row{display:none}
 /* Posters are absolutely-positioned and overflow the stage, so the band
    can't just subtract from the stage height (that pulls it up INTO the
    art). Instead, during a run, cap the posters and give the stage a fixed
    height that fits them — the band then flows cleanly below. */
-#compare-screen.ladder-run .cp-stage{height:350px;padding-top:34px}
-#compare-screen.ladder-run .cp-card{max-width:165px}
+#compare-screen.ladder-run .cp-stage{height:430px;padding-top:34px}
+#compare-screen.ladder-run .cp-card{max-width:210px}
 /* Titles clamp to one line during a run so both cards are the same height
    (a 2-line title would make one card taller and poke its rotated corner
    into the band) — the band already carries the contender's full title. */
 #compare-screen.ladder-run .cp-card-title{-webkit-line-clamp:1;min-height:0;font-size:26px;margin-bottom:8px}
 @media (max-height:849px){
-  #compare-screen.ladder-run .cp-stage{height:335px;padding-top:30px}
-  #compare-screen.ladder-run .cp-card{max-width:158px}
+  #compare-screen.ladder-run .cp-stage{height:392px;padding-top:28px}
+  #compare-screen.ladder-run .cp-card{max-width:190px}
 }
 @media (max-height:700px){
-  #compare-screen.ladder-run .cp-stage{height:312px;padding-top:22px}
-  #compare-screen.ladder-run .cp-card{max-width:146px}
+  #compare-screen.ladder-run .cp-stage{height:322px;padding-top:20px}
+  #compare-screen.ladder-run .cp-card{max-width:158px}
 }
 /* Old duel chrome has no place during a placement run. */
 #compare-screen.ladder-run .cp-rank-badge,
@@ -232,10 +235,30 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 @keyframes cpTickUp{0%{color:var(--green);transform:translateY(7px) scale(1.28)}100%{color:var(--text-hi);transform:none}}
 @keyframes cpTickDown{0%{color:var(--amber);transform:translateY(-7px) scale(1.28)}100%{color:var(--text-hi);transform:none}}
 
+/* Loop reset — when a film locks and the next contender starts its climb,
+   its poster rises up from the bottom of the screen (the new bottom-of-list
+   film coming up), and a brief cue confirms we've gone back to the bottom. */
+@keyframes cpLadderRise{0%{transform:translateY(90px);opacity:0}55%{opacity:1}100%{transform:translateY(0);opacity:1}}
+#compare-screen.ladder-run .cp-poster-wrap.ladder-rising{animation:cpLadderRise .6s var(--ease)}
+.cp-lb-nextcue{position:absolute;left:50%;top:-14px;transform:translateX(-50%);white-space:nowrap;font-family:var(--sans);font-size:11px;font-weight:800;letter-spacing:.1em;color:var(--green);opacity:0;pointer-events:none}
+.cp-lb-nextcue.show{animation:cpNextCue 1.15s var(--ease)}
+@keyframes cpNextCue{0%{opacity:0;transform:translate(-50%,8px)}18%{opacity:1;transform:translate(-50%,0)}70%{opacity:1}100%{opacity:0;transform:translate(-50%,-4px)}}
+
 /* Always-on skip controls — the repetition-killer on big tiers. */
 .cp-lb-skiprow{display:flex;align-items:center;gap:8px}
 .cp-lb-skipbtn{font-size:12px;font-weight:700;color:var(--accent);border:1px solid rgba(218,165,32,.4);border-radius:14px;padding:4px 12px;background:rgba(218,165,32,.08);transition:transform .13s,background .13s,color .13s}
 .cp-lb-skipbtn:active{transform:scale(.9);background:var(--accent);color:var(--bg)}
+
+/* Within-tier 0–100 (medium) + small overall-rank / tier-span quick ref.
+   The big #cur ▸ #tgt above stays the most prominent number. */
+.cp-lb-tier{display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:-1px}
+.cp-lb-in100{font-family:var(--serif);font-size:15px;color:var(--text)}
+.cp-lb-ref{display:flex;align-items:center;gap:8px}
+.cp-lb-overall{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.04em;color:var(--dim)}
+.cp-lb-range{font-family:var(--sans);font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--accent);border:1px solid rgba(218,165,32,.55);border-radius:11px;padding:2px 9px}
+/* Milestone banner — TOP OF TIER / END OF TIER, reuses the cue slot + fade. */
+.cp-lb-milestone{position:absolute;left:50%;top:-16px;transform:translateX(-50%);white-space:nowrap;font-family:var(--sans);font-size:12px;font-weight:800;letter-spacing:.09em;color:var(--accent);opacity:0;pointer-events:none;text-shadow:0 1px 8px rgba(218,165,32,.5)}
+.cp-lb-milestone.show{animation:cpNextCue 1.9s var(--ease)}
 
 .cp-lb-actions{display:flex;align-items:center;justify-content:space-evenly;width:100%;margin-top:2px}
 
@@ -259,6 +282,10 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 @media (max-height:700px){
   .cp-session-panel{display:none}
 }
+/* During a placement run the band carries the run's own progress/context
+   and is taller (tier readout), so the recents strip is hidden throughout —
+   the posters and readout get the full height on every screen. */
+#compare-screen.ladder-run .cp-session-panel{display:none}
 
 /* Its own inset card — margin on the sides and rounded corners set it
    apart from the timeline's full-width, square-cornered strip below. */
@@ -1538,6 +1565,8 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
          skip-control variants, and the folded-in action icons, so it reads as
          one control surface below the posters. -->
     <div class="cp-ladder-band" id="cp-ladder-band">
+      <div class="cp-lb-nextcue" id="cp-lb-nextcue">↓ NEXT FILM — BACK TO THE BOTTOM</div>
+      <div class="cp-lb-milestone" id="cp-lb-milestone"></div>
       <div class="cp-lb-head">
         <span class="cp-lb-tag">▲ NOW PLACING</span>
         <span class="cp-lb-title" id="cp-lb-title"></span>
@@ -1555,6 +1584,14 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
           <button class="cp-lb-skipbtn" onclick="ladderSkip(10)">+10</button>
           <button class="cp-lb-skipbtn" onclick="ladderSkip(50)">+50</button>
         </div>
+      </div>
+      <!-- Within-tier 0–100 (medium) + small overall-rank / tier-span quick ref. -->
+      <div class="cp-lb-tier">
+        <span class="cp-lb-in100" id="cp-lb-in100">(— / 100 in tier)</span>
+        <span class="cp-lb-ref">
+          <span class="cp-lb-overall" id="cp-lb-overall">overall #—</span>
+          <span class="cp-lb-range" id="cp-lb-range">★ · #—–#—</span>
+        </span>
       </div>
       <!-- Action icons folded in (mirrors .cp-action-row; that row is hidden
            during a ladder run). No ids — saveNow(this) works on any button. -->
@@ -4741,6 +4778,7 @@ function ladderRedistribute(ordered){
 function ladderSettleAndNext(){
   const st=tournamentState; if(!st)return;
   const contender=S.films.find(f=>f.id===st.filmId);
+  let lockedAtTop=false;
   if(contender){
     const ordered=ladderStableOrder(ladderPool());
     const ci=ordered.findIndex(f=>f.id===contender.id);
@@ -4749,6 +4787,7 @@ function ladderSettleAndNext(){
       ordered.splice(ci+st.lo,0,contender);
       const idx=ordered.indexOf(contender);
       const below=ordered[idx-1], above=ordered[idx+1];
+      lockedAtTop=!above;                // nothing above it — it took the tier's #1 slot
       if(below&&below.rating!==contender.rating)contender.rating=below.rating;
       else if(above&&above.rating!==contender.rating)contender.rating=above.rating;
       ladderRedistribute(ordered);
@@ -4763,7 +4802,14 @@ function ladderSettleAndNext(){
     next.rankLocked=true; persist();     // nothing above — it's the tier top
     next=ladderNextClimber(ladderPool());
   }
-  if(!next){ setTimeout(()=>promptTierPromotion(st.tier,st.maxDiff),320); return; }
+  if(!next){
+    // Whole tier placed — flash the winner (the film now sitting at the top).
+    const winner=ladderStableOrder(ladderPool()).slice(-1)[0];
+    cpLadderMilestone(winner?('🏆 END OF TIER · '+winner.title):'🏆 END OF TIER');
+    setTimeout(()=>promptTierPromotion(st.tier,st.maxDiff),320);
+    return;
+  }
+  if(lockedAtTop)cpLadderMilestone('▲ TOP OF TIER');   // a film just took #1
   setTimeout(()=>renderPair(),320);
 }
 function ladderApplyWin(j){
@@ -5277,7 +5323,7 @@ function renderPair(){
     cpRenderLadder();
   }else{
     cs?.classList.remove('ladder-run');
-    prevLadderCur=null; prevLadderKey=null;
+    prevLadderCur=null; prevLadderKey=null; ladderSuppressReset=false;
   }
 }
 
@@ -5322,10 +5368,24 @@ function cpRenderLadder(){
     }else if(prevLadderKey!==null&&prevLadderKey!==st.filmId){
       void curEl.offsetWidth;
       curEl.classList.add('tick-down');   // previous pick locked, new one drops in below
+      cpLadderResetCue(cSlot);            // ...and the loop visibly restarts from the bottom
     }
     prevLadderCur=cur; prevLadderKey=st.filmId;
   }
   if(tgtEl)tgtEl.textContent='#'+tgt;
+
+  // Tier context — the run's pool is a contiguous block in the full ranked
+  // list, so its overall span gives the #bottom–#top badge, and the
+  // contender's live within-pool spot maps onto both the 0–100 tier scale
+  // (biggest thing above is #cur) and its overall reference rank.
+  const ranked=rankedFilms();
+  const poolRanks=pool.map(f=>ranked.indexOf(f)+1);
+  const spanTop=Math.min(...poolRanks), spanBottom=Math.max(...poolRanks);
+  const in100=pool.length>1?Math.round((pool.length-cur)/(pool.length-1)*99)+1:100;
+  const overall=(spanTop-1)+cur;
+  const in100El=el('cp-lb-in100'); if(in100El)in100El.textContent=`(${in100} / 100 in tier)`;
+  const ovEl=el('cp-lb-overall'); if(ovEl)ovEl.textContent=`overall #${overall}`;
+  const rgEl=el('cp-lb-range'); if(rgEl)rgEl.textContent=`${starsStrFilled(st.tier)} · #${spanBottom}–#${spanTop}`;
 
   // Role badges + gold ring on a locked opponent.
   const roleC=el('cp-role-'+cSlot), roleO=el('cp-role-'+oSlot);
@@ -5336,6 +5396,30 @@ function cpRenderLadder(){
   }
   el('poster-'+oSlot)?.classList.toggle('holding-ring',!!opponent.rankLocked);
   el('poster-'+cSlot)?.classList.remove('holding-ring');
+}
+
+// Loop reset — the previous film locked in, so a fresh contender starts its
+// climb from the bottom of the list. Rise its poster up and flash a cue so
+// the jump back down to the bottom rank reads as a deliberate restart.
+// When a tier milestone just fired it already occupies the cue slot, so we
+// keep the poster rise but skip the "back to the bottom" text that turn.
+let ladderSuppressReset=false;
+function cpLadderResetCue(cSlot){
+  const wrap=el('cp-card-'+cSlot)?.querySelector('.cp-poster-wrap');
+  if(wrap){ wrap.classList.remove('ladder-rising'); void wrap.offsetWidth; wrap.classList.add('ladder-rising'); setTimeout(()=>wrap.classList.remove('ladder-rising'),650); }
+  if(ladderSuppressReset){ ladderSuppressReset=false; return; }
+  const cue=el('cp-lb-nextcue');
+  if(cue){ cue.classList.remove('show'); void cue.offsetWidth; cue.classList.add('show'); setTimeout(()=>cue.classList.remove('show'),1200); }
+}
+
+// Tier milestone flash — TOP OF TIER when a film locks into the tier's #1
+// slot, END OF TIER · winner when every film in the tier is placed.
+function cpLadderMilestone(text){
+  const m=el('cp-lb-milestone'); if(!m)return;
+  m.textContent=text;
+  m.classList.remove('show'); void m.offsetWidth; m.classList.add('show');
+  setTimeout(()=>m.classList.remove('show'),1900);
+  ladderSuppressReset=true;   // let this occupy the cue slot, not "back to the bottom"
 }
 
 // Renders the session panel: progress bar + timeline (recent picks / up
