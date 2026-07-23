@@ -169,7 +169,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .cp-ticker-item .stars{color:var(--accent);letter-spacing:1px}
 .cp-ticker-item .sep{opacity:.4}
 @keyframes cpTickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.cp-status .cp-status-caret{font-size:9px;opacity:.55;font-family:var(--sans)}
 
 /* Undo/Skip — below the posters, in normal flow (not pulled up under the
    stage) so leftover space collects below the row instead of above it.
@@ -359,13 +358,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .duel-side.anim{animation:flipIn .24s var(--ease)}
 .d-spacer{flex:1;min-height:4px}
 .side-content{display:contents}
-
-/* Spotlight complete banner */
-.spot-complete-banner{display:none;padding:7px 16px;border-bottom:1px solid rgba(218,165,32,.2);background:rgba(218,165,32,.06);font-size:12px;color:var(--amber);font-weight:600;align-items:center;gap:8px;flex-shrink:0}
-.spot-complete-banner.show{display:flex}
-
-/* Strikethrough for finished spotlight film */
-.d-title.spot-done{text-decoration:line-through;opacity:.45}
 
 /* Layout toggle buttons */
 .layout-toggle{display:flex;gap:6px}
@@ -1025,11 +1017,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .exp-note{font-size:11px;color:var(--dim);text-align:center;line-height:1.6}
 .settings-section{display:flex;flex-direction:column;gap:8px;flex-shrink:0}
 .settings-label{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
-.settings-mode-row{display:flex;gap:5px;flex-wrap:wrap}
-.smode-btn{padding:8px 13px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--border2);color:var(--dim);cursor:pointer;transition:all .14s;white-space:nowrap}
-.smode-btn.on-within{background:var(--green-dim);color:var(--green);border-color:rgba(0,163,163,.3)}
-.smode-btn.on-chaos{background:rgba(218,165,32,.1);color:var(--orange);border-color:rgba(218,165,32,.3)}
-.smode-btn.on-spot{background:rgba(218,165,32,.1);color:var(--amber);border-color:rgba(218,165,32,.3)}
 .range-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .range-lbl{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
 .range-val{font-size:13px;font-weight:700;color:var(--green)}
@@ -1508,7 +1495,7 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 
     <!-- Status indicator — quiet text, shows tier or focus film context -->
     <div class="cp-status-row" id="cp-status-row">
-      <div class="cp-status" id="cp-status" onclick="cpStatusTap()"></div>
+      <div class="cp-status" id="cp-status"></div>
     </div>
 
     <!-- Ticker — scrolling rating + tagline for both films -->
@@ -1697,8 +1684,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div id="genres-b"></div><div id="meta-b"></div><div id="syn-b"></div>
     <div id="cast-b"></div><div id="matchup-b"></div><div id="was-b"></div>
     <div id="stars-b"></div><div id="rval-b"></div>
-    <div id="mode-label"></div><div id="tier-banner"></div><div id="spot-banner"></div>
-    <div id="spot-title"></div><div id="spot-complete-banner"></div>
     <div id="count-lbl"></div><div id="conf-lbl"></div><div id="cbar"></div><div id="cbar-label"></div>
     <div id="nudge-overlay-a"></div><div id="nudge-overlay-b"></div>
     <div id="stars-wrap-a"></div><div id="stars-wrap-b"></div>
@@ -1706,7 +1691,6 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
     <div id="nudge-val-a"></div><div id="nudge-val-b"></div>
     <div id="nudge-title-a"></div><div id="nudge-title-b"></div>
     <button id="save-btn-c"></button><button id="undo-btn"></button>
-    <div id="tier-banner-lbl"></div>
   </div>
 
 </div>
@@ -2244,9 +2228,9 @@ let S = {
   recentPairs:[],    // last 20 pair keys
   recentWinners:[],  // last 5 winner film ids this session (not persisted)
   undoSnap:null,
-  mergeMode:'merge', mode:'range', pinnedId:null,
+  mergeMode:'merge',
   selectedTier:null,
-  homeMode:'range', rangeSteps:0,
+  rangeSteps:0,
   sessionDone:0, sessionSnap:null,
   layout:'v',
   slotInQueue:[],          // film ids imported but not yet placed via Log a Watch
@@ -2259,7 +2243,6 @@ let currentPair = null;
 let lhDetailFilmId = null;
 // Ladder run state — entirely transient, not persisted. null when inactive.
 let tournamentState = null; // {tier, maxDiff, filmId, championSide:'a'|'b'}
-let pinnedSide = 'a'; // which side the Spotlight pinned film last rendered on
 // Director/Actor/Genre ranking — fully isolated from the main film scores.
 // null when inactive. Never touches S.films directly.
 let topicRankState = null; // {label, scores:{filmId:num}, comparedPairs:{}, recentPairs:[]}
@@ -2455,14 +2438,6 @@ function reconfirmRefine(filmId){
 
 
 
-
-function updateModeBanner(){
-  const rangeStr=S.rangeSteps===0?'same rating':RANGE_LABELS[S.rangeSteps]||'by similarity';
-  const labels={range:rangeStr,spot:'focus film'};
-  const lbl=el('mode-label');if(lbl)lbl.textContent=labels[S.mode]||S.mode;
-  el('tier-banner').classList.toggle('show',S.mode==='range'&&S.rangeSteps===0&&S.selectedTier!==null);
-  updateSettingsModeButtons();
-}
 
 /* ════════════════════════════════
    LAYOUT
@@ -3959,14 +3934,7 @@ function prepModeSheetContent(){
   // kept short since this now lives in a compact box, not a full-width row.
   const resumeDesc=el('msheet-resume-desc');
   if(resumeDesc){
-    let desc='Last settings';
-    const mode=S.homeMode||'range';
-    if(mode==='range'&&S.selectedTier!==null)desc=S.selectedTier+'★ tier';
-    else if(mode==='spot'&&S.pinnedId){
-      const pf=S.films.find(f=>f.id===S.pinnedId);
-      if(pf)desc=pf.title;
-    }
-    resumeDesc.textContent=desc;
+    resumeDesc.textContent=S.selectedTier!=null?S.selectedTier+'★ tier':'Last settings';
   }
   // Stop explicitly ends a session — don't offer to resume it until a new
   // mode has actually been started again (cleared in clearCompetingModeState).
@@ -4018,12 +3986,10 @@ function msheetResume(){
 
 function msheetPickTier(){
   closeModeSheet();
-  S.homeMode='range';S.mode='range';
   openTierPicker();
 }
 function msheetPickFilm(){
   closeModeSheet();
-  S.homeMode='spot';
   openSpotlight();
 }
 // Recent Additions — ranks only films never yet compared, regardless of
@@ -4336,13 +4302,6 @@ function openSettings(){
   if(pb)pb.textContent=S.provisionalEnabled!==false?'ON':'OFF';
   el('settings-modal').classList.add('show');
 }
-function updateSettingsModeButtons(){
-  const cls={range:'on-within',chaos:'on-chaos',spot:'on-spot'};
-  ['range','chaos','spot'].forEach(m=>{
-    const b=el('sm-'+m);if(b)b.className='smode-btn'+(m===S.mode?' '+cls[m]:'');
-  });
-}
-
 /* ════════════════════════════════
    MODAL HELPERS
 ════════════════════════════════ */
@@ -4615,42 +4574,17 @@ function pinFilm(film){
 // real account already has comparisons behind it, so gating on lifetime count
 // would mean this text never shows for exactly the "handed the phone, no
 // orientation" scenario it exists to fix.
-const PURPOSE_STRIP_SESSION_LIMIT=5;
 function cpUpdateStatus(){
   const row=el('cp-status-row');const status=el('cp-status');
   if(!row||!status)return;
-  const render=(icon,label,done,total,tappable)=>{
-    status.className='cp-status';
-    const caret=tappable?' <span class="cp-status-caret">▾</span>':'';
-    const iconPart=icon?`${icon} `:'';
-    status.innerHTML=`${iconPart}${label} · ${done}/${total}${caret}`;
-    row.classList.add('show');
-  };
+  // Only Director/Actor/Genre runs use the top status row now; a ladder run
+  // carries all its context in the placement band below the posters, so it
+  // stays hidden there.
   if(topicRankState){
     const total=topicRankState.filmIds.length*(topicRankState.filmIds.length-1)/2;
     const done=Object.keys(topicRankState.comparedPairs).length;
-    render('🔍',esc(topicRankState.label),done,total,false);
-  }else if(tournamentState){
-    // The placement band below the posters now carries all run context
-    // (tier, contender, rank), so the old top status row stays hidden —
-    // it would just be redundant chrome during a placement run.
-    row.classList.remove('show');
-  }else if(S.mode==='range'&&S.selectedTier!==null){
-    const g=S.films.filter(f=>f.rating===S.selectedTier);
-    const total=g.length*(g.length-1)/2;
-    const done=countDonePairs(g);
-    render('',starsStrFilled(S.selectedTier),done,total,true);
-  }else if(S.mode==='spot'&&S.pinnedId){
-    const pf=S.films.find(f=>f.id===S.pinnedId);
-    const opps=pf?spotlightOpponents(pf):[];
-    const done=pf?opps.filter(f=>hasCompared(pf,f)).length:0;
-    render('🎯',pf?esc(pf.title):'Film',done,opps.length,true);
-  }else if(S.sessionDone<PURPOSE_STRIP_SESSION_LIMIT){
-    // Cross-tier "All ratings" free-compare had zero status text at all —
-    // the biggest orientation gap. Plain line, no counts (there's no
-    // meaningful "done/total" for an open-ended cross-tier pool).
     status.className='cp-status';
-    status.innerHTML='Tap the film you rate higher';
+    status.innerHTML=`🔍 ${esc(topicRankState.label)} · ${done}/${total}`;
     row.classList.add('show');
   }else{
     row.classList.remove('show');
@@ -4660,11 +4594,6 @@ function cpUpdateStatus(){
   // above them, so without this it pushes the action row straight into
   // the reserved zone whenever the status row is showing.
   document.documentElement.style.setProperty('--cp-status-row-h',row.getBoundingClientRect().height+'px');
-}
-
-function cpStatusTap(){
-  if(S.mode==='range')openTierPicker();
-  else if(S.mode==='spot')openSpotlight();
 }
 
 // Builds the scrolling ticker showing star rating + tagline for both
@@ -4693,14 +4622,6 @@ function cpUpdateTicker(a,b){
   track.style.animationDuration=Math.max(14,halfWidth/PX_PER_SEC)+'s';
 }
 
-function unpin(){
-  S.pinnedId=null;
-  el('spot-banner').classList.remove('show');
-  el('film-picker').style.display='none';
-  S.mode='range';S.homeMode='range';
-  updateModeBanner();renderPair();
-}
-
 /* ════════════════════════════════
    MATCHMAKING
 ════════════════════════════════ */
@@ -4714,13 +4635,6 @@ function markCompared(a,b){ S.comparedPairs[pk(a,b)]=true }
 function isNewInTier(film){
   return !S.films.some(f=>f.id!==film.id&&f.rating===film.rating&&hasCompared(film,f));
 }
-// Spotlight's opponent pool — same tier only by default, widened to
-// nearby tiers when a range is set via the Spotlight picker's stepper.
-function spotlightOpponents(pinned){
-  const maxDiff=S.rangeSteps*0.5;
-  return S.films.filter(f=>f.id!==pinned.id&&Math.abs(f.rating-pinned.rating)<=maxDiff);
-}
-
 /* ════════════════════════════════
    TIER LADDER
    Insertion-style placement: the
@@ -5169,12 +5083,13 @@ function renderPair(){
     cardA.style.transform='';cardB.style.transform='';
     const ga=el('cp-glow-a'),gb=el('cp-glow-b');
     if(ga)ga.style.opacity='0';if(gb)gb.style.opacity='0';
-    // Ladder climber, or Spotlight pinned film — same visual treatment
-    const isChampA=(!!tournamentState&&a.id===tournamentState.filmId)||(S.mode==='spot'&&a.id===S.pinnedId);
-    const isChampB=(!!tournamentState&&b.id===tournamentState.filmId)||(S.mode==='spot'&&b.id===S.pinnedId);
+    // The ladder contender (climbing film, incl. a Spotlight re-placement)
+    // gets the champion treatment.
+    const isChampA=!!tournamentState&&a.id===tournamentState.filmId;
+    const isChampB=!!tournamentState&&b.id===tournamentState.filmId;
     cardA.classList.toggle('cp-champion',isChampA);
     cardB.classList.toggle('cp-champion',isChampB);
-    const badgeTitle=tournamentState?'Currently climbing':'Focus film';
+    const badgeTitle='Currently climbing';
     const badgeA=cardA.querySelector('.cp-champion-badge');if(badgeA)badgeA.title=badgeTitle;
     const badgeB=cardB.querySelector('.cp-champion-badge');if(badgeB)badgeB.title=badgeTitle;
     // Ghost "NEW" badge — visible confirmation that a film with no
@@ -5643,31 +5558,7 @@ function cpOpenMiniCard(slot){
 
 
 function getProgressInfo(){
-  // Spotlight: comparisons vs all tier peers
-  if(S.mode==='spot'&&S.pinnedId){
-    const pinned=S.films.find(f=>f.id===S.pinnedId);
-    if(pinned){
-      const opps=spotlightOpponents(pinned);
-      const done=opps.filter(f=>hasCompared(pinned,f)).length;
-      const title=pinned.title.length>18?pinned.title.slice(0,16)+'…':pinned.title;
-      return{done,total:opps.length,label:`${title} · ${done}/${opps.length} compared`};
-    }
-  }
-  // Same-tier mode with selected tier
-  if(S.mode==='range'&&S.rangeSteps===0&&S.selectedTier!==null){
-    const g=S.films.filter(f=>f.rating===S.selectedTier);
-    const total=g.length*(g.length-1)/2;
-    const done=countDonePairs(g);
-    return{done,total,label:`${S.selectedTier}★ tier · ${done}/${total} pairs`};
-  }
-  // Same-tier across all tiers
-  if(S.mode==='range'&&S.rangeSteps===0){
-    const HS=[5,4.5,4,3.5,3,2.5,2,1.5,1,0.5];
-    let total=0,done=0;
-    HS.forEach(r=>{const g=S.films.filter(f=>f.rating===r);if(g.length<2)return;total+=g.length*(g.length-1)/2;done+=countDonePairs(g)});
-    return{done,total,label:`${done}/${total} tier pairs`};
-  }
-  // Chaos / wide range: all possible pairs
+  // Global progress across the whole library — all possible pairs vs. compared.
   const n=S.films.length;
   const total=n*(n-1)/2;
   const done=Object.keys(S.comparedPairs).length;
@@ -6155,7 +6046,6 @@ function deleteFilm(filmId){
   });
   S.recentPairs=S.recentPairs.filter(key=>!key.split('|').includes(filmId));
   S.slotInQueue=S.slotInQueue.filter(id=>id!==filmId);
-  if(S.pinnedId===filmId) S.pinnedId=null;
   delete tmdbCache[filmId];
   persist();
 }
