@@ -908,6 +908,16 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
 .lh-header-metric-val{font-size:15px;font-weight:700;color:var(--accent);letter-spacing:.04em}
 .lh-header-metric-lbl{font-size:11px;color:rgba(216,205,176,.4);letter-spacing:.04em}
 
+/* Compare-screen tier bar — tier label + countdown over a thin progress fill.
+   Sits where the confidence metric used to, under the wordmark. */
+.cp-tierbar{width:calc(100% - 8px);max-width:330px;margin:8px auto 0;font-family:var(--sans)}
+.cp-tierbar-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.cp-tierbar-tier{font-size:12px;font-weight:800;letter-spacing:.12em;color:var(--accent)}
+.cp-tierbar-count{font-size:11px;color:rgba(216,205,176,.55);letter-spacing:.03em}
+.cp-tierbar-track{height:4px;background:rgba(255,255,255,.09);border-radius:3px;overflow:hidden}
+.cp-tierbar-fill{height:100%;background:linear-gradient(90deg,var(--accent-dk),var(--accent));border-radius:3px;transition:width .5s var(--ease)}
+@media (max-height:700px){ .cp-tierbar{margin-top:4px} }
+
 /* Shorter phones — the header's generous padding/type-size was fixed
    regardless of available height, competing with the compare screen's
    poster stage for room. Shrink it on short viewports instead. */
@@ -1478,9 +1488,16 @@ button{font-family:var(--sans);cursor:pointer;border:none;background:none;color:
       <div class="rankd-bar" style="background:#1E3A8A"></div>
       <div class="rankd-bar" style="background:#6B4E9E"></div>
     </div>
-    <div class="lh-header-metric" id="cp-header-metric" onclick="cycleHeaderMetric()">
-      <span class="lh-header-metric-val" id="cp-metric-val">—</span>
-      <span class="lh-header-metric-lbl" id="cp-metric-lbl">confidence</span>
+    <!-- Tier progress bar — carries the run's ambient context (which tier,
+         how many films left to place) so none of it clutters the bottom.
+         Replaces the old confidence metric on the compare screen; the list
+         screen keeps its own metric. Populated by cpRenderTierBar(). -->
+    <div class="cp-tierbar" id="cp-tierbar">
+      <div class="cp-tierbar-row">
+        <span class="cp-tierbar-tier" id="cp-tierbar-tier">—</span>
+        <span class="cp-tierbar-count" id="cp-tierbar-count"></span>
+      </div>
+      <div class="cp-tierbar-track"><div class="cp-tierbar-fill" id="cp-tierbar-fill"></div></div>
     </div>
   </div>
 
@@ -4932,7 +4949,6 @@ function checkNewAchievements(){
 function updateHeaderMetric(){
   const slots=[
     {val:'lh-metric-val',lbl:'lh-metric-lbl'},
-    {val:'cp-metric-val',lbl:'cp-metric-lbl'},
   ];
   if(!S.films.length){
     slots.forEach(s=>{const v=el(s.val),l=el(s.lbl);if(v)v.textContent='—';if(l)l.textContent='no films'});
@@ -5166,6 +5182,8 @@ function cpRenderLadder(){
   const opponent=contender===a?b:a;
   const cSlot=contender===a?'a':'b', oSlot=cSlot==='a'?'b':'a';
 
+  cpRenderTierBar();
+
   const pool=ladderPool();
   const ordered=ladderStableOrder(pool);
   const ci=ordered.findIndex(f=>f.id===st.filmId);
@@ -5219,6 +5237,20 @@ function cpRenderLadder(){
   }
   el('poster-'+oSlot)?.classList.toggle('holding-ring',!!opponent.rankLocked);
   el('poster-'+cSlot)?.classList.remove('holding-ring');
+}
+
+// Compare-screen tier bar — which tier this run works, how many films are
+// still unplaced ("n to go"), and a fill showing how much of the tier is
+// settled. Ambient run context lifted out of the bottom band into the header.
+function cpRenderTierBar(){
+  const st=tournamentState; if(!st)return;
+  const pool=ladderPool();
+  const placed=pool.filter(f=>f.rankLocked).length;
+  const toGo=pool.length-placed;
+  const pct=pool.length?Math.round(placed/pool.length*100):0;
+  const tierEl=el('cp-tierbar-tier'); if(tierEl)tierEl.textContent=`${st.tier}★ TIER`;
+  const countEl=el('cp-tierbar-count'); if(countEl)countEl.textContent=`${toGo} to go`;
+  const fillEl=el('cp-tierbar-fill'); if(fillEl)fillEl.style.width=Math.max(pct,3)+'%';
 }
 
 // Loop reset — the previous film locked in, so a fresh contender starts its
