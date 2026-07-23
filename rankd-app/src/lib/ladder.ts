@@ -168,3 +168,14 @@ export function skip(state: RankState, n: number): RankState {
   if (!state.run) return state;
   return { ...state, run: { ...state.run, skipN: Math.max(1, n) } };
 }
+
+// Aim the next probe at a specific film above the contender — the rolodex
+// scrub. Returns state unchanged if the film isn't a valid target (it's below
+// the contender or already beaten). Only touches run.skipN, not the films.
+export function skipToFilm(state: RankState, filmId: string): RankState {
+  const { run } = state;
+  if (!run) return state;
+  const k = aboveOf(state.films, run).findIndex((f) => f.id === filmId);
+  if (k < 0 || k < run.lo) return state;
+  return skip(state, k - run.lo + 1);
+}

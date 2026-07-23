@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { startRun, getPair, choose, rankedFilms } from "@/lib/ladder";
+import { startRun, getPair, choose, skipToFilm, rankedFilms } from "@/lib/ladder";
 import type { Film, RankState } from "@/lib/types";
 
 const TIER = 4 as const;
@@ -31,6 +31,9 @@ export default function DuelScreen() {
     saveFilms(next.films);
     setState(next);
   };
+
+  // Rolodex scrub — aim the next duel at the film the player scrolled to.
+  const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
 
   // Overall ranks (best = 1).
   const order = rankedFilms(films);
@@ -84,6 +87,7 @@ export default function DuelScreen() {
           pool={pool}
           order={order}
           onPick={decide}
+          onScrub={scrub}
         />
       ) : (
         <TierComplete order={order} pool={pool} />
@@ -101,6 +105,7 @@ function Duel({
   pool,
   order,
   onPick,
+  onScrub,
 }: {
   contender: Film;
   opponent: Film;
@@ -109,6 +114,7 @@ function Duel({
   pool: Film[];
   order: Film[];
   onPick: (id: string) => void;
+  onScrub: (id: string) => void;
 }) {
   return (
     <>
@@ -132,7 +138,13 @@ function Duel({
       </div>
 
       {/* Rolodex */}
-      <Rolodex pool={pool} order={order} contenderId={contender.id} opponentId={opponent.id} />
+      <Rolodex
+        pool={pool}
+        order={order}
+        contenderId={contender.id}
+        opponentId={opponent.id}
+        onScrub={onScrub}
+      />
     </>
   );
 }
@@ -183,20 +195,23 @@ function PosterCard({
 }
 
 // Rolodex — the tier's ranked films low→high with the contender as a gold YOU
-// marker riding immediately left of the centred challenger. Display + auto-centre
-// for now; scroll-to-skip wiring comes next.
+// marker riding immediately left of the centred challenger. Finger-scroll it to
+// aim the next duel at a different film (the tactile jump-ahead).
 function Rolodex({
   pool,
   order,
   contenderId,
   opponentId,
+  onScrub,
 }: {
   pool: Film[];
   order: Film[];
   contenderId: string;
   opponentId: string;
+  onScrub: (id: string) => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cells = useMemo(() => {
     const poolIds = new Set(pool.map((f) => f.id));
@@ -216,7 +231,7 @@ function Rolodex({
     return list;
   }, [pool, order, contenderId, opponentId]);
 
-  // Centre the challenger cell.
+  // Centre the challenger cell whenever it changes.
   useEffect(() => {
     const track = trackRef.current;
     if (!track) return;
@@ -224,17 +239,40 @@ function Rolodex({
     if (el) track.scrollLeft = el.offsetLeft - track.clientWidth / 2 + el.clientWidth / 2;
   }, [cells]);
 
+  // On scroll settle, aim the duel at whichever film cell is nearest centre.
+  const handleScroll = () => {
+    const track = trackRef.current;
+    if (!track) return;
+    if (scrubTimer.current) clearTimeout(scrubTimer.current);
+    scrubTimer.current = setTimeout(() => {
+      const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
+      let bestId: string | null = null;
+      let bestD = Infinity;
+      track.querySelectorAll<HTMLElement>("[data-fid]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(r.left + r.width / 2 - mid);
+        if (d < bestD) {
+          bestD = d;
+          bestId = el.dataset.fid ?? null;
+        }
+      });
+      if (bestId && bestId !== opponentId) onScrub(bestId);
+    }, 90);
+  };
+
   return (
     <div className="w-full pb-5 pt-2">
       <div
         ref={trackRef}
-        className="flex items-end gap-2.5 overflow-x-auto px-[calc(50%-33px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        onScroll={handleScroll}
+        className="flex items-end gap-2.5 overflow-x-auto px-[calc(50%-33px)] [scrollbar-width:none] [scroll-snap-type:x_mandatory] [&::-webkit-scrollbar]:hidden"
       >
         {cells.map((c, i) => (
           <div
             key={c.you ? "you" : c.film.id + i}
+            data-fid={c.you ? undefined : c.film.id}
             data-challenger={c.challenger ? "1" : "0"}
-            className="flex flex-shrink-0 flex-col items-center gap-1"
+            className="flex flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]"
             style={{
               width: c.challenger ? 66 : 54,
               opacity: c.challenger || c.you ? 1 : 0.55,
