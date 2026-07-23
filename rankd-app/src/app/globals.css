@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/* Rankd palette — ported verbatim from the prototype (rankd.html :root). */
+:root {
+  --bg: #150f24;
+  --nav: #08060a;
+  --card: #1c1432;
+  --card2: #100b21;
+  --border: #241a38;
+  --border2: #362a50;
+  --accent: #daa520;
+  --accent-dk: #b8891a;
+  --accent-dim: rgba(218, 165, 32, 0.12);
+  --green: #00a3a3;
+  --green-dk: #007a7a;
+  --blue: #5a82e8;
+  --amber: #daa520;
+  --dim: #8a7ba8;
+  --text: #d8cdb0;
+  --text-hi: #f2e6c9;
+  --red: #d81e26;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Expose the palette + fonts to Tailwind so utilities like bg-bg, text-accent,
+   font-serif, font-display resolve to Rankd's tokens. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-nav: var(--nav);
+  --color-card: var(--card);
+  --color-card2: var(--card2);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-dk: var(--accent-dk);
+  --color-green: var(--green);
+  --color-blue: var(--blue);
+  --color-amber: var(--amber);
+  --color-dim: var(--dim);
+  --color-text: var(--text);
+  --color-text-hi: var(--text-hi);
+  --color-red: var(--red);
+
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-src-serif);
+  --font-display: var(--font-bebas);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}

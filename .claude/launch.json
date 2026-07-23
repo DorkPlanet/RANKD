@@ -7,6 +7,13 @@
       "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/server.ps1"],
       "port": 8080,
       "autoPort": true
+    },
+    {
+      "name": "rankd-app",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "$env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User'); Set-Location rankd-app; npm run dev"],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }
