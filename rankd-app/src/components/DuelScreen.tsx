@@ -81,7 +81,8 @@ export default function DuelScreen() {
       >
         <GearIcon />
       </button>
-      <Header placed={session?.confirmed.length ?? 0} toGo={session?.unconfirmed.length ?? 0} />
+      <Header />
+      <TierProgress placed={session?.confirmed.length ?? 0} toGo={session?.unconfirmed.length ?? 0} />
 
       {champion ? (
         <ConfirmView champion={champion} rank={(session?.confirmed.length ?? 0) + 1} onConfirm={lockIn} />
@@ -153,9 +154,9 @@ function Settings({ brightness, onChange, onClose }: { brightness: number; onCha
   );
 }
 
-function Header({ placed, toGo }: { placed: number; toGo: number }) {
+function Header() {
   return (
-    <header className="px-6 pt-4 pb-2">
+    <header className="relative px-6 pt-5 pb-4" style={{ background: "var(--header-bg)" }}>
       <div className="text-center">
         <span className="font-display text-3xl tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
           RANKD
@@ -166,7 +167,24 @@ function Header({ placed, toGo }: { placed: number; toGo: number }) {
           ))}
         </div>
       </div>
-      <div className="mx-auto mt-3 max-w-[330px]">
+      {/* Short feather below the solid header — ported from rankd.html .lh-header::after */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-full h-11"
+        style={{
+          background:
+            "linear-gradient(to bottom, color-mix(in srgb, var(--header-bg) 92%, transparent), color-mix(in srgb, var(--header-bg) 50%, transparent) 40%, transparent)",
+        }}
+      />
+    </header>
+  );
+}
+
+// The tier + progress strip, sitting on the body just under the header feather.
+function TierProgress({ placed, toGo }: { placed: number; toGo: number }) {
+  return (
+    <div className="px-6">
+      <div className="mx-auto mt-4 max-w-[330px]">
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-xs font-extrabold tracking-[0.12em] text-gold">{TIER}★ TIER</span>
           <span className="text-[11px] text-text/55">
@@ -183,7 +201,7 @@ function Header({ placed, toGo }: { placed: number; toGo: number }) {
           />
         </div>
       </div>
-    </header>
+    </div>
   );
 }
 

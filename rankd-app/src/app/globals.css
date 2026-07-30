@@ -14,8 +14,7 @@
   --accent: #4c93ff;
   --gold: #e7b53e;
   --border: #122036;
-  --header-bg: #04122a;
-  --header-text: #eaf0fa;
+  --header-bg: #000000;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -30,8 +29,6 @@
   --color-dim: var(--dim);
   --color-text: var(--text);
   --color-text-hi: var(--text-hi);
-  --color-header: var(--header-bg);
-  --color-header-text: var(--header-text);
 
   --font-sans: var(--font-inter);
   --font-serif: var(--font-src-serif);

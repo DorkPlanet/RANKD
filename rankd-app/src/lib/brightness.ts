@@ -42,6 +42,9 @@ export function brightnessVars(t: number): Record<string, string> {
   const c = clamp01(t);
   return {
     "--bg": hslHex(218, 72, 6 + 9.5 * c),
+    // Header sits ~6 lightness points below --bg, so it's the blackest at t=0
+    // and a deep blue at t=1 — a darker shade of the background that slides with it.
+    "--header-bg": hslHex(218, 68, 9.5 * c),
     "--surface": hslHex(216, 55, 9 + 13 * c),
     "--border": hslHex(216, 50, 14 + 14 * c),
     "--text": lerpHex("#e7b53e", "#c6d3ea", c),
