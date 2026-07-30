@@ -394,6 +394,7 @@ function Rolodex({
   const rafRef = useRef(0);
   const userScrolling = useRef(false);
   const prevPileKey = useRef("");
+  const prevContenderId = useRef("");
   const pileKey = lowToHigh.map((f) => f.id).join(",");
 
   const contender = lowToHigh.find((f) => f.id === contenderId);
@@ -431,16 +432,20 @@ function Rolodex({
     if (el) track.scrollLeft = el.offsetLeft - track.clientWidth / 2 + el.clientWidth / 2;
   };
 
-  // Re-centre the challenger only when the PILE changes (start / flick / confirm),
-  // never on a plain scrub — so the strip stays put under the thumb.
+  // Re-centre the challenger when the PILE changes (flick / confirm / contender
+  // win) OR the contender changes — tapping the challenger makes IT the new
+  // contender without reordering the pile, so watching pileKey alone misses it.
+  // Never re-centre on a plain scrub (challengerId-only change) so the strip
+  // stays put under the thumb.
   useEffect(() => {
-    if (prevPileKey.current === pileKey) return;
+    if (prevPileKey.current === pileKey && prevContenderId.current === contenderId) return;
     prevPileKey.current = pileKey;
+    prevContenderId.current = contenderId;
     requestAnimationFrame(() => {
       centerFilm(challengerId);
       syncHighlight();
     });
-  }, [pileKey, challengerId]);
+  }, [pileKey, contenderId, challengerId]);
 
   useEffect(() => {
     syncHighlight();
