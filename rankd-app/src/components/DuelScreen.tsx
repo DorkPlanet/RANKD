@@ -74,13 +74,6 @@ export default function DuelScreen() {
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
-      <button
-        onClick={() => setSettingsOpen(true)}
-        aria-label="Settings"
-        className="absolute right-4 top-4 z-20 text-dim transition-colors hover:text-text-hi active:scale-95"
-      >
-        <GearIcon />
-      </button>
       <Header />
       <TierProgress placed={session?.confirmed.length ?? 0} toGo={session?.unconfirmed.length ?? 0} />
 
@@ -101,6 +94,8 @@ export default function DuelScreen() {
         <TierComplete films={state.films} />
       )}
 
+      <BottomNav onSettings={() => setSettingsOpen(true)} />
+
       {settingsOpen && (
         <Settings brightness={brightness} onChange={changeBrightness} onClose={() => setSettingsOpen(false)} />
       )}
@@ -108,9 +103,46 @@ export default function DuelScreen() {
   );
 }
 
+// Bottom nav — bookends the black header, so the play area sits between two
+// dark bands. Sized to its final height now, so adding List/Stats later slots
+// in without re-flowing the duel.
+function BottomNav({ onSettings }: { onSettings: () => void }) {
+  return (
+    <nav
+      className="flex flex-shrink-0 items-stretch border-t"
+      style={{ background: "var(--header-bg)", borderColor: "var(--border)" }}
+    >
+      <NavItem label="Rank" active icon={<DuelIcon />} />
+      <NavItem label="Settings" onClick={onSettings} icon={<GearIcon />} />
+    </nav>
+  );
+}
+
+function NavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-1 flex-col items-center gap-[5px] py-2.5 transition-colors active:scale-95"
+      style={{ color: active ? "var(--gold)" : "var(--dim)" }}
+    >
+      {icon}
+      <span className="text-[9px] font-bold tracking-[0.14em]">{label.toUpperCase()}</span>
+    </button>
+  );
+}
+
+function DuelIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="7" height="14" rx="1.5" />
+      <rect x="14" y="5" width="7" height="14" rx="1.5" />
+    </svg>
+  );
+}
+
 function GearIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
