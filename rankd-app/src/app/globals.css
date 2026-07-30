@@ -66,3 +66,22 @@ body {
     0 0 0 2px var(--accent),
     0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent);
 }
+
+/* Floating posters + titles — ported from rankd.html (cpPosterFloat/cpTitleFloat):
+   a gentle vertical bob, with the B side delayed so the pair never syncs. Uses
+   the `translate` property so it composes with each poster's static `rotate`. */
+@keyframes float-poster {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -9px; }
+}
+@keyframes float-title {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -6px; }
+}
+.float-a { animation: float-poster 6.5s ease-in-out 0s infinite; }
+.float-b { animation: float-poster 6.5s ease-in-out 3.8s infinite; }
+.float-c { animation: float-title 5s ease-in-out 0s infinite; }
+.float-d { animation: float-title 5s ease-in-out 2.5s infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .float-a, .float-b, .float-c, .float-d { animation: none; }
+}

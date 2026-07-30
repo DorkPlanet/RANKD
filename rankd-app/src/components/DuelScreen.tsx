@@ -302,15 +302,20 @@ function PosterCard({
       style={{ touchAction: "none" }}
       className="group relative flex w-[46%] max-w-[180px] flex-col items-center transition-transform active:scale-95"
     >
-      <span className="mb-1.5 font-display text-lg tracking-wide text-text-hi">{film.title}</span>
+      <span
+        className={`mb-3 w-full text-center font-display text-[32px] font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 ${pick ? "float-c" : "float-d"}`}
+        style={{ textShadow: "0 2px 8px rgba(0,0,0,0.8)" }}
+      >
+        {film.title}
+      </span>
       <div
-        className="relative w-full overflow-hidden rounded-xl"
+        className={`relative w-full overflow-hidden rounded-xl ${pick ? "float-a" : "float-b"}`}
         style={{
           aspectRatio: "2 / 3",
           boxShadow: pick
             ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
             : "0 8px 26px rgba(0,0,0,0.55)",
-          transform: pick ? "rotate(-2deg)" : "rotate(2deg)",
+          rotate: pick ? "-2deg" : "2deg",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
