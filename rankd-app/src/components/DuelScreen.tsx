@@ -397,9 +397,6 @@ function Rolodex({
   const prevContenderId = useRef("");
   const pileKey = lowToHigh.map((f) => f.id).join(",");
 
-  const contender = lowToHigh.find((f) => f.id === contenderId);
-  const others = useMemo(() => lowToHigh.filter((f) => f.id !== contenderId), [lowToHigh, contenderId]);
-
   // A cell is a legal challenger only if it sits ABOVE the contender in the pile
   // (lowToHigh runs bottom→top, so a higher index = higher standing). Films below
   // the contender have already been passed and can't be re-challenged.
@@ -485,26 +482,33 @@ function Rolodex({
         onWheel={markUserScroll}
         className="flex items-end gap-2.5 overflow-x-auto px-[calc(50%-27px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
-        {others.map((f) => (
-          <div key={f.id} data-fid={f.id} className="rol-cell flex w-[54px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]">
-            <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+        {lowToHigh.map((f) =>
+          f.id === contenderId ? (
+            // The climbing film sits IN the strip at its real position, so it
+            // occupies layout space — overlaying it caused it to stack on top of
+            // whichever cell happened to scroll under it. No data-fid: it must
+            // never be pickable as its own challenger.
+            <div key={f.id} className="flex w-[54px] flex-shrink-0 flex-col items-center gap-1">
+              <div
+                className="w-full overflow-hidden rounded-md"
+                style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent)" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+              </div>
+              <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
             </div>
-            <span className="text-[9px] font-bold tracking-wide text-dim/70">UN-RNKD</span>
-          </div>
-        ))}
+          ) : (
+            <div key={f.id} data-fid={f.id} className="rol-cell flex w-[54px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]">
+              <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+              </div>
+              <span className="text-[9px] font-bold tracking-wide text-dim/70">UN-RNKD</span>
+            </div>
+          ),
+        )}
       </div>
-
-      {contender && (
-        <div className="pointer-events-none absolute bottom-2 flex flex-col items-center gap-1" style={{ left: "50%", transform: "translateX(calc(-50% - 64px))", width: 54 }}>
-          <div className="w-full overflow-hidden rounded-md" style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent)" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={contender.poster} alt="" className="h-full w-full object-cover" />
-          </div>
-          <span className="font-serif text-xs font-extrabold tracking-wide text-gold">YOU</span>
-        </div>
-      )}
     </div>
   );
 }
