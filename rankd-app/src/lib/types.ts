@@ -7,25 +7,25 @@ export interface Film {
   poster?: string;
   tagline?: string;
   rating: Rating; // star rating = tier
-  score: number; // position within the tier's score band
-  rankLocked?: boolean; // has settled into a slot this run (soft-lock rework: task #5)
+  score: number; // derived position within the tier's band (written on confirm)
+  confirmed?: boolean; // committed placement this tier — soft, re-openable
 }
 
-// One in-flight placement: the contender is inserted among the films ABOVE it
-// in stable order. lo = films it's surely beaten (floor); hi = films it could
-// still beat (cap). It locks at position lo once lo === hi.
-export interface PlacementRun {
+// One in-flight tier placement. The only committed data is `confirmed`; the
+// `unconfirmed` list is a live, ephemeral shuffle that records nothing until a
+// film is confirmed. Films climb from the bottom of `unconfirmed`; whoever
+// reaches the top is confirmed by the user, then the climb restarts.
+export interface PlacementSession {
   tier: Rating;
   maxDiff: number;
-  filmId: string;
-  lo: number;
-  hi: number;
-  capped: boolean; // a loss has capped hi → the window binary-settles
-  streak: number;
-  skipN: number; // >0 = next probe jumps N films up instead of one
+  confirmed: string[]; // committed ranking, top → down (confirmed[0] = #1)
+  unconfirmed: string[]; // live order, index 0 = top of the pile, last = bottom
+  contenderId: string; // the film currently climbing
+  challengerId: string; // the film directly above it (its opponent); "" at the top
+  needsConfirm: boolean; // contender reached the top → awaiting the user's confirm
 }
 
 export interface RankState {
   films: Film[];
-  run: PlacementRun | null;
+  session: PlacementSession | null;
 }
