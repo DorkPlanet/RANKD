@@ -424,7 +424,7 @@ function Duel({
   return (
     <>
       <div className="mt-3 flex flex-col items-center">
-        <span className="text-[11px] text-dim">Throw a poster up ↑ to send it to the top</span>
+        <Tips />
       </div>
 
       <div className="flex flex-1 items-center justify-center gap-3 px-4">
@@ -434,6 +434,32 @@ function Duel({
 
       <Rolodex lowToHigh={lowToHigh} contenderId={contender.id} challengerId={challenger.id} onScrub={onScrub} />
     </>
+  );
+}
+
+// Every gesture the duel screen understands, cycled one at a time — the screen
+// has no chrome explaining itself, so this is where the mechanics get taught.
+const TIPS = [
+  "Tap the poster you rate higher",
+  "Throw a poster up ↑ to send it to the top",
+  "Hold a poster for cast, crew and synopsis",
+  "Scrub the strip below to choose who you take on next",
+  "Scrub past your own film to rank it lower",
+  "Nothing is locked in until you confirm a place",
+];
+const TIP_MS = 6500;
+
+function Tips() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % TIPS.length), TIP_MS);
+    return () => clearInterval(t);
+  }, []);
+  // key remounts the span so the fade-in replays for each new tip.
+  return (
+    <span key={i} className="tip text-[11px]">
+      {TIPS[i]}
+    </span>
   );
 }
 

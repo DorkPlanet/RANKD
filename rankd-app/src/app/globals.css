@@ -44,6 +44,56 @@ body {
   overscroll-behavior: none;
 }
 
+/* Holding a poster must open our info card, not the OS "Save image / Open in
+   new tab" callout. preventDefault on contextmenu doesn't cover iOS Safari's
+   image callout — that needs -webkit-touch-callout explicitly. */
+img {
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/* Tips — a slow silver sweep left to right across the hint text, so it reads as
+   a live prompt rather than static furniture. Each tip fades in as it arrives. */
+@keyframes tip-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@keyframes tip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.tip {
+  background: linear-gradient(
+    90deg,
+    var(--dim) 0%,
+    var(--dim) 42%,
+    #e6ecf7 50%,
+    var(--dim) 58%,
+    var(--dim) 100%
+  );
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: tip-in 0.6s ease both, tip-shine 4.5s ease-in-out 0.6s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tip {
+    animation: none;
+    background: none;
+    color: var(--dim);
+  }
+}
+
 /* Rolodex — scale the centred film via transform (GPU-smooth, no layout reflow)
    so scrolling stays buttery. The .rol-centered class is toggled imperatively.
    The centred film is the scrub target, so its ring is the structural --accent. */
