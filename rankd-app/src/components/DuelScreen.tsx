@@ -590,11 +590,11 @@ function Duel({
           travels with the posters. Left outside it, folding the strip away
           stranded it in the middle of the freed space. */}
       <div ref={arenaRef} className="flex flex-1 flex-col px-4">
-        {/* Spacers weighted 2:1:1. The posters stay centred in the arena as a
-            whole, while the line floats to the middle of the gap beneath them —
-            giving the two rows equal flex instead centred the posters in the top
-            half and dragged them up the screen. */}
-        <div style={{ flexGrow: 2 }} />
+        {/* A fixed gap above the posters, and every flexible space below them.
+            Centring them in the arena meant folding the strip away resized the
+            arena and shifted the posters with it; anchoring them here means the
+            freed height all lands underneath and they never move. */}
+        <div style={{ height: 28, flexShrink: 0 }} />
         <div className="relative flex items-center justify-center gap-3">
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
@@ -602,24 +602,31 @@ function Duel({
             stole width from both posters and shrank them. */}
         <span
           aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex items-center justify-center rounded-full font-display text-[11px] leading-none tracking-[0.06em]"
+          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex items-center justify-center rounded-full font-display leading-none"
           style={{
-            width: 26,
-            height: 26,
+            width: 32,
+            height: 32,
+            fontSize: 13,
+            letterSpacing: "0.1em",
+            paddingLeft: "0.1em", // letter-spacing pads the right; nudge back to true centre
             transform: "translate(-50%, -50%)",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            color: "var(--dim)",
+            // Near-black so it reads as a gap punched between the posters, with
+            // a gold rim and halo to match the climbing film's ring.
+            background: "var(--header-bg)",
+            border: "1px solid color-mix(in srgb, var(--gold) 45%, transparent)",
+            color: "var(--gold)",
+            boxShadow: "0 0 0 4px var(--bg), 0 2px 12px color-mix(in srgb, var(--gold) 25%, transparent)",
           }}
         >
           OR
         </span>
         </div>
-        {/* Not an even 1:1 — the collapsed strip and its handle sit between the
-            arena's foot and the nav, so the line needs to ride lower inside the
-            arena to land midway to the bar itself. */}
+        {/* The line only shows with the strip folded away — open, the strip is
+            what you're reading, and the two compete. Weighted 1.8:1 rather than
+            evenly because the collapsed strip and its handle still sit between
+            the arena's foot and the nav. */}
         <div style={{ flexGrow: 1.8 }} />
-        <LastResult results={results} />
+        {!stripOpen && <LastResult results={results} />}
         <div style={{ flexGrow: 1 }} />
       </div>
 
