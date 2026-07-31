@@ -440,13 +440,13 @@ function Duel({
 // Every mechanic the duel screen understands, cycled one at a time — the screen
 // carries no chrome explaining itself, so this is where the game gets taught.
 const TIPS = [
-  "Tap whichever film you rate higher — that settles the duel",
-  "Win and you climb; lose and the winner carries on up without you",
-  "Throw a film up ↑ to send it straight to the top of the pile",
-  "Press and hold a film to see its cast, crew and synopsis",
-  "Scrub the strip below to choose which film you take on next",
-  "Scrub past your own film to rank it further down the pile",
-  "Only a confirmed place is saved — the rest is just shuffling",
+  "Tap the film you like more",
+  "Whichever film wins keeps climbing",
+  "Flick a film up to send it straight to the top",
+  "Hold a film to see who's in it and what it's about",
+  "Swipe the row below to choose who you face next",
+  "Pick a film below yours to move down the list",
+  "Nothing's saved until you lock a film into place",
 ];
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
