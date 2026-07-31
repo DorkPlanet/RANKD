@@ -593,41 +593,31 @@ function Duel({
         {/* A fixed gap above the posters, and every flexible space below them.
             Centring them in the arena meant folding the strip away resized the
             arena and shifted the posters with it; anchoring them here means the
-            freed height all lands underneath and they never move. */}
-        <div style={{ height: 28, flexShrink: 0 }} />
+            freed height all lands underneath and they never move. Sized to sit
+            them where centring used to, and allowed to shrink so a short screen
+            reclaims it rather than overflowing. */}
+        <div style={{ height: 110, flexShrink: 1 }} />
         <div className="relative flex items-center justify-center gap-3">
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
-        {/* Floats over the gap rather than sitting in it — as a flex item it
-            stole width from both posters and shrank them. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex items-center justify-center rounded-full font-display leading-none"
-          style={{
-            width: 32,
-            height: 32,
-            fontSize: 13,
-            letterSpacing: "0.1em",
-            paddingLeft: "0.1em", // letter-spacing pads the right; nudge back to true centre
-            transform: "translate(-50%, -50%)",
-            // Near-black so it reads as a gap punched between the posters, with
-            // a gold rim and halo to match the climbing film's ring.
-            background: "var(--header-bg)",
-            border: "1px solid color-mix(in srgb, var(--gold) 45%, transparent)",
-            color: "var(--gold)",
-            boxShadow: "0 0 0 4px var(--bg), 0 2px 12px color-mix(in srgb, var(--gold) 25%, transparent)",
-          }}
-        >
-          OR
-        </span>
         </div>
-        {/* The line only shows with the strip folded away — open, the strip is
-            what you're reading, and the two compete. Weighted 1.8:1 rather than
-            evenly because the collapsed strip and its handle still sit between
-            the arena's foot and the nav. */}
-        <div style={{ flexGrow: 1.8 }} />
-        {!stripOpen && <LastResult results={results} />}
-        <div style={{ flexGrow: 1 }} />
+      </div>
+
+      {/* Anchored to the bottom of the screen rather than sitting in the arena's
+          flow: in-flow it slid down as the strip collapsed, arriving late and
+          in motion. Pinned here it only fades, and stays where the eye left it.
+          It shows just while the strip is folded away — open, the strip is what
+          you're reading and the two compete for the same glance. */}
+      <div
+        aria-hidden={stripOpen}
+        className="pointer-events-none absolute inset-x-0 flex justify-center"
+        style={{
+          bottom: "17%", // lands midway between the posters and the nav
+          opacity: stripOpen ? 0 : 1,
+          transition: "opacity 0.28s var(--ease)",
+        }}
+      >
+        <LastResult results={results} />
       </div>
 
       <Rolodex
