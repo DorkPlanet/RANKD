@@ -262,8 +262,7 @@ function Duel({
 
   return (
     <>
-      <div className="mt-3 flex flex-col items-center gap-0.5">
-        <span className="font-serif text-lg font-bold text-text-hi">{contender.title}</span>
+      <div className="mt-3 flex flex-col items-center">
         <span className="text-[11px] text-dim">Throw a poster up ↑ to send it to the top</span>
       </div>
 
@@ -505,16 +504,17 @@ function Rolodex({
   };
 
   return (
-    <div className="relative w-full pb-3 pt-1">
+    <div className="relative w-full pb-3">
       <div
         ref={trackRef}
         onScroll={handleScroll}
         onPointerDown={markUserScroll}
         onTouchStart={markUserScroll}
         onWheel={markUserScroll}
-        // pb-3: the centred poster scales 1.16x, and overflow-x:auto forces
-        // overflow-y to auto too — without this the track clips it.
-        className="rol-track flex items-end gap-2.5 overflow-x-auto pb-3 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+        // pt-4: the centred poster scales 1.16x upward from its bottom edge, and
+        // overflow-x:auto forces overflow-y to auto — without headroom the track
+        // slices the top off it.
+        className="rol-track flex items-end gap-2.5 overflow-x-auto pt-4 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
