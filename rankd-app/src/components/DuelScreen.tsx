@@ -112,13 +112,13 @@ function BottomNav({ onSettings }: { onSettings: () => void }) {
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Five equal cells so RNK sits dead centre — it's the core loop. List and
-          Account anchor the edges; the interior gap is a slot held for a future
-          destination. Add-film and Search live inside List, not out here. */}
+      {/* Five equal cells so RNK sits dead centre — it's the core loop. Ending
+          the session sits beside it, since that's the duel's own control.
+          Add-film and Search live inside List, not out here. */}
       <NavItem label="Your list" icon={<ListIcon />} />
-      <NavItem label="Activity" icon={<ActivityIcon />} />
+      <NavItem label="End session" icon={<StopIcon />} />
       <NavItem label="Rank" active icon={<RankdMark />} />
-      <div className="flex-1" aria-hidden />
+      <NavItem label="Activity" icon={<ActivityIcon />} />
       {/* Account owns Settings — for now it opens the sheet directly, since the
           brightness slider is the only setting that exists yet. */}
       <NavItem label="You" onClick={onSettings} icon={<PersonIcon />} />
@@ -156,11 +156,12 @@ function PersonIcon() {
   );
 }
 
-function EndSessionIcon() {
+// A stop glyph — unambiguous as "end what's running", where an X read as "close".
+function StopIcon() {
   return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -248,14 +249,6 @@ function Header() {
       className="relative px-6 pb-3"
       style={{ background: "var(--header-bg)", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
     >
-      {/* End session sits opposite the trophy, so the duel always has a way out. */}
-      <button
-        aria-label="End session"
-        className="absolute left-5 text-dim transition-colors active:scale-95"
-        style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
-      >
-        <EndSessionIcon />
-      </button>
       <button
         aria-label="Achievements"
         className="absolute right-5 text-dim transition-colors active:scale-95"
