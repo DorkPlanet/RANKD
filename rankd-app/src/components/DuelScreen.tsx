@@ -113,8 +113,71 @@ function BottomNav({ onSettings }: { onSettings: () => void }) {
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <NavItem label="Rank" active icon={<RankdMark />} />
-      <NavItem label="Settings" onClick={onSettings} icon={<GearIcon />} />
+      <NavItem label="Your list" icon={<ListIcon />} />
+      <NavItem label="Log a film" icon={<LogFilmButton />} />
+      <NavItem label="Activity" icon={<ActivityIcon />} />
+      {/* Account owns Settings — for now it opens the sheet directly, since the
+          brightness slider is the only setting that exists yet. */}
+      <NavItem label="You" onClick={onSettings} icon={<PersonIcon />} />
     </nav>
+  );
+}
+
+// The primary input action, so it reads as a button rather than a tab.
+function LogFilmButton() {
+  return (
+    <span
+      className="flex h-8 w-8 items-center justify-center rounded-full"
+      style={{ background: "var(--gold)", color: "#1c1405" }}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round">
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+      </svg>
+    </span>
+  );
+}
+
+function ListIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    </svg>
+  );
+}
+
+function PersonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function TrophyIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+      <path d="M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
+      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+    </svg>
   );
 }
 
@@ -188,6 +251,13 @@ function Header() {
       className="relative px-6 pb-3"
       style={{ background: "var(--header-bg)", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
     >
+      <button
+        aria-label="Achievements"
+        className="absolute right-5 text-dim transition-colors active:scale-95"
+        style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
+      >
+        <TrophyIcon />
+      </button>
       <div className="text-center">
         <span className="font-display text-[28px] leading-none tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
           RANKD
