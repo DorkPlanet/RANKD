@@ -1,0 +1,79 @@
+import { NextResponse } from "next/server";
+
+// Server-side TMDb proxy. The key is read from the environment here and never
+// reaches the browser — the client only ever sees the normalised shape below.
+//
+// Seed films carry no TMDb id, and user-added films won't either, so this
+// resolves by title (+ year when known) and then pulls details and credits in a
+// single follow-up call.
+
+const BASE = "https://api.themoviedb.org/3";
+const DAY = 60 * 60 * 24;
+
+export interface FilmMeta {
+  synopsis?: string;
+  runtime?: number;
+  genres?: string[];
+  director?: string;
+  writer?: string;
+  cinematographer?: string;
+  composer?: string;
+  cast?: string[];
+}
+
+interface CrewMember {
+  job?: string;
+  name?: string;
+}
+
+export async function GET(request: Request) {
+  const key = process.env.TMDB_API_KEY;
+  if (!key) {
+    return NextResponse.json({ error: "TMDB_API_KEY is not set" }, { status: 500 });
+  }
+
+  const params = new URL(request.url).searchParams;
+  const title = params.get("title");
+  const year = params.get("year");
+  if (!title) {
+    return NextResponse.json({ error: "title is required" }, { status: 400 });
+  }
+
+  try {
+    const search = new URL(`${BASE}/search/movie`);
+    search.searchParams.set("api_key", key);
+    search.searchParams.set("query", title);
+    search.searchParams.set("include_adult", "false");
+    if (year) search.searchParams.set("year", year);
+
+    const found = await fetch(search, { next: { revalidate: DAY } });
+    if (!found.ok) return NextResponse.json({ error: "TMDb search failed" }, { status: 502 });
+    const hit = (await found.json())?.results?.[0];
+    if (!hit) return NextResponse.json({}, { status: 200 }); // no match — card just shows less
+
+    const detail = new URL(`${BASE}/movie/${hit.id}`);
+    detail.searchParams.set("api_key", key);
+    detail.searchParams.set("append_to_response", "credits");
+
+    const res = await fetch(detail, { next: { revalidate: DAY } });
+    if (!res.ok) return NextResponse.json({ error: "TMDb detail failed" }, { status: 502 });
+    const d = await res.json();
+
+    const crew: CrewMember[] = d.credits?.crew ?? [];
+    const byJob = (...jobs: string[]) => crew.find((c) => jobs.includes(c.job ?? ""))?.name;
+
+    const meta: FilmMeta = {
+      synopsis: d.overview || undefined,
+      runtime: d.runtime || undefined,
+      genres: (d.genres ?? []).map((g: { name: string }) => g.name),
+      director: byJob("Director"),
+      writer: byJob("Screenplay", "Writer", "Story"),
+      cinematographer: byJob("Director of Photography"),
+      composer: byJob("Original Music Composer", "Music"),
+      cast: (d.credits?.cast ?? []).slice(0, 4).map((c: { name: string }) => c.name),
+    };
+    return NextResponse.json(meta);
+  } catch {
+    return NextResponse.json({ error: "TMDb request failed" }, { status: 502 });
+  }
+}

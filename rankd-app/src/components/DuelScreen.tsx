@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, skipToFilm } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
+import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import type { Film, RankState } from "@/lib/types";
 
 const TIER = 4 as const;
@@ -210,29 +211,85 @@ function GearIcon() {
   );
 }
 
-// Long-press card — the only place year and tagline surface. Deliberately quiet:
-// it's for settling a "wait, which one is this?" mid-duel, not for browsing.
+// Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
+// year and tagline are local and paint instantly; the TMDb detail streams in
+// underneath so the card is never blocked on the network.
 function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
+  const [meta, setMeta] = useState<FilmMeta | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchMeta(film).then((m) => {
+      if (live) setMeta(m);
+    });
+    return () => {
+      live = false;
+    };
+  }, [film]);
+
+  const crew = meta
+    ? ([
+        ["Director", meta.director],
+        ["Written by", meta.writer],
+        ["Cinematography", meta.cinematographer],
+        ["Music", meta.composer],
+      ].filter(([, v]) => v) as [string, string][])
+    : [];
+
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm"
-      style={{ background: "rgba(0,0,0,0.65)", padding: "0 2.5rem" }}
+      style={{ background: "rgba(0,0,0,0.7)", padding: "1.5rem" }}
       onClick={onClose}
     >
       <div
-        className="w-full overflow-hidden border border-border"
-        style={{ background: "var(--surface)", maxWidth: 250, borderRadius: 16 }}
+        className="w-full overflow-y-auto border border-border"
+        style={{ background: "var(--surface)", maxWidth: 300, maxHeight: "88vh", borderRadius: 16 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={film.poster} alt={film.title} className="w-full" style={{ aspectRatio: "2 / 3", objectFit: "cover" }} />
-        <div className="px-5 pb-5 pt-4 text-center">
-          <div className="font-display text-2xl leading-none tracking-wide text-text-hi">{film.title}</div>
-          <div className="mt-2 text-[11px] font-bold tracking-[0.12em] text-gold">
-            {film.year} · {film.rating}★
+        <div className="flex gap-3 p-4">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={film.poster}
+            alt={film.title}
+            style={{ width: 88, flexShrink: 0, aspectRatio: "2 / 3", objectFit: "cover", borderRadius: 8 }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
+            <div className="mt-1.5 text-[11px] font-bold tracking-[0.1em] text-gold">
+              {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
+            </div>
+            {meta?.genres?.length ? (
+              <div className="mt-1.5 text-[11px] leading-snug text-dim">{meta.genres.slice(0, 3).join(" · ")}</div>
+            ) : null}
+            {film.tagline && (
+              <p className="mt-2 font-serif text-[13px] italic leading-snug text-text">“{film.tagline}”</p>
+            )}
           </div>
-          {film.tagline && <p className="mt-3 font-serif text-sm italic leading-snug text-text">“{film.tagline}”</p>}
         </div>
+
+        {meta?.synopsis && (
+          <p className="px-4 pb-3 text-[12px] leading-relaxed text-text">{meta.synopsis}</p>
+        )}
+
+        {meta?.cast?.length ? (
+          <div className="px-4 pb-3">
+            <div className="text-[10px] font-extrabold tracking-[0.12em] text-dim">STARRING</div>
+            <div className="mt-1 text-[12px] leading-snug text-text">{meta.cast.join(", ")}</div>
+          </div>
+        ) : null}
+
+        {crew.length > 0 && (
+          <div className="border-t border-border px-4 py-3">
+            {crew.map(([role, name]) => (
+              <div key={role} className="flex justify-between gap-3 py-0.5 text-[12px]">
+                <span className="text-dim">{role}</span>
+                <span className="text-right text-text-hi">{name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!meta && <div className="px-4 pb-4 text-[11px] text-dim">Loading details…</div>}
       </div>
     </div>
   );
