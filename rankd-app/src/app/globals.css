@@ -47,24 +47,36 @@ body {
 /* Rolodex — scale the centred film via transform (GPU-smooth, no layout reflow)
    so scrolling stays buttery. The .rol-centered class is toggled imperatively.
    The centred film is the scrub target, so its ring is the structural --accent. */
+/* Scale the POSTER, never the whole cell: transforming the cell dragged its
+   label along with it, so the centred cell's label sat lower than its
+   neighbours' and lower again than the unscaled YOU cell — three baselines.
+   Anchoring the poster's scale to its bottom edge keeps every label on one
+   line, at one size, whichever cell is centred. */
 .rol-cell {
-  transform: scale(0.85);
   opacity: 0.5;
-  transition: transform 0.22s var(--ease), opacity 0.22s var(--ease);
+  transition: opacity 0.22s var(--ease);
+}
+.rol-poster {
+  transform: scale(0.85);
+  transform-origin: bottom center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
   will-change: transform;
 }
 .rol-cell.rol-centered {
-  transform: scale(1.16);
   opacity: 1;
 }
-.rol-poster {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  transition: box-shadow 0.22s var(--ease);
-}
 .rol-cell.rol-centered .rol-poster {
+  transform: scale(1.16);
   box-shadow:
     0 0 0 2px var(--accent),
     0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* Fade the strip's edges so films scroll out of view instead of being sliced
+   mid-word by the screen edge. */
+.rol-track {
+  mask-image: linear-gradient(to right, transparent, #000 7%, #000 93%, transparent);
 }
 
 /* Floating posters + titles — ported from rankd.html (cpPosterFloat/cpTitleFloat):

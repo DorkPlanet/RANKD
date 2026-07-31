@@ -512,9 +512,9 @@ function Rolodex({
         onPointerDown={markUserScroll}
         onTouchStart={markUserScroll}
         onWheel={markUserScroll}
-        // pb-3: the centred cell scales 1.16x, and overflow-x:auto forces
-        // overflow-y to auto too — without this the track clips its label.
-        className="flex items-end gap-2.5 overflow-x-auto pb-3 px-[calc(50%-27px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+        // pb-3: the centred poster scales 1.16x, and overflow-x:auto forces
+        // overflow-y to auto too — without this the track clips it.
+        className="rol-track flex items-end gap-2.5 overflow-x-auto pb-3 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
@@ -522,7 +522,7 @@ function Rolodex({
             // occupies layout space — overlaying it caused it to stack on top of
             // whichever cell happened to scroll under it. No data-fid: it must
             // never be pickable as its own challenger.
-            <div key={f.id} className="flex w-[54px] flex-shrink-0 flex-col items-center gap-1">
+            <div key={f.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
               <div
                 className="w-full overflow-hidden rounded-md"
                 style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent)" }}
@@ -533,7 +533,7 @@ function Rolodex({
               <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
-            <div key={f.id} data-fid={f.id} className="rol-cell flex w-[54px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]">
+            <div key={f.id} data-fid={f.id} className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]">
               <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
