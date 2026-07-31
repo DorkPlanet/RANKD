@@ -158,13 +158,27 @@ export function jumpToTop(state: RankState): RankState {
   return flickToTop(state, state.session.contenderId);
 }
 
-// Rolodex scrub — aim the duel at a specific film ABOVE the contender.
-// Returns unchanged if the film isn't a valid (higher) unconfirmed target.
+// Rolodex scrub — the fatigue shortcut. Lift the contender up to sit directly
+// beneath `filmId`, so that film becomes its very next duel and everything in
+// between is skipped outright.
+//
+// This is a user assertion ("I know this clears those"), not an inference: the
+// player is supplying the ordering directly rather than earning it a duel at a
+// time, exactly as flickToTop does. Nothing is committed — only a confirm does
+// that. Repositioning (rather than merely re-aiming the displayed opponent)
+// keeps the climb strictly adjacent, so what the duel shows and what choose()
+// resolves can never disagree.
 export function skipToFilm(state: RankState, filmId: string): RankState {
   const { session } = state;
   if (!session) return state;
   const ci = session.unconfirmed.indexOf(session.contenderId);
   const ti = session.unconfirmed.indexOf(filmId);
   if (ti < 0 || ti >= ci) return state; // must sit above the contender
-  return { ...state, session: { ...session, challengerId: filmId, needsConfirm: false } };
+  const films = clone(state.films);
+  const unconfirmed = [...session.unconfirmed];
+  unconfirmed.splice(ci, 1); // lift the contender out
+  unconfirmed.splice(ti + 1, 0, session.contenderId); // drop it just below the target
+  const s: PlacementSession = { ...session, unconfirmed };
+  refresh(s);
+  return { films, session: s };
 }
