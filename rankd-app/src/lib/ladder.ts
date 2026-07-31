@@ -92,21 +92,30 @@ export function pendingConfirm(state: RankState): Film | null {
 }
 
 // Apply a duel result: winnerId is whichever poster the player tapped.
+//
+// The challenger is usually the film directly above, but a rolodex scrub can aim
+// at a distant one. Either way the outcome is the same shape: the contender ends
+// up immediately above the film it beat, or immediately below the film that beat
+// it. Any distance the scrub covered collapses HERE, at the duel — the pile is
+// never reordered while the player is merely looking around.
 export function choose(state: RankState, winnerId: string): RankState {
   const { session } = state;
   if (!session || session.needsConfirm) return state;
   const films = clone(state.films);
   const s: PlacementSession = { ...session, unconfirmed: [...session.unconfirmed] };
   const ci = s.unconfirmed.indexOf(s.contenderId);
-  const chi = ci - 1;
-  if (chi < 0) return state; // nothing above — shouldn't be dueling
+  const chi = s.unconfirmed.indexOf(s.challengerId);
+  if (ci < 0 || chi < 0) return state; // no valid opponent — shouldn't be dueling
+
+  s.unconfirmed.splice(ci, 1); // lift the contender out
+  // Removing it shifts everything below its old slot up one, so a challenger
+  // that sat below the contender is now one index lower.
+  const target = ci < chi ? chi - 1 : chi;
   if (winnerId === s.contenderId) {
-    // contender beats the film above → swap up, keep climbing
-    [s.unconfirmed[ci], s.unconfirmed[chi]] = [s.unconfirmed[chi], s.unconfirmed[ci]];
+    s.unconfirmed.splice(target, 0, s.contenderId); // winner takes the loser's place
   } else {
-    // the film above wins → it becomes the contender and keeps climbing
-    // (no swap: the winner already sits above the loser)
-    s.contenderId = s.unconfirmed[chi];
+    s.unconfirmed.splice(target + 1, 0, s.contenderId); // drop in beneath the winner
+    s.contenderId = s.challengerId; // the winner carries the climb on
   }
   refresh(s);
   return { films, session: s };
@@ -158,35 +167,23 @@ export function jumpToTop(state: RankState): RankState {
   return flickToTop(state, state.session.contenderId);
 }
 
-// Rolodex scrub — the fatigue shortcut, in both directions. Move the contender
-// to sit directly beneath `filmId`, so that film becomes its very next duel and
-// everything in between is skipped outright.
+// Rolodex scrub — the fatigue shortcut, in both directions. Aim the duel at any
+// film in the pile: scrub up to leap past ones the contender clears, or down to
+// drop past ones that beat it.
 //
-// One rule covers both: scrub UP and the contender leaps past the films it
-// clears; scrub DOWN and it drops past the films that beat it, landing under a
-// weaker opponent. Either way it ends up directly below the target and duels it,
-// so the climb resumes from a neighbourhood that already feels about right.
+// This only AIMS. The pile is left exactly as it was, so the strip holds still
+// while the player looks around — nothing shuffles under the thumb. The move
+// itself lands in choose(), when the duel is actually fought and the contender
+// takes its place above or below the film it faced.
 //
-// This is a user assertion ("I know this belongs around here"), not an
+// Skipping is a user assertion ("I know this belongs around here"), not an
 // inference: the player supplies the ordering directly rather than earning it a
-// duel at a time, exactly as flickToTop does. Nothing is committed — only a
-// confirm does that. Repositioning (rather than merely re-aiming the displayed
-// opponent) keeps the climb strictly adjacent, so what the duel shows and what
-// choose() resolves can never disagree.
+// duel at a time, exactly as flickToTop does. Nothing is committed either way —
+// only a confirm does that.
 export function skipToFilm(state: RankState, filmId: string): RankState {
   const { session } = state;
   if (!session) return state;
-  const ci = session.unconfirmed.indexOf(session.contenderId);
   const ti = session.unconfirmed.indexOf(filmId);
-  if (ti < 0 || ti === ci) return state; // unknown film, or the contender itself
-  const films = clone(state.films);
-  const unconfirmed = [...session.unconfirmed];
-  unconfirmed.splice(ci, 1); // lift the contender out
-  // Lifting it shifts everything below its old slot up by one, so a target that
-  // sat below the contender is now one index lower than it was.
-  const targetIdx = ti < ci ? ti : ti - 1;
-  unconfirmed.splice(targetIdx + 1, 0, session.contenderId); // drop it just below the target
-  const s: PlacementSession = { ...session, unconfirmed };
-  refresh(s);
-  return { films, session: s };
+  if (ti < 0 || filmId === session.contenderId) return state; // unknown, or itself
+  return { ...state, session: { ...session, challengerId: filmId, needsConfirm: false } };
 }
