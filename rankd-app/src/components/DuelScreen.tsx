@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, skipToFilm } from "@/lib/ladder";
+import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, skipToFilm, stepBackFromConfirm } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import type { Film, RankState } from "@/lib/types";
@@ -92,6 +92,7 @@ export default function DuelScreen() {
     saveFilms(next.films); // confirmation is the only committed data
     setState(next);
   };
+  const backOut = () => setState(stepBackFromConfirm(state));
 
   const pair = getPair(state);
   const champion = pendingConfirm(state);
@@ -102,7 +103,12 @@ export default function DuelScreen() {
       <TierProgress placed={session?.confirmed.length ?? 0} toGo={session?.unconfirmed.length ?? 0} />
 
       {champion ? (
-        <ConfirmView champion={champion} rank={(session?.confirmed.length ?? 0) + 1} onConfirm={lockIn} />
+        <ConfirmView
+          champion={champion}
+          rank={(session?.confirmed.length ?? 0) + 1}
+          onConfirm={lockIn}
+          onBack={(session?.unconfirmed.length ?? 0) > 1 ? backOut : undefined}
+        />
       ) : pair && session ? (
         <Duel
           contender={pair.contender}
@@ -648,7 +654,17 @@ function PosterCard({
 }
 
 // ── The confirm moment: the champion tops the pile, take a real number ─────
-function ConfirmView({ champion, rank, onConfirm }: { champion: Film; rank: number; onConfirm: () => void }) {
+function ConfirmView({
+  champion,
+  rank,
+  onConfirm,
+  onBack,
+}: {
+  champion: Film;
+  rank: number;
+  onConfirm: () => void;
+  onBack?: () => void;
+}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
       <span className="text-[11px] font-extrabold tracking-[0.14em] text-gold">🏆 TOPS THE PILE</span>
@@ -667,6 +683,11 @@ function ConfirmView({ champion, rank, onConfirm }: { champion: Film; rank: numb
       >
         Lock in as #{rank}
       </button>
+      {onBack && (
+        <button onClick={onBack} className="-mt-2 text-xs font-semibold text-dim active:scale-95">
+          Not yet — keep playing
+        </button>
+      )}
     </div>
   );
 }

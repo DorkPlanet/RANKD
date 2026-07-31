@@ -157,6 +157,28 @@ export function flickToTop(state: RankState, filmId: string): RankState {
   unconfirmed.splice(idx, 1);
   unconfirmed.unshift(filmId);
   const s: PlacementSession = { ...session, unconfirmed };
+  // Flicking the climbing film parks it at the top and hands the climb to the
+  // next film up from the bottom — the same as flicking any other film. Without
+  // this it lands at the top with nothing above it and drops the player straight
+  // into a confirm they never asked for.
+  if (filmId === s.contenderId && unconfirmed.length > 1) {
+    s.contenderId = unconfirmed[unconfirmed.length - 1];
+  }
+  refresh(s);
+  return { films, session: s };
+}
+
+// Back out of a pending confirm: drop the champion one place so it has to win
+// its way back to the top. Commits nothing — it only ever un-parks the film.
+export function stepBackFromConfirm(state: RankState): RankState {
+  const { session } = state;
+  if (!session || !session.needsConfirm) return state;
+  if (session.unconfirmed.length < 2) return state; // nothing left to duel
+  const films = clone(state.films);
+  const unconfirmed = [...session.unconfirmed];
+  const [champ] = unconfirmed.splice(0, 1);
+  unconfirmed.splice(1, 0, champ); // slot it back in just below the new top
+  const s: PlacementSession = { ...session, unconfirmed, contenderId: champ };
   refresh(s);
   return { films, session: s };
 }
