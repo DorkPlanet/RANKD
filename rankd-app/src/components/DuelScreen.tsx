@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, jumpToTop, skipToFilm } from "@/lib/ladder";
+import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, skipToFilm } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import type { Film, RankState } from "@/lib/types";
 
@@ -61,7 +61,6 @@ export default function DuelScreen() {
 
   const decide = (winnerId: string) => setState(choose(state, winnerId));
   const flick = (filmId: string) => setState(flickToTop(state, filmId));
-  const jump = () => setState(jumpToTop(state));
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
   const lockIn = () => {
     const next = confirm(state);
@@ -87,7 +86,6 @@ export default function DuelScreen() {
           films={state.films}
           onPick={decide}
           onFlick={flick}
-          onJump={jump}
           onScrub={scrub}
         />
       ) : (
@@ -246,7 +244,6 @@ function Duel({
   films,
   onPick,
   onFlick,
-  onJump,
   onScrub,
 }: {
   contender: Film;
@@ -255,7 +252,6 @@ function Duel({
   films: Film[];
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
-  onJump: () => void;
   onScrub: (id: string) => void;
 }) {
   // Low → high for the rolodex (bottom of pile first).
@@ -267,7 +263,6 @@ function Duel({
   return (
     <>
       <div className="mt-3 flex flex-col items-center gap-0.5">
-        <span className="text-[10px] font-extrabold tracking-[0.14em] text-gold">▲ CLIMBING</span>
         <span className="font-serif text-lg font-bold text-text-hi">{contender.title}</span>
         <span className="text-[11px] text-dim">Throw a poster up ↑ to send it to the top</span>
       </div>
@@ -278,12 +273,6 @@ function Duel({
       </div>
 
       <Rolodex lowToHigh={lowToHigh} contenderId={contender.id} challengerId={challenger.id} onScrub={onScrub} />
-
-      <div className="flex items-center justify-center pb-4">
-        <button onClick={onJump} className="rounded-full border border-accent/40 bg-accent/5 px-4 py-1.5 text-[11px] font-bold tracking-wide text-accent active:scale-95">
-          ↑ Jump to top
-        </button>
-      </div>
     </>
   );
 }
@@ -506,14 +495,16 @@ function Rolodex({
   };
 
   return (
-    <div className="relative w-full pb-2 pt-1">
+    <div className="relative w-full pb-3 pt-1">
       <div
         ref={trackRef}
         onScroll={handleScroll}
         onPointerDown={markUserScroll}
         onTouchStart={markUserScroll}
         onWheel={markUserScroll}
-        className="flex items-end gap-2.5 overflow-x-auto px-[calc(50%-27px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+        // pb-3: the centred cell scales 1.16x, and overflow-x:auto forces
+        // overflow-y to auto too — without this the track clips its label.
+        className="flex items-end gap-2.5 overflow-x-auto pb-3 px-[calc(50%-27px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
