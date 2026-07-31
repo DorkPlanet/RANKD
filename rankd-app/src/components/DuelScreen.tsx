@@ -466,7 +466,7 @@ function TierProgress({ placed, toGo }: { placed: number; toGo: number }) {
     <div className="px-6">
       {/* mt-8 clears the header's 44px feather so the progress bar doesn't sit
           inside the fade. */}
-      <div className="mx-auto mt-8 max-w-[330px]">
+      <div className="mx-auto mt-11 max-w-[330px]">
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-xs font-extrabold tracking-[0.12em] text-gold">{TIER}★ TIER</span>
           <span className="text-[11px] text-text/55">
@@ -898,7 +898,7 @@ function Rolodex({
         // slices the top off it.
         className="rol-track flex items-end gap-2.5 overflow-x-auto pb-4 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
-        <TierDivider rating={TIER} />
+        <TierDivider />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
@@ -930,6 +930,14 @@ function Rolodex({
             can't be scrubbed to; re-opening them is a later feature. */}
         {locked.map(({ film, rank }) => (
           <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
+            {/* The rank is the point of a locked film, so it leads rather than
+                trails — and it's the one number on the strip worth reading. */}
+            <span
+              className="font-serif text-[15px] font-bold leading-none text-gold"
+              style={{ textShadow: "0 0 10px color-mix(in srgb, var(--gold) 55%, transparent)" }}
+            >
+              {rank}
+            </span>
             <div
               className="w-full overflow-hidden rounded-md bg-surface"
               style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
@@ -937,10 +945,11 @@ function Rolodex({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
             </div>
-            <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">#{rank}</span>
+            {/* Matches the UN-RNKD label height so every poster shares a baseline */}
+            <span className="text-[9px] leading-none text-transparent">.</span>
           </div>
         ))}
-        <TierDivider rating={TIER} />
+        <TierDivider />
       </div>
     </div>
   );
@@ -949,20 +958,26 @@ function Rolodex({
 // Bookends: the tier's own boundary marks. The strip only ever holds one star
 // tier, so these are the walls it runs between — and they'll read as real
 // dividers once more than one tier is in play.
-function TierDivider({ rating }: { rating: number }) {
+function TierDivider() {
   const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
   return (
     <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
-      <div className="flex w-full items-center justify-center" style={{ aspectRatio: "1 / 3" }}>
+      <div className="relative flex w-full items-center justify-center" style={{ aspectRatio: "1 / 3" }}>
         <span
+          className="absolute"
           style={{
             width: 1,
             height: "100%",
             background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
           }}
         />
+        {/* The star breaks the line at its midpoint rather than sitting under it */}
+        <span className="relative text-[12px] leading-none text-gold" style={{ padding: "3px 0", background: "var(--bg)" }}>
+          ★
+        </span>
       </div>
-      <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">{rating}★</span>
+      {/* Holds the label row's height so posters stay on one baseline */}
+      <span className="text-[10px] leading-none text-transparent">.</span>
     </div>
   );
 }

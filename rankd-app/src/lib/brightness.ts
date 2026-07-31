@@ -41,12 +41,12 @@ function lerpHex(a: string, b: string, t: number): string {
 export function brightnessVars(t: number): Record<string, string> {
   const c = clamp01(t);
   return {
-    "--bg": hslHex(218, 72, 6 + 9.5 * c),
-    // Header sits ~6 lightness points below --bg, so it's the blackest at t=0
-    // and a deep blue at t=1 — a darker shade of the background that slides with it.
-    "--header-bg": hslHex(218, 68, 9.5 * c),
-    "--surface": hslHex(216, 55, 9 + 13 * c),
-    "--border": hslHex(216, 50, 14 + 14 * c),
+    "--bg": hslHex(218, 72, 6 + 12 * c),
+    // Header sits below --bg, so it's the blackest at t=0 and a deep blue at
+    // t=1 — a darker shade of the background that slides with it.
+    "--header-bg": hslHex(218, 68, 12 * c),
+    "--surface": hslHex(216, 55, 9 + 15 * c),
+    "--border": hslHex(216, 50, 14 + 16 * c),
     "--text": lerpHex("#e7b53e", "#c6d3ea", c),
     "--text-hi": lerpHex("#f4dd90", "#eaf0fa", c),
     "--dim": lerpHex("#a5822f", "#8ca0c0", c),
