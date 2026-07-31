@@ -168,6 +168,23 @@ export function flickToTop(state: RankState, filmId: string): RankState {
   return { films, session: s };
 }
 
+// Mirror of flickToTop: throw a film to the BOTTOM of the pile. Same deal — a
+// user assertion that it belongs down there, commits nothing.
+export function flickToBottom(state: RankState, filmId: string): RankState {
+  const { session } = state;
+  if (!session) return state;
+  const idx = session.unconfirmed.indexOf(filmId);
+  if (idx < 0) return state; // not an unconfirmed film
+  const films = clone(state.films);
+  const unconfirmed = [...session.unconfirmed];
+  unconfirmed.splice(idx, 1);
+  unconfirmed.push(filmId);
+  const s: PlacementSession = { ...session, unconfirmed };
+  // Sending the climber to the bottom just means it starts its climb from there.
+  refresh(s);
+  return { films, session: s };
+}
+
 // Back out of a pending confirm: drop the champion one place so it has to win
 // its way back to the top. Commits nothing — it only ever un-parks the film.
 export function stepBackFromConfirm(state: RankState): RankState {

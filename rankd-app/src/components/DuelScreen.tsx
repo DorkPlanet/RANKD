@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { startRun, getPair, choose, confirm, pendingConfirm, flickToTop, skipToFilm, stepBackFromConfirm } from "@/lib/ladder";
+import {
+  startRun,
+  getPair,
+  choose,
+  confirm,
+  pendingConfirm,
+  flickToTop,
+  flickToBottom,
+  skipToFilm,
+  stepBackFromConfirm,
+} from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import type { Film, RankState } from "@/lib/types";
@@ -10,32 +20,48 @@ import type { Film, RankState } from "@/lib/types";
 const TIER = 4 as const;
 const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
 
+// Degrees each card leans. The climbing card tilts one way, the challenger the
+// other; clones have to match or they land crooked against the real poster.
+const TILT = 2;
+
 // Spawn a copy of a poster that outlives the re-render, so a film can be seen
-// leaving rather than simply being replaced.
-function posterClone(r: DOMRect, poster: string, ring: string): HTMLElement {
+// leaving rather than simply being replaced. Positioned from the element's
+// CENTRE and its untransformed size — a rotated element's bounding rect is the
+// axis-aligned box around it, which is bigger than the poster itself.
+function posterClone(el: HTMLElement, poster: string, ring: string): HTMLElement {
+  const r = el.getBoundingClientRect();
+  const w = el.offsetWidth || r.width;
+  const h = el.offsetHeight || r.height;
+  const left = r.left + r.width / 2 - w / 2;
+  const top = r.top + r.height / 2 - h / 2;
   const clone = document.createElement("div");
-  clone.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:${ring}`;
+  clone.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${w}px;height:${h}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:${ring}`;
   clone.innerHTML = `<img src="${poster}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
   document.body.appendChild(clone);
   return clone;
 }
 
+// Centre point of an element, which rotation about the centre leaves unmoved.
+function centreOf(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
 // Flick: the poster carries on along the throw, so it leaves the way it was
 // thrown rather than always arcing to the same spot regardless of the gesture.
-function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number) {
-  const r = el.getBoundingClientRect();
+function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, tilt: number) {
   const mag = Math.hypot(vx, vy) || 1;
   const ux = vx / mag;
   const uy = vy / mag;
   const travel = Math.max(window.innerWidth, window.innerHeight);
-  const spin = ux * 22; // lean into the direction of the throw
-  const clone = posterClone(r, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
+  const spin = tilt + ux * 22; // start from the card's lean, then lean into the throw
+  const clone = posterClone(el, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
   clone
     .animate(
       [
-        { transform: "translate(0,0) rotate(0deg) scale(1)", opacity: 1, offset: 0 },
+        { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1, offset: 0 },
         {
-          transform: `translate(${ux * travel * 0.3}px,${uy * travel * 0.3}px) rotate(${spin * 0.4}deg) scale(0.94)`,
+          transform: `translate(${ux * travel * 0.3}px,${uy * travel * 0.3}px) rotate(${tilt + (spin - tilt) * 0.4}deg) scale(0.94)`,
           opacity: 1,
           offset: 0.35,
         },
@@ -53,12 +79,12 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number) 
 // The beaten challenger sinks and fades, revealing its replacement underneath,
 // rather than the two cutting straight from one film to the next.
 function fadeLoserOut(el: HTMLElement, poster: string) {
-  const clone = posterClone(el.getBoundingClientRect(), poster, "0 8px 26px rgba(0,0,0,0.55)");
+  const clone = posterClone(el, poster, "0 8px 26px rgba(0,0,0,0.55)");
   clone
     .animate(
       [
-        { transform: "translate(0,0) scale(1)", opacity: 1 },
-        { transform: "translate(0,18px) scale(0.94)", opacity: 0 },
+        { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, opacity: 1 },
+        { transform: `translate(0,18px) rotate(${TILT}deg) scale(0.94)`, opacity: 0 },
       ],
       { duration: 320, easing: "cubic-bezier(.4,0,1,1)" },
     )
@@ -70,18 +96,19 @@ function fadeLoserOut(el: HTMLElement, poster: string) {
 // — the film you just chose jumps the screen. Slide a clone across so the pick
 // visibly takes its new seat.
 function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: string) {
-  const a = fromImg.getBoundingClientRect();
-  const b = toImg.getBoundingClientRect();
-  const clone = document.createElement("div");
-  clone.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)`;
-  clone.innerHTML = `<img src="${poster}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
-  document.body.appendChild(clone);
+  const a = centreOf(fromImg);
+  const b = centreOf(toImg);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)");
   clone
     .animate(
       [
-        { transform: "translate(0,0) scale(1)", offset: 0 },
-        { transform: `translate(${(b.left - a.left) * 0.5}px,-14px) scale(1.04)`, offset: 0.5 },
-        { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(1)`, offset: 1 },
+        // Leaves at the challenger's lean and arrives at the climber's, so it
+        // settles flush against the card it is replacing rather than crooked.
+        { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, offset: 0 },
+        { transform: `translate(${dx * 0.5}px,${dy * 0.5 - 14}px) rotate(0deg) scale(1.04)`, offset: 0.5 },
+        { transform: `translate(${dx}px,${dy}px) rotate(${-TILT}deg) scale(1)`, offset: 1 },
       ],
       { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" },
     )
@@ -119,6 +146,7 @@ export default function DuelScreen() {
 
   const decide = (winnerId: string) => setState(choose(state, winnerId));
   const flick = (filmId: string) => setState(flickToTop(state, filmId));
+  const sink = (filmId: string) => setState(flickToBottom(state, filmId));
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
   const lockIn = () => {
     const next = confirm(state);
@@ -147,9 +175,11 @@ export default function DuelScreen() {
           contender={pair.contender}
           challenger={pair.opponent}
           pile={session.unconfirmed}
+          confirmed={session.confirmed}
           films={state.films}
           onPick={decide}
           onFlick={flick}
+          onSink={sink}
           onScrub={scrub}
           onInfo={setInfoFilm}
         />
@@ -462,18 +492,22 @@ function Duel({
   contender,
   challenger,
   pile,
+  confirmed,
   films,
   onPick,
   onFlick,
+  onSink,
   onScrub,
   onInfo,
 }: {
   contender: Film;
   challenger: Film;
   pile: string[]; // unconfirmed, index 0 = top
+  confirmed: string[]; // locked shelf, index 0 = #1
   films: Film[];
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
+  onSink: (id: string) => void;
   onScrub: (id: string) => void;
   onInfo: (film: Film) => void;
 }) {
@@ -508,6 +542,17 @@ function Duel({
     [pile, films],
   );
 
+  // Locked films sit above the whole pile, so they tail the strip. confirmed[0]
+  // is #1, so reversing puts the weakest lock nearest the pile and #1 furthest.
+  const locked = useMemo(
+    () =>
+      [...confirmed]
+        .reverse()
+        .map((id, j) => ({ film: films.find((f) => f.id === id)!, rank: confirmed.length - j }))
+        .filter((x) => x.film),
+    [confirmed, films],
+  );
+
   return (
     <>
       <div className="mt-3 flex flex-col items-center">
@@ -515,11 +560,17 @@ function Duel({
       </div>
 
       <div ref={arenaRef} className="flex flex-1 items-center justify-center gap-3 px-4">
-        <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onInfo={onInfo} />
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onInfo={onInfo} />
+        <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
       </div>
 
-      <Rolodex lowToHigh={lowToHigh} contenderId={contender.id} challengerId={challenger.id} onScrub={onScrub} />
+      <Rolodex
+        lowToHigh={lowToHigh}
+        locked={locked}
+        contenderId={contender.id}
+        challengerId={challenger.id}
+        onScrub={onScrub}
+      />
     </>
   );
 }
@@ -569,6 +620,7 @@ function PosterCard({
   pick,
   onPick,
   onFlick,
+  onSink,
   onInfo,
 }: {
   film: Film;
@@ -576,6 +628,7 @@ function PosterCard({
   pick?: boolean;
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
+  onSink: (id: string) => void;
   onInfo: (film: Film) => void;
 }) {
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -623,11 +676,12 @@ function PosterCard({
     }
     const dy = e.clientY - s.y;
     const dx = e.clientX - s.x;
-    if (dy < -45 && Math.abs(dy) > Math.abs(dx)) {
-      // upward throw → send the poster off along the throw, commit mid-flight
+    if (Math.abs(dy) > 45 && Math.abs(dy) > Math.abs(dx)) {
+      // vertical throw → up sends it to the top of the pile, down to the bottom
       const img = e.currentTarget.querySelector("img");
-      if (img) flyPosterAway(img, film.poster ?? "", dx, dy);
-      setTimeout(() => onFlick(film.id), 170);
+      if (img) flyPosterAway(img, film.poster ?? "", dx, dy, pick ? -TILT : TILT);
+      const land = dy < 0 ? onFlick : onSink;
+      setTimeout(() => land(film.id), 170);
     } else {
       onPick(film.id); // tap = pick winner
     }
@@ -662,7 +716,7 @@ function PosterCard({
           card reads as off-centre even when it is mathematically centred. */}
       <div
         className={`relative w-full ${pick ? "float-a" : "float-b"}`}
-        style={{ rotate: pick ? "-2deg" : "2deg" }}
+        style={{ rotate: `${pick ? -TILT : TILT}deg` }}
       >
         <div
           className="w-full overflow-hidden rounded-xl"
@@ -751,11 +805,13 @@ function TierComplete({ films }: { films: Film[] }) {
 // ── Rolodex — the unconfirmed pile, contender pinned as a gold YOU marker ──
 function Rolodex({
   lowToHigh,
+  locked,
   contenderId,
   challengerId,
   onScrub,
 }: {
   lowToHigh: Film[];
+  locked: { film: Film; rank: number }[];
   contenderId: string;
   challengerId: string;
   onScrub: (id: string) => void;
@@ -842,6 +898,7 @@ function Rolodex({
         // slices the top off it.
         className="rol-track flex items-end gap-2.5 overflow-x-auto pb-4 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
+        <TierDivider rating={TIER} />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
@@ -868,7 +925,44 @@ function Rolodex({
             </div>
           ),
         )}
+        {/* Locked films tail the strip — they outrank the whole pile, so the
+            shelf you're building stays in view. They carry no data-fid, so they
+            can't be scrubbed to; re-opening them is a later feature. */}
+        {locked.map(({ film, rank }) => (
+          <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
+            <div
+              className="w-full overflow-hidden rounded-md bg-surface"
+              style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+            </div>
+            <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">#{rank}</span>
+          </div>
+        ))}
+        <TierDivider rating={TIER} />
       </div>
+    </div>
+  );
+}
+
+// Bookends: the tier's own boundary marks. The strip only ever holds one star
+// tier, so these are the walls it runs between — and they'll read as real
+// dividers once more than one tier is in play.
+function TierDivider({ rating }: { rating: number }) {
+  const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
+  return (
+    <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
+      <div className="flex w-full items-center justify-center" style={{ aspectRatio: "1 / 3" }}>
+        <span
+          style={{
+            width: 1,
+            height: "100%",
+            background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
+          }}
+        />
+      </div>
+      <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">{rating}★</span>
     </div>
   );
 }
