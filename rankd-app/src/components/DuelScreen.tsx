@@ -437,27 +437,40 @@ function Duel({
   );
 }
 
-// Every gesture the duel screen understands, cycled one at a time — the screen
-// has no chrome explaining itself, so this is where the mechanics get taught.
+// Every mechanic the duel screen understands, cycled one at a time — the screen
+// carries no chrome explaining itself, so this is where the game gets taught.
 const TIPS = [
-  "Tap the poster you rate higher",
-  "Throw a poster up ↑ to send it to the top",
-  "Hold a poster for cast, crew and synopsis",
-  "Scrub the strip below to choose who you take on next",
-  "Scrub past your own film to rank it lower",
-  "Nothing is locked in until you confirm a place",
+  "Tap whichever film you rate higher — that settles the duel",
+  "Win and you climb; lose and the winner carries on up without you",
+  "Throw a film up ↑ to send it straight to the top of the pile",
+  "Press and hold a film to see its cast, crew and synopsis",
+  "Scrub the strip below to choose which film you take on next",
+  "Scrub past your own film to rank it further down the pile",
+  "Only a confirmed place is saved — the rest is just shuffling",
 ];
-const TIP_MS = 6500;
+const TIP_MS = 9500; // dwell
+const TIP_FADE_MS = 550; // matches the .tip opacity transition
 
 function Tips() {
   const [i, setI] = useState(0);
+  const [shown, setShown] = useState(true);
+
   useEffect(() => {
-    const t = setInterval(() => setI((n) => (n + 1) % TIPS.length), TIP_MS);
-    return () => clearInterval(t);
+    // Fade the old tip out, swap the text while it's invisible, fade back in —
+    // a crossfade rather than a cut. Opacity lives in CSS so the shine keeps
+    // running underneath instead of restarting on every change.
+    const cycle = setInterval(() => {
+      setShown(false);
+      setTimeout(() => {
+        setI((n) => (n + 1) % TIPS.length);
+        setShown(true);
+      }, TIP_FADE_MS);
+    }, TIP_MS);
+    return () => clearInterval(cycle);
   }, []);
-  // key remounts the span so the fade-in replays for each new tip.
+
   return (
-    <span key={i} className="tip text-[11px]">
+    <span className="tip px-6 text-center text-[11px] leading-snug" style={{ opacity: shown ? 1 : 0 }}>
       {TIPS[i]}
     </span>
   );
