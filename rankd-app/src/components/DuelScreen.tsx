@@ -112,29 +112,17 @@ function BottomNav({ onSettings }: { onSettings: () => void }) {
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <NavItem label="Rank" active icon={<RankdMark />} />
+      {/* Five equal cells so RNK sits dead centre — it's the core loop. List and
+          Account anchor the edges; the interior gap is a slot held for a future
+          destination. Add-film and Search live inside List, not out here. */}
       <NavItem label="Your list" icon={<ListIcon />} />
-      <NavItem label="Log a film" icon={<LogFilmButton />} />
       <NavItem label="Activity" icon={<ActivityIcon />} />
+      <NavItem label="Rank" active icon={<RankdMark />} />
+      <div className="flex-1" aria-hidden />
       {/* Account owns Settings — for now it opens the sheet directly, since the
           brightness slider is the only setting that exists yet. */}
       <NavItem label="You" onClick={onSettings} icon={<PersonIcon />} />
     </nav>
-  );
-}
-
-// The primary input action, so it reads as a button rather than a tab.
-function LogFilmButton() {
-  return (
-    <span
-      className="flex h-8 w-8 items-center justify-center rounded-full"
-      style={{ background: "var(--gold)", color: "#1c1405" }}
-    >
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round">
-        <line x1="12" y1="5" x2="12" y2="19" />
-        <line x1="5" y1="12" x2="19" y2="12" />
-      </svg>
-    </span>
   );
 }
 
@@ -168,6 +156,15 @@ function PersonIcon() {
   );
 }
 
+function EndSessionIcon() {
+  return (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 function TrophyIcon() {
   return (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -196,7 +193,7 @@ function NavItem({ label, icon, active, onClick }: { label: string; icon: React.
 }
 
 function RankdMark() {
-  return <span className="font-display text-xl leading-none tracking-[0.1em]">RNKD</span>;
+  return <span className="font-display text-xl leading-none tracking-[0.1em]">RNK</span>;
 }
 
 function GearIcon() {
@@ -251,6 +248,14 @@ function Header() {
       className="relative px-6 pb-3"
       style={{ background: "var(--header-bg)", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
     >
+      {/* End session sits opposite the trophy, so the duel always has a way out. */}
+      <button
+        aria-label="End session"
+        className="absolute left-5 text-dim transition-colors active:scale-95"
+        style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
+      >
+        <EndSessionIcon />
+      </button>
       <button
         aria-label="Achievements"
         className="absolute right-5 text-dim transition-colors active:scale-95"
