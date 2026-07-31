@@ -45,6 +45,7 @@ export default function DuelScreen() {
 
   const [brightness, setBrightness] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [infoFilm, setInfoFilm] = useState<Film | null>(null);
   useEffect(() => {
     const b = loadBrightness();
     setBrightness(b);
@@ -87,12 +88,15 @@ export default function DuelScreen() {
           onPick={decide}
           onFlick={flick}
           onScrub={scrub}
+          onInfo={setInfoFilm}
         />
       ) : (
         <TierComplete films={state.films} />
       )}
 
       <BottomNav onSettings={() => setSettingsOpen(true)} />
+
+      {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
 
       {settingsOpen && (
         <Settings brightness={brightness} onChange={changeBrightness} onClose={() => setSettingsOpen(false)} />
@@ -206,6 +210,34 @@ function GearIcon() {
   );
 }
 
+// Long-press card — the only place year and tagline surface. Deliberately quiet:
+// it's for settling a "wait, which one is this?" mid-duel, not for browsing.
+function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm"
+      style={{ background: "rgba(0,0,0,0.65)", padding: "0 2.5rem" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full overflow-hidden border border-border"
+        style={{ background: "var(--surface)", maxWidth: 250, borderRadius: 16 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={film.poster} alt={film.title} className="w-full" style={{ aspectRatio: "2 / 3", objectFit: "cover" }} />
+        <div className="px-5 pb-5 pt-4 text-center">
+          <div className="font-display text-2xl leading-none tracking-wide text-text-hi">{film.title}</div>
+          <div className="mt-2 text-[11px] font-bold tracking-[0.12em] text-gold">
+            {film.year} · {film.rating}★
+          </div>
+          {film.tagline && <p className="mt-3 font-serif text-sm italic leading-snug text-text">“{film.tagline}”</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Settings sheet — home for the brightness slider (and future settings).
 function Settings({ brightness, onChange, onClose }: { brightness: number; onChange: (t: number) => void; onClose: () => void }) {
   return (
@@ -315,6 +347,7 @@ function Duel({
   onPick,
   onFlick,
   onScrub,
+  onInfo,
 }: {
   contender: Film;
   challenger: Film;
@@ -323,6 +356,7 @@ function Duel({
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
   onScrub: (id: string) => void;
+  onInfo: (film: Film) => void;
 }) {
   // Low → high for the rolodex (bottom of pile first).
   const lowToHigh = useMemo(
@@ -337,8 +371,8 @@ function Duel({
       </div>
 
       <div className="flex flex-1 items-center justify-center gap-3 px-4">
-        <PosterCard film={contender} badge="CLIMBING" pick onPick={onPick} onFlick={onFlick} />
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={onPick} onFlick={onFlick} />
+        <PosterCard film={contender} badge="CLIMBING" pick onPick={onPick} onFlick={onFlick} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" onPick={onPick} onFlick={onFlick} onInfo={onInfo} />
       </div>
 
       <Rolodex lowToHigh={lowToHigh} contenderId={contender.id} challengerId={challenger.id} onScrub={onScrub} />
@@ -352,16 +386,29 @@ function PosterCard({
   pick,
   onPick,
   onFlick,
+  onInfo,
 }: {
   film: Film;
   badge: string;
   pick?: boolean;
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
+  onInfo: (film: Film) => void;
 }) {
   const start = useRef<{ x: number; y: number } | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+
+  const cancelHold = () => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
     start.current = { x: e.clientX, y: e.clientY };
+    held.current = false;
     // Capture the pointer so an upward drag off the poster still reports its
     // release here — without this the flick is lost the moment you leave the card.
     try {
@@ -369,11 +416,28 @@ function PosterCard({
     } catch {
       // ignore — capture is a best-effort enhancement
     }
+    holdTimer.current = setTimeout(() => {
+      held.current = true; // swallows the tap on release, so holding never picks
+      onInfo(film);
+    }, 450);
   };
+
+  // Any real movement means they're flicking or scrolling, not holding.
+  const onPointerMove = (e: React.PointerEvent) => {
+    const s = start.current;
+    if (!s) return;
+    if (Math.abs(e.clientX - s.x) > 8 || Math.abs(e.clientY - s.y) > 8) cancelHold();
+  };
+
   const onPointerUp = (e: React.PointerEvent) => {
+    cancelHold();
     const s = start.current;
     start.current = null;
     if (!s) return;
+    if (held.current) {
+      held.current = false;
+      return; // the hold already opened the info card
+    }
     const dy = e.clientY - s.y;
     const dx = e.clientX - s.x;
     if (dy < -45 && Math.abs(dy) > Math.abs(dx)) {
@@ -386,10 +450,18 @@ function PosterCard({
     }
   };
 
+  const onPointerCancel = () => {
+    cancelHold();
+    start.current = null;
+  };
+
   return (
     <button
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
       style={{ touchAction: "none" }}
       className="group relative flex w-[46%] max-w-[180px] flex-col items-center transition-transform active:scale-95"
     >
