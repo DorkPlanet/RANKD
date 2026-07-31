@@ -116,9 +116,12 @@ img {
 }
 .rol-cell.rol-centered .rol-poster {
   transform: scale(1.16);
+  /* Symmetric, and tight enough to sit inside the track's padding. An offset,
+     wider glow spilled past the scroll box and overflow-y:auto sliced a hard
+     horizontal line straight through it. */
   box-shadow:
     0 0 0 2px var(--accent),
-    0 8px 22px color-mix(in srgb, var(--accent) 45%, transparent);
+    0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* Fade the strip's edges so films scroll out of view instead of being sliced

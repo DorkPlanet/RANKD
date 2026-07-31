@@ -32,6 +32,29 @@ function flyPosterUp(el: HTMLElement, poster: string) {
     .addEventListener("finish", () => clone.remove());
 }
 
+// The challenger sits on the right, but winning makes it the climbing film on
+// the left. Without this it simply appears over there the instant state updates
+// — the film you just chose jumps the screen. Slide a clone across so the pick
+// visibly takes its new seat.
+function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: string) {
+  const a = fromImg.getBoundingClientRect();
+  const b = toImg.getBoundingClientRect();
+  const clone = document.createElement("div");
+  clone.style.cssText = `position:fixed;left:${a.left}px;top:${a.top}px;width:${a.width}px;height:${a.height}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)`;
+  clone.innerHTML = `<img src="${poster}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
+  document.body.appendChild(clone);
+  clone
+    .animate(
+      [
+        { transform: "translate(0,0) scale(1)", offset: 0 },
+        { transform: `translate(${(b.left - a.left) * 0.5}px,-14px) scale(1.04)`, offset: 0.5 },
+        { transform: `translate(${b.left - a.left}px,${b.top - a.top}px) scale(1)`, offset: 1 },
+      ],
+      { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" },
+    )
+    .addEventListener("finish", () => clone.remove());
+}
+
 export default function DuelScreen() {
   const [state, setState] = useState<RankState | null>(null);
 
@@ -415,6 +438,26 @@ function Duel({
   onScrub: (id: string) => void;
   onInfo: (film: Film) => void;
 }) {
+  const arenaRef = useRef<HTMLDivElement>(null);
+
+  // Intercept a win by the right-hand card so it slides into the climbing seat
+  // before the state swap paints. Picking the left card needs none of this — it
+  // is already where it is going to be.
+  const pick = (id: string) => {
+    const arena = arenaRef.current;
+    if (id === challenger.id && arena) {
+      const cards = arena.querySelectorAll<HTMLElement>("button");
+      const from = cards[1]?.querySelector("img");
+      const to = cards[0]?.querySelector("img");
+      if (from && to) {
+        flyPosterAcross(from, to, challenger.poster ?? "");
+        setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
+        return;
+      }
+    }
+    onPick(id);
+  };
+
   // Low → high for the rolodex (bottom of pile first).
   const lowToHigh = useMemo(
     () => [...pile].reverse().map((id) => films.find((f) => f.id === id)!).filter(Boolean),
@@ -427,9 +470,9 @@ function Duel({
         <Tips />
       </div>
 
-      <div className="flex flex-1 items-center justify-center gap-3 px-4">
-        <PosterCard film={contender} badge="CLIMBING" pick onPick={onPick} onFlick={onFlick} onInfo={onInfo} />
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={onPick} onFlick={onFlick} onInfo={onInfo} />
+      <div ref={arenaRef} className="flex flex-1 items-center justify-center gap-3 px-4">
+        <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onInfo={onInfo} />
       </div>
 
       <Rolodex lowToHigh={lowToHigh} contenderId={contender.id} challengerId={challenger.id} onScrub={onScrub} />
@@ -738,7 +781,7 @@ function Rolodex({
         // pt-4: the centred poster scales 1.16x upward from its bottom edge, and
         // overflow-x:auto forces overflow-y to auto — without headroom the track
         // slices the top off it.
-        className="rol-track flex items-end gap-2.5 overflow-x-auto pt-4 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+        className="rol-track flex items-end gap-2.5 overflow-x-auto pb-4 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
       >
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
