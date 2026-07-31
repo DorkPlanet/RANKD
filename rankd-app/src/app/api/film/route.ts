@@ -11,6 +11,7 @@ const BASE = "https://api.themoviedb.org/3";
 const DAY = 60 * 60 * 24;
 
 export interface FilmMeta {
+  poster?: string;
   synopsis?: string;
   runtime?: number;
   genres?: string[];
@@ -63,6 +64,8 @@ export async function GET(request: Request) {
     const byJob = (...jobs: string[]) => crew.find((c) => jobs.includes(c.job ?? ""))?.name;
 
     const meta: FilmMeta = {
+      // Imported films arrive with no artwork, so the poster comes back too.
+      poster: d.poster_path ? `https://image.tmdb.org/t/p/w342${d.poster_path}` : undefined,
       synopsis: d.overview || undefined,
       runtime: d.runtime || undefined,
       genres: (d.genres ?? []).map((g: { name: string }) => g.name),

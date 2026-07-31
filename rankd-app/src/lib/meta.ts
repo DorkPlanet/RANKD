@@ -6,6 +6,7 @@ import type { Film } from "./types";
 // it or to let a stale synopsis outlive a cache bust.
 
 export interface FilmMeta {
+  poster?: string;
   synopsis?: string;
   runtime?: number;
   genres?: string[];
@@ -33,3 +34,25 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
   cache.set(film.id, req);
   return req;
 }
+
+// A CSV import brings in titles and ratings but no artwork, and the duel is
+// unplayable without posters. Walk the films that need one, oldest request
+// first, reporting each so the caller can persist as it goes — a long import
+// shouldn't lose everything if the tab closes halfway.
+//
+// Throttled and sequential on purpose: this can be hundreds of films, and
+// hammering TMDb in parallel is how you get rate-limited.
+export async function backfillPosters(
+  films: Film[],
+  onFound: (id: string, poster: string) => void,
+  shouldStop: () => boolean,
+  gapMs = 260,
+): Promise<void> {
+  for (const film of films) {
+    if (shouldStop()) return;
+    const meta = await fetchMeta(film);
+    if (meta.poster) onFound(film.id, meta.poster);
+    await new Promise((r) => setTimeout(r, gapMs));
+  }
+}
+

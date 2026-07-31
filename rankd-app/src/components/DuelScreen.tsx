@@ -14,7 +14,8 @@ import {
   stepBackFromConfirm,
 } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
-import { fetchMeta, type FilmMeta } from "@/lib/meta";
+import { fetchMeta, backfillPosters, type FilmMeta } from "@/lib/meta";
+import { parseLetterboxdCsv, mergeFilms } from "@/lib/importCsv";
 import type { Film, RankState } from "@/lib/types";
 
 const TIER = 4 as const;
@@ -153,6 +154,35 @@ export default function DuelScreen() {
     saveBrightness(t);
   };
 
+  // Fill in artwork for the tier being played. Scoped to the active pile rather
+  // than the whole library — an import can be hundreds of films, and only these
+  // are ever on screen. Persists as each one lands so progress survives a reload.
+  const pileKey = state?.session?.unconfirmed.join(",") ?? "";
+  useEffect(() => {
+    if (!state?.session) return;
+    const need = state.session.unconfirmed
+      .map((id) => state.films.find((f) => f.id === id))
+      .filter((f): f is Film => !!f && !f.poster);
+    if (need.length === 0) return;
+
+    let stopped = false;
+    backfillPosters(
+      need,
+      (id, poster) =>
+        setState((s) => {
+          if (!s) return s;
+          const films = s.films.map((f) => (f.id === id ? { ...f, poster } : f));
+          saveFilms(films);
+          return { ...s, films };
+        }),
+      () => stopped,
+    );
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pileKey]);
+
   if (!state) return null;
   const { session } = state;
 
@@ -166,6 +196,16 @@ export default function DuelScreen() {
     setState(next);
   };
   const backOut = () => setState(stepBackFromConfirm(state));
+
+  // Swap the whole library for an imported one and restart the run on it.
+  const loadLibrary = (films: Film[]) => {
+    saveFilms(films);
+    try {
+      setState(startRun(films, TIER));
+    } catch {
+      setState({ films, session: null }); // fewer than 2 films in this tier
+    }
+  };
 
   const pair = getPair(state);
   const champion = pendingConfirm(state);
@@ -206,7 +246,13 @@ export default function DuelScreen() {
       {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
 
       {settingsOpen && (
-        <Settings brightness={brightness} onChange={changeBrightness} onClose={() => setSettingsOpen(false)} />
+        <Settings
+          brightness={brightness}
+          onChange={changeBrightness}
+          onClose={() => setSettingsOpen(false)}
+          films={state.films}
+          onImport={loadLibrary}
+        />
       )}
     </main>
   );
@@ -317,6 +363,36 @@ function GearIcon() {
   );
 }
 
+// A label wrapping a hidden file input — a styled <button> can't open a picker.
+function ImportButton({
+  label,
+  merge,
+  onFile,
+}: {
+  label: string;
+  merge?: boolean;
+  onFile: (file: File, merge: boolean) => void;
+}) {
+  return (
+    <label
+      className="flex-1 cursor-pointer rounded-full border border-border py-2.5 text-center text-xs font-bold tracking-wide text-text active:scale-95"
+      style={merge ? { color: "#1c1405", background: "var(--gold)", borderColor: "var(--gold)" } : undefined}
+    >
+      {label}
+      <input
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFile(file, !!merge);
+          e.target.value = ""; // so picking the same file twice still fires
+        }}
+      />
+    </label>
+  );
+}
+
 // Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
 // year and tagline are local and paint instantly; the TMDb detail streams in
 // underneath so the card is never blocked on the network.
@@ -402,7 +478,36 @@ function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
 }
 
 // Settings sheet — home for the brightness slider (and future settings).
-function Settings({ brightness, onChange, onClose }: { brightness: number; onChange: (t: number) => void; onClose: () => void }) {
+function Settings({
+  brightness,
+  onChange,
+  onClose,
+  films,
+  onImport,
+}: {
+  brightness: number;
+  onChange: (t: number) => void;
+  onClose: () => void;
+  films: Film[];
+  onImport: (films: Film[]) => void;
+}) {
+  const [note, setNote] = useState<string | null>(null);
+
+  const takeFile = async (file: File, merge: boolean) => {
+    const { films: parsed, skipped } = parseLetterboxdCsv(await file.text());
+    if (parsed.length === 0) {
+      setNote("No rated films found — is that a Letterboxd ratings.csv?");
+      return;
+    }
+    const next = merge ? mergeFilms(films, parsed) : parsed;
+    onImport(next);
+    setNote(
+      `${merge ? "Merged" : "Imported"} ${parsed.length} films` +
+        (skipped ? ` · skipped ${skipped} unrated` : "") +
+        ". Posters are loading in the background.",
+    );
+  };
+
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -432,6 +537,22 @@ function Settings({ brightness, onChange, onClose }: { brightness: number; onCha
         <div className="mt-1.5 flex justify-between text-[11px] text-dim">
           <span>Deep</span>
           <span>Bright</span>
+        </div>
+
+        <div className="mt-7 border-t border-border pt-5">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">YOUR FILMS</span>
+            <span className="text-[11px] text-dim">{films.length} in the library</span>
+          </div>
+          <p className="mb-3 text-[11px] leading-snug text-dim">
+            Import a Letterboxd <span className="text-text">ratings.csv</span>. Merge keeps anything
+            you&apos;ve already placed; replace starts over.
+          </p>
+          <div className="flex gap-2">
+            <ImportButton label="Merge" merge onFile={takeFile} />
+            <ImportButton label="Replace" onFile={takeFile} />
+          </div>
+          {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
         </div>
       </div>
     </div>
