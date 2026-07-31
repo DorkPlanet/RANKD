@@ -92,6 +92,115 @@ img {
   }
 }
 
+/* Dual-thumb range. There's no native two-handle input, so two ranges are laid
+   over one track: the inputs ignore pointer events, only their thumbs take
+   them, which lets either handle be grabbed anywhere along the shared line. */
+.dual-range {
+  position: relative;
+  height: 26px;
+}
+.dual-range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dual-range input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--surface);
+  cursor: pointer;
+}
+.dual-range input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--gold);
+  cursor: pointer;
+}
+.dual-track,
+.dual-fill {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+}
+.dual-track {
+  left: 0;
+  right: 0;
+  background: var(--border);
+}
+.dual-fill {
+  background: var(--gold);
+}
+
+/* Sheets slide up from the bottom edge and back down again, so a panel arrives
+   from somewhere rather than appearing on top of everything. The close is
+   slightly quicker than the open — dismissing should feel immediate. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes scrim-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.sheet-in {
+  animation: sheet-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.sheet-out {
+  animation: sheet-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+}
+.scrim-in {
+  animation: scrim-in 0.25s ease both;
+}
+.scrim-out {
+  animation: scrim-out 0.22s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-in,
+  .sheet-out,
+  .scrim-in,
+  .scrim-out {
+    animation-duration: 0.01s;
+  }
+}
+
 /* The last-duel line lifts in as it arrives, so a result registers as something
    that just happened rather than text that was always sitting there. */
 @keyframes result-in {

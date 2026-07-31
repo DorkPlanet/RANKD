@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFilms, saveFilms } from "@/lib/store";
 import {
   startRun,
+  startSpotlight,
+  abandonSpotlight,
   getPair,
   choose,
   confirm,
@@ -12,13 +14,19 @@ import {
   flickToBottom,
   skipToFilm,
   stepBackFromConfirm,
+  promotionTarget,
+  startPromotionDuel,
+  promoteDirect,
+  promotionWon,
+  completePromotion,
 } from "@/lib/ladder";
+import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { fetchMeta, backfillPosters, type FilmMeta } from "@/lib/meta";
 import { parseLetterboxdCsv, mergeFilms } from "@/lib/importCsv";
 import type { Film, RankState } from "@/lib/types";
 
-const TIER = 4 as const;
+const DEFAULT_TIER = 4 as const;
 const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
 
 // Degrees each card leans. The climbing card tilts one way, the challenger the
@@ -121,8 +129,11 @@ export default function DuelScreen() {
 
   useEffect(() => {
     const films = loadFilms();
+    // Open on the biggest tier that can actually be played — with a real library
+    // the default 4★ might be empty, and an empty screen is a poor first look.
+    const best = pickOpeningTier(films);
     try {
-      setState(startRun(films, TIER));
+      setState(startRun(films, best));
     } catch {
       setState({ films, session: null });
     }
@@ -130,6 +141,14 @@ export default function DuelScreen() {
 
   const [brightness, setBrightness] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
+  const [tierOpen, setTierOpen] = useState(false);
+  const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
+  const [shuffle, setShuffle] = useState(false);
+  // How far either side of the chosen tier to pull films in from, set
+  // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
+  const [below, setBelow] = useState(0);
+  const [above, setAbove] = useState(0);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
@@ -160,7 +179,19 @@ export default function DuelScreen() {
   const pileKey = state?.session?.unconfirmed.join(",") ?? "";
   useEffect(() => {
     if (!state?.session) return;
-    const need = state.session.unconfirmed
+    const { unconfirmed, contenderId } = state.session;
+    // Fetch in the order they'll be SEEN, not pile order. The contender sits at
+    // the bottom of the pile and climbs upward, so plain pile order fetches the
+    // whole tier before reaching the two films actually on screen — a 130-film
+    // tier left them blank for half a minute.
+    const ci = unconfirmed.indexOf(contenderId);
+    const byWhenSeen = [
+      unconfirmed[ci], // the contender itself
+      ...unconfirmed.slice(0, ci).reverse(), // then upward: its next opponents
+      ...unconfirmed.slice(ci + 1), // then everything already passed
+    ].filter(Boolean);
+
+    const need = byWhenSeen
       .map((id) => state.films.find((f) => f.id === id))
       .filter((f): f is Film => !!f && !f.poster);
     if (need.length === 0) return;
@@ -191,20 +222,48 @@ export default function DuelScreen() {
   const sink = (filmId: string) => setState(flickToBottom(state, filmId));
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
   const lockIn = () => {
-    const next = confirm(state);
+    // Winning the promotion duels banks a new star rating instead of a position.
+    const next = promotionWon(state) ? completePromotion(state) : confirm(state);
     saveFilms(next.films); // confirmation is the only committed data
     setState(next);
   };
   const backOut = () => setState(stepBackFromConfirm(state));
 
+  const beginRun = (tier: Rating, films = state.films) => {
+    try {
+      setState(startRun(films, tier, { shuffle, below, above }));
+    } catch {
+      setState({ films, session: null }); // fewer than 2 films in range
+    }
+  };
+
+  const beginSpotlight = (filmId: string) => {
+    try {
+      setState(startSpotlight(state.films, filmId, { shuffle }));
+    } catch {
+      setState(state); // no peers to place against — leave the run alone
+    }
+  };
+
+  // Leaving a spotlight must put the film back exactly as it was.
+  const endRun = () => {
+    const next = session?.mode === "spotlight" ? abandonSpotlight(state) : { ...state, session: null };
+    saveFilms(next.films);
+    setState(next);
+  };
+
+  const promoteTo = promotionTarget(state);
+  const takeOnTierAbove = () => setState(startPromotionDuel(state));
+  const assertPromotion = () => {
+    const next = promoteDirect(state);
+    saveFilms(next.films);
+    setState(next);
+  };
+
   // Swap the whole library for an imported one and restart the run on it.
   const loadLibrary = (films: Film[]) => {
     saveFilms(films);
-    try {
-      setState(startRun(films, TIER));
-    } catch {
-      setState({ films, session: null }); // fewer than 2 films in this tier
-    }
+    beginRun(pickOpeningTier(films), films);
   };
 
   const pair = getPair(state);
@@ -213,7 +272,13 @@ export default function DuelScreen() {
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
       <Header />
-      <TierProgress placed={session?.confirmed.length ?? 0} toGo={session?.unconfirmed.length ?? 0} />
+      <TierProgress
+        tier={session?.tier ?? DEFAULT_TIER}
+        mode={session?.mode ?? "koth"}
+        placed={session?.confirmed.length ?? 0}
+        toGo={session?.unconfirmed.length ?? 0}
+        onPickTier={() => setTierOpen(true)}
+      />
 
       {champion ? (
         <ConfirmView
@@ -221,6 +286,11 @@ export default function DuelScreen() {
           rank={(session?.confirmed.length ?? 0) + 1}
           onConfirm={lockIn}
           onBack={(session?.unconfirmed.length ?? 0) > 1 ? backOut : undefined}
+          spotlight={session?.mode === "spotlight"}
+          promoteTo={promoteTo}
+          onTakeOn={takeOnTierAbove}
+          onAssertPromotion={assertPromotion}
+          justPromoted={promotionWon(state)}
         />
       ) : pair && session ? (
         <Duel
@@ -229,6 +299,7 @@ export default function DuelScreen() {
           pile={session.unconfirmed}
           confirmed={session.confirmed}
           films={state.films}
+          tier={session.tier}
           onPick={decide}
           onFlick={flick}
           onSink={sink}
@@ -238,12 +309,62 @@ export default function DuelScreen() {
           onToggleStrip={toggleStrip}
         />
       ) : (
-        <TierComplete films={state.films} />
+        <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} />
       )}
 
-      <BottomNav onSettings={() => setSettingsOpen(true)} />
+      <BottomNav onSettings={() => setSettingsOpen(true)} onModes={() => setModeOpen(true)} onEnd={endRun} />
 
       {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
+
+      {modeOpen && (
+        <ModePanel
+          films={state.films}
+          tier={session?.tier ?? DEFAULT_TIER}
+          shuffle={shuffle}
+          onShuffle={setShuffle}
+          below={below}
+          above={above}
+          onBelow={setBelow}
+          onAbove={setAbove}
+          onClose={() => setModeOpen(false)}
+          onKoth={(t) => {
+            beginRun(t);
+            setModeOpen(false);
+          }}
+          onSpotlight={(t) => {
+            setSpotlightFor(t);
+            setModeOpen(false);
+          }}
+          onPickTier={() => {
+            setModeOpen(false);
+            setTierOpen(true);
+          }}
+        />
+      )}
+
+      {tierOpen && (
+        <TierPicker
+          films={state.films}
+          current={session?.tier ?? DEFAULT_TIER}
+          onClose={() => setTierOpen(false)}
+          onPick={(t) => {
+            beginRun(t);
+            setTierOpen(false);
+          }}
+        />
+      )}
+
+      {spotlightFor !== null && (
+        <SpotlightPicker
+          films={state.films}
+          tier={spotlightFor}
+          onClose={() => setSpotlightFor(null)}
+          onPick={(id) => {
+            beginSpotlight(id);
+            setSpotlightFor(null);
+          }}
+        />
+      )}
 
       {settingsOpen && (
         <Settings
@@ -258,10 +379,36 @@ export default function DuelScreen() {
   );
 }
 
+// Open on a tier that can actually be played, preferring the default when it
+// works and otherwise the fullest — a real import may have nothing at 4★.
+function pickOpeningTier(films: Film[]): Rating {
+  const counts = new Map<Rating, number>();
+  for (const f of films) counts.set(f.rating, (counts.get(f.rating) ?? 0) + 1);
+  if ((counts.get(DEFAULT_TIER) ?? 0) >= 2) return DEFAULT_TIER;
+  let best: Rating = DEFAULT_TIER;
+  let most = 0;
+  for (const t of ORDERED_TIERS) {
+    const n = counts.get(t) ?? 0;
+    if (n > most) {
+      most = n;
+      best = t;
+    }
+  }
+  return best;
+}
+
 // Bottom nav — bookends the black header, so the play area sits between two
 // dark bands. Sized to its final height now, so adding List/Stats later slots
 // in without re-flowing the duel.
-function BottomNav({ onSettings }: { onSettings: () => void }) {
+function BottomNav({
+  onSettings,
+  onModes,
+  onEnd,
+}: {
+  onSettings: () => void;
+  onModes: () => void;
+  onEnd: () => void;
+}) {
   return (
     <nav
       className="flex flex-shrink-0 items-stretch border-t"
@@ -273,8 +420,8 @@ function BottomNav({ onSettings }: { onSettings: () => void }) {
           the session sits beside it, since that's the duel's own control.
           Add-film and Search live inside List, not out here. */}
       <NavItem label="Your list" icon={<ListIcon />} />
-      <NavItem label="End session" icon={<StopIcon />} />
-      <NavItem label="Rank" active icon={<RankdMark />} />
+      <NavItem label="End session" onClick={onEnd} icon={<StopIcon />} />
+      <NavItem label="Rank" active onClick={onModes} icon={<RankdMark />} />
       <NavItem label="Activity" icon={<ActivityIcon />} />
       {/* Account owns Settings — for now it opens the sheet directly, since the
           brightness slider is the only setting that exists yet. */}
@@ -360,6 +507,377 @@ function GearIcon() {
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
+  );
+}
+
+// Shared sheet chrome — the Settings sheet established this; modes, tier and
+// spotlight all reuse it so every panel dismisses the same way.
+const SHEET_EXIT_MS = 220;
+
+function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  // The panel has to outlive the dismissal long enough to slide back down, so
+  // closing plays the exit first and only then unmounts.
+  const [closing, setClosing] = useState(false);
+  const close = () => {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(onClose, SHEET_EXIT_MS);
+  };
+  return (
+    <div
+      className={`fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
+      onClick={close}
+    >
+      <div
+        className={`max-h-[82vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5 ${closing ? "sheet-out" : "sheet-in"}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
+        <div className="mb-5 flex items-center justify-between">
+          <span className="font-display text-2xl tracking-wide text-gold">{title}</span>
+          <button onClick={close} className="text-sm font-semibold text-dim active:scale-95">
+            Done
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const tierCounts = (films: Film[]): Map<Rating, number> => {
+  const m = new Map<Rating, number>();
+  for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
+  return m;
+};
+
+function ShuffleRow({ shuffle, onShuffle }: { shuffle: boolean; onShuffle: (v: boolean) => void }) {
+  return (
+    <label className="mb-3 flex items-center justify-between rounded-xl border border-border px-4 py-3">
+      <span>
+        <span className="block text-sm text-text-hi">Shuffle the order</span>
+        <span className="block text-[11px] leading-snug text-dim">
+          Face films in a random order instead of weakest first.
+        </span>
+      </span>
+      <input
+        type="checkbox"
+        checked={shuffle}
+        onChange={(e) => onShuffle(e.target.checked)}
+        style={{ accentColor: "var(--gold)", width: 18, height: 18 }}
+      />
+    </label>
+  );
+}
+
+function StartButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="mt-1 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-40"
+      style={{ color: "#1c1405", background: "var(--gold)" }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function BackRow({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="mt-3 w-full text-center text-xs font-semibold text-dim active:scale-95">
+      ‹ Back
+    </button>
+  );
+}
+
+// One track, two handles — the range is a single span, so it reads as one
+// control rather than two settings that happen to be related.
+function RangeSlider({
+  low,
+  high,
+  onLow,
+  onHigh,
+}: {
+  low: number;
+  high: number;
+  onLow: (v: number) => void;
+  onHigh: (v: number) => void;
+}) {
+  const MIN = 0.5;
+  const MAX = 5;
+  const pct = (v: number) => ((v - MIN) / (MAX - MIN)) * 100;
+  return (
+    <div className="dual-range">
+      <div className="dual-track" />
+      <div className="dual-fill" style={{ left: `${pct(low)}%`, right: `${100 - pct(high)}%` }} />
+      <input
+        type="range"
+        min={MIN}
+        max={MAX}
+        step={0.5}
+        value={low}
+        aria-label="Lowest rating to include"
+        onChange={(e) => onLow(parseFloat(e.target.value))}
+      />
+      <input
+        type="range"
+        min={MIN}
+        max={MAX}
+        step={0.5}
+        value={high}
+        aria-label="Highest rating to include"
+        onChange={(e) => onHigh(parseFloat(e.target.value))}
+      />
+    </div>
+  );
+}
+
+function ModePanel({
+  films,
+  tier,
+  shuffle,
+  onShuffle,
+  below,
+  above,
+  onBelow,
+  onAbove,
+  onClose,
+  onKoth,
+  onSpotlight,
+  onPickTier,
+}: {
+  films: Film[];
+  tier: Rating;
+  shuffle: boolean;
+  onShuffle: (v: boolean) => void;
+  below: number;
+  above: number;
+  onBelow: (v: number) => void;
+  onAbove: (v: number) => void;
+  onClose: () => void;
+  onKoth: (t: Rating) => void;
+  onSpotlight: (t: Rating) => void;
+  onPickTier: () => void;
+}) {
+  // Pick the game first, then set it up. A flat list asked you to read a tier
+  // and a range before knowing what they were for — and showed a range control
+  // to Spotlight, which is always single-tier and ignores it entirely.
+  const [chosen, setChosen] = useState<"koth" | "spotlight" | null>(null);
+
+  const lowEdge = tier - below;
+  const highEdge = tier + above;
+  // The range pulls films in from either side, so the count has to reflect the
+  // whole span, not just the chosen tier.
+  const count = films.filter((f) => f.rating >= lowEdge && f.rating <= highEdge).length;
+  const playable = count >= 2;
+
+  if (chosen === null) {
+    return (
+      <Sheet title="Play" onClose={onClose}>
+        <ModeRow
+          title="King of the Hill"
+          blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
+          onClick={() => setChosen("koth")}
+        />
+        <ModeRow
+          title="Spotlight"
+          blurb="Pick one film and find where it really belongs — it can push into the tier above."
+          onClick={() => setChosen("spotlight")}
+        />
+      </Sheet>
+    );
+  }
+
+  if (chosen === "spotlight") {
+    // Spotlight's only real setting is which film, and that's the next screen.
+    return (
+      <Sheet title="Spotlight" onClose={onClose}>
+        <button
+          onClick={onPickTier}
+          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
+        >
+          <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
+          <span className="flex items-baseline gap-2">
+            <span className="text-base text-gold">{starsFor(tier)}</span>
+            <span className="text-[11px] text-dim">
+              {tierCounts(films).get(tier) ?? 0} films ›
+            </span>
+          </span>
+        </button>
+        <ShuffleRow shuffle={shuffle} onShuffle={onShuffle} />
+        <StartButton label="Choose a film" onClick={() => onSpotlight(tier)} disabled={(tierCounts(films).get(tier) ?? 0) < 2} />
+        <BackRow onClick={() => setChosen(null)} />
+      </Sheet>
+    );
+  }
+  return (
+    <Sheet title="King of the Hill" onClose={onClose}>
+      <button
+        onClick={onPickTier}
+        className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
+      >
+        <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
+        <span className="flex items-baseline gap-2">
+          <span className="text-base text-gold">{starsFor(tier)}</span>
+          <span className="text-[11px] text-dim">
+            {count} film{count === 1 ? "" : "s"} ›
+          </span>
+        </span>
+      </button>
+
+      {/* Reach set independently either side — a 1★ run might want 0.5★ below
+          and 1.5★ above, which a single symmetric figure can't express.
+          Cross-tier duels are the ones the overall order most needs: they're the
+          only comparisons that say anything about how two star bands relate. */}
+      <div className="mt-4 rounded-xl border border-border px-4 py-3">
+        <div className="mb-2 flex items-baseline justify-between">
+          <span className="text-sm text-text-hi">Range</span>
+          <span className="text-[11px] text-gold">
+            {starsFor(lowEdge)} – {starsFor(highEdge)}
+          </span>
+        </div>
+
+        {/* Both handles are clamped past the chosen tier, so the range always
+            contains the tier the run is anchored to. */}
+        <RangeSlider
+          low={lowEdge}
+          high={highEdge}
+          onLow={(v) => onBelow(tier - Math.min(v, tier))}
+          onHigh={(v) => onAbove(Math.max(v, tier) - tier)}
+        />
+        <div className="flex justify-between text-[10px] text-dim">
+          <span>½</span>
+          <span>★★★★★</span>
+        </div>
+
+        {(below > 0 || above > 0) && (
+          <p className="mt-2 text-[11px] leading-snug text-dim">
+            {count} films in range. Every film keeps its own star rating — this only decides which
+            films meet each other.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2">
+        <ShuffleRow shuffle={shuffle} onShuffle={onShuffle} />
+      </div>
+
+      <StartButton label={`Start · ${count} films`} onClick={() => onKoth(tier)} disabled={!playable} />
+      {!playable && (
+        <p className="mt-2 text-center text-[11px] text-gold">
+          Only {count} film{count === 1 ? "" : "s"} in range — widen it or pick another tier.
+        </p>
+      )}
+      <BackRow onClick={() => setChosen(null)} />
+    </Sheet>
+  );
+}
+
+function ModeRow({
+  title,
+  blurb,
+  disabled,
+  onClick,
+}: {
+  title: string;
+  blurb: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-40"
+    >
+      <span className="block font-display text-lg tracking-wide text-text-hi">{title}</span>
+      <span className="block text-[11px] leading-snug text-dim">{blurb}</span>
+    </button>
+  );
+}
+
+// Every tier with its count. Tiers you can't play are shown but inert — seeing
+// that 4.5★ holds one film explains why it isn't offered.
+function TierPicker({
+  films,
+  current,
+  onClose,
+  onPick,
+}: {
+  films: Film[];
+  current: Rating;
+  onClose: () => void;
+  onPick: (t: Rating) => void;
+}) {
+  const counts = tierCounts(films);
+  return (
+    <Sheet title="Choose a tier" onClose={onClose}>
+      {ORDERED_TIERS.map((t) => {
+        const n = counts.get(t) ?? 0;
+        const playable = n >= 2;
+        return (
+          <button
+            key={t}
+            disabled={!playable}
+            onClick={() => onPick(t)}
+            className="mb-1.5 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-30"
+          >
+            <span className="text-base text-gold">{starsFor(t)}</span>
+            <span className="flex items-center gap-2 text-[11px] text-dim">
+              {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
+              {n === 1 && " — needs 2"}
+              {t === current && <span className="text-gold">✓</span>}
+            </span>
+          </button>
+        );
+      })}
+    </Sheet>
+  );
+}
+
+function SpotlightPicker({
+  films,
+  tier,
+  onClose,
+  onPick,
+}: {
+  films: Film[];
+  tier: Rating;
+  onClose: () => void;
+  onPick: (id: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const inTier = films
+    .filter((f) => f.rating === tier)
+    .sort((a, b) => b.score - a.score)
+    .filter((f) => f.title.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <Sheet title="Spotlight" onClose={onClose}>
+      <p className="mb-3 text-[11px] leading-snug text-dim">
+        Pick a {starsFor(tier)} film to re-place. It starts at the bottom and climbs to where it
+        belongs.
+      </p>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search this tier"
+        className="mb-3 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+      />
+      {inTier.slice(0, 40).map((f) => (
+        <button
+          key={f.id}
+          onClick={() => onPick(f.id)}
+          className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={f.poster} alt="" style={{ width: 26, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }} />
+          <span className="min-w-0 flex-1 truncate text-sm text-text-hi">{f.title}</span>
+          {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
+        </button>
+      ))}
+      {inTier.length === 0 && <p className="text-[11px] text-dim">Nothing matches.</p>}
+    </Sheet>
   );
 }
 
@@ -509,18 +1027,8 @@ function Settings({
   };
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <div className="mb-6 flex items-center justify-between">
-          <span className="font-display text-2xl tracking-wide text-gold">Settings</span>
-          <button onClick={onClose} className="text-sm font-semibold text-dim active:scale-95">
-            Done
-          </button>
-        </div>
+    <Sheet title="Settings" onClose={onClose}>
+      <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-extrabold tracking-[0.12em] text-dim">BRIGHTNESS</span>
           <span className="text-[11px] text-dim">{Math.round(brightness * 100)}%</span>
@@ -555,7 +1063,7 @@ function Settings({
           {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -596,16 +1104,39 @@ function Header() {
 }
 
 // The tier + progress strip, sitting on the body just under the header feather.
-function TierProgress({ placed, toGo }: { placed: number; toGo: number }) {
+function TierProgress({
+  tier,
+  mode,
+  placed,
+  toGo,
+  onPickTier,
+}: {
+  tier: Rating;
+  mode: string;
+  placed: number;
+  toGo: number;
+  onPickTier: () => void;
+}) {
   return (
     <div className="px-6">
-      {/* mt-8 clears the header's 44px feather so the progress bar doesn't sit
+      {/* mt-11 clears the header's 44px feather so the progress bar doesn't sit
           inside the fade. */}
       <div className="mx-auto mt-11 max-w-[330px]">
         <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="text-xs font-extrabold tracking-[0.12em] text-gold">{TIER}★ TIER</span>
+          {/* The tier reads as its stars, and doubles as the quickest way to
+              switch — the label you're looking at is the control. */}
+          <button onClick={onPickTier} className="flex items-baseline gap-1.5 active:scale-95">
+            <span className="text-base leading-none text-gold">{starsFor(tier)}</span>
+            <span className="text-[10px] leading-none text-dim">▾</span>
+          </button>
           <span className="text-[11px] text-text/55">
-            <b className="text-text-hi">{placed}</b> placed · {toGo} to go
+            {mode === "spotlight" ? (
+              <b className="text-gold">SPOTLIGHT</b>
+            ) : (
+              <>
+                <b className="text-text-hi">{placed}</b> placed · {toGo} to go
+              </>
+            )}
           </span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-border">
@@ -629,6 +1160,7 @@ function Duel({
   pile,
   confirmed,
   films,
+  tier,
   onPick,
   onFlick,
   onSink,
@@ -642,6 +1174,7 @@ function Duel({
   pile: string[]; // unconfirmed, index 0 = top
   confirmed: string[]; // locked shelf, index 0 = #1
   films: Film[];
+  tier: Rating;
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
@@ -722,28 +1255,30 @@ function Duel({
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         </div>
-      </div>
-
-      {/* Anchored to the bottom of the screen rather than sitting in the arena's
-          flow: in-flow it slid down as the strip collapsed, arriving late and
-          in motion. Pinned here it only fades, and stays where the eye left it.
-          It shows just while the strip is folded away — open, the strip is what
-          you're reading and the two compete for the same glance. */}
-      <div
-        aria-hidden={stripOpen}
-        className="pointer-events-none absolute inset-x-0 flex justify-center"
-        style={{
-          bottom: "17%", // lands midway between the posters and the nav
-          opacity: stripOpen ? 0 : 1,
-          transition: "opacity 0.28s var(--ease)",
-        }}
-      >
-        <LastResult results={results} />
+        {/* Stays in the layout flow so it can never overlap anything at any
+            screen height. It only needs to look right with the strip folded
+            away, so rather than pinning it, the fade-in simply WAITS for the
+            drawer to finish moving — invisible while the layout shifts, so it
+            never appears to slide. Fading out has no delay. */}
+        <div style={{ flexGrow: 1.6 }} />
+        <div
+          aria-hidden={stripOpen}
+          className="pointer-events-none flex justify-center"
+          style={{
+            opacity: stripOpen ? 0 : 1,
+            transition: "opacity 0.25s var(--ease)",
+            transitionDelay: stripOpen ? "0s" : "0.3s",
+          }}
+        >
+          <LastResult results={results} />
+        </div>
+        <div style={{ flexGrow: 1 }} />
       </div>
 
       <Rolodex
         lowToHigh={lowToHigh}
         locked={locked}
+        tier={tier}
         contenderId={contender.id}
         challengerId={challenger.id}
         onScrub={onScrub}
@@ -933,32 +1468,66 @@ function ConfirmView({
   rank,
   onConfirm,
   onBack,
+  spotlight,
+  promoteTo,
+  onTakeOn,
+  onAssertPromotion,
+  justPromoted,
 }: {
   champion: Film;
   rank: number;
   onConfirm: () => void;
   onBack?: () => void;
+  spotlight?: boolean;
+  promoteTo?: Rating;
+  onTakeOn?: () => void;
+  onAssertPromotion?: () => void;
+  justPromoted?: boolean;
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
-      <span className="text-[11px] font-extrabold tracking-[0.14em] text-gold">🏆 TOPS THE PILE</span>
+      <span className="text-[11px] font-extrabold tracking-[0.14em] text-gold">
+        {justPromoted ? `⭐ EARNED ${starsFor(champion.rating)}` : "🏆 TOPS THE PILE"}
+      </span>
       <div className="w-40 overflow-hidden rounded-xl" style={{ boxShadow: "0 0 0 3px var(--gold), 0 12px 36px color-mix(in srgb, var(--gold) 45%, transparent)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={champion.poster} alt={champion.title} className="w-full" style={{ aspectRatio: "2 / 3", objectFit: "cover" }} />
       </div>
       <div>
         <div className="font-serif text-xl font-bold text-text-hi">{champion.title}</div>
-        <div className="mt-1 font-serif text-5xl font-bold text-gold">#{rank}</div>
+        {justPromoted ? (
+          <div className="mt-1 text-base text-gold">{starsFor(champion.rating)}</div>
+        ) : (
+          <div className="mt-1 font-serif text-5xl font-bold text-gold">#{rank}</div>
+        )}
       </div>
       <button
         onClick={onConfirm}
         className="rounded-full px-8 py-3 text-sm font-extrabold tracking-wide active:scale-95"
         style={{ color: "#1c1405", background: "var(--gold)", boxShadow: "0 4px 20px color-mix(in srgb, var(--gold) 40%, transparent)" }}
       >
-        Lock in as #{rank}
+        {justPromoted ? `Lock in at ${starsFor(champion.rating)}` : spotlight ? "Lock in here" : `Lock in as #${rank}`}
       </button>
-      {onBack && (
-        <button onClick={onBack} className="-mt-2 text-xs font-semibold text-dim active:scale-95">
+
+      {/* Topping a tier in Spotlight is the one moment a star rating can change:
+          earn it against the tier above, or assert it outright. */}
+      {promoteTo !== undefined && !justPromoted && (
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={onTakeOn}
+            className="rounded-full border px-6 py-2.5 text-xs font-bold tracking-wide active:scale-95"
+            style={{ color: "var(--accent)", borderColor: "var(--accent)" }}
+          >
+            Take on {starsFor(promoteTo)}
+          </button>
+          <button onClick={onAssertPromotion} className="text-[11px] font-semibold text-dim active:scale-95">
+            or move it up without dueling
+          </button>
+        </div>
+      )}
+
+      {onBack && !justPromoted && (
+        <button onClick={onBack} className="-mt-1 text-xs font-semibold text-dim active:scale-95">
           Not yet — keep playing
         </button>
       )}
@@ -966,12 +1535,18 @@ function ConfirmView({
   );
 }
 
-function TierComplete({ films }: { films: Film[] }) {
-  const ranked = films.filter((f) => f.rating === TIER && f.confirmed).sort((a, b) => b.score - a.score);
+function TierComplete({ films, tier, onPickTier }: { films: Film[]; tier: Rating; onPickTier: () => void }) {
+  const ranked = films.filter((f) => f.rating === tier && f.confirmed).sort((a, b) => b.score - a.score);
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
-      <div className="font-display text-2xl tracking-wide text-gold">🏆 Tier placed</div>
+      <div className="font-display text-2xl tracking-wide text-gold">🏆 {starsFor(tier)} placed</div>
       <p className="font-serif italic text-dim">Every film in this tier has found its spot.</p>
+      <button
+        onClick={onPickTier}
+        className="rounded-full border border-gold px-5 py-2 text-xs font-bold tracking-wide text-gold active:scale-95"
+      >
+        Choose another tier
+      </button>
       <ol className="mt-2 w-full max-w-xs space-y-1 text-left">
         {ranked.map((f, i) => (
           <li key={f.id} className="flex gap-3 text-sm text-text">
@@ -988,6 +1563,7 @@ function TierComplete({ films }: { films: Film[] }) {
 function Rolodex({
   lowToHigh,
   locked,
+  tier,
   contenderId,
   challengerId,
   onScrub,
@@ -996,6 +1572,7 @@ function Rolodex({
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
+  tier: Rating;
   contenderId: string;
   challengerId: string;
   onScrub: (id: string) => void;
@@ -1136,7 +1713,7 @@ function Rolodex({
           onWheel={markUserScroll}
           className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
         >
-        <TierDivider />
+        <TierDivider tier={tier} />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
@@ -1186,7 +1763,7 @@ function Rolodex({
             <span className="text-[9px] leading-none text-transparent">.</span>
           </div>
         ))}
-        <TierDivider />
+        <TierDivider tier={tier} />
         </div>
         </div>
       </div>
@@ -1242,7 +1819,7 @@ function LockIcon() {
   );
 }
 
-function TierDivider() {
+function TierDivider({ tier }: { tier: Rating }) {
   const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
   return (
     <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
@@ -1255,9 +1832,12 @@ function TierDivider() {
             background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
           }}
         />
-        {/* The star breaks the line at its midpoint rather than sitting under it */}
-        <span className="relative text-[12px] leading-none text-gold" style={{ padding: "3px 0", background: "var(--bg)" }}>
-          ★
+        {/* The stars break the line at its midpoint rather than sitting under it */}
+        <span
+          className="relative text-[9px] leading-none text-gold"
+          style={{ padding: "3px 0", background: "var(--bg)", writingMode: "vertical-rl" }}
+        >
+          {starsFor(tier)}
         </span>
       </div>
       {/* Holds the label row's height so posters stay on one baseline */}

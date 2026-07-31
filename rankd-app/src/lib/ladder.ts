@@ -8,7 +8,7 @@
 // the in-between shuffle records nothing (no comparison log, no inference).
 
 import type { Film, PlacementSession, RankState } from "./types";
-import { tierMin, tierMax } from "./tiers";
+import { tierMin, tierMax, tierAbove, type Rating } from "./tiers";
 
 const clone = (films: Film[]): Film[] => films.map((f) => ({ ...f }));
 
@@ -22,8 +22,22 @@ export function overallRank(films: Film[], id: string): number {
   return rankedFilms(films).findIndex((f) => f.id === id) + 1;
 }
 
-function poolFor(films: Film[], tier: number, maxDiff: number): Film[] {
-  return films.filter((f) => Math.abs(f.rating - tier) <= maxDiff);
+// Best first, so the pile starts as the standing we already believe. Ordering it
+// this way is what makes the climb short: a film meets progressively stronger
+// opponents rather than an arbitrary sequence.
+function poolFor(films: Film[], tier: number, below: number, above: number): Film[] {
+  return films
+    .filter((f) => f.rating >= tier - below && f.rating <= tier + above)
+    .sort((a, b) => b.score - a.score);
+}
+
+function shuffled<T>(xs: T[]): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 // Recompute the challenger + needsConfirm from where the contender sits.
@@ -39,30 +53,55 @@ function refresh(s: PlacementSession): void {
   }
 }
 
-// Spread the tier's films across its score band in [...confirmed, ...unconfirmed]
-// order, so the master ranking reflects the current standing. Written on confirm.
+// Spread the run's films across their score bands in [...confirmed,
+// ...unconfirmed] order, so the master ranking reflects the current standing.
+//
+// Grouped BY RATING, because each star tier owns its own non-overlapping band.
+// A cross-tier run holds films of several ratings, and spreading them all across
+// one tier's band would hand a 3.5★ film a 4★ score — silently corrupting the
+// master order for every film the run touched. Each rating keeps its own band;
+// the run only decides the order within it.
 function writeScores(films: Film[], s: PlacementSession): void {
-  const order = [...s.confirmed, ...s.unconfirmed]; // best → worst
-  const n = order.length;
-  const mn = tierMin(s.tier);
-  const mx = tierMax(s.tier);
-  order.forEach((id, i) => {
+  const order = [...s.confirmed, ...s.unconfirmed]; // best → worst overall
+  const byRating = new Map<number, string[]>();
+  for (const id of order) {
     const f = films.find((ff) => ff.id === id);
-    if (f) f.score = n === 1 ? Math.round((mn + mx) / 2) : Math.round(mx - (i / (n - 1)) * (mx - mn));
-  });
+    if (!f) continue;
+    byRating.set(f.rating, [...(byRating.get(f.rating) ?? []), id]);
+  }
+  for (const [rating, ids] of byRating) {
+    const mn = tierMin(rating);
+    const mx = tierMax(rating);
+    const n = ids.length;
+    ids.forEach((id, i) => {
+      const f = films.find((ff) => ff.id === id);
+      if (f) f.score = n === 1 ? Math.round((mn + mx) / 2) : Math.round(mx - (i / (n - 1)) * (mx - mn));
+    });
+  }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────
 
 // Start placing the given tier. Throws if there aren't enough films (fail fast).
-export function startRun(films: Film[], tier: PlacementSession["tier"], maxDiff = 0): RankState {
+export function startRun(
+  films: Film[],
+  tier: PlacementSession["tier"],
+  {
+    below = 0,
+    above = 0,
+    shuffle = false,
+  }: { below?: number; above?: number; shuffle?: boolean } = {},
+): RankState {
   const f = clone(films);
-  const pool = poolFor(f, tier, maxDiff);
+  const pool = poolFor(f, tier, below, above);
   if (pool.length < 2) throw new Error("Need at least 2 films in range to start ranking");
-  const unconfirmed = pool.map((p) => p.id);
+  const ids = pool.map((p) => p.id);
+  const unconfirmed = shuffle ? shuffled(ids) : ids;
   const s: PlacementSession = {
     tier,
-    maxDiff,
+    spanBelow: below,
+    spanAbove: above,
+    mode: "koth",
     confirmed: [],
     unconfirmed,
     contenderId: unconfirmed[unconfirmed.length - 1], // bottom
@@ -71,6 +110,56 @@ export function startRun(films: Film[], tier: PlacementSession["tier"], maxDiff 
   };
   refresh(s);
   return { films: f, session: s };
+}
+
+// Spotlight — re-place ONE film. It drops to the bottom of its own tier so every
+// peer sits above it and it can climb to any slot, then the run ends the moment
+// it settles rather than rolling on to the next climber. Its original score is
+// kept so abandoning restores it: starting a spotlight moves a film before it
+// has earned anything, and walking away shouldn't cost it its place.
+export function startSpotlight(
+  films: Film[],
+  filmId: string,
+  { shuffle = false }: { shuffle?: boolean } = {},
+): RankState {
+  const f = clone(films);
+  const subject = f.find((x) => x.id === filmId);
+  if (!subject) throw new Error("No such film");
+  const tier = subject.rating;
+  const pool = poolFor(f, tier, 0, 0);
+  if (pool.length < 2) throw new Error(`No other ${tier}★ films to place against`);
+
+  const others = pool.filter((p) => p.id !== filmId).map((p) => p.id);
+  const unconfirmed = [...(shuffle ? shuffled(others) : others), filmId]; // subject last = bottom
+  const s: PlacementSession = {
+    tier,
+    spanBelow: 0,
+    spanAbove: 0,
+    mode: "spotlight",
+    subjectId: filmId,
+    origScore: subject.score,
+    origRating: subject.rating,
+    confirmed: [],
+    unconfirmed,
+    contenderId: filmId,
+    challengerId: "",
+    needsConfirm: false,
+  };
+  refresh(s);
+  return { films: f, session: s };
+}
+
+// Put a spotlit film back as it was. Abandoning a run must cost nothing.
+export function abandonSpotlight(state: RankState): RankState {
+  const { session } = state;
+  if (!session || session.mode !== "spotlight" || !session.subjectId) return { ...state, session: null };
+  const films = clone(state.films);
+  const subject = films.find((f) => f.id === session.subjectId);
+  if (subject) {
+    if (session.origScore !== undefined) subject.score = session.origScore;
+    if (session.origRating !== undefined) subject.rating = session.origRating;
+  }
+  return { films, session: null };
 }
 
 // The current duel: contender vs the film directly above it. null while a film
@@ -139,10 +228,115 @@ export function confirm(state: RankState): RankState {
     if (champ) champ.confirmed = true;
   }
   writeScores(films, s);
+  // A spotlight places one film and stops. A full run would hand off to the next
+  // climber here; a spotlight has nothing further to place.
+  if (s.mode === "spotlight") return { films, session: null };
   if (s.unconfirmed.length === 0) return { films, session: null }; // tier fully placed
   s.contenderId = s.unconfirmed[s.unconfirmed.length - 1]; // restart from the bottom
   refresh(s);
   return { films, session: s };
+}
+
+// ── Tier promotion (spotlight only) ─────────────────────────────────────
+//
+// The only route by which a film's star rating ever changes. Two ways up,
+// mirroring the earn-it / assert-it pairing used everywhere else in the app:
+// beat the weakest films of the tier above, or flick past them.
+
+const PROMOTION_OPPONENTS = 3;
+
+// Is the spotlit film sitting on top of its tier with somewhere left to go?
+export function promotionTarget(state: RankState): Rating | undefined {
+  const { session } = state;
+  if (!session || session.mode !== "spotlight" || !session.needsConfirm) return undefined;
+  const above = tierAbove(session.tier);
+  if (above === undefined) return undefined;
+  return state.films.some((f) => f.rating === above) ? above : undefined;
+}
+
+// Earn it: queue the weakest few of the tier above, weakest first, and duel them.
+export function startPromotionDuel(state: RankState): RankState {
+  const above = promotionTarget(state);
+  const { session } = state;
+  if (!above || !session) return state;
+  const films = clone(state.films);
+  const queue = films
+    .filter((f) => f.rating === above)
+    .sort((a, b) => a.score - b.score) // weakest first
+    .slice(0, PROMOTION_OPPONENTS)
+    .map((f) => f.id);
+  if (queue.length === 0) return state;
+
+  // The subject sits below its first opponent so the normal climb applies: beat
+  // it and you move up, lose and the promotion is off.
+  const unconfirmed = [...queue.slice().reverse(), session.contenderId];
+  const s: PlacementSession = {
+    ...session,
+    tier: above,
+    unconfirmed,
+    contenderId: session.contenderId,
+    promotionQueue: queue,
+    needsConfirm: false,
+  };
+  refresh(s);
+  return { films, session: s };
+}
+
+// Assert it: skip the duels and take the higher rating outright.
+export function promoteDirect(state: RankState): RankState {
+  const above = promotionTarget(state);
+  const { session } = state;
+  if (!above || !session?.subjectId) return state;
+  const films = clone(state.films);
+  const subject = films.find((f) => f.id === session.subjectId);
+  if (!subject) return state;
+  subject.rating = above;
+  subject.score = tierMin(above); // enters at the foot of its new tier, to climb from there
+  try {
+    return startSpotlight(films, subject.id, {});
+  } catch {
+    // Promoted into a tier with no one else in it — nothing to place against, so
+    // it simply stands there as its own entry.
+    subject.confirmed = true;
+    return { films, session: null };
+  }
+}
+
+// Did the subject just clear the last of its promotion opponents?
+export function promotionWon(state: RankState): boolean {
+  const { session } = state;
+  if (!session?.promotionQueue?.length) return false;
+  return session.needsConfirm && session.contenderId === session.subjectId;
+}
+
+// Bank a won promotion. Deliberately NOT writeScores: a promotion pile holds
+// only the handful of films the subject actually faced, so spreading it across
+// the whole band would rewrite the scores of a tier that was never re-ranked.
+// Instead the subject is slotted just above the opponents it beat and nothing
+// else is touched.
+export function completePromotion(state: RankState): RankState {
+  const { session } = state;
+  if (!session?.promotionQueue || !session.subjectId) return state;
+  const films = clone(state.films);
+  const subject = films.find((f) => f.id === session.subjectId);
+  if (!subject) return state;
+
+  const tier = session.tier;
+  const beaten = new Set(session.promotionQueue);
+  const peers = films
+    .filter((f) => f.rating === tier && f.id !== subject.id)
+    .sort((a, b) => a.score - b.score); // weakest first
+
+  // The best film it beat, and the weakest it didn't — it belongs between them.
+  const lastBeaten = [...peers].reverse().find((f) => beaten.has(f.id));
+  const firstUnbeaten = peers.find((f) => !beaten.has(f.id));
+  const floor = lastBeaten ? lastBeaten.score : tierMin(tier);
+  const ceiling = firstUnbeaten ? firstUnbeaten.score : tierMax(tier);
+
+  subject.rating = tier;
+  subject.score = Math.round((floor + ceiling) / 2);
+  subject.confirmed = true;
+  return { films, session: null };
 }
 
 // Fast-forward: send an unconfirmed film to the top of the pile. If it's the

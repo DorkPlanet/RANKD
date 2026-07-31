@@ -46,13 +46,17 @@ export async function backfillPosters(
   films: Film[],
   onFound: (id: string, poster: string) => void,
   shouldStop: () => boolean,
-  gapMs = 260,
+  gapMs = 120,
 ): Promise<void> {
   for (const film of films) {
     if (shouldStop()) return;
+    // Only pace REAL requests. The caller re-runs this after every duel to
+    // re-prioritise, and sleeping between films already in the cache meant
+    // waiting out the whole tier again before reaching anything new.
+    const cached = cache.has(film.id);
     const meta = await fetchMeta(film);
     if (meta.poster) onFound(film.id, meta.poster);
-    await new Promise((r) => setTimeout(r, gapMs));
+    if (!cached) await new Promise((r) => setTimeout(r, gapMs));
   }
 }
 

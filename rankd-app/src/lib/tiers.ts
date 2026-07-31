@@ -28,3 +28,13 @@ export const seedScore = (r: number): number => tierMid(r);
 
 export const clampScore = (score: number, r: number): number =>
   Math.min(tierMax(r), Math.max(tierMin(r), score));
+
+// A rating drawn as stars — "★★★★" / "★★★★½" — so a tier reads as what it is
+// rather than as a number beside a symbol.
+export const starsFor = (r: number): string => "★".repeat(Math.floor(r)) + (r % 1 ? "½" : "");
+
+// The next rating up, or undefined at 5★. Used by promotion.
+export const tierAbove = (r: number): Rating | undefined => {
+  const i = ORDERED_TIERS.indexOf(r as Rating);
+  return i > 0 ? ORDERED_TIERS[i - 1] : undefined; // ORDERED_TIERS runs 5 → 0.5
+};
