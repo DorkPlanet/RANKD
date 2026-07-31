@@ -7,11 +7,6 @@ import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightnes
 import type { Film, RankState } from "@/lib/types";
 
 const TIER = 4 as const;
-
-// The N and K share one stem, per the brand sketch. Pulling the K left by this
-// much laps its spine exactly onto the N's right stem so they read as a single
-// fused stroke — tuned against Bebas Neue's stem width and side bearings.
-const FUSED_NK = "-0.17em";
 const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
 
 // Visual cue for a flick: a floating clone of the poster arcs up toward the top
@@ -140,11 +135,7 @@ function NavItem({ label, icon, active, onClick }: { label: string; icon: React.
 }
 
 function RankdMark() {
-  return (
-    <span className="font-display text-xl leading-none tracking-[0.1em]">
-      R<span style={{ letterSpacing: FUSED_NK }}>N</span>KD
-    </span>
-  );
+  return <span className="font-display text-xl leading-none tracking-[0.1em]">RNKD</span>;
 }
 
 function GearIcon() {
@@ -201,7 +192,7 @@ function Header() {
     >
       <div className="text-center">
         <span className="font-display text-3xl tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
-          RA<span style={{ letterSpacing: FUSED_NK }}>N</span>KD
+          RANKD
         </span>
         <div className="mt-1.5 flex items-center justify-center gap-1">
           {BARS.map((c) => (
