@@ -185,16 +185,16 @@ function Settings({ brightness, onChange, onClose }: { brightness: number; onCha
 function Header() {
   return (
     <header
-      className="relative px-6 pb-4"
-      style={{ background: "var(--header-bg)", paddingTop: "calc(1.25rem + env(safe-area-inset-top))" }}
+      className="relative px-6 pb-3"
+      style={{ background: "var(--header-bg)", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
     >
       <div className="text-center">
-        <span className="font-display text-3xl tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
+        <span className="font-display text-[28px] leading-none tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
           RANKD
         </span>
-        <div className="mt-1.5 flex items-center justify-center gap-1">
+        <div className="mt-1 flex items-center justify-center gap-1">
           {BARS.map((c) => (
-            <span key={c} className="h-[3px] w-6 rounded-full" style={{ background: c }} />
+            <span key={c} className="h-[3px] w-5 rounded-full" style={{ background: c }} />
           ))}
         </div>
       </div>
@@ -215,7 +215,9 @@ function Header() {
 function TierProgress({ placed, toGo }: { placed: number; toGo: number }) {
   return (
     <div className="px-6">
-      <div className="mx-auto mt-4 max-w-[330px]">
+      {/* mt-8 clears the header's 44px feather so the progress bar doesn't sit
+          inside the fade. */}
+      <div className="mx-auto mt-8 max-w-[330px]">
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-xs font-extrabold tracking-[0.12em] text-gold">{TIER}★ TIER</span>
           <span className="text-[11px] text-text/55">
