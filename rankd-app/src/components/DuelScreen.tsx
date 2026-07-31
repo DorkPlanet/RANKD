@@ -110,34 +110,32 @@ function BottomNav({ onSettings }: { onSettings: () => void }) {
   return (
     <nav
       className="flex flex-shrink-0 items-stretch border-t"
-      style={{ background: "var(--header-bg)", borderColor: "var(--border)" }}
+      // Pad into the home-indicator strip so the bar's black reaches the
+      // physical bottom edge instead of cutting off into the page background.
+      style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <NavItem label="Rank" active icon={<DuelIcon />} />
+      <NavItem label="Rank" active icon={<RankdMark />} />
       <NavItem label="Settings" onClick={onSettings} icon={<GearIcon />} />
     </nav>
   );
 }
 
+// Icon-only: labels cost vertical space the duel needs more than the nav does.
 function NavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-1 flex-col items-center gap-[5px] py-2.5 transition-colors active:scale-95"
+      aria-label={label}
+      className="flex flex-1 items-center justify-center py-4 transition-colors active:scale-95"
       style={{ color: active ? "var(--gold)" : "var(--dim)" }}
     >
       {icon}
-      <span className="text-[9px] font-bold tracking-[0.14em]">{label.toUpperCase()}</span>
     </button>
   );
 }
 
-function DuelIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="7" height="14" rx="1.5" />
-      <rect x="14" y="5" width="7" height="14" rx="1.5" />
-    </svg>
-  );
+function RankdMark() {
+  return <span className="font-display text-xl leading-none tracking-[0.1em]">RNKD</span>;
 }
 
 function GearIcon() {
@@ -188,7 +186,10 @@ function Settings({ brightness, onChange, onClose }: { brightness: number; onCha
 
 function Header() {
   return (
-    <header className="relative px-6 pt-5 pb-4" style={{ background: "var(--header-bg)" }}>
+    <header
+      className="relative px-6 pb-4"
+      style={{ background: "var(--header-bg)", paddingTop: "calc(1.25rem + env(safe-area-inset-top))" }}
+    >
       <div className="text-center">
         <span className="font-display text-3xl tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
           RANKD

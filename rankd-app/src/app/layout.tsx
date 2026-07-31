@@ -27,11 +27,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#150F24",
+  themeColor: "#000000",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Draw under the notch/home indicator so the header and nav can extend into
+  // the safe areas — without this env(safe-area-inset-*) is always 0 and the
+  // nav stops short, letting the page background show beneath it.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
