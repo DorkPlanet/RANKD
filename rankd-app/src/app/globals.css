@@ -92,6 +92,27 @@ img {
   }
 }
 
+/* The last-duel line lifts in as it arrives, so a result registers as something
+   that just happened rather than text that was always sitting there. */
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.result-in {
+  animation: result-in 0.32s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-in {
+    animation: none;
+  }
+}
+
 /* Rolodex — scale the centred film via transform (GPU-smooth, no layout reflow)
    so scrolling stays buttery. The .rol-centered class is toggled imperatively.
    The centred film is the scrub target, so its ring is the structural --accent. */

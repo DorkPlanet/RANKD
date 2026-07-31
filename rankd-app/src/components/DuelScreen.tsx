@@ -512,11 +512,18 @@ function Duel({
   onInfo: (film: Film) => void;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
+  const [last, setLast] = useState<{ won: string; lost: string; at: number } | null>(null);
 
   // Intercept a win by the right-hand card so it slides into the climbing seat
   // before the state swap paints. Picking the left card needs none of this — it
   // is already where it is going to be.
   const pick = (id: string) => {
+    // Record the result before state moves on — the screen otherwise gives no
+    // acknowledgement that a tap landed at all.
+    const won = id === contender.id ? contender : challenger;
+    const lost = id === contender.id ? challenger : contender;
+    setLast({ won: won.title, lost: lost.title, at: Date.now() });
+
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
     const climbImg = cards?.[0]?.querySelector("img");
@@ -563,6 +570,8 @@ function Duel({
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
       </div>
+
+      <LastResult last={last} />
 
       <Rolodex
         lowToHigh={lowToHigh}
@@ -928,16 +937,15 @@ function Rolodex({
         {/* Locked films tail the strip — they outrank the whole pile, so the
             shelf you're building stays in view. They carry no data-fid, so they
             can't be scrubbed to; re-opening them is a later feature. */}
-        {locked.map(({ film, rank }) => (
+        {locked.map(({ film }) => (
           <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
-            {/* The rank is the point of a locked film, so it leads rather than
-                trails — and it's the one number on the strip worth reading. */}
-            <span
-              className="font-serif text-[15px] font-bold leading-none text-gold"
-              style={{ textShadow: "0 0 10px color-mix(in srgb, var(--gold) 55%, transparent)" }}
-            >
-              {rank}
-            </span>
+            {/* A padlock, not a number. `confirmed` is per-tier, so a rank shown
+                here would read as "#1 of everything" when it only means "#1 of
+                this tier" — and a 5★ film already outranks the whole 4★ shelf.
+                The strip's job is "this is settled"; the real number belongs
+                where it can say "#2 overall, #1 in 4★" (overallRank exists for
+                that). */}
+            <LockIcon />
             <div
               className="w-full overflow-hidden rounded-md bg-surface"
               style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
@@ -958,6 +966,32 @@ function Rolodex({
 // Bookends: the tier's own boundary marks. The strip only ever holds one star
 // tier, so these are the walls it runs between — and they'll read as real
 // dividers once more than one tier is in play.
+// Sits between the arena and the strip. Until now nothing on screen confirmed a
+// tap had registered — you picked, the posters changed, and that was it. Keyed
+// on the timestamp so it replays even when the same film wins twice running.
+function LastResult({ last }: { last: { won: string; lost: string; at: number } | null }) {
+  return (
+    <div className="flex h-8 items-center justify-center px-6">
+      {last && (
+        <span key={last.at} className="result-in text-[11px] leading-none">
+          <span className="font-semibold text-gold">{last.won}</span>
+          <span className="text-dim"> beat </span>
+          <span className="text-dim">{last.lost}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
 function TierDivider() {
   const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
   return (
