@@ -130,6 +130,18 @@ export default function DuelScreen() {
   const [brightness, setBrightness] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
+
+  // The strip is a map, not a control — folding it away buys the duel ~110px
+  // when you just want to play. Remembered, since it's a working preference.
+  const [stripOpen, setStripOpen] = useState(true);
+  useEffect(() => {
+    setStripOpen(localStorage.getItem(STRIP_KEY) !== "closed");
+  }, []);
+  const toggleStrip = () =>
+    setStripOpen((v) => {
+      localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
+      return !v;
+    });
   useEffect(() => {
     const b = loadBrightness();
     setBrightness(b);
@@ -182,6 +194,8 @@ export default function DuelScreen() {
           onSink={sink}
           onScrub={scrub}
           onInfo={setInfoFilm}
+          stripOpen={stripOpen}
+          onToggleStrip={toggleStrip}
         />
       ) : (
         <TierComplete films={state.films} />
@@ -499,6 +513,8 @@ function Duel({
   onSink,
   onScrub,
   onInfo,
+  stripOpen,
+  onToggleStrip,
 }: {
   contender: Film;
   challenger: Film;
@@ -510,6 +526,8 @@ function Duel({
   onSink: (id: string) => void;
   onScrub: (id: string) => void;
   onInfo: (film: Film) => void;
+  stripOpen: boolean;
+  onToggleStrip: () => void;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
   const [last, setLast] = useState<{ won: string; lost: string; at: number } | null>(null);
@@ -568,6 +586,13 @@ function Duel({
 
       <div ref={arenaRef} className="flex flex-1 items-center justify-center gap-3 px-4">
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <span
+          aria-hidden
+          className="font-display text-[15px] leading-none tracking-[0.08em] text-dim"
+          style={{ alignSelf: "center" }}
+        >
+          VS
+        </span>
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
       </div>
 
@@ -579,6 +604,8 @@ function Duel({
         contenderId={contender.id}
         challengerId={challenger.id}
         onScrub={onScrub}
+        open={stripOpen}
+        onToggle={onToggleStrip}
       />
     </>
   );
@@ -595,6 +622,7 @@ const TIPS = [
   "Pick a film below yours to move down the list",
   "Nothing's saved until you lock a film into place",
 ];
+const STRIP_KEY = "rankd-strip-open";
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
 
@@ -818,12 +846,16 @@ function Rolodex({
   contenderId,
   challengerId,
   onScrub,
+  open,
+  onToggle,
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
   contenderId: string;
   challengerId: string;
   onScrub: (id: string) => void;
+  open: boolean;
+  onToggle: () => void;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -831,6 +863,7 @@ function Rolodex({
   const userScrolling = useRef(false);
   const prevPileKey = useRef("");
   const prevContenderId = useRef("");
+  const pullFrom = useRef<number | null>(null);
   const pileKey = lowToHigh.map((f) => f.id).join(",");
 
   const syncHighlight = () => {
@@ -878,6 +911,19 @@ function Rolodex({
     syncHighlight();
   });
 
+  // Re-opening mounts a fresh, unscrolled track, but prevPileKey still holds the
+  // key from before it was folded away — so clear it or the centring effect
+  // decides nothing has changed and leaves the strip parked at the far left.
+  useEffect(() => {
+    if (!open) return;
+    prevPileKey.current = "";
+    requestAnimationFrame(() => {
+      centerFilm(challengerId);
+      syncHighlight();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const markUserScroll = () => (userScrolling.current = true);
   const handleScroll = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -895,18 +941,56 @@ function Rolodex({
   };
 
   return (
-    <div className="relative w-full pb-3">
-      <div
-        ref={trackRef}
-        onScroll={handleScroll}
-        onPointerDown={markUserScroll}
-        onTouchStart={markUserScroll}
-        onWheel={markUserScroll}
-        // pt-4: the centred poster scales 1.16x upward from its bottom edge, and
-        // overflow-x:auto forces overflow-y to auto — without headroom the track
-        // slices the top off it.
-        className="rol-track flex items-end gap-2.5 overflow-x-auto pb-4 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+    <div className="relative w-full pb-1">
+      {/* A grabber, not a chevron — the strip pulls open and closed like a
+          drawer, so drag it or tap it. */}
+      <button
+        onClick={onToggle}
+        onPointerDown={(e) => (pullFrom.current = e.clientY)}
+        onPointerUp={(e) => {
+          const from = pullFrom.current;
+          pullFrom.current = null;
+          if (from == null) return;
+          const dy = e.clientY - from;
+          // A deliberate pull wins over the tap; anything smaller is a tap.
+          if (Math.abs(dy) > 12) {
+            e.preventDefault();
+            if (dy > 0 === open) onToggle(); // pull down to close, up to open
+          }
+        }}
+        aria-label={open ? "Hide the film strip" : "Show the film strip"}
+        aria-expanded={open}
+        className="mx-auto flex h-7 w-20 items-center justify-center"
+        style={{ touchAction: "none" }}
       >
+        <span
+          className="block rounded-full"
+          style={{
+            width: 34,
+            height: 4,
+            background: open ? "var(--border)" : "color-mix(in srgb, var(--gold) 55%, transparent)",
+            transition: "background 0.25s var(--ease)",
+          }}
+        />
+      </button>
+      {/* pt-7: the centred poster scales 1.16x upward from its bottom edge, and
+          overflow-x:auto forces overflow-y to auto — without headroom the track
+          slices the top off it and its glow. */}
+      {/* Stays mounted and animates its row from 0fr to 1fr, so it slides rather
+          than snaps — and keeps its scroll position while folded away. */}
+      <div
+        className="grid"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.3s var(--ease)" }}
+      >
+        <div style={{ overflow: "hidden", minHeight: 0 }}>
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          onPointerDown={markUserScroll}
+          onTouchStart={markUserScroll}
+          onWheel={markUserScroll}
+          className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
+        >
         <TierDivider />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
@@ -958,6 +1042,8 @@ function Rolodex({
           </div>
         ))}
         <TierDivider />
+        </div>
+        </div>
       </div>
     </div>
   );
@@ -972,12 +1058,15 @@ function Rolodex({
 function LastResult({ last }: { last: { won: string; lost: string; at: number } | null }) {
   return (
     <div className="flex h-8 items-center justify-center px-6">
-      {last && (
+      {last ? (
         <span key={last.at} className="result-in text-[11px] leading-none">
           <span className="font-semibold text-gold">{last.won}</span>
           <span className="text-dim"> beat </span>
           <span className="text-dim">{last.lost}</span>
         </span>
+      ) : (
+        // Holds the question until the first pick answers it.
+        <span className="text-[11px] leading-none text-dim">Which film do you prefer?</span>
       )}
     </div>
   );
