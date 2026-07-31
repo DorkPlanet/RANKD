@@ -10,24 +10,57 @@ import type { Film, RankState } from "@/lib/types";
 const TIER = 4 as const;
 const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
 
-// Visual cue for a flick: a floating clone of the poster arcs up toward the top
-// of the screen and shrinks away, so you can see the film get thrown to the top.
-function flyPosterUp(el: HTMLElement, poster: string) {
-  const r = el.getBoundingClientRect();
-  const dx = window.innerWidth / 2 - (r.left + r.width / 2);
-  const dy = 130 - (r.top + r.height / 2);
+// Spawn a copy of a poster that outlives the re-render, so a film can be seen
+// leaving rather than simply being replaced.
+function posterClone(r: DOMRect, poster: string, ring: string): HTMLElement {
   const clone = document.createElement("div");
-  clone.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)`;
+  clone.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:${ring}`;
   clone.innerHTML = `<img src="${poster}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
   document.body.appendChild(clone);
+  return clone;
+}
+
+// Flick: the poster carries on along the throw, so it leaves the way it was
+// thrown rather than always arcing to the same spot regardless of the gesture.
+function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number) {
+  const r = el.getBoundingClientRect();
+  const mag = Math.hypot(vx, vy) || 1;
+  const ux = vx / mag;
+  const uy = vy / mag;
+  const travel = Math.max(window.innerWidth, window.innerHeight);
+  const spin = ux * 22; // lean into the direction of the throw
+  const clone = posterClone(r, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
   clone
     .animate(
       [
-        { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
-        { transform: `translate(${dx * 0.5}px,-70px) scale(0.92)`, opacity: 1, offset: 0.3 },
-        { transform: `translate(${dx}px,${dy}px) scale(0.3)`, opacity: 0, offset: 1 },
+        { transform: "translate(0,0) rotate(0deg) scale(1)", opacity: 1, offset: 0 },
+        {
+          transform: `translate(${ux * travel * 0.3}px,${uy * travel * 0.3}px) rotate(${spin * 0.4}deg) scale(0.94)`,
+          opacity: 1,
+          offset: 0.35,
+        },
+        {
+          transform: `translate(${ux * travel}px,${uy * travel}px) rotate(${spin}deg) scale(0.45)`,
+          opacity: 0,
+          offset: 1,
+        },
       ],
-      { duration: 480, easing: "cubic-bezier(.34,1.1,.64,1)" },
+      { duration: 520, easing: "cubic-bezier(.2,.7,.3,1)" },
+    )
+    .addEventListener("finish", () => clone.remove());
+}
+
+// The beaten challenger sinks and fades, revealing its replacement underneath,
+// rather than the two cutting straight from one film to the next.
+function fadeLoserOut(el: HTMLElement, poster: string) {
+  const clone = posterClone(el.getBoundingClientRect(), poster, "0 8px 26px rgba(0,0,0,0.55)");
+  clone
+    .animate(
+      [
+        { transform: "translate(0,0) scale(1)", opacity: 1 },
+        { transform: "translate(0,18px) scale(0.94)", opacity: 0 },
+      ],
+      { duration: 320, easing: "cubic-bezier(.4,0,1,1)" },
     )
     .addEventListener("finish", () => clone.remove());
 }
@@ -451,15 +484,20 @@ function Duel({
   // is already where it is going to be.
   const pick = (id: string) => {
     const arena = arenaRef.current;
-    if (id === challenger.id && arena) {
-      const cards = arena.querySelectorAll<HTMLElement>("button");
-      const from = cards[1]?.querySelector("img");
-      const to = cards[0]?.querySelector("img");
-      if (from && to) {
-        flyPosterAcross(from, to, challenger.poster ?? "");
-        setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
-        return;
-      }
+    const cards = arena?.querySelectorAll<HTMLElement>("button");
+    const climbImg = cards?.[0]?.querySelector("img");
+    const challImg = cards?.[1]?.querySelector("img");
+
+    if (id === challenger.id && climbImg && challImg) {
+      flyPosterAcross(challImg, climbImg, challenger.poster ?? "");
+      setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
+      return;
+    }
+    if (id === contender.id && challImg) {
+      // The climber stays put; only the beaten challenger needs to leave.
+      fadeLoserOut(challImg, challenger.poster ?? "");
+      onPick(id); // commit at once so the replacement fades up underneath
+      return;
     }
     onPick(id);
   };
@@ -586,9 +624,9 @@ function PosterCard({
     const dy = e.clientY - s.y;
     const dx = e.clientX - s.x;
     if (dy < -45 && Math.abs(dy) > Math.abs(dx)) {
-      // upward throw → fly the poster to the top, then commit mid-flight
+      // upward throw → send the poster off along the throw, commit mid-flight
       const img = e.currentTarget.querySelector("img");
-      if (img) flyPosterUp(img, film.poster ?? "");
+      if (img) flyPosterAway(img, film.poster ?? "", dx, dy);
       setTimeout(() => onFlick(film.id), 170);
     } else {
       onPick(film.id); // tap = pick winner
