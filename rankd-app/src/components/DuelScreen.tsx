@@ -330,29 +330,39 @@ function PosterCard({
       >
         {film.title}
       </span>
+      {/* Wrapper carries the float so the badge drifts with its poster. The
+          poster itself keeps overflow-hidden for its rounded corners, so the
+          badge has to hang off this wrapper to straddle the bottom edge. */}
+      {/* The tilt lives on the wrapper, not the poster, so the badge rotates with
+          the card and sits square to its bottom edge — a level badge on a tilted
+          card reads as off-centre even when it is mathematically centred. */}
       <div
-        className={`relative w-full overflow-hidden rounded-xl ${pick ? "float-a" : "float-b"}`}
-        style={{
-          aspectRatio: "2 / 3",
-          boxShadow: pick
-            ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
-            : "0 8px 26px rgba(0,0,0,0.55)",
-          rotate: pick ? "-2deg" : "2deg",
-        }}
+        className={`relative w-full ${pick ? "float-a" : "float-b"}`}
+        style={{ rotate: pick ? "-2deg" : "2deg" }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
+        <div
+          className="w-full overflow-hidden rounded-xl"
+          style={{
+            aspectRatio: "2 / 3",
+            boxShadow: pick
+              ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
+              : "0 8px 26px rgba(0,0,0,0.55)",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
+        </div>
+        <span
+          className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
+          style={
+            pick
+              ? { color: "#1c1405", background: "var(--gold)" }
+              : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
+          }
+        >
+          {badge}
+        </span>
       </div>
-      <span
-        className="mt-2 rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
-        style={
-          pick
-            ? { color: "#1c1405", background: "var(--gold)" }
-            : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
-        }
-      >
-        {badge}
-      </span>
     </button>
   );
 }
