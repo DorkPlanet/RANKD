@@ -530,7 +530,9 @@ function Duel({
   onToggleStrip: () => void;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
-  const [last, setLast] = useState<{ won: string; lost: string; at: number } | null>(null);
+  // Newest first, capped at two — the one before last is context, anything older
+  // is clutter.
+  const [results, setResults] = useState<{ won: string; lost: string; at: number }[]>([]);
 
   // Intercept a win by the right-hand card so it slides into the climbing seat
   // before the state swap paints. Picking the left card needs none of this — it
@@ -540,7 +542,7 @@ function Duel({
     // acknowledgement that a tap landed at all.
     const won = id === contender.id ? contender : challenger;
     const lost = id === contender.id ? challenger : contender;
-    setLast({ won: won.title, lost: lost.title, at: Date.now() });
+    setResults((prev) => [{ won: won.title, lost: lost.title, at: Date.now() }, ...prev].slice(0, 2));
 
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
@@ -584,19 +586,42 @@ function Duel({
         <Tips />
       </div>
 
-      <div ref={arenaRef} className="flex flex-1 items-center justify-center gap-3 px-4">
+      {/* The question belongs to the duel, so it lives inside the arena and
+          travels with the posters. Left outside it, folding the strip away
+          stranded it in the middle of the freed space. */}
+      <div ref={arenaRef} className="flex flex-1 flex-col px-4">
+        {/* Spacers weighted 2:1:1. The posters stay centred in the arena as a
+            whole, while the line floats to the middle of the gap beneath them —
+            giving the two rows equal flex instead centred the posters in the top
+            half and dragged them up the screen. */}
+        <div style={{ flexGrow: 2 }} />
+        <div className="relative flex items-center justify-center gap-3">
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        {/* Floats over the gap rather than sitting in it — as a flex item it
+            stole width from both posters and shrank them. */}
         <span
           aria-hidden
-          className="font-display text-[15px] leading-none tracking-[0.08em] text-dim"
-          style={{ alignSelf: "center" }}
+          className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex items-center justify-center rounded-full font-display text-[11px] leading-none tracking-[0.06em]"
+          style={{
+            width: 26,
+            height: 26,
+            transform: "translate(-50%, -50%)",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            color: "var(--dim)",
+          }}
         >
-          VS
+          OR
         </span>
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        </div>
+        {/* Not an even 1:1 — the collapsed strip and its handle sit between the
+            arena's foot and the nav, so the line needs to ride lower inside the
+            arena to land midway to the bar itself. */}
+        <div style={{ flexGrow: 1.8 }} />
+        <LastResult results={results} />
+        <div style={{ flexGrow: 1 }} />
       </div>
-
-      <LastResult last={last} />
 
       <Rolodex
         lowToHigh={lowToHigh}
@@ -614,12 +639,14 @@ function Duel({
 // Every mechanic the duel screen understands, cycled one at a time — the screen
 // carries no chrome explaining itself, so this is where the game gets taught.
 const TIPS = [
-  "Tap the film you like more",
+  // "Tap the one you like more" is gone — the question under the posters now
+  // says that, and a tip repeating it wastes a turn of the cycle.
   "Whichever film wins keeps climbing",
   "Flick a film up to send it straight to the top",
+  "Flick a film down to send it to the bottom",
   "Hold a film to see who's in it and what it's about",
   "Swipe the row below to choose who you face next",
-  "Pick a film below yours to move down the list",
+  "Pull the handle down to hide the row",
   "Nothing's saved until you lock a film into place",
 ];
 const STRIP_KEY = "rankd-strip-open";
@@ -1055,18 +1082,34 @@ function Rolodex({
 // Sits between the arena and the strip. Until now nothing on screen confirmed a
 // tap had registered — you picked, the posters changed, and that was it. Keyed
 // on the timestamp so it replays even when the same film wins twice running.
-function LastResult({ last }: { last: { won: string; lost: string; at: number } | null }) {
+// Beaten films read in a cool silver-blue — clearly not the gold of a winner,
+// but still legible rather than faded out.
+const LOSER = "#9db4d6";
+
+function LastResult({ results }: { results: { won: string; lost: string; at: number }[] }) {
+  // No fixed height: with one, padding only squeezed the text inside the box and
+  // the row still butted straight onto the strip's handle, so the line read as
+  // that control's label.
   return (
-    <div className="flex h-8 items-center justify-center px-6">
-      {last ? (
-        <span key={last.at} className="result-in text-[11px] leading-none">
-          <span className="font-semibold text-gold">{last.won}</span>
-          <span className="text-dim"> beat </span>
-          <span className="text-dim">{last.lost}</span>
-        </span>
-      ) : (
+    <div className="flex flex-col items-center justify-center gap-1.5 px-6 pb-6 pt-2">
+      {results.length === 0 ? (
         // Holds the question until the first pick answers it.
-        <span className="text-[11px] leading-none text-dim">Which film do you prefer?</span>
+        <span className="text-[13px] leading-none text-dim">Which film do you prefer?</span>
+      ) : (
+        results.map((r, i) => (
+          // Keyed on its own timestamp, so React moves the same element down a
+          // row rather than rebuilding it — which is what lets it shrink and
+          // fade on the way instead of snapping.
+          <span
+            key={r.at}
+            className={`result-line leading-none ${i === 0 ? "result-in" : ""}`}
+            style={{ fontSize: i === 0 ? 13 : 11, opacity: i === 0 ? 1 : 0.55 }}
+          >
+            <span className="font-semibold text-gold">{r.won}</span>
+            <span className="text-dim"> beat </span>
+            <span style={{ color: LOSER }}>{r.lost}</span>
+          </span>
+        ))
       )}
     </div>
   );
