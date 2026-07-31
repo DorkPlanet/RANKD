@@ -498,12 +498,6 @@ function Rolodex({
   const prevContenderId = useRef("");
   const pileKey = lowToHigh.map((f) => f.id).join(",");
 
-  // A cell is a legal challenger only if it sits ABOVE the contender in the pile
-  // (lowToHigh runs bottom→top, so a higher index = higher standing). Films below
-  // the contender have already been passed and can't be re-challenged.
-  const contenderIdx = lowToHigh.findIndex((f) => f.id === contenderId);
-  const isAboveContender = (fid: string) => lowToHigh.findIndex((f) => f.id === fid) > contenderIdx;
-
   const syncHighlight = () => {
     const track = trackRef.current;
     if (!track) return null;
@@ -558,17 +552,9 @@ function Rolodex({
       const id = syncHighlight();
       // Only commit a scrub for a user-driven scroll — a programmatic reorder
       // (flick / confirm) also fires scroll events and must NOT override the challenger.
-      if (userScrolling.current && id && id !== challengerId) {
-        if (isAboveContender(id)) {
-          onScrub(id); // legal target — commit it as the new challenger
-        } else {
-          // Scrubbed to/below the climbing film: not a legal challenger. Snap the
-          // strip back onto the real challenger so the highlight never strands on
-          // a film that skipToFilm silently refuses to commit.
-          centerFilm(challengerId);
-          syncHighlight();
-        }
-      }
+      // Any film but the contender is a legal target: scrubbing up leaps past
+      // films it clears, scrubbing down drops it below a weaker one.
+      if (userScrolling.current && id && id !== challengerId) onScrub(id);
       userScrolling.current = false;
     }, 100);
   };
