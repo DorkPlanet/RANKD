@@ -283,7 +283,13 @@ export default function DuelScreen() {
       {champion ? (
         <ConfirmView
           champion={champion}
-          rank={(session?.confirmed.length ?? 0) + 1}
+          // A spotlight settles wherever it stopped climbing, so its number is
+          // its position in the tier — not the next slot on the shelf.
+          rank={
+            session?.mode === "spotlight"
+              ? session.unconfirmed.indexOf(session.contenderId) + 1
+              : (session?.confirmed.length ?? 0) + 1
+          }
           onConfirm={lockIn}
           onBack={(session?.unconfirmed.length ?? 0) > 1 ? backOut : undefined}
           spotlight={session?.mode === "spotlight"}
@@ -307,6 +313,7 @@ export default function DuelScreen() {
           onInfo={setInfoFilm}
           stripOpen={stripOpen}
           onToggleStrip={toggleStrip}
+          spotlight={session.mode === "spotlight"}
         />
       ) : (
         <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} />
@@ -591,14 +598,17 @@ function BackRow({ onClick }: { onClick: () => void }) {
   );
 }
 
-// One track, two handles — the range is a single span, so it reads as one
-// control rather than two settings that happen to be related.
+// One track, two handles. Each input owns its own half — low runs from the
+// scale's floor up to the tier, high from the tier to the ceiling — so the two
+// can never sit on top of each other and both stay grabbable at any setting.
 function RangeSlider({
+  tier,
   low,
   high,
   onLow,
   onHigh,
 }: {
+  tier: number;
   low: number;
   high: number;
   onLow: (v: number) => void;
@@ -607,28 +617,43 @@ function RangeSlider({
   const MIN = 0.5;
   const MAX = 5;
   const pct = (v: number) => ((v - MIN) / (MAX - MIN)) * 100;
+  const split = pct(tier);
+  const ticks = ORDERED_TIERS.map((t) => pct(t));
+
   return (
     <div className="dual-range">
       <div className="dual-track" />
+      {ticks.map((t) => (
+        <span key={t} className="dual-tick" style={{ left: `${t}%` }} />
+      ))}
       <div className="dual-fill" style={{ left: `${pct(low)}%`, right: `${100 - pct(high)}%` }} />
-      <input
-        type="range"
-        min={MIN}
-        max={MAX}
-        step={0.5}
-        value={low}
-        aria-label="Lowest rating to include"
-        onChange={(e) => onLow(parseFloat(e.target.value))}
-      />
-      <input
-        type="range"
-        min={MIN}
-        max={MAX}
-        step={0.5}
-        value={high}
-        aria-label="Highest rating to include"
-        onChange={(e) => onHigh(parseFloat(e.target.value))}
-      />
+
+      {/* Below the tier. Hidden at ½★, where there's nothing further down. */}
+      {tier > MIN && (
+        <input
+          type="range"
+          min={MIN}
+          max={tier}
+          step={0.5}
+          value={low}
+          aria-label="Lowest rating to include"
+          style={{ left: 0, width: `${split}%` }}
+          onChange={(e) => onLow(parseFloat(e.target.value))}
+        />
+      )}
+      {/* Above the tier. Hidden at 5★. */}
+      {tier < MAX && (
+        <input
+          type="range"
+          min={tier}
+          max={MAX}
+          step={0.5}
+          value={high}
+          aria-label="Highest rating to include"
+          style={{ left: `${split}%`, width: `${100 - split}%` }}
+          onChange={(e) => onHigh(parseFloat(e.target.value))}
+        />
+      )}
     </div>
   );
 }
@@ -741,10 +766,11 @@ function ModePanel({
         {/* Both handles are clamped past the chosen tier, so the range always
             contains the tier the run is anchored to. */}
         <RangeSlider
+          tier={tier}
           low={lowEdge}
           high={highEdge}
-          onLow={(v) => onBelow(tier - Math.min(v, tier))}
-          onHigh={(v) => onAbove(Math.max(v, tier) - tier)}
+          onLow={(v) => onBelow(tier - v)}
+          onHigh={(v) => onAbove(v - tier)}
         />
         <div className="flex justify-between text-[10px] text-dim">
           <span>½</span>
@@ -1129,9 +1155,14 @@ function TierProgress({
             <span className="text-base leading-none text-gold">{starsFor(tier)}</span>
             <span className="text-[10px] leading-none text-dim">▾</span>
           </button>
+          {/* What you're playing, between what you're playing it on and how far
+              through you are. */}
+          <span className="flex-1 text-center text-[9px] font-extrabold tracking-[0.1em] text-dim">
+            {mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
+          </span>
           <span className="text-[11px] text-text/55">
             {mode === "spotlight" ? (
-              <b className="text-gold">SPOTLIGHT</b>
+              <b className="text-text-hi">1 film</b>
             ) : (
               <>
                 <b className="text-text-hi">{placed}</b> placed · {toGo} to go
@@ -1168,6 +1199,7 @@ function Duel({
   onInfo,
   stripOpen,
   onToggleStrip,
+  spotlight,
 }: {
   contender: Film;
   challenger: Film;
@@ -1175,6 +1207,7 @@ function Duel({
   confirmed: string[]; // locked shelf, index 0 = #1
   films: Film[];
   tier: Rating;
+  spotlight?: boolean;
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
@@ -1203,7 +1236,11 @@ function Duel({
     const climbImg = cards?.[0]?.querySelector("img");
     const challImg = cards?.[1]?.querySelector("img");
 
-    if (id === challenger.id && climbImg && challImg) {
+    // Only in King of the Hill does a winning challenger become the climber, so
+    // only there should it fly into the climbing seat. In a spotlight the
+    // spotlit film stays put and simply stops here — showing its opponent take
+    // its place would say the opposite of what happened.
+    if (id === challenger.id && climbImg && challImg && !spotlight) {
       flyPosterAcross(challImg, climbImg, challenger.poster ?? "");
       setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
       return;
@@ -1487,7 +1524,11 @@ function ConfirmView({
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
       <span className="text-[11px] font-extrabold tracking-[0.14em] text-gold">
-        {justPromoted ? `⭐ EARNED ${starsFor(champion.rating)}` : "🏆 TOPS THE PILE"}
+        {justPromoted
+          ? `⭐ EARNED ${starsFor(champion.rating)}`
+          : spotlight && rank > 1
+            ? "🎯 FOUND ITS PLACE"
+            : "🏆 TOPS THE PILE"}
       </span>
       <div className="w-40 overflow-hidden rounded-xl" style={{ boxShadow: "0 0 0 3px var(--gold), 0 12px 36px color-mix(in srgb, var(--gold) 45%, transparent)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1506,7 +1547,11 @@ function ConfirmView({
         className="rounded-full px-8 py-3 text-sm font-extrabold tracking-wide active:scale-95"
         style={{ color: "#1c1405", background: "var(--gold)", boxShadow: "0 4px 20px color-mix(in srgb, var(--gold) 40%, transparent)" }}
       >
-        {justPromoted ? `Lock in at ${starsFor(champion.rating)}` : spotlight ? "Lock in here" : `Lock in as #${rank}`}
+        {justPromoted
+          ? `Lock in at ${starsFor(champion.rating)}`
+          : spotlight
+            ? `Lock in at #${rank}`
+            : `Lock in as #${rank}`}
       </button>
 
       {/* Topping a tier in Spotlight is the one moment a star rating can change:
@@ -1713,7 +1758,7 @@ function Rolodex({
           onWheel={markUserScroll}
           className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
         >
-        <TierDivider tier={tier} />
+        <TierDivider />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
@@ -1763,7 +1808,7 @@ function Rolodex({
             <span className="text-[9px] leading-none text-transparent">.</span>
           </div>
         ))}
-        <TierDivider tier={tier} />
+        <TierDivider />
         </div>
         </div>
       </div>
@@ -1819,7 +1864,7 @@ function LockIcon() {
   );
 }
 
-function TierDivider({ tier }: { tier: Rating }) {
+function TierDivider() {
   const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
   return (
     <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
@@ -1832,12 +1877,11 @@ function TierDivider({ tier }: { tier: Rating }) {
             background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
           }}
         />
-        {/* The stars break the line at its midpoint rather than sitting under it */}
-        <span
-          className="relative text-[9px] leading-none text-gold"
-          style={{ padding: "3px 0", background: "var(--bg)", writingMode: "vertical-rl" }}
-        >
-          {starsFor(tier)}
+        {/* A single star breaks the line at its midpoint. The bookend marks
+            where the tier ends; which tier it is belongs in the header, and
+            stacking four stars down the strip only made it heavy. */}
+        <span className="relative text-[12px] leading-none text-gold" style={{ padding: "3px 0", background: "var(--bg)" }}>
+          ★
         </span>
       </div>
       {/* Holds the label row's height so posters stay on one baseline */}

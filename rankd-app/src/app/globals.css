@@ -92,41 +92,62 @@ img {
   }
 }
 
-/* Dual-thumb range. There's no native two-handle input, so two ranges are laid
-   over one track: the inputs ignore pointer events, only their thumbs take
-   them, which lets either handle be grabbed anywhere along the shared line. */
+/* Dual-thumb range. Rather than stacking two full-width inputs — where the
+   handles sit on top of each other at the default and the lower one can't be
+   grabbed at all — each input owns its own HALF of the track, meeting at the
+   chosen tier. They never overlap, so both handles are always draggable and a
+   press anywhere on the track moves the handle that owns that side. */
 .dual-range {
   position: relative;
-  height: 26px;
+  height: 34px;
 }
 .dual-range input[type="range"] {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  height: 100%;
   margin: 0;
   background: transparent;
-  pointer-events: none;
   -webkit-appearance: none;
   appearance: none;
 }
+.dual-range input[type="range"]::-webkit-slider-runnable-track {
+  height: 34px;
+  background: transparent;
+}
 .dual-range input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  pointer-events: auto;
+  margin-top: 8px; /* centres an 18px thumb on a 34px track */
   width: 18px;
   height: 18px;
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   cursor: pointer;
 }
+.dual-range input[type="range"]::-moz-range-track {
+  height: 34px;
+  background: transparent;
+}
 .dual-range input[type="range"]::-moz-range-thumb {
-  pointer-events: auto;
   width: 18px;
   height: 18px;
   border: 2px solid var(--surface);
   border-radius: 50%;
   background: var(--gold);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   cursor: pointer;
+}
+/* Half-star stops, so the stepping reads as deliberate rather than juddery. */
+.dual-tick {
+  position: absolute;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+  background: var(--dim);
+  opacity: 0.5;
 }
 .dual-track,
 .dual-fill {

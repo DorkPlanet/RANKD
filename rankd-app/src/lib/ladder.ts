@@ -204,6 +204,16 @@ export function choose(state: RankState, winnerId: string): RankState {
     s.unconfirmed.splice(target, 0, s.contenderId); // winner takes the loser's place
   } else {
     s.unconfirmed.splice(target + 1, 0, s.contenderId); // drop in beneath the winner
+    // In a spotlight the subject is the thing being placed, so it never hands
+    // the climb over — losing IS the answer. The first film to beat it marks its
+    // ceiling, so it settles directly beneath and the run is done. Handing off
+    // here would swap the spotlit film out for its opponent, which is exactly
+    // what a spotlight is not.
+    if (s.mode === "spotlight") {
+      s.needsConfirm = true;
+      s.challengerId = "";
+      return { films, session: s };
+    }
     s.contenderId = s.challengerId; // the winner carries the climb on
   }
   refresh(s);
@@ -249,6 +259,9 @@ const PROMOTION_OPPONENTS = 3;
 export function promotionTarget(state: RankState): Rating | undefined {
   const { session } = state;
   if (!session || session.mode !== "spotlight" || !session.needsConfirm) return undefined;
+  // Only on actually reaching the top. A spotlight also stops the moment the
+  // subject loses, and settling mid-pile has plainly not earned a higher tier.
+  if (session.unconfirmed.indexOf(session.contenderId) !== 0) return undefined;
   const above = tierAbove(session.tier);
   if (above === undefined) return undefined;
   return state.films.some((f) => f.rating === above) ? above : undefined;
