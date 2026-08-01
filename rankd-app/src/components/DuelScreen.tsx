@@ -20,6 +20,7 @@ import {
   promotionWon,
   completePromotion,
   spotlightSummary,
+  searchWindow,
   type SpotlightSummary,
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
@@ -146,6 +147,13 @@ export default function DuelScreen() {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
   const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
+  // A tier chosen for the NEXT run but not started. Without it the only way to
+  // change the tier on screen was to start a game, which is exactly why picking
+  // one used to drop you straight into a duel.
+  const [pickedTier, setPickedTier] = useState<Rating | null>(null);
+  // Which mode the setup panel is showing. Held here, not inside the panel, so
+  // stepping out to the tier sheet and back doesn't reset you to the mode list.
+  const [chosenMode, setChosenMode] = useState<"koth" | null>(null);
   const [summary, setSummary] = useState<SpotlightSummary | null>(null);
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
@@ -232,12 +240,29 @@ export default function DuelScreen() {
   };
   const backOut = () => setState(stepBackFromConfirm(state));
 
-  const beginRun = (tier: Rating, films = state.films) => {
+  // Returns whether a run actually started, so the setup panel can stay open and
+  // say why instead of dropping you on a "tier complete" screen that was really
+  // "your range holds fewer than two films".
+  const beginRun = (tier: Rating, films = state.films): boolean => {
     try {
       setState(startRun(films, tier, { shuffle, below, above }));
+      return true;
     } catch {
-      setState({ films, session: null }); // fewer than 2 films in range
+      setState({ films, session: null });
+      return false;
     }
+  };
+
+  // The tier the setup panel is talking about: what you picked if you picked
+  // one, otherwise whatever is running.
+  const setupTier = pickedTier ?? session?.tier ?? DEFAULT_TIER;
+
+  // Leaving setup entirely clears the choice; stepping between its own screens
+  // does not.
+  const closeSetup = () => {
+    setModeOpen(false);
+    setChosenMode(null);
+    setPickedTier(null);
   };
 
   const beginSpotlight = (filmId: string) => {
@@ -353,6 +378,7 @@ export default function DuelScreen() {
           stripOpen={stripOpen}
           onToggleStrip={toggleStrip}
           spotlight={session.mode === "spotlight"}
+          inPlay={searchWindow(state)}
         />
       ) : (
         <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} />
@@ -367,21 +393,22 @@ export default function DuelScreen() {
       {modeOpen && (
         <ModePanel
           films={state.films}
-          tier={session?.tier ?? DEFAULT_TIER}
+          tier={setupTier}
+          chosen={chosenMode}
+          onChoose={setChosenMode}
           shuffle={shuffle}
           onShuffle={setShuffle}
           below={below}
           above={above}
           onBelow={setBelow}
           onAbove={setAbove}
-          onClose={() => setModeOpen(false)}
+          onClose={closeSetup}
           onKoth={(t) => {
-            beginRun(t);
-            setModeOpen(false);
+            if (beginRun(t)) closeSetup(); // a run that couldn't start leaves you in setup
           }}
           onSpotlight={(t) => {
             setSpotlightFor(t);
-            setModeOpen(false);
+            closeSetup();
           }}
           onPickTier={() => {
             setModeOpen(false);
@@ -393,11 +420,19 @@ export default function DuelScreen() {
       {tierOpen && (
         <TierPicker
           films={state.films}
-          current={session?.tier ?? DEFAULT_TIER}
-          onClose={() => setTierOpen(false)}
-          onPick={(t) => {
-            beginRun(t);
+          current={setupTier}
+          onClose={() => {
             setTierOpen(false);
+            setModeOpen(true); // back where you came from, nothing started
+          }}
+          onPick={(t) => {
+            // Choosing a tier is a setting, not a start. It hands you back to the
+            // panel with the range still there to adjust; only Start plays.
+            setPickedTier(t);
+            setBelow(0);
+            setAbove(0); // a new tier's reach is its own question
+            setTierOpen(false);
+            setModeOpen(true);
           }}
         />
       )}
@@ -405,7 +440,6 @@ export default function DuelScreen() {
       {spotlightFor !== null && (
         <SpotlightPicker
           films={state.films}
-          tier={spotlightFor}
           onClose={() => setSpotlightFor(null)}
           onPick={(id) => {
             beginSpotlight(id);
@@ -593,6 +627,9 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
+// How many rows the film picker builds per pass.
+const PICKER_PAGE = 60;
+
 const tierCounts = (films: Film[]): Map<Rating, number> => {
   const m = new Map<Rating, number>();
   for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
@@ -702,6 +739,8 @@ function RangeSlider({
 function ModePanel({
   films,
   tier,
+  chosen,
+  onChoose,
   shuffle,
   onShuffle,
   below,
@@ -715,6 +754,8 @@ function ModePanel({
 }: {
   films: Film[];
   tier: Rating;
+  chosen: "koth" | null;
+  onChoose: (v: "koth" | null) => void;
   shuffle: boolean;
   onShuffle: (v: boolean) => void;
   below: number;
@@ -729,7 +770,7 @@ function ModePanel({
   // Pick the game first, then set it up. A flat list asked you to read a tier
   // and a range before knowing what they were for — and showed a range control
   // to Spotlight, which is always single-tier and ignores it entirely.
-  const [chosen, setChosen] = useState<"koth" | "spotlight" | null>(null);
+  const setChosen = onChoose;
 
   const lowEdge = tier - below;
   const highEdge = tier + above;
@@ -746,37 +787,18 @@ function ModePanel({
           blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
           onClick={() => setChosen("koth")}
         />
+        {/* Spotlight is about one film, so choosing it goes straight to the
+            film. Tier and shuffle live in the picker — they're a way to narrow
+            the list, not a setup step to complete before seeing it. */}
         <ModeRow
           title="Spotlight"
           blurb="Pick one film and find where it really belongs — it can push into the tier above."
-          onClick={() => setChosen("spotlight")}
+          onClick={() => onSpotlight(tier)}
         />
       </Sheet>
     );
   }
 
-  if (chosen === "spotlight") {
-    // Spotlight's only real setting is which film, and that's the next screen.
-    return (
-      <Sheet title="Spotlight" onClose={onClose}>
-        <button
-          onClick={onPickTier}
-          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
-        >
-          <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
-          <span className="flex items-baseline gap-2">
-            <span className="text-base text-gold">{starsFor(tier)}</span>
-            <span className="text-[11px] text-dim">
-              {tierCounts(films).get(tier) ?? 0} films ›
-            </span>
-          </span>
-        </button>
-        <ShuffleRow shuffle={shuffle} onShuffle={onShuffle} />
-        <StartButton label="Choose a film" onClick={() => onSpotlight(tier)} disabled={(tierCounts(films).get(tier) ?? 0) < 2} />
-        <BackRow onClick={() => setChosen(null)} />
-      </Sheet>
-    );
-  }
   return (
     <Sheet title="King of the Hill" onClose={onClose}>
       <button
@@ -903,50 +925,238 @@ function TierPicker({
   );
 }
 
+// Choosing the film IS the mode setup for Spotlight, so this screen carries
+// everything: the whole library to scroll, a tier filter to narrow it, and
+// shuffle. A spotlight's tier comes from the film you pick, never from a
+// setting made beforehand — so the filter here only decides what you see.
 function SpotlightPicker({
   films,
-  tier,
   onClose,
   onPick,
 }: {
   films: Film[];
-  tier: Rating;
   onClose: () => void;
   onPick: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
-  const inTier = films
-    .filter((f) => f.rating === tier)
-    .sort((a, b) => b.score - a.score)
-    .filter((f) => f.title.toLowerCase().includes(q.trim().toLowerCase()));
+  // "All" by default: a search that only covers one tier can't find the film
+  // you're thinking of unless you already know its rating.
+  const [filter, setFilter] = useState<Rating | "all">("all");
+  const [tierOpen, setTierOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  const counts = tierCounts(films);
+  const query = q.trim().toLowerCase();
+
+  const shown = films
+    .filter((f) => (filter === "all" ? true : f.rating === filter))
+    .filter((f) => (query === "" ? true : f.title.toLowerCase().includes(query)))
+    // Highest tier first, then position within the tier — the same order the
+    // list strip shows, so a film sits where you'd expect to find it.
+    .sort((a, b) => b.rating - a.rating || b.score - a.score);
+
+  // Committing all 828 rows at once cost a measured 508ms of blocked main
+  // thread — the sheet appeared to hang before it opened. Only a screenful is
+  // built up front; scrolling near the end extends it.
+  const [limit, setLimit] = useState(PICKER_PAGE);
+  // A new result set starts fresh. Adjusted during render rather than in an
+  // effect, so the first paint of a search is never the previous list's length.
+  const sig = `${filter}|${query}`;
+  const [prevSig, setPrevSig] = useState(sig);
+  if (sig !== prevSig) {
+    setPrevSig(sig);
+    setLimit(PICKER_PAGE);
+  }
+  const visible = shown.slice(0, limit);
+
+  const onScroll = () => {
+    const el = listRef.current;
+    if (!el || limit >= shown.length) return;
+    if (el.scrollTop + el.clientHeight > el.scrollHeight - 600) {
+      setLimit((l) => Math.min(shown.length, l + PICKER_PAGE));
+    }
+  };
+
+  const jump = (to: "top" | "bottom") => {
+    if (to === "top") {
+      listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    // The end of the list has to exist before it can be scrolled to, so jumping
+    // down materialises the rest first and moves once they've laid out.
+    setLimit(shown.length);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }),
+      ),
+    );
+  };
+
   return (
     <Sheet title="Spotlight" onClose={onClose}>
       <p className="mb-3 text-[11px] leading-snug text-dim">
-        Pick a {starsFor(tier)} film to test. It starts where it currently sits and moves as far as
-        its results take it.
+        Pick any film to test. It starts where it currently sits and moves as far as its results
+        take it.
       </p>
+
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search this tier"
-        className="mb-3 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+        placeholder="Search all films"
+        className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
       />
-      {inTier.slice(0, 40).map((f) => (
+
+      {/* One toolbar rather than a chip rail and a count line: the filter says
+          what you're looking at and how many, and everything else is an icon.
+          Shuffle is one bit of state — a full labelled row overstated it next to
+          the list it's a footnote to. */}
+      <div className="relative mb-2 flex items-center gap-1.5">
         <button
-          key={f.id}
-          onClick={() => onPick(f.id)}
-          className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
+          onClick={() => setTierOpen((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] active:scale-95 ${
+            filter === "all" ? "border-border text-dim" : "border-gold text-gold"
+          }`}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={f.poster} alt="" style={{ width: 26, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }} />
-          <span className="min-w-0 flex-1 truncate text-sm text-text-hi">{f.title}</span>
-          {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
+          <span className={filter === "all" ? "" : "text-sm"}>
+            {filter === "all" ? "All tiers" : starsFor(filter)}
+          </span>
+          <span className="opacity-60">{shown.length}</span>
+          <span className="opacity-60">▾</span>
         </button>
-      ))}
-      {inTier.length === 0 && <p className="text-[11px] text-dim">Nothing matches.</p>}
+
+        <span className="flex-1" />
+
+        <IconToggle label="Jump to top" onClick={() => jump("top")} icon={<span className="text-xs">↑</span>} />
+        <IconToggle label="Jump to bottom" onClick={() => jump("bottom")} icon={<span className="text-xs">↓</span>} />
+
+        {/* Anchored to the control it belongs to, so the tier list appears where
+            you asked for it instead of pushing the film list down the screen. */}
+        {tierOpen && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setTierOpen(false)} />
+            <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-44 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
+              <TierOption
+                label="All tiers"
+                count={films.length}
+                active={filter === "all"}
+                onClick={() => {
+                  setFilter("all");
+                  setTierOpen(false);
+                }}
+              />
+              {/* Tiers holding nothing would only be dead rows. */}
+              {ORDERED_TIERS.filter((t) => (counts.get(t) ?? 0) > 0).map((t) => (
+                <TierOption
+                  key={t}
+                  label={starsFor(t)}
+                  count={counts.get(t) ?? 0}
+                  active={filter === t}
+                  onClick={() => {
+                    setFilter(t);
+                    setTierOpen(false);
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* The list scrolls inside the sheet rather than with it, so search, the
+          filter and the jump controls stay reachable however far down you are —
+          the whole library is in here, not a truncated first page. */}
+      <div ref={listRef} onScroll={onScroll} className="max-h-[54vh] overflow-y-auto rounded-xl">
+        {visible.map((f) => {
+          // A spotlight needs someone to face: a film alone in its tier has
+          // nobody, so it's shown but inert rather than silently doing nothing.
+          const peers = (counts.get(f.rating) ?? 0) - 1;
+          return (
+            <button
+              key={f.id}
+              disabled={peers < 1}
+              onClick={() => onPick(f.id)}
+              className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99] disabled:opacity-30"
+            >
+              {/* Most of the library has no artwork yet — backfill only covers
+                  the tier being played — so an empty <img> would just be a
+                  broken icon 600 times over. */}
+              {f.poster ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={f.poster}
+                  alt=""
+                  loading="lazy"
+                  style={{ width: 26, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }}
+                />
+              ) : (
+                <span
+                  className="shrink-0 bg-border"
+                  style={{ width: 26, aspectRatio: "2/3", borderRadius: 3 }}
+                />
+              )}
+              <span className="min-w-0 flex-1 truncate text-sm text-text-hi">{f.title}</span>
+              {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
+              <span className="text-[11px] text-gold">{starsFor(f.rating)}</span>
+            </button>
+          );
+        })}
+        {shown.length === 0 && <p className="text-[11px] text-dim">Nothing matches.</p>}
+      </div>
     </Sheet>
   );
 }
+
+function TierOption({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98] ${
+        active ? "bg-border/40" : ""
+      }`}
+    >
+      <span className={active ? "text-sm text-gold" : "text-sm text-text-hi"}>{label}</span>
+      <span className="text-[11px] text-dim">{count}</span>
+    </button>
+  );
+}
+
+// A square icon button that can carry an on/off state — gold when it's on.
+function IconToggle({
+  label,
+  active,
+  onClick,
+  icon,
+}: {
+  label: string;
+  active?: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      className={`flex h-7 w-7 items-center justify-center rounded-lg border active:scale-95 ${
+        active ? "border-gold text-gold" : "border-border text-dim"
+      }`}
+    >
+      {icon}
+    </button>
+  );
+}
+
 
 // The point of a spotlight isn't the number it lands on, it's what moved and
 // what decided it — so ending one shows the before, the after, and the films
@@ -1373,6 +1583,7 @@ function Duel({
   stripOpen,
   onToggleStrip,
   spotlight,
+  inPlay,
 }: {
   contender: Film;
   challenger: Film;
@@ -1388,6 +1599,7 @@ function Duel({
   onInfo: (film: Film) => void;
   stripOpen: boolean;
   onToggleStrip: () => void;
+  inPlay?: Set<string> | null;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
   // Newest first, capped at two — the one before last is context, anything older
@@ -1427,6 +1639,14 @@ function Duel({
     onPick(id);
   };
 
+  // Where a film currently stands in its tier. Locked films hold the top slots,
+  // so the pile's own index picks up from the end of the confirmed shelf.
+  const rankOf = (id: string) => {
+    const i = pile.indexOf(id);
+    return i < 0 ? null : confirmed.length + i + 1;
+  };
+  const total = confirmed.length + pile.length;
+
   // Low → high for the rolodex (bottom of pile first).
   const lowToHigh = useMemo(
     () => [...pile].reverse().map((id) => films.find((f) => f.id === id)!).filter(Boolean),
@@ -1453,15 +1673,37 @@ function Duel({
       {/* The question belongs to the duel, so it lives inside the arena and
           travels with the posters. Left outside it, folding the strip away
           stranded it in the middle of the freed space. */}
-      <div ref={arenaRef} className="flex flex-1 flex-col px-4">
+      {/* min-h-0 is load-bearing: a flex child defaults to min-height:auto, so
+          without it the arena refuses to shrink below the posters' natural size.
+          Opening the strip then pushed the whole column past the bottom of the
+          h-dvh main and the nav was clipped off the screen — it was never the
+          nav shrinking, it was this refusing to. */}
+      <div ref={arenaRef} className="flex min-h-0 flex-1 flex-col px-4">
         {/* A fixed gap above the posters, and every flexible space below them.
             Centring them in the arena meant folding the strip away resized the
             arena and shifted the posters with it; anchoring them here means the
             freed height all lands underneath and they never move. Sized to sit
             them where centring used to, and allowed to shrink so a short screen
             reclaims it rather than overflowing. */}
-        <div style={{ height: 110, flexShrink: 1 }} />
-        <div className="relative flex items-center justify-center gap-3">
+        {/* The gap above the posters, carrying each film's current standing.
+            Shrinks far more eagerly than the posters do (weighting is factor ×
+            size, so 12 against the row's 1 means this gap gives up roughly four
+            times as much height). Opening the drawer therefore tightens this
+            space instead of resizing the artwork. */}
+        <div
+          className="flex min-h-0 items-center justify-center overflow-hidden"
+          style={{ height: 110, flexShrink: 12 }}
+        >
+          <RankFace from={rankOf(contender.id)} to={rankOf(challenger.id)} total={total} />
+        </div>
+        {/* A definite height the cards can fill, and one that yields under
+            pressure. 356px = the original 270px poster plus the two-line title
+            box above it, so a full-height phone looks exactly as it did; flex
+            shrink hands the space back on anything shorter. */}
+        <div
+          className="relative flex items-stretch justify-center gap-3"
+          style={{ height: 356, flexShrink: 1, minHeight: 0 }}
+        >
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         </div>
@@ -1471,9 +1713,13 @@ function Duel({
             drawer to finish moving — invisible while the layout shifts, so it
             never appears to slide. Fading out has no delay. */}
         <div style={{ flexGrow: 1.6 }} />
+        {/* Stays in the layout whether or not it's visible. Unmounting it saved
+            ~60px, but the mount landed in one frame while the drawer was still
+            animating — the posters dipped and sprang back. Toggling the strip
+            must change exactly one thing: the strip. */}
         <div
           aria-hidden={stripOpen}
-          className="pointer-events-none flex justify-center"
+          className="pointer-events-none flex flex-shrink-0 justify-center"
           style={{
             opacity: stripOpen ? 0 : 1,
             transition: "opacity 0.25s var(--ease)",
@@ -1494,6 +1740,7 @@ function Duel({
         onScrub={onScrub}
         open={stripOpen}
         onToggle={onToggleStrip}
+        inPlay={inPlay}
       />
     </>
   );
@@ -1538,6 +1785,66 @@ function Tips() {
     <span className="tip px-6 text-center text-[11px] leading-snug" style={{ opacity: shown ? 1 : 0 }}>
       {TIPS[i]}
     </span>
+  );
+}
+
+// The stake of the duel, stated as a move: the place the climber holds now and
+// the place it takes by winning. Centred in its own space rather than tagged to
+// the posters, because it belongs to the match, not to either film.
+//
+// No VS mark — that was cut from the prototype and isn't coming back. The arrow
+// carries the same meaning and says which way the climb runs.
+function RankFace({ from, to, total }: { from: number | null; to: number | null; total: number }) {
+  if (from === null || to === null) return null;
+  return (
+    <div className="flex flex-col items-center gap-2.5">
+      <div className="flex items-center gap-4">
+        <Hairline />
+        {/* Both numbers the same size so the arrow sits dead centre and the
+            group balances — the gold is what says which one is climbing, not
+            the scale. Keyed on its own value so it re-plays the lift each time
+            the climber takes a place. */}
+        <span
+          key={from}
+          className="rank-pop font-display text-[32px] leading-none tracking-wide text-gold tabular-nums"
+          style={{ textShadow: "0 2px 16px color-mix(in srgb, var(--gold) 50%, transparent)" }}
+        >
+          {from}
+        </span>
+        {/* Points the way the pile is climbed — up the order, toward #1. */}
+        <ClimbArrow />
+        <span className="font-display text-[32px] leading-none tracking-wide text-text/45 tabular-nums">
+          {to}
+        </span>
+        <Hairline flip />
+      </div>
+      {/* Underneath and centred, so it can't pull the numbers off true. */}
+      <span className="text-[9px] font-extrabold uppercase tracking-[0.22em] text-dim">
+        of {total}
+      </span>
+    </div>
+  );
+}
+
+function ClimbArrow() {
+  return (
+    <svg width="26" height="10" viewBox="0 0 26 10" fill="none" aria-hidden>
+      <path d="M0 5h22" stroke="var(--border)" strokeWidth="1.5" />
+      <path d="M18 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Fades in from nothing so the numbers sit on a line that appears to emerge
+// rather than a rule that stops dead.
+function Hairline({ flip }: { flip?: boolean }) {
+  return (
+    <span
+      className="h-px w-12 flex-shrink-0"
+      style={{
+        background: `linear-gradient(to ${flip ? "left" : "right"}, transparent, var(--border))`,
+      }}
+    />
   );
 }
 
@@ -1627,11 +1934,21 @@ function PosterCard({
       onPointerCancel={onPointerCancel}
       onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
       style={{ touchAction: "none" }}
-      className="group relative flex w-[46%] max-w-[180px] flex-col items-center transition-transform active:scale-95"
+      className="group relative flex h-full w-[46%] max-w-[180px] min-h-0 flex-col items-center transition-transform active:scale-95"
     >
+      {/* A fixed two-line box, whatever the title's length. Sized to the text
+          rather than sized by it, so a film whose name wraps can never sit its
+          poster lower than its opponent's — the two cards always share a top and
+          a bottom edge, and so do their badges. */}
       <span
-        className={`mb-3 w-full text-center font-display text-[32px] font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 ${pick ? "float-c" : "float-d"}`}
-        style={{ textShadow: "0 2px 8px rgba(0,0,0,0.8)" }}
+        className={`mb-3 flex w-full flex-shrink-0 items-end justify-center text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 ${pick ? "float-c" : "float-d"}`}
+        style={{
+          // Long titles step down instead of being silently cut off at two
+          // lines — the whole name is the point, it's what you're choosing between.
+          fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
+          minHeight: "2.3em",
+          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+        }}
       >
         {film.title}
       </span>
@@ -1641,12 +1958,15 @@ function PosterCard({
       {/* The tilt lives on the wrapper, not the poster, so the badge rotates with
           the card and sits square to its bottom edge — a level badge on a tilted
           card reads as off-centre even when it is mathematically centred. */}
+      {/* min-h-0 + flex-1 lets the poster take whatever height is left rather
+          than demanding width × 1.5, so a short screen shrinks the artwork
+          instead of driving the column past the bottom of the viewport. */}
       <div
-        className={`relative w-full ${pick ? "float-a" : "float-b"}`}
+        className={`relative flex min-h-0 w-full flex-1 justify-center ${pick ? "float-a" : "float-b"}`}
         style={{ rotate: `${pick ? -TILT : TILT}deg` }}
       >
         <div
-          className="w-full overflow-hidden rounded-xl"
+          className="h-full overflow-hidden rounded-xl"
           style={{
             aspectRatio: "2 / 3",
             boxShadow: pick
@@ -1756,7 +2076,7 @@ function ConfirmView({
 function TierComplete({ films, tier, onPickTier }: { films: Film[]; tier: Rating; onPickTier: () => void }) {
   const ranked = films.filter((f) => f.rating === tier && f.confirmed).sort((a, b) => b.score - a.score);
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-8 text-center">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-8 text-center">
       <div className="font-display text-2xl tracking-wide text-gold">🏆 {starsFor(tier)} placed</div>
       <p className="font-serif italic text-dim">Every film in this tier has found its spot.</p>
       <button
@@ -1787,6 +2107,7 @@ function Rolodex({
   onScrub,
   open,
   onToggle,
+  inPlay,
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
@@ -1796,6 +2117,7 @@ function Rolodex({
   onScrub: (id: string) => void;
   open: boolean;
   onToggle: () => void;
+  inPlay?: Set<string> | null;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1881,7 +2203,10 @@ function Rolodex({
   };
 
   return (
-    <div className="relative w-full pb-1">
+    // flex-shrink-0 so the drawer keeps the height it asked for and the arena
+    // above gives way instead. Without it both fought for the same space and
+    // neither yielded, pushing the nav off the bottom of the screen.
+    <div className="relative w-full flex-shrink-0 pb-1">
       {/* A grabber, not a chevron — the strip pulls open and closed like a
           drawer, so drag it or tap it. */}
       <button
@@ -1949,12 +2274,22 @@ function Rolodex({
               <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
-            <div key={f.id} data-fid={f.id} className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]">
+            // During a spotlight, films the search has already ruled out are
+            // faded: the strip stops offering duels that can't teach the session
+            // anything, and you can see the window closing in as you play.
+            <div
+              key={f.id}
+              data-fid={f.id}
+              className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]"
+              style={inPlay && !inPlay.has(f.id) ? { opacity: 0.3 } : undefined}
+            >
               <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="text-[9px] font-bold tracking-wide text-dim/70">UN-RNKD</span>
+              <span className="text-[9px] font-bold tracking-wide text-dim/70">
+                {inPlay && !inPlay.has(f.id) ? "SETTLED" : "UN-RNKD"}
+              </span>
             </div>
           ),
         )}

@@ -38,10 +38,12 @@ export interface PlacementSession {
   origScore?: number;
   origRating?: Rating;
   origIndex?: number; // where it stood in the tier before any of this
-  // Which way the subject is currently testing. It climbs until something beats
-  // it, then works downward to find its floor — so a loss narrows the search
-  // rather than ending it.
-  probeDown?: boolean;
+  // The slice of the tier the subject could still belong to, as indices into the
+  // pile WITH THE SUBJECT REMOVED (that order never changes during a spotlight,
+  // so the indices stay valid). Every duel narrows it by half; when `spotLo`
+  // passes `spotHi` there is nowhere left it could be and the film is placed.
+  spotLo?: number;
+  spotHi?: number;
   spotWins?: string[];
   spotLosses?: string[];
   // A promotion run in progress: the subject is working through the weakest
