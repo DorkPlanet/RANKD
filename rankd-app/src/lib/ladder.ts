@@ -44,6 +44,21 @@ function shuffled<T>(xs: T[]): T[] {
 // index 0 = top of the pile, so "above" = a smaller index.
 function refresh(s: PlacementSession): void {
   const ci = s.unconfirmed.indexOf(s.contenderId);
+  // A spotlight that has been beaten turns around and tests downward, looking
+  // for the weakest film it still clears. Running out of films below means it
+  // has found its floor.
+  if (s.mode === "spotlight" && s.probeDown) {
+    // Skip anything already settled on the way up — re-fighting a film it has
+    // just beaten asks a question the session has already answered. Running out
+    // of unfaced films below means the floor is found.
+    const faced = new Set([...(s.spotWins ?? []), ...(s.spotLosses ?? [])]);
+    let j = ci + 1;
+    while (j < s.unconfirmed.length && faced.has(s.unconfirmed[j])) j++;
+    const below = s.unconfirmed[j];
+    s.needsConfirm = !below;
+    s.challengerId = below ?? "";
+    return;
+  }
   if (ci <= 0) {
     s.needsConfirm = ci === 0; // at the top → confirm (ci === -1 shouldn't happen)
     s.challengerId = "";
@@ -112,11 +127,12 @@ export function startRun(
   return { films: f, session: s };
 }
 
-// Spotlight — re-place ONE film. It drops to the bottom of its own tier so every
-// peer sits above it and it can climb to any slot, then the run ends the moment
-// it settles rather than rolling on to the next climber. Its original score is
-// kept so abandoning restores it: starting a spotlight moves a film before it
-// has earned anything, and walking away shouldn't cost it its place.
+// Spotlight — re-place ONE film. It starts exactly where it already stands and
+// moves only as far as its results justify: it climbs while it keeps winning,
+// and turns downward once something beats it. It deliberately does NOT start
+// from the bottom of the tier — doing that made every unfinished session read as
+// a catastrophic drop, when all it meant was that few duels had been fought.
+// Its original score is kept so abandoning restores it exactly.
 export function startSpotlight(
   films: Film[],
   filmId: string,
@@ -129,8 +145,10 @@ export function startSpotlight(
   const pool = poolFor(f, tier, 0, 0);
   if (pool.length < 2) throw new Error(`No other ${tier}★ films to place against`);
 
-  const others = pool.filter((p) => p.id !== filmId).map((p) => p.id);
-  const unconfirmed = [...(shuffle ? shuffled(others) : others), filmId]; // subject last = bottom
+  // Keep the standing order so the film sits at its current position; shuffling
+  // is the deliberate opt-in to a varied sequence instead.
+  const ids = pool.map((p) => p.id);
+  const unconfirmed = shuffle ? shuffled(ids) : ids;
   const s: PlacementSession = {
     tier,
     spanBelow: 0,
@@ -139,6 +157,10 @@ export function startSpotlight(
     subjectId: filmId,
     origScore: subject.score,
     origRating: subject.rating,
+    // Where it stood before any of this, so the session can show the move it made.
+    origIndex: unconfirmed.indexOf(filmId),
+    spotWins: [],
+    spotLosses: [],
     confirmed: [],
     unconfirmed,
     contenderId: filmId,
@@ -147,6 +169,33 @@ export function startSpotlight(
   };
   refresh(s);
   return { films: f, session: s };
+}
+
+export interface SpotlightSummary {
+  film: Film;
+  fromIndex: number;
+  toIndex: number;
+  total: number;
+  beat: Film[];
+  lostTo: Film[];
+}
+
+// What the session actually established: where the film stood, where it stands
+// now, and which films decided it.
+export function spotlightSummary(state: RankState): SpotlightSummary | null {
+  const { session } = state;
+  if (!session || session.mode !== "spotlight" || !session.subjectId) return null;
+  const film = state.films.find((f) => f.id === session.subjectId);
+  if (!film) return null;
+  const byId = (id: string) => state.films.find((f) => f.id === id);
+  return {
+    film,
+    fromIndex: session.origIndex ?? 0,
+    toIndex: session.unconfirmed.indexOf(session.subjectId),
+    total: session.unconfirmed.length,
+    beat: (session.spotWins ?? []).map(byId).filter((f): f is Film => !!f),
+    lostTo: (session.spotLosses ?? []).map(byId).filter((f): f is Film => !!f),
+  };
 }
 
 // Put a spotlit film back as it was. Abandoning a run must cost nothing.
@@ -200,18 +249,25 @@ export function choose(state: RankState, winnerId: string): RankState {
   // Removing it shifts everything below its old slot up one, so a challenger
   // that sat below the contender is now one index lower.
   const target = ci < chi ? chi - 1 : chi;
+  // A spotlight keeps a record of every film the subject met, so the session can
+  // show what actually changed rather than just a final number.
+  const spotlight = s.mode === "spotlight";
+  if (spotlight) {
+    const beaten = winnerId === s.contenderId;
+    s.spotWins = beaten ? [...(s.spotWins ?? []), s.challengerId] : (s.spotWins ?? []);
+    s.spotLosses = beaten ? (s.spotLosses ?? []) : [...(s.spotLosses ?? []), s.challengerId];
+  }
+
   if (winnerId === s.contenderId) {
     s.unconfirmed.splice(target, 0, s.contenderId); // winner takes the loser's place
   } else {
     s.unconfirmed.splice(target + 1, 0, s.contenderId); // drop in beneath the winner
-    // In a spotlight the subject is the thing being placed, so it never hands
-    // the climb over — losing IS the answer. The first film to beat it marks its
-    // ceiling, so it settles directly beneath and the run is done. Handing off
-    // here would swap the spotlit film out for its opponent, which is exactly
-    // what a spotlight is not.
-    if (s.mode === "spotlight") {
-      s.needsConfirm = true;
-      s.challengerId = "";
+    // In a spotlight the subject never hands the climb over — it IS the thing
+    // being placed. Being beaten sets its ceiling, so it turns around and works
+    // downward from there looking for its floor, instead of stopping dead.
+    if (spotlight) {
+      s.probeDown = true;
+      refresh(s);
       return { films, session: s };
     }
     s.contenderId = s.challengerId; // the winner carries the climb on

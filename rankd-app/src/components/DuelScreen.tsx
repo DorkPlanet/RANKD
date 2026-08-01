@@ -19,6 +19,8 @@ import {
   promoteDirect,
   promotionWon,
   completePromotion,
+  spotlightSummary,
+  type SpotlightSummary,
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
@@ -144,6 +146,7 @@ export default function DuelScreen() {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
   const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
+  const [summary, setSummary] = useState<SpotlightSummary | null>(null);
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
@@ -245,11 +248,35 @@ export default function DuelScreen() {
     }
   };
 
-  // Leaving a spotlight must put the film back exactly as it was.
+  // Ending a spotlight that fought nobody just restores the film; ending one
+  // that did show what it established before committing anything.
   const endRun = () => {
-    const next = session?.mode === "spotlight" ? abandonSpotlight(state) : { ...state, session: null };
+    if (session?.mode === "spotlight") {
+      const fought = (session.spotWins?.length ?? 0) + (session.spotLosses?.length ?? 0);
+      if (fought > 0) {
+        setSummary(spotlightSummary(state));
+        return;
+      }
+      const next = abandonSpotlight(state);
+      saveFilms(next.films);
+      setState(next);
+      return;
+    }
+    setState({ ...state, session: null });
+  };
+
+  // Keep the result, or throw the session away and leave the film where it was.
+  const keepSpotlight = () => {
+    const next = confirm(state);
     saveFilms(next.films);
     setState(next);
+    setSummary(null);
+  };
+  const discardSpotlight = () => {
+    const next = abandonSpotlight(state);
+    saveFilms(next.films);
+    setState(next);
+    setSummary(null);
   };
 
   const promoteTo = promotionTarget(state);
@@ -280,7 +307,19 @@ export default function DuelScreen() {
         onPickTier={() => setTierOpen(true)}
       />
 
-      {champion ? (
+      {/* A spotlight that has settled reports what it established rather than
+          asking for a bare number — the before/after is the whole point. */}
+      {champion && session?.mode === "spotlight" ? (
+        <SpotlightReport
+          summary={spotlightSummary(state)!}
+          promoteTo={promoteTo}
+          onTakeOn={takeOnTierAbove}
+          onAssertPromotion={assertPromotion}
+          onKeep={keepSpotlight}
+          onDiscard={discardSpotlight}
+          inline
+        />
+      ) : champion ? (
         <ConfirmView
           champion={champion}
           // A spotlight settles wherever it stopped climbing, so its number is
@@ -322,6 +361,8 @@ export default function DuelScreen() {
       <BottomNav onSettings={() => setSettingsOpen(true)} onModes={() => setModeOpen(true)} onEnd={endRun} />
 
       {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
+
+      {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
 
       {modeOpen && (
         <ModePanel
@@ -881,8 +922,8 @@ function SpotlightPicker({
   return (
     <Sheet title="Spotlight" onClose={onClose}>
       <p className="mb-3 text-[11px] leading-snug text-dim">
-        Pick a {starsFor(tier)} film to re-place. It starts at the bottom and climbs to where it
-        belongs.
+        Pick a {starsFor(tier)} film to test. It starts where it currently sits and moves as far as
+        its results take it.
       </p>
       <input
         value={q}
@@ -904,6 +945,104 @@ function SpotlightPicker({
       ))}
       {inTier.length === 0 && <p className="text-[11px] text-dim">Nothing matches.</p>}
     </Sheet>
+  );
+}
+
+// The point of a spotlight isn't the number it lands on, it's what moved and
+// what decided it — so ending one shows the before, the after, and the films
+// responsible, before anything is committed.
+function SpotlightReport({
+  summary,
+  onKeep,
+  onDiscard,
+  promoteTo,
+  onTakeOn,
+  onAssertPromotion,
+  inline,
+}: {
+  summary: SpotlightSummary;
+  onKeep: () => void;
+  onDiscard: () => void;
+  promoteTo?: Rating;
+  onTakeOn?: () => void;
+  onAssertPromotion?: () => void;
+  inline?: boolean;
+}) {
+  const { film, fromIndex, toIndex, total, beat, lostTo } = summary;
+  const moved = fromIndex - toIndex; // positive = climbed
+
+  const body = (
+    <>
+      <div className="mb-4 flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={film.poster} alt="" style={{ width: 54, aspectRatio: "2/3", objectFit: "cover", borderRadius: 6 }} />
+        <div className="min-w-0">
+          <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
+          <div className="mt-1.5 flex items-baseline gap-2 text-sm">
+            <span className="text-dim">#{fromIndex + 1}</span>
+            <span className="text-dim">→</span>
+            <span className="font-bold text-gold">#{toIndex + 1}</span>
+            <span className="text-[11px] text-dim">of {total}</span>
+          </div>
+          <div className="mt-0.5 text-[11px] text-dim">
+            {moved > 0
+              ? `Climbed ${moved} place${moved === 1 ? "" : "s"}`
+              : moved < 0
+                ? `Dropped ${-moved} place${moved === -1 ? "" : "s"}`
+                : "Held its place"}
+          </div>
+        </div>
+      </div>
+
+      {beat.length > 0 && <ReportList label="BEAT" films={beat} tone="var(--gold)" />}
+      {lostTo.length > 0 && <ReportList label="LOST TO" films={lostTo} tone={LOSER} />}
+
+      {promoteTo !== undefined && (
+        <div className="mb-3 flex flex-col items-center gap-2 border-t border-border pt-3">
+          <button
+            onClick={onTakeOn}
+            className="rounded-full border px-6 py-2.5 text-xs font-bold tracking-wide active:scale-95"
+            style={{ color: "var(--accent)", borderColor: "var(--accent)" }}
+          >
+            Take on {starsFor(promoteTo)}
+          </button>
+          <button onClick={onAssertPromotion} className="text-[11px] font-semibold text-dim active:scale-95">
+            or move it up without dueling
+          </button>
+        </div>
+      )}
+
+      <StartButton label={`Keep it at #${toIndex + 1}`} onClick={onKeep} />
+      <button onClick={onDiscard} className="mt-3 w-full text-center text-xs font-semibold text-dim active:scale-95">
+        Discard — leave it where it was
+      </button>
+    </>
+  );
+
+  // Shown in place when the run settles, or as a sheet when ended by hand.
+  if (inline) {
+    return (
+      <div className="flex flex-1 flex-col justify-center overflow-y-auto px-8 py-4">
+        <div className="mx-auto w-full max-w-sm">{body}</div>
+      </div>
+    );
+  }
+
+  return (
+    <Sheet title="Spotlight" onClose={onDiscard}>
+      {body}
+    </Sheet>
+  );
+}
+
+function ReportList({ label, films, tone }: { label: string; films: Film[]; tone: string }) {
+  return (
+    <div className="mb-3">
+      <div className="mb-1 text-[10px] font-extrabold tracking-[0.12em]" style={{ color: tone }}>
+        {label}
+      </div>
+      <div className="text-[12px] leading-relaxed text-text">{films.map((f) => f.title).join(", ")}</div>
+    </div>
   );
 }
 
@@ -1129,6 +1268,40 @@ function Header() {
   );
 }
 
+// Right-hand status. It's held to its own half of the row so it can never push
+// the centre label off true; if the text doesn't fit, the edge nearest the
+// middle is feathered away and the text drifts across to reveal the rest.
+function RowStatus({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [overflowBy, setOverflowBy] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const over = el.scrollWidth - el.clientWidth;
+    setOverflowBy(over > 1 ? over : 0);
+  });
+
+  return (
+    <span
+      ref={ref}
+      className="ml-auto overflow-hidden whitespace-nowrap text-right text-[11px] text-text/55"
+      style={{
+        maxWidth: "42%",
+        // Feather only the inner edge, and only when something is actually cut.
+        maskImage: overflowBy ? "linear-gradient(to right, transparent, #000 14px)" : undefined,
+      }}
+    >
+      <span
+        className={overflowBy ? "row-reveal inline-block" : undefined}
+        style={overflowBy ? ({ "--reveal-x": `-${overflowBy}px` } as React.CSSProperties) : undefined}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
 // The tier + progress strip, sitting on the body just under the header feather.
 function TierProgress({
   tier,
@@ -1148,19 +1321,19 @@ function TierProgress({
       {/* mt-11 clears the header's 44px feather so the progress bar doesn't sit
           inside the fade. */}
       <div className="mx-auto mt-11 max-w-[330px]">
-        <div className="mb-1.5 flex items-baseline justify-between">
+        {/* Each part is anchored rather than flowed, so the middle label sits on
+            the true centre no matter how long the status beside it grows. */}
+        <div className="relative mb-1.5 flex items-baseline">
           {/* The tier reads as its stars, and doubles as the quickest way to
               switch — the label you're looking at is the control. */}
-          <button onClick={onPickTier} className="flex items-baseline gap-1.5 active:scale-95">
+          <button onClick={onPickTier} className="flex shrink-0 items-baseline gap-1.5 active:scale-95">
             <span className="text-base leading-none text-gold">{starsFor(tier)}</span>
             <span className="text-[10px] leading-none text-dim">▾</span>
           </button>
-          {/* What you're playing, between what you're playing it on and how far
-              through you are. */}
-          <span className="flex-1 text-center text-[9px] font-extrabold tracking-[0.1em] text-dim">
+          <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-extrabold tracking-[0.1em] text-dim">
             {mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
           </span>
-          <span className="text-[11px] text-text/55">
+          <RowStatus>
             {mode === "spotlight" ? (
               <b className="text-text-hi">1 film</b>
             ) : (
@@ -1168,7 +1341,7 @@ function TierProgress({
                 <b className="text-text-hi">{placed}</b> placed · {toGo} to go
               </>
             )}
-          </span>
+          </RowStatus>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-border">
           <div

@@ -37,6 +37,13 @@ export interface PlacementSession {
   subjectId?: string;
   origScore?: number;
   origRating?: Rating;
+  origIndex?: number; // where it stood in the tier before any of this
+  // Which way the subject is currently testing. It climbs until something beats
+  // it, then works downward to find its floor — so a loss narrows the search
+  // rather than ending it.
+  probeDown?: boolean;
+  spotWins?: string[];
+  spotLosses?: string[];
   // A promotion run in progress: the subject is working through the weakest
   // films of the tier above, weakest first. Emptying it earns the promotion.
   promotionQueue?: string[];

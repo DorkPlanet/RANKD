@@ -92,6 +92,28 @@ img {
   }
 }
 
+/* When the right-hand status outgrows its half of the row it's masked off at
+   the edge nearest the centre, then drifts across to reveal the rest rather
+   than being clipped dead or shoving the middle label off true. */
+@keyframes row-reveal {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  82%,
+  100% {
+    transform: translateX(var(--reveal-x));
+  }
+}
+.row-reveal {
+  animation: row-reveal 7s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-reveal {
+    animation: none;
+  }
+}
+
 /* Dual-thumb range. Rather than stacking two full-width inputs — where the
    handles sit on top of each other at the default and the lower one can't be
    grabbed at all — each input owns its own HALF of the track, meeting at the
