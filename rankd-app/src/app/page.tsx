@@ -1,5 +1,5 @@
-import DuelScreen from "@/components/DuelScreen";
+import AppShell from "@/components/AppShell";
 
 export default function Home() {
-  return <DuelScreen />;
+  return <AppShell />;
 }

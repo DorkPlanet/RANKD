@@ -9,6 +9,11 @@ export interface Film {
   rating: Rating; // star rating = tier
   score: number; // derived position within the tier's band (written on confirm)
   confirmed?: boolean; // committed placement this tier — soft, re-openable
+  // Kept so a film can be found by who made it. These arrive on the very same
+  // response as the poster and used to be thrown away, so storing them costs no
+  // extra requests — only the bytes. Absent until that film's artwork is fetched.
+  director?: string;
+  cast?: string[];
 }
 
 // One in-flight tier placement. The only committed data is `confirmed`; the

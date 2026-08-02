@@ -42,9 +42,29 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 //
 // Throttled and sequential on purpose: this can be hundreds of films, and
 // hammering TMDb in parallel is how you get rate-limited.
+// Worth fetching? Artwork is the obvious reason, but a film fetched before
+// credits were stored has a poster and no director — without this, those films
+// would never learn who made them.
+export const needsMeta = (f: Film): boolean => !f.poster || !f.director;
+
+// Fold a fetched response into the stored film. Only the fields worth persisting
+// are taken — synopsis, runtime and genres stay derived, since they'd bloat
+// localStorage and can go stale, but who made a film does not change.
+export function withMeta(film: Film, meta: FilmMeta): Film {
+  return {
+    ...film,
+    poster: meta.poster ?? film.poster,
+    director: meta.director ?? film.director,
+    cast: meta.cast?.length ? meta.cast : film.cast,
+  };
+}
+
+// Reports the whole response, not just the poster. Director and cast ride along
+// on the same request, and discarding them meant the app could never find a film
+// by who made it without paying for all 828 fetches a second time.
 export async function backfillPosters(
   films: Film[],
-  onFound: (id: string, poster: string) => void,
+  onFound: (id: string, meta: FilmMeta) => void,
   shouldStop: () => boolean,
   gapMs = 120,
 ): Promise<void> {
@@ -55,7 +75,7 @@ export async function backfillPosters(
     // waiting out the whole tier again before reaching anything new.
     const cached = cache.has(film.id);
     const meta = await fetchMeta(film);
-    if (meta.poster) onFound(film.id, meta.poster);
+    if (meta.poster || meta.director || meta.cast?.length) onFound(film.id, meta);
     if (!cached) await new Promise((r) => setTimeout(r, gapMs));
   }
 }

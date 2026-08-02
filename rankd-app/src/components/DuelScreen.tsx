@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadFilms, saveFilms } from "@/lib/store";
+import { saveFilms } from "@/lib/store";
 import {
   startRun,
   startSpotlight,
@@ -24,8 +24,7 @@ import {
   type SpotlightSummary,
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
-import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
-import { fetchMeta, backfillPosters, type FilmMeta } from "@/lib/meta";
+import { fetchMeta, backfillPosters, withMeta, needsMeta, type FilmMeta } from "@/lib/meta";
 import { parseLetterboxdCsv, mergeFilms } from "@/lib/importCsv";
 import type { Film, RankState } from "@/lib/types";
 
@@ -127,23 +126,23 @@ function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: strin
     .addEventListener("finish", () => clone.remove());
 }
 
-export default function DuelScreen() {
-  const [state, setState] = useState<RankState | null>(null);
-
-  useEffect(() => {
-    const films = loadFilms();
-    // Open on the biggest tier that can actually be played — with a real library
-    // the default 4★ might be empty, and an empty screen is a poor first look.
-    const best = pickOpeningTier(films);
-    try {
-      setState(startRun(films, best));
-    } catch {
-      setState({ films, session: null });
-    }
-  }, []);
-
-  const [brightness, setBrightness] = useState(0);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+// The library and the app-wide chrome now live in AppShell — this screen owns
+// only the duel. Everything it still holds is setup state for the next run.
+export default function DuelScreen({
+  state,
+  setState,
+  onInfo,
+  onSettings,
+  onList,
+  onProfile,
+}: {
+  state: RankState | null;
+  setState: React.Dispatch<React.SetStateAction<RankState | null>>;
+  onInfo: (film: Film) => void;
+  onSettings: () => void;
+  onList: () => void;
+  onProfile: () => void;
+}) {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
   const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
@@ -160,7 +159,6 @@ export default function DuelScreen() {
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
   const [below, setBelow] = useState(0);
   const [above, setAbove] = useState(0);
-  const [infoFilm, setInfoFilm] = useState<Film | null>(null);
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
@@ -173,17 +171,6 @@ export default function DuelScreen() {
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
       return !v;
     });
-  useEffect(() => {
-    const b = loadBrightness();
-    setBrightness(b);
-    applyBrightness(b);
-  }, []);
-  const changeBrightness = (t: number) => {
-    setBrightness(t);
-    applyBrightness(t);
-    saveBrightness(t);
-  };
-
   // Fill in artwork for the tier being played. Scoped to the active pile rather
   // than the whole library — an import can be hundreds of films, and only these
   // are ever on screen. Persists as each one lands so progress survives a reload.
@@ -204,16 +191,16 @@ export default function DuelScreen() {
 
     const need = byWhenSeen
       .map((id) => state.films.find((f) => f.id === id))
-      .filter((f): f is Film => !!f && !f.poster);
+      .filter((f): f is Film => !!f && needsMeta(f));
     if (need.length === 0) return;
 
     let stopped = false;
     backfillPosters(
       need,
-      (id, poster) =>
+      (id, meta) =>
         setState((s) => {
           if (!s) return s;
-          const films = s.films.map((f) => (f.id === id ? { ...f, poster } : f));
+          const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
           saveFilms(films);
           return { ...s, films };
         }),
@@ -312,18 +299,12 @@ export default function DuelScreen() {
     setState(next);
   };
 
-  // Swap the whole library for an imported one and restart the run on it.
-  const loadLibrary = (films: Film[]) => {
-    saveFilms(films);
-    beginRun(pickOpeningTier(films), films);
-  };
-
   const pair = getPair(state);
   const champion = pendingConfirm(state);
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
-      <Header />
+      <Header onSettings={onSettings} />
       <TierProgress
         tier={session?.tier ?? DEFAULT_TIER}
         mode={session?.mode ?? "koth"}
@@ -374,7 +355,7 @@ export default function DuelScreen() {
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
-          onInfo={setInfoFilm}
+          onInfo={onInfo}
           stripOpen={stripOpen}
           onToggleStrip={toggleStrip}
           spotlight={session.mode === "spotlight"}
@@ -384,9 +365,14 @@ export default function DuelScreen() {
         <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} />
       )}
 
-      <BottomNav onSettings={() => setSettingsOpen(true)} onModes={() => setModeOpen(true)} onEnd={endRun} />
-
-      {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
+      <BottomNav
+        screen="duel"
+        onSettings={onSettings}
+        onModes={() => setModeOpen(true)}
+        onEnd={endRun}
+        onList={onList}
+        onProfile={onProfile}
+      />
 
       {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
 
@@ -448,22 +434,13 @@ export default function DuelScreen() {
         />
       )}
 
-      {settingsOpen && (
-        <Settings
-          brightness={brightness}
-          onChange={changeBrightness}
-          onClose={() => setSettingsOpen(false)}
-          films={state.films}
-          onImport={loadLibrary}
-        />
-      )}
     </main>
   );
 }
 
 // Open on a tier that can actually be played, preferring the default when it
 // works and otherwise the fullest — a real import may have nothing at 4★.
-function pickOpeningTier(films: Film[]): Rating {
+export function pickOpeningTier(films: Film[]): Rating {
   const counts = new Map<Rating, number>();
   for (const f of films) counts.set(f.rating, (counts.get(f.rating) ?? 0) + 1);
   if ((counts.get(DEFAULT_TIER) ?? 0) >= 2) return DEFAULT_TIER;
@@ -482,14 +459,20 @@ function pickOpeningTier(films: Film[]): Rating {
 // Bottom nav — bookends the black header, so the play area sits between two
 // dark bands. Sized to its final height now, so adding List/Stats later slots
 // in without re-flowing the duel.
-function BottomNav({
+export function BottomNav({
+  screen,
   onSettings,
   onModes,
   onEnd,
+  onList,
+  onProfile,
 }: {
+  screen: "duel" | "list" | "profile";
   onSettings: () => void;
-  onModes: () => void;
-  onEnd: () => void;
+  onModes?: () => void;
+  onEnd?: () => void;
+  onList: () => void;
+  onProfile?: () => void;
 }) {
   return (
     <nav
@@ -501,13 +484,20 @@ function BottomNav({
       {/* Five equal cells so RNK sits dead centre — it's the core loop. Ending
           the session sits beside it, since that's the duel's own control.
           Add-film and Search live inside List, not out here. */}
-      <NavItem label="Your list" icon={<ListIcon />} />
+      <NavItem label="Your list" active={screen === "list"} onClick={onList} icon={<ListIcon />} />
+      {/* Ending a session only means something mid-duel, so it's inert on the
+          list — the cell stays for the nav's fixed five-column rhythm. */}
       <NavItem label="End session" onClick={onEnd} icon={<StopIcon />} />
-      <NavItem label="Rank" active onClick={onModes} icon={<RankdMark />} />
+      <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} />
       <NavItem label="Activity" icon={<ActivityIcon />} />
-      {/* Account owns Settings — for now it opens the sheet directly, since the
-          brightness slider is the only setting that exists yet. */}
-      <NavItem label="You" onClick={onSettings} icon={<PersonIcon />} />
+      {/* Account owns the profile; Settings moved to the gear on its cover, so
+          this slot leads somewhere rather than opening a sheet over the duel. */}
+      <NavItem
+        label="You"
+        active={screen === "profile"}
+        onClick={onProfile ?? onSettings}
+        icon={<PersonIcon />}
+      />
     </nav>
   );
 }
@@ -630,7 +620,10 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 // How many rows the film picker builds per pass.
 const PICKER_PAGE = 60;
 
-const tierCounts = (films: Film[]): Map<Rating, number> => {
+// What the picker's search box is asking about.
+type SearchMode = "film" | "director" | "actor";
+
+export const tierCounts = (films: Film[]): Map<Rating, number> => {
   const m = new Map<Rating, number>();
   for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
   return m;
@@ -929,28 +922,51 @@ function TierPicker({
 // everything: the whole library to scroll, a tier filter to narrow it, and
 // shuffle. A spotlight's tier comes from the film you pick, never from a
 // setting made beforehand — so the filter here only decides what you see.
-function SpotlightPicker({
+// Exported because picking a film out of the library is not a Spotlight idea —
+// the profile needs the same searchable, windowed list to choose a banner, an
+// avatar or a favourite. Only the words at the top change.
+export function SpotlightPicker({
   films,
   onClose,
   onPick,
+  title = "Spotlight",
+  blurb = "Pick any film to test. It starts where it currently sits and moves as far as its results take it.",
 }: {
   films: Film[];
   onClose: () => void;
   onPick: (id: string) => void;
+  title?: string;
+  blurb?: string;
 }) {
   const [q, setQ] = useState("");
   // "All" by default: a search that only covers one tier can't find the film
   // you're thinking of unless you already know its rating.
   const [filter, setFilter] = useState<Rating | "all">("all");
   const [tierOpen, setTierOpen] = useState(false);
+  // What the search box is asking about. A film you want to re-place is often
+  // easier to reach through who made it than through its own name.
+  const [mode, setMode] = useState<SearchMode>("film");
   const listRef = useRef<HTMLDivElement | null>(null);
 
   const counts = tierCounts(films);
   const query = q.trim().toLowerCase();
 
+  // Credits arrive with artwork, so they cover the tiers you've played and
+  // whatever the list has scrolled past — never the whole library at once. The
+  // count is shown rather than hidden, so an empty result reads as "not fetched
+  // yet" instead of "not in your library".
+  const withCredits = films.filter((f) => f.director || f.cast?.length).length;
+
+  const matches = (f: Film) => {
+    if (query === "") return true;
+    if (mode === "film") return f.title.toLowerCase().includes(query);
+    if (mode === "director") return !!f.director?.toLowerCase().includes(query);
+    return !!f.cast?.some((c) => c.toLowerCase().includes(query));
+  };
+
   const shown = films
     .filter((f) => (filter === "all" ? true : f.rating === filter))
-    .filter((f) => (query === "" ? true : f.title.toLowerCase().includes(query)))
+    .filter(matches)
     // Highest tier first, then position within the tier — the same order the
     // list strip shows, so a film sits where you'd expect to find it.
     .sort((a, b) => b.rating - a.rating || b.score - a.score);
@@ -961,7 +977,7 @@ function SpotlightPicker({
   const [limit, setLimit] = useState(PICKER_PAGE);
   // A new result set starts fresh. Adjusted during render rather than in an
   // effect, so the first paint of a search is never the previous list's length.
-  const sig = `${filter}|${query}`;
+  const sig = `${filter}|${query}|${mode}`;
   const [prevSig, setPrevSig] = useState(sig);
   if (sig !== prevSig) {
     setPrevSig(sig);
@@ -993,16 +1009,31 @@ function SpotlightPicker({
   };
 
   return (
-    <Sheet title="Spotlight" onClose={onClose}>
-      <p className="mb-3 text-[11px] leading-snug text-dim">
-        Pick any film to test. It starts where it currently sits and moves as far as its results
-        take it.
-      </p>
+    <Sheet title={title} onClose={onClose}>
+      <p className="mb-3 text-[11px] leading-snug text-dim">{blurb}</p>
+
+      {/* Three ways in. The search box below changes what it asks about rather
+          than sitting beside three separate fields. */}
+      <div className="mb-2 flex gap-1">
+        {(["film", "director", "actor"] as SearchMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`flex-1 rounded-lg border py-1.5 text-[11px] capitalize active:scale-95 ${
+              mode === m ? "border-gold text-gold" : "border-border text-dim"
+            }`}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
 
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search all films"
+        placeholder={
+          mode === "film" ? "Search all films" : mode === "director" ? "Search directors" : "Search actors"
+        }
         className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
       />
 
@@ -1094,13 +1125,36 @@ function SpotlightPicker({
                   style={{ width: 26, aspectRatio: "2/3", borderRadius: 3 }}
                 />
               )}
-              <span className="min-w-0 flex-1 truncate text-sm text-text-hi">{f.title}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm text-text-hi">{f.title}</span>
+                {/* In a people search, show who matched — otherwise the row gives
+                    no clue why it's in the results. */}
+                {mode !== "film" && query !== "" && (
+                  <span className="block truncate text-[10px] text-dim">
+                    {mode === "director" ? f.director : f.cast?.find((c) => c.toLowerCase().includes(query))}
+                  </span>
+                )}
+              </span>
               {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
               <span className="text-[11px] text-gold">{starsFor(f.rating)}</span>
             </button>
           );
         })}
-        {shown.length === 0 && <p className="text-[11px] text-dim">Nothing matches.</p>}
+        {shown.length === 0 &&
+          (mode === "film" ? (
+            <p className="text-[11px] text-dim">Nothing matches.</p>
+          ) : (
+            // Never imply a person isn't in the library when the truth is that
+            // most of it hasn't been looked up yet.
+            <p className="text-[11px] leading-snug text-dim">
+              No match among the{" "}
+              <span className="text-text-hi">
+                {withCredits} of {films.length}
+              </span>{" "}
+              films that know their credits. They fill in as artwork loads — play a tier or scroll
+              your list to gather more.
+            </p>
+          ))}
       </div>
     </Sheet>
   );
@@ -1289,7 +1343,7 @@ function ImportButton({
 // Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
 // year and tagline are local and paint instantly; the TMDb detail streams in
 // underneath so the card is never blocked on the network.
-function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
+export function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
   const [meta, setMeta] = useState<FilmMeta | null>(null);
   useEffect(() => {
     let live = true;
@@ -1371,7 +1425,7 @@ function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
 }
 
 // Settings sheet — home for the brightness slider (and future settings).
-function Settings({
+export function Settings({
   brightness,
   onChange,
   onClose,
@@ -1442,12 +1496,25 @@ function Settings({
   );
 }
 
-function Header() {
+export function Header({ onSettings }: { onSettings?: () => void }) {
   return (
     <header
-      className="relative px-6 pb-3"
+      className="relative flex-shrink-0 px-6 pb-3"
       style={{ background: "var(--header-bg)", paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
     >
+      {/* Settings lives here rather than on the nav, so the account slot can
+          lead to the profile instead of opening a sheet over whatever you were
+          doing. */}
+      {onSettings && (
+        <button
+          onClick={onSettings}
+          aria-label="Settings"
+          className="absolute left-5 text-dim transition-colors active:scale-95"
+          style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
+        >
+          <GearIcon />
+        </button>
+      )}
       <button
         aria-label="Achievements"
         className="absolute right-5 text-dim transition-colors active:scale-95"

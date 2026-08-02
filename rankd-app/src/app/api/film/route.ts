@@ -73,7 +73,7 @@ export async function GET(request: Request) {
       writer: byJob("Screenplay", "Writer", "Story"),
       cinematographer: byJob("Director of Photography"),
       composer: byJob("Original Music Composer", "Music"),
-      cast: (d.credits?.cast ?? []).slice(0, 4).map((c: { name: string }) => c.name),
+      cast: (d.credits?.cast ?? []).slice(0, 10).map((c: { name: string }) => c.name),
     };
     return NextResponse.json(meta);
   } catch {

@@ -271,6 +271,78 @@ img {
     opacity: 1;
   }
 }
+/* ── The list ──────────────────────────────────────────────────────────────
+   Rows are cheap off screen: the browser skips their layout and paint but
+   still reserves their height, so the scroll bar, the tier jumps and the idle
+   drift all behave as if every one of the 800+ rows were live. */
+.list-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 96px;
+}
+
+/* Every poster tilted by the same 4 degrees — the list stops reading as a table
+   and starts reading as a stack of physical cards. */
+.list-poster {
+  width: 54px;
+  height: 76px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: center top;
+  transform: rotate(-4deg);
+  border: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.65), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* The rank is set, not boxed. A framed recess was the one piece of heavy chrome
+   on a screen made of hairlines and type, and it read as a button you could
+   press. The number carries itself — the app already says a ranked position in
+   exactly this voice on the end-of-tier screen. */
+.rank-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  /* Digits sit on a common right edge so the column stays true from 1 to 828 —
+     ranks are positions in the whole library, so three digits is the norm. */
+  min-width: 3.4ch;
+  text-align: right;
+}
+
+/* ── The shelf ─────────────────────────────────────────────────────────────
+   Films as objects leaning on a rail, not thumbnails in a grid. Alternating
+   tilt is what stops six posters reading as a row of cells. */
+.shelf-slot {
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+  border: 1px solid color-mix(in srgb, var(--gold) 14%, transparent);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
+  transform-origin: bottom center;
+}
+/* The rail the shelf stands on — brightest under the middle, fading at both
+   ends so it reads as light falling on an edge rather than a drawn line. */
+.shelf-rail {
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0.55;
+}
+
+/* ── The flagship ──────────────────────────────────────────────────────────
+   The front-of-store display: your number one, presented rather than listed. */
+.flagship {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  background: var(--surface);
+}
+.flagship-wash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, var(--surface) 42%, transparent);
+}
+
 /* The climber's number lifts as it takes a place — the duel's whole point,
    stated in the one element that changes every single time you pick. */
 @keyframes rank-pop {
