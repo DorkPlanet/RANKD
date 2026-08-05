@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import DuelScreen, { FilmInfo, Settings, pickOpeningTier } from "./DuelScreen";
 import ListScreen from "./ListScreen";
 import ProfileScreen from "./ProfileScreen";
+import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { startRun } from "@/lib/ladder";
@@ -26,6 +27,9 @@ export default function AppShell() {
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Lives here, not on the profile — the trophy sits in the shared header, so it
+  // has to work from whichever screen you're looking at.
+  const [trophiesOpen, setTrophiesOpen] = useState(false);
   const [brightness, setBrightness] = useState(0);
 
   useEffect(() => {
@@ -88,6 +92,7 @@ export default function AppShell() {
           setState={setState}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
+          onTrophies={() => setTrophiesOpen(true)}
           onList={() => setScreen("list")}
           onProfile={() => setScreen("profile")}
         />
@@ -97,6 +102,7 @@ export default function AppShell() {
           profile={profile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
+          onTrophies={() => setTrophiesOpen(true)}
           onDuel={() => setScreen("duel")}
           onProfile={() => setScreen("profile")}
           onPoster={setMeta}
@@ -108,10 +114,13 @@ export default function AppShell() {
           onProfile={changeProfile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
+          onTrophies={() => setTrophiesOpen(true)}
           onDuel={() => setScreen("duel")}
           onList={() => setScreen("list")}
         />
       )}
+
+      {trophiesOpen && <Trophies films={state.films} onClose={() => setTrophiesOpen(false)} />}
 
       {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
 

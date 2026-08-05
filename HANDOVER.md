@@ -1,5 +1,15 @@
 # Rankd — Handover
 
+> **Read this first.** This describes the **original single-file prototype**,
+> not the app in `rankd-app/`. The file it refers to (`rankd.html`) has been
+> deleted, and none of the function names below exist in the current codebase.
+>
+> It's kept because the placement mechanic described under "The ranking
+> mechanic" is the **direct ancestor of the live engine** — the floor `lo` and
+> cap `hi` that collapse until they meet is exactly what `spotLo`/`spotHi` do in
+> `rankd-app/src/lib/ladder.ts` today. Read this for the reasoning; read the code
+> for the implementation.
+
 Self-contained context for a fresh chat. Read this + `CLAUDE.md` before working.
 
 ## What Rankd is

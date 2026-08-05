@@ -16,7 +16,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Film } from "./types";
-import { fetchMeta, needsMeta, type FilmMeta } from "./meta";
+import { fetchMeta, needsMeta, needsPoster, type FilmMeta } from "./meta";
 
 const GAP_MS = 120; // same pacing as backfillPosters — TMDb rate limits
 const NEAR_VIEWPORT = "600px 0px"; // "onscreen and slightly beyond"
@@ -57,7 +57,9 @@ export function useVisiblePosters(
         done.current.add(id); // never ask twice, even if it comes back empty
         const meta = await fetchMeta(film);
         if (stopped) break;
-        if (meta.poster || meta.director || meta.cast?.length) found.current(id, meta);
+        if (meta.poster || meta.director || meta.cast?.length || meta.genres?.length) {
+          found.current(id, meta);
+        }
         await new Promise((r) => setTimeout(r, GAP_MS));
       }
       running.current = false;
@@ -70,9 +72,12 @@ export function useVisiblePosters(
           const id = (e.target as HTMLElement).dataset.filmId;
           const film = byId.current.get(id ?? "");
           if (!id || done.current.has(id) || !film || !needsMeta(film)) continue;
-          // Front, not back: the newest thing on screen is the thing you're
-          // looking at right now.
-          queue.current = [id, ...queue.current.filter((q) => q !== id)];
+          const rest = queue.current.filter((q) => q !== id);
+          // A missing poster is a hole you can see, so it jumps the queue. A
+          // film that only wants credits waits at the back — it already looks
+          // finished, and letting it compete for the same 8-per-second budget is
+          // what made artwork appear to stop arriving.
+          queue.current = needsPoster(film) ? [id, ...rest] : [...rest, id];
         }
         void pump();
       },

@@ -26,6 +26,7 @@ import {
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { fetchMeta, backfillPosters, withMeta, needsMeta, type FilmMeta } from "@/lib/meta";
 import { parseLetterboxdCsv, mergeFilms } from "@/lib/importCsv";
+import { exportBackup, importBackup } from "@/lib/backup";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
@@ -135,6 +136,7 @@ export default function DuelScreen({
   onSettings,
   onList,
   onProfile,
+  onTrophies,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -142,6 +144,7 @@ export default function DuelScreen({
   onSettings: () => void;
   onList: () => void;
   onProfile: () => void;
+  onTrophies: () => void;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
@@ -162,10 +165,15 @@ export default function DuelScreen({
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
-  const [stripOpen, setStripOpen] = useState(true);
-  useEffect(() => {
-    setStripOpen(localStorage.getItem(STRIP_KEY) !== "closed");
-  }, []);
+  //
+  // Read during the first render, not in an effect. Defaulting to open and then
+  // correcting afterwards meant the strip flashed open and slammed shut every
+  // time you came back to the duel — a jarring swap for a preference we already
+  // knew. AppShell renders nothing until the library loads, so this only ever
+  // runs on the client.
+  const [stripOpen, setStripOpen] = useState(
+    () => typeof window !== "undefined" && localStorage.getItem(STRIP_KEY) !== "closed",
+  );
   const toggleStrip = () =>
     setStripOpen((v) => {
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
@@ -215,7 +223,14 @@ export default function DuelScreen({
   if (!state) return null;
   const { session } = state;
 
-  const decide = (winnerId: string) => setState(choose(state, winnerId));
+  // A duel result is written straight away. Placements still only commit on
+  // confirm — what's saved here is the record that the comparison happened,
+  // which is the one thing an abandoned run should still leave behind.
+  const decide = (winnerId: string) => {
+    const next = choose(state, winnerId);
+    saveFilms(next.films);
+    setState(next);
+  };
   const flick = (filmId: string) => setState(flickToTop(state, filmId));
   const sink = (filmId: string) => setState(flickToBottom(state, filmId));
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
@@ -304,7 +319,7 @@ export default function DuelScreen({
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
-      <Header onSettings={onSettings} />
+      <Header onSettings={onSettings} onTrophies={onTrophies} />
       <TierProgress
         tier={session?.tier ?? DEFAULT_TIER}
         mode={session?.mode ?? "koth"}
@@ -1491,12 +1506,73 @@ export function Settings({
           </div>
           {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
         </div>
+
+        {/* Your library lives in this browser and nowhere else, so this is both
+            the only backup you have and the only way to open the same library on
+            your phone — a deployed Rankd is a different origin with its own
+            empty storage. */}
+        <div className="mt-7 border-t border-border pt-5">
+          <span className="text-xs font-extrabold tracking-[0.12em] text-dim">MOVE OR BACK UP</span>
+          <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+            One file holds everything — films, placements, duels and your profile. Save it, then
+            restore it wherever you want to carry on.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                exportBackup();
+                setNote("Saved. Send it to your other device and restore it there.");
+              }}
+              className="flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+            >
+              Save a backup
+            </button>
+            <RestoreButton
+              onFile={async (file) => {
+                try {
+                  const r = importBackup(await file.text());
+                  setNote(`Restored ${r.films} films${r.hadProfile ? " and your profile" : ""}. Reloading…`);
+                  setTimeout(() => location.reload(), 900);
+                } catch (e) {
+                  setNote(e instanceof Error ? e.message : "That file couldn't be read.");
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Required by TMDB's API terms, and the right thing regardless — every
+            poster, still and credit in this app is their data. */}
+        <p className="mt-7 border-t border-border pt-5 text-[10px] leading-snug text-dim">
+          Artwork and film details from TMDB. This product uses the TMDB API but is not endorsed or
+          certified by TMDB.
+        </p>
       </div>
     </Sheet>
   );
 }
 
-export function Header({ onSettings }: { onSettings?: () => void }) {
+// A label wrapping a hidden file input, same trick as ImportButton — a styled
+// button can't open a file picker.
+function RestoreButton({ onFile }: { onFile: (file: File) => void }) {
+  return (
+    <label className="flex-1 cursor-pointer rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]">
+      Restore
+      <input
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFile(file);
+          e.target.value = ""; // so picking the same file twice still fires
+        }}
+      />
+    </label>
+  );
+}
+
+export function Header({ onSettings, onTrophies }: { onSettings?: () => void; onTrophies?: () => void }) {
   return (
     <header
       className="relative flex-shrink-0 px-6 pb-3"
@@ -1516,6 +1592,7 @@ export function Header({ onSettings }: { onSettings?: () => void }) {
         </button>
       )}
       <button
+        onClick={onTrophies}
         aria-label="Achievements"
         className="absolute right-5 text-dim transition-colors active:scale-95"
         style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}

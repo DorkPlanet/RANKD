@@ -14,6 +14,21 @@ export interface Film {
   // extra requests — only the bytes. Absent until that film's artwork is fetched.
   director?: string;
   cast?: string[];
+  // Same free ride as the credits: genre and runtime come back on the response
+  // that fetches the poster. Kept because they're what the profile uses to say
+  // what kind of viewer you are, which no amount of ordering can tell it.
+  genres?: string[];
+  // TMDb's keywords, which are the only place anything like a subgenre lives —
+  // its genre list is 19 flat labels with no children, so "slasher" and "found
+  // footage" are keywords or they're nothing.
+  keywords?: string[];
+  runtime?: number;
+  // TMDb had nothing under this title and year. Remembered so the fetch queue
+  // stops retrying it every session — an unmatched film never becomes matched.
+  noMatch?: boolean;
+  // How many duels this film has been through. Cheap to keep, and it's the only
+  // record of how much evidence sits behind a placement.
+  duels?: number;
 }
 
 // One in-flight tier placement. The only committed data is `confirmed`; the

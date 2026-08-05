@@ -307,6 +307,24 @@ img {
   text-align: right;
 }
 
+/* Separates the name card from the evidence below it. Brightest in the middle
+   and gone at both ends, so it divides without drawing a box round anything. */
+.card-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+}
+
+/* A scene doesn't stop, it dissolves — the frame fades into the page so the
+   name below emerges out of the shot rather than sitting on top of a photo. */
+.banner-fade {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg) 25%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 10%, transparent) 40%,
+    var(--bg) 100%
+  );
+}
+
 /* ── The shelf ─────────────────────────────────────────────────────────────
    Films as objects leaning on a rail, not thumbnails in a grid. Alternating
    tilt is what stops six posters reading as a row of cells. */

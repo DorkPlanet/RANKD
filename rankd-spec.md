@@ -1,5 +1,17 @@
 # Rankd — Product Spec & Handoff
 
+> **Read this first.** This document describes the **original single-file
+> prototype**, which has been replaced by the app in `rankd-app/`. Its function
+> names, CSS classes and screen structure no longer exist anywhere in the
+> codebase — don't go looking for them.
+>
+> It's kept for two reasons. The ranking mechanic it describes is the **direct
+> ancestor of the live engine**: the floor/cap window that collapses onto a
+> single placement is what `spotLo`/`spotHi` do in `rankd-app/src/lib/ladder.ts`
+> today, arrived at independently and for the same reasons. And the backlog
+> section still holds items that haven't been built. Read this for *why* the
+> ranking works the way it does; read the code for *how* it does it.
+
 *Living document. Last updated: v125.*
 *This version written explicitly as a handoff — the project is moving from a single long chat conversation to Claude Code. See "Handoff notes" at the bottom for what a fresh session needs to know.*
 

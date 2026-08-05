@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { refuse } from "../guard";
 
 // Server-side TMDb proxy. The key is read from the environment here and never
 // reaches the browser — the client only ever sees the normalised shape below.
@@ -20,6 +21,7 @@ export interface FilmMeta {
   cinematographer?: string;
   composer?: string;
   cast?: string[];
+  keywords?: string[];
 }
 
 interface CrewMember {
@@ -28,6 +30,9 @@ interface CrewMember {
 }
 
 export async function GET(request: Request) {
+  const no = refuse(request);
+  if (no) return no;
+
   const key = process.env.TMDB_API_KEY;
   if (!key) {
     return NextResponse.json({ error: "TMDB_API_KEY is not set" }, { status: 500 });
@@ -54,7 +59,9 @@ export async function GET(request: Request) {
 
     const detail = new URL(`${BASE}/movie/${hit.id}`);
     detail.searchParams.set("api_key", key);
-    detail.searchParams.set("append_to_response", "credits");
+    // Keywords are the closest thing TMDb has to subgenres — slasher, giallo,
+    // found footage — since its genre list is 19 flat labels with no children.
+    detail.searchParams.set("append_to_response", "credits,keywords");
 
     const res = await fetch(detail, { next: { revalidate: DAY } });
     if (!res.ok) return NextResponse.json({ error: "TMDb detail failed" }, { status: 502 });
@@ -74,6 +81,7 @@ export async function GET(request: Request) {
       cinematographer: byJob("Director of Photography"),
       composer: byJob("Original Music Composer", "Music"),
       cast: (d.credits?.cast ?? []).slice(0, 10).map((c: { name: string }) => c.name),
+      keywords: (d.keywords?.keywords ?? []).slice(0, 10).map((k: { name: string }) => k.name),
     };
     return NextResponse.json(meta);
   } catch {

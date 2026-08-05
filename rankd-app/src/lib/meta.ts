@@ -15,6 +15,7 @@ export interface FilmMeta {
   cinematographer?: string;
   composer?: string;
   cast?: string[];
+  keywords?: string[];
 }
 
 // One in-flight request per film, shared across callers, kept for the session.
@@ -45,17 +46,35 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 // Worth fetching? Artwork is the obvious reason, but a film fetched before
 // credits were stored has a poster and no director — without this, those films
 // would never learn who made them.
-export const needsMeta = (f: Film): boolean => !f.poster || !f.director;
+// Two different urgencies, and conflating them was a bug: a missing poster is a
+// hole on screen, while missing credits are a detail nobody is looking at. When
+// both queued at the same priority, 374 films that already had artwork were
+// re-fetched for their keywords ahead of films showing a grey box — so posters
+// visibly stopped arriving.
+//
+// `noMatch` stops the other trap: a film TMDb can't find never gains a poster,
+// so it would qualify forever and be asked about again every single session.
+export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch;
+
+export const needsMeta = (f: Film): boolean =>
+  !f.noMatch && (!f.poster || !f.director || !f.genres || !f.keywords);
 
 // Fold a fetched response into the stored film. Only the fields worth persisting
 // are taken — synopsis, runtime and genres stay derived, since they'd bloat
 // localStorage and can go stale, but who made a film does not change.
 export function withMeta(film: Film, meta: FilmMeta): Film {
+  // An empty response means TMDb has no film by that title and year. Recorded so
+  // the queue stops asking about it every session forever.
+  const empty = !meta.poster && !meta.director && !meta.genres?.length;
   return {
     ...film,
+    noMatch: empty || film.noMatch,
     poster: meta.poster ?? film.poster,
     director: meta.director ?? film.director,
     cast: meta.cast?.length ? meta.cast : film.cast,
+    genres: meta.genres?.length ? meta.genres : film.genres,
+    keywords: meta.keywords?.length ? meta.keywords : film.keywords,
+    runtime: meta.runtime ?? film.runtime,
   };
 }
 
@@ -75,7 +94,9 @@ export async function backfillPosters(
     // waiting out the whole tier again before reaching anything new.
     const cached = cache.has(film.id);
     const meta = await fetchMeta(film);
-    if (meta.poster || meta.director || meta.cast?.length) onFound(film.id, meta);
+    if (meta.poster || meta.director || meta.cast?.length || meta.genres?.length) {
+      onFound(film.id, meta);
+    }
     if (!cached) await new Promise((r) => setTimeout(r, gapMs));
   }
 }

@@ -284,6 +284,13 @@ export function choose(state: RankState, winnerId: string): RankState {
   const films = clone(state.films);
   const s: PlacementSession = { ...session, unconfirmed: [...session.unconfirmed] };
 
+  // Both films fought, whoever won. Counted here rather than at confirm, because
+  // the question is how much evidence a placement rests on, and a duel is
+  // evidence whichever way it goes.
+  for (const f of films) {
+    if (f.id === s.contenderId || f.id === s.challengerId) f.duels = (f.duels ?? 0) + 1;
+  }
+
   // A spotlight resolves by narrowing, not by swapping places. Beating a film
   // puts every film below that one out of the question; losing to it rules out
   // everything above. The subject never leaps past films whose relation to it

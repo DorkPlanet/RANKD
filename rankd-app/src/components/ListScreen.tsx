@@ -43,6 +43,7 @@ export default function ListScreen({
   onDuel,
   onProfile,
   onPoster,
+  onTrophies,
 }: {
   films: Film[];
   profile: Profile;
@@ -51,6 +52,7 @@ export default function ListScreen({
   onDuel: () => void;
   onProfile: () => void;
   onPoster: (id: string, meta: FilmMeta) => void;
+  onTrophies: () => void;
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
@@ -99,7 +101,7 @@ export default function ListScreen({
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
-      <Header onSettings={onSettings} />
+      <Header onSettings={onSettings} onTrophies={onTrophies} />
 
       <div className="flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--header-bg)" }}>
         {/* Whose list this is, tapping through to the profile — the result and

@@ -18,7 +18,14 @@
       "mcp__claude-in-chrome__tabs_context_mcp",
       "Read(//c/Users/jarra/Desktop/**)",
       "Bash(cp \"C:\\\\Users\\\\jarra\\\\Desktop\\\\ratings.csv\" ./ratings.csv)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(npm -v)",
+      "PowerShell($n = Get-Command node -ErrorAction SilentlyContinue; if \\($n\\) { \"node: $\\(node -v\\) at $\\($n.Source\\)\" } else { \"node: NOT FOUND\" }; $np = Get-Command npm -ErrorAction SilentlyContinue; if \\($np\\) { \"npm: $\\(npm -v\\)\" } else { \"npm: NOT FOUND\" })",
+      "PowerShell($w = Get-Command winget -ErrorAction SilentlyContinue; if \\($w\\) { \"winget: available \\($\\(winget -v\\)\\)\" } else { \"winget: NOT FOUND\" })",
+      "PowerShell(winget install OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements)",
+      "PowerShell($env:Path = [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"Path\",\"User\"\\); $n = Get-Command node -ErrorAction SilentlyContinue; if \\($n\\) { \"node: $\\(node -v\\)\"; \"npm: $\\(npm -v\\)\" } else { \"still not found\" })",
+      "PowerShell($env:Path=[Environment]::GetEnvironmentVariable\\('Path','Machine'\\)+';'+[Environment]::GetEnvironmentVariable\\('Path','User'\\); Set-Location C:\\\\Users\\\\jarra\\\\Desktop\\\\RANKD\\\\rankd-app; npx tsc --noEmit)",
+      "PowerShell($env:Path=[Environment]::GetEnvironmentVariable\\('Path','Machine'\\)+';'+[Environment]::GetEnvironmentVariable\\('Path','User'\\); Set-Location C:\\\\Users\\\\jarra\\\\Desktop\\\\RANKD\\\\rankd-app; npx --yes tsx selftest.ts)"
     ]
   }
 }
