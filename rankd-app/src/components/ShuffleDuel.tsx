@@ -19,10 +19,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { LastResult, PosterCard } from "./PosterCard";
+import { LastResult, PosterCard, fadeLoserOut } from "./PosterCard";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
 import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
+import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
@@ -47,12 +48,21 @@ export interface ShuffleOptions {
 export default function ShuffleDuel({
   films,
   onFilms,
+  onMeta,
   options,
   onInfo,
   onExit,
 }: {
   films: Film[];
   onFilms: (films: Film[]) => void;
+  /**
+   * Fold a fetched TMDb response into one film. Separate from `onFilms` and
+   * applied by the parent through a functional update, because artwork arrives
+   * asynchronously while swiping keeps replacing the library — handing back a
+   * whole array built from a closed-over `films` would silently undo whatever
+   * duels landed while the request was in flight.
+   */
+  onMeta: (id: string, meta: FilmMeta) => void;
   options: ShuffleOptions;
   onInfo: (film: Film) => void;
   onExit: () => void;
@@ -66,6 +76,8 @@ export default function ShuffleDuel({
   // taking it back restores the scores too, not just the log row.
   const [pending, setPending] = useState<{ judgement: Judgement; films: Film[]; pair: [Film, Film] } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The poster row, so an exit animation can find the two <img>s to clone.
+  const arenaRef = useRef<HTMLDivElement>(null);
 
   const fallback = useCallback(
     (id: string): Belief => {
@@ -115,6 +127,48 @@ export default function ShuffleDuel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Artwork ───────────────────────────────────────────────────────────
+  //
+  // Fast Shuffle shipped without any of this, so a film TMDb had never been
+  // asked about stayed a blank rectangle forever — there was simply nothing in
+  // this component that ever fetched a poster. DuelScreen backfills for its
+  // pile; this mode has no pile, so it needs its own.
+  //
+  // Two loops, because they have completely different urgency. `fetchMeta` keeps
+  // one in-flight request per film and shares it, so the two never duplicate
+  // work: whichever asks first wins and the other awaits the same promise.
+
+  // URGENT — the two films actually on screen, unpaced. Everything else can wait;
+  // these are the ones being stared at right now.
+  useEffect(() => {
+    if (!pair) return;
+    const need = pair.filter(needsPoster);
+    if (need.length === 0) return;
+    let stopped = false;
+    void backfillPosters(need, onMeta, () => stopped, 0);
+    return () => {
+      stopped = true;
+    };
+  }, [pair, onMeta]);
+
+  // BACKGROUND — the rest of the pool, paced, so a film has usually been fetched
+  // before it is ever served. Runs once for the session rather than per swipe:
+  // `films` changes on every judgement, and restarting the walk each time would
+  // mean never getting past the first few.
+  useEffect(() => {
+    let stopped = false;
+    const pool = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed });
+    // Films with no artwork at all first — a missing poster is a hole on screen,
+    // where missing credits are a detail nobody is looking at.
+    const queue = [...pool.filter(needsPoster), ...pool.filter((f) => !needsPoster(f) && needsMeta(f))];
+    if (queue.length > 0) void backfillPosters(queue, onMeta, () => stopped);
+    return () => {
+      stopped = true;
+    };
+    // Once per session, deliberately — see above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const commit = useCallback((judgement: Judgement) => {
     void appendJudgements([judgement]);
   }, []);
@@ -132,9 +186,27 @@ export default function ShuffleDuel({
     }
   }, [commit]);
 
+  // Show the answer landing before the pair is replaced.
+  //
+  // Without this the posters simply cut from one film to the next, which reads
+  // as a glitch rather than as a consequence. The ordinary duel flies the winner
+  // into the climbing seat — meaningless here, where neither card is a seat and
+  // both films are peers — so the loser sinks and fades instead, and a draw
+  // sinks both, because a draw is precisely the claim that neither won.
+  const playExit = (outcome: "a" | "b" | "draw") => {
+    const cards = arenaRef.current?.querySelectorAll<HTMLElement>("button");
+    const imgs = [cards?.[0]?.querySelector("img"), cards?.[1]?.querySelector("img")];
+    const losers = outcome === "draw" ? [0, 1] : [outcome === "a" ? 1 : 0];
+    for (const i of losers) {
+      const img = imgs[i];
+      if (img) fadeLoserOut(img, pair?.[i].poster ?? "");
+    }
+  };
+
   const answer = (outcome: "a" | "b" | "draw") => {
     if (!pair || !log) return;
     const [a, b] = pair;
+    playExit(outcome);
     flush(); // the previous judgement lands before this one is buffered
 
     const judgement = newJudgement(a.id, b.id, outcome, "shuffle");
@@ -213,7 +285,17 @@ export default function ShuffleDuel({
     );
   }
 
-  const [a, b] = pair;
+  // Render the CURRENT version of each film, not the snapshot taken when the
+  // pair was served.
+  //
+  // `pair` holds Film objects and artwork arrives asynchronously, so a poster
+  // fetched while you were looking at a card landed in the library and never
+  // reached the screen — the card was still rendering the object from before the
+  // fetch, whose `poster` was undefined. The pair says WHICH two films; the
+  // library says what they currently look like.
+  const [servedA, servedB] = pair;
+  const a = films.find((f) => f.id === servedA.id) ?? servedA;
+  const b = films.find((f) => f.id === servedB.id) ?? servedB;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -232,6 +314,7 @@ export default function ShuffleDuel({
           screen. */}
       <div style={{ flexGrow: 1 }} />
       <div
+        ref={arenaRef}
         className="relative flex items-stretch justify-center gap-3 px-4"
         style={{ height: 356, flexShrink: 1, minHeight: 0 }}
       >
@@ -265,9 +348,14 @@ export default function ShuffleDuel({
         )}
       </div>
 
-      <div className="flex flex-shrink-0 justify-center">
+      {/* Given room rather than jammed against the bottom edge. It was sitting
+          flush under the controls with no space of its own, which made the line
+          read as a caption on the buttons instead of a record of what you just
+          did. */}
+      <div className="flex flex-shrink-0 justify-center pb-2 pt-1">
         <LastResult results={results} />
       </div>
+      <div style={{ flexGrow: 0.6 }} />
     </div>
   );
 }

@@ -315,6 +315,17 @@ export default function DuelScreen({
             saveFilms(films);
             setState((s) => (s ? { ...s, films } : s));
           }}
+          // Applied as a functional update, so artwork arriving mid-streak folds
+          // into whatever the library is NOW rather than into a stale snapshot
+          // taken when the request went out.
+          onMeta={(id, meta) =>
+            setState((s) => {
+              if (!s) return s;
+              const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
+              saveFilms(films);
+              return { ...s, films };
+            })
+          }
           options={shuffleRun}
           onInfo={onInfo}
           onExit={() => setShuffleRun(null)}
