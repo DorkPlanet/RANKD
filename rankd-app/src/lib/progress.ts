@@ -62,6 +62,31 @@ export function libraryProgress(films: readonly Film[], log: readonly Judgement[
 }
 
 /**
+ * How far through THIS RUN's scope you are — the session bar.
+ *
+ * Deliberately derived from the log rather than from session state, which is
+ * what makes it survive walking away. A long session interrupted by real life
+ * and resumed an hour later picks up exactly where it left off, because there
+ * was never any in-memory progress to lose: the bar is a question asked of the
+ * evidence, and the evidence is on disk.
+ *
+ * `scoped` is the run's pool — pass `poolFor(films, opts)` from matchmaker.ts so
+ * the denominator is precisely the films this run can serve, and the bar cannot
+ * fill while work remains or stall while it does not.
+ */
+export function sessionProgress(
+  scoped: readonly Film[],
+  log: readonly Judgement[],
+): { total: number; compared: number } {
+  const seen = new Set<string>();
+  for (const j of log) {
+    seen.add(j.a);
+    seen.add(j.b);
+  }
+  return { total: scoped.length, compared: scoped.filter((f) => seen.has(f.id)).length };
+}
+
+/**
  * A count as a percentage of the library, safe on an empty one.
  *
  * Returns 0 rather than NaN when there is nothing to be a fraction of — an

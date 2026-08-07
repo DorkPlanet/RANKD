@@ -270,7 +270,7 @@ export function LastResult({ results }: { results: { won: string; lost: string; 
     <div className="flex flex-col items-center justify-center gap-1.5 px-6 pb-6 pt-2">
       {results.length === 0 ? (
         // Holds the question until the first pick answers it.
-        <span className="text-[13px] leading-none text-dim">Which film do you prefer?</span>
+        <span className="text-[13px] leading-none text-dim">Which do you prefer?</span>
       ) : (
         results.map((r, i) => (
           // Keyed on its own timestamp, so React moves the same element down a

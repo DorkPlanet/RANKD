@@ -114,7 +114,7 @@ export default function DuelScreen({
   // knew. AppShell renders nothing until the library loads, so this only ever
   // runs on the client.
   const [stripOpen, setStripOpen] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem(STRIP_KEY) !== "closed",
+    () => typeof window !== "undefined" && localStorage.getItem(STRIP_KEY) === "open",
   );
   const toggleStrip = () =>
     setStripOpen((v) => {
@@ -370,6 +370,7 @@ export default function DuelScreen({
           tier={session.tier}
           onPick={decide}
           onDraw={declineToCall}
+          onDone={endRun}
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
@@ -793,7 +794,7 @@ function ShuffleSetup({
           type="checkbox"
           checked={includeConfirmed}
           onChange={(e) => setIncludeConfirmed(e.target.checked)}
-          style={{ accentColor: "var(--gold)", width: 18, height: 18 }}
+          className="tickbox"
         />
       </label>
 
@@ -1123,6 +1124,7 @@ function Duel({
   tier,
   onPick,
   onDraw,
+  onDone,
   onFlick,
   onSink,
   onScrub,
@@ -1141,6 +1143,8 @@ function Duel({
   spotlight?: boolean;
   onPick: (id: string) => void;
   onDraw: () => void;
+  /** End the run — the same action as the nav's End session. */
+  onDone: () => void;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
   onScrub: (id: string) => void;
@@ -1154,13 +1158,25 @@ function Duel({
   // is clutter.
   const [results, setResults] = useState<{ won: string; lost: string; at: number; drew?: boolean }[]>([]);
 
-  // A skip has to leave the same trace a pick does. Without it the pair changes
+  // The controls are revealed by answering, not by arriving. They stay for a
+  // beat and then hand the slot back to the question.
+  const [controlsShown, setControlsShown] = useState(false);
+  const controlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealControls = () => {
+    setControlsShown(true);
+    if (controlTimer.current) clearTimeout(controlTimer.current);
+    controlTimer.current = setTimeout(() => setControlsShown(false), CONTROLS_MS);
+  };
+  useEffect(() => () => void (controlTimer.current && clearTimeout(controlTimer.current)), []);
+
+  // A draw has to leave the same trace a pick does. Without it the pair changes
   // under you while the recents line still reports the duel before — which reads
   // as the tap having missed.
   const declineToCall = () => {
     setResults((prev) =>
       [{ won: contender.title, lost: challenger.title, at: Date.now(), drew: true }, ...prev].slice(0, 2),
     );
+    revealControls();
     onDraw();
   };
 
@@ -1173,6 +1189,7 @@ function Duel({
     const won = id === contender.id ? contender : challenger;
     const lost = id === contender.id ? challenger : contender;
     setResults((prev) => [{ won: won.title, lost: lost.title, at: Date.now() }, ...prev].slice(0, 2));
+    revealControls();
 
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
@@ -1270,40 +1287,47 @@ function Duel({
             away, so rather than pinning it, the fade-in simply WAITS for the
             drawer to finish moving — invisible while the layout shifts, so it
             never appears to slide. Fading out has no delay. */}
-        {/* "I can't separate these" is a real answer, not a failure to give one.
-            Without it the only way past a 50/50 is to invent a winner, and that
-            invention is then treated as fact by everything downstream.
+        <div style={{ flexGrow: 1.6 }} />
+        {/* One slot, two states. The controls used to sit here permanently as a
+            pill, taking space from the arena and putting a decision in front of
+            you before you had made the only one that matters. Now the slot holds
+            the question until you answer it, then offers what you can do about
+            the answer, then goes quiet again. Discovery is by making a choice —
+            which everyone does immediately, because it is the whole screen.
 
-            PROVISIONAL LOOK AND PLACEMENT — not the finished affordance. This is
-            a plain pill dropped into space the layout already had, so it works
-            and costs no height, but it does not belong to the compare screen's
-            design and is not meant to read as final. The look and the position
-            are both still open; only the behaviour is settled. Whatever replaces
-            it must not disturb the existing arena, strip or action row. */}
-        <div style={{ flexGrow: 0.8 }} />
-        <div className="flex flex-shrink-0 justify-center">
-          <button
-            onClick={declineToCall}
-            className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-          >
-            Too close to call
-          </button>
-        </div>
-        <div style={{ flexGrow: 0.8 }} />
-        {/* Stays in the layout whether or not it's visible. Unmounting it saved
+            Stays in the layout whether or not it's visible. Unmounting it saved
             ~60px, but the mount landed in one frame while the drawer was still
             animating — the posters dipped and sprang back. Toggling the strip
             must change exactly one thing: the strip. */}
         <div
           aria-hidden={stripOpen}
-          className="pointer-events-none flex flex-shrink-0 justify-center"
+          className="flex flex-shrink-0 justify-center"
           style={{
             opacity: stripOpen ? 0 : 1,
             transition: "opacity 0.25s var(--ease)",
             transitionDelay: stripOpen ? "0s" : "0.3s",
           }}
         >
-          <LastResult results={results} />
+          {controlsShown ? (
+            <div className="flex items-center gap-2 px-6 pb-6 pt-2">
+              <button
+                onClick={declineToCall}
+                className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+              >
+                Draw
+              </button>
+              <button
+                onClick={onDone}
+                className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="pointer-events-none">
+              <LastResult results={results} />
+            </div>
+          )}
         </div>
         <div style={{ flexGrow: 1 }} />
       </div>
@@ -1338,6 +1362,16 @@ const TIPS = [
   "Nothing's saved until you lock a film into place",
 ];
 const STRIP_KEY = "rankd-strip-open";
+
+/**
+ * How long the duel controls stay on screen after an answer before the slot
+ * hands itself back to "Which do you prefer?".
+ *
+ * Close to ShuffleDuel's UNDO_MS on purpose — the screen should have one
+ * rhythm, and a control that outlives the undo it sits next to invites a tap
+ * that no longer does what it looks like it does.
+ */
+const CONTROLS_MS = 2500;
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
 
@@ -1382,16 +1416,21 @@ function RankFace({ from, to, total }: { from: number | null; to: number | null;
             group balances — the gold is what says which one is climbing, not
             the scale. Keyed on its own value so it re-plays the lift each time
             the climber takes a place. */}
+        {/* Equal width on both sides, or the arrow drifts. `140 → 9` puts three
+            digits of mass on the left and one on the right, so a plain centred
+            row centres the GROUP while the arrow sits well off the screen's
+            middle. Fixed width plus tabular-nums pins it regardless of how many
+            digits each side happens to have. */}
         <span
           key={from}
-          className="rank-pop font-display text-[32px] leading-none tracking-wide text-gold tabular-nums"
+          className="rank-pop min-w-[3ch] text-right font-display text-[32px] leading-none tracking-wide text-gold tabular-nums"
           style={{ textShadow: "0 2px 16px color-mix(in srgb, var(--gold) 50%, transparent)" }}
         >
           {from}
         </span>
         {/* Points the way the pile is climbed — up the order, toward #1. */}
         <ClimbArrow />
-        <span className="font-display text-[32px] leading-none tracking-wide text-text/45 tabular-nums">
+        <span className="min-w-[3ch] text-left font-display text-[32px] leading-none tracking-wide text-text/45 tabular-nums">
           {to}
         </span>
         <Hairline flip />

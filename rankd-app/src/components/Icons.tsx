@@ -81,9 +81,14 @@ export function RankdMark() {
 }
 
 // Points the way the pile is climbed — up the order, toward #1.
+//
+// The box is 22 wide because the ART is 22 wide. It used to be 26, leaving four
+// dead pixels on the right, which put the drawn glyph two pixels left of the
+// box's centre — and since the layout centres the BOX, the arrow read as
+// off-centre between the two numbers however carefully they were balanced.
 export function ClimbArrow() {
   return (
-    <svg width="26" height="10" viewBox="0 0 26 10" fill="none" aria-hidden>
+    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
       <path d="M0 5h22" stroke="var(--border)" strokeWidth="1.5" />
       <path d="M18 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
@@ -100,32 +105,5 @@ export function Hairline({ flip }: { flip?: boolean }) {
         background: `linear-gradient(to ${flip ? "left" : "right"}, transparent, var(--border))`,
       }}
     />
-  );
-}
-
-// The strip's bookend: where the tier ends.
-export function TierDivider() {
-  const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
-  return (
-    <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
-      <div className="relative flex w-full items-center justify-center" style={{ aspectRatio: "1 / 3" }}>
-        <span
-          className="absolute"
-          style={{
-            width: 1,
-            height: "100%",
-            background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
-          }}
-        />
-        {/* A single star breaks the line at its midpoint. The bookend marks
-            where the tier ends; which tier it is belongs in the header, and
-            stacking four stars down the strip only made it heavy. */}
-        <span className="relative text-[12px] leading-none text-gold" style={{ padding: "3px 0", background: "var(--bg)" }}>
-          ★
-        </span>
-      </div>
-      {/* Holds the label row's height so posters stay on one baseline */}
-      <span className="text-[10px] leading-none text-transparent">.</span>
-    </div>
   );
 }

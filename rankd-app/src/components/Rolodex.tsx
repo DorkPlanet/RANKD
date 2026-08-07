@@ -11,7 +11,7 @@ import { useEffect, useRef } from "react";
 
 import type { Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
-import { LockIcon, TierDivider } from "./Icons";
+import { LockIcon } from "./Icons";
 
 export function Rolodex({
   lowToHigh,
@@ -171,7 +171,6 @@ export function Rolodex({
           onWheel={markUserScroll}
           className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
         >
-        <TierDivider />
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
@@ -231,7 +230,6 @@ export function Rolodex({
             <span className="text-[9px] leading-none text-transparent">.</span>
           </div>
         ))}
-        <TierDivider />
         </div>
         </div>
       </div>

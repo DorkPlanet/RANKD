@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { newJudgement } from "@/lib/log";
-import { libraryProgress, pct } from "@/lib/progress";
+import { libraryProgress, pct, sessionProgress } from "@/lib/progress";
 import type { Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
@@ -85,6 +85,36 @@ describe("libraryProgress", () => {
     const out = libraryProgress([film("a", "hard"), film("b")], []);
     expect(out.hard).toBe(1);
     expect(out.shuffled).toBe(0);
+  });
+});
+
+describe("sessionProgress", () => {
+  const pool = [film("a"), film("b"), film("c"), film("d")];
+
+  it("is empty-safe", () => {
+    expect(sessionProgress([], [])).toEqual({ total: 0, compared: 0 });
+  });
+
+  it("counts only films inside the run's scope", () => {
+    // A duel involving a film outside the pool must not inflate the bar.
+    const out = sessionProgress(pool, [duel("a", "outsider"), duel("b", "c")]);
+    expect(out).toEqual({ total: 4, compared: 3 });
+  });
+
+  // The whole reason it reads the log rather than session state: a long run
+  // interrupted and resumed must pick up where it left off.
+  it("survives being resumed — the same log gives the same answer", () => {
+    const log = [duel("a", "b")];
+    const before = sessionProgress(pool, log);
+    // Simulate walking away and coming back: fresh component, same evidence.
+    const after = sessionProgress([...pool], [...log]);
+    expect(after).toEqual(before);
+  });
+
+  it("fills as the scope is covered, and reaches 100% only when it is", () => {
+    expect(pct(sessionProgress(pool, []).compared, 4)).toBe(0);
+    expect(pct(sessionProgress(pool, [duel("a", "b")]).compared, 4)).toBe(50);
+    expect(pct(sessionProgress(pool, [duel("a", "b"), duel("c", "d")]).compared, 4)).toBe(100);
   });
 });
 

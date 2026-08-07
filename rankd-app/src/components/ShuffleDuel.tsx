@@ -25,7 +25,7 @@ import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
-import { libraryProgress, pct } from "@/lib/progress";
+import { libraryProgress, pct, sessionProgress } from "@/lib/progress";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
@@ -309,7 +309,7 @@ export default function ShuffleDuel({
           <b className="text-text-hi">{count}</b> {count === 1 ? "duel" : "duels"} · {pool.length} in play
         </span>
       </div>
-      <LibraryBars films={films} log={log} />
+      <LibraryBars films={films} log={log} pool={pool} />
 
       {/* A definite height that yields under pressure, matching the arena in the
           ordinary duel. Left as `flex-1` the cards grew to fill whatever was
@@ -331,7 +331,7 @@ export default function ShuffleDuel({
           onClick={() => answer("draw")}
           className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
         >
-          Too close to call
+          Draw
         </button>
         {pending ? (
           <button
@@ -380,17 +380,25 @@ const noop = () => {};
  * PROVISIONAL LOOK — the shape is borrowed from TierProgress so it belongs to
  * the same family, but it has had no design pass.
  */
-function LibraryBars({ films, log }: { films: Film[]; log: Judgement[] }) {
+function LibraryBars({ films, log, pool }: { films: Film[]; log: Judgement[]; pool: Film[] }) {
   const p = libraryProgress(films, log);
+  const s = sessionProgress(pool, log);
   const hardPct = pct(p.hard, p.total);
   const softPct = pct(p.soft, p.total);
 
   return (
     <div className="flex-shrink-0 px-5 pb-1">
+      {/* This run's scope, derived from the log — so walking away mid-session and
+          coming back an hour later resumes exactly where you left off. */}
+      <Bar
+        label="This run"
+        value={`${s.compared} of ${s.total}`}
+        segments={[{ pct: pct(s.compared, s.total), colour: "var(--accent)" }]}
+      />
       <Bar
         label="Shuffled"
         value={`${p.shuffled} of ${p.total}`}
-        segments={[{ pct: pct(p.shuffled, p.total), colour: "var(--accent)" }]}
+        segments={[{ pct: pct(p.shuffled, p.total), colour: "color-mix(in srgb, var(--accent) 55%, var(--border))" }]}
       />
       <Bar
         label="Locked"

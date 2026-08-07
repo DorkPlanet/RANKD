@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
+import { isHard } from "@/lib/lock";
 import { type Profile } from "@/lib/profile";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
@@ -350,10 +351,26 @@ function Row({
         </span>
       </span>
 
+      {/* Three states, told by the number's weight rather than by anything that
+          would change the row's height — ROW_H is load-bearing, since the
+          section spacers and the tier jumps are computed from it.
+
+          Gold and solid  = you committed to this position.
+          Quiet           = the evidence placed it; it counts, but the model is
+                            still free to revise it.
+          UN-RNKD         = no position at all.
+
+          The distinction has existed in the data since hard and soft locks
+          landed and this is the first place a reader can see it. */}
       {rank === undefined ? (
         <span className="flex-shrink-0 text-[9px] font-extrabold tracking-[0.14em] text-dim">UN-RNKD</span>
       ) : (
-        <span className="rank-num flex-shrink-0 font-serif text-[26px] font-bold leading-none text-gold">
+        <span
+          className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
+            isHard(film) ? "font-bold text-gold" : "font-normal text-dim"
+          }`}
+          title={isHard(film) ? "You placed this" : "Placed by the evidence"}
+        >
           {rank}
         </span>
       )}

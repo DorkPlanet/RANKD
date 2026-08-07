@@ -103,7 +103,7 @@ export function ShuffleRow({ shuffle, onShuffle }: { shuffle: boolean; onShuffle
         type="checkbox"
         checked={shuffle}
         onChange={(e) => onShuffle(e.target.checked)}
-        style={{ accentColor: "var(--gold)", width: 18, height: 18 }}
+        className="tickbox"
       />
     </label>
   );
