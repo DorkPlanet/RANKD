@@ -4,10 +4,15 @@
 // writeScores on every confirm, and it re-spreads the WHOLE tier pool — so after
 // the first confirm in a tier, all 173 of its films hold distinct scores while
 // most have never been duelled. A distinct score is not an earned position.
-// `confirmed` is the only marker that means a user actually placed a film, so
-// that — not score — is what decides whether a film gets a number here.
+//
+// So a LOCK — not a score — is what earns a number here. Both kinds count: a
+// hard lock is a placement the user committed to, a soft one is the model's,
+// granted once the evidence settled the film. Both mean "this position is
+// established"; they differ only in who established it, and in whether the model
+// is still allowed to revise it (see lib/lock.ts).
 
 import type { Film } from "./types";
+import { isPlaced } from "./lock";
 import { rankedFilms } from "./ladder";
 import { ORDERED_TIERS, type Rating } from "./tiers";
 
@@ -42,7 +47,7 @@ export function buildList(films: Film[]): ListModel {
     // Equal scores would otherwise swap places between renders; title is stable.
     .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
     .forEach((f, i) => {
-      if (f.confirmed) ranks.set(f.id, i + 1);
+      if (isPlaced(f)) ranks.set(f.id, i + 1);
     });
 
   const byTier = new Map<Rating, Film[]>();

@@ -14,8 +14,10 @@
 // belongs to every social network, and this isn't one.
 
 import { useEffect, useMemo, useState } from "react";
-import { BottomNav, Header, SpotlightPicker, tierCounts } from "./DuelScreen";
+import { BottomNav, Header, tierCounts } from "./DuelScreen";
+import { SpotlightPicker } from "./SpotlightPicker";
 import { rankedFilms } from "@/lib/ladder";
+import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
@@ -64,7 +66,7 @@ export default function ProfileScreen({
   const badges = useMemo(() => achievements(films), [films]);
   const earned = badges.filter((b) => b.got).length;
 
-  const placed = useMemo(() => ranked.filter((f) => f.confirmed), [ranked]);
+  const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
   const hero = placed[0];
   const topTen = placed.slice(0, 10);
   const bannerFilm = films.find((f) => f.id === profile.bannerFilmId) ?? hero;

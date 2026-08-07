@@ -13,8 +13,8 @@
 
 const KEYS = [
   "rankd-app-v1", // the library — films, scores, placements, duels
+  "rankd-log-v1", // the evidence — every duel ever settled
   "rankd-profile-v1", // name, bio, banner
-  "rankd-session-v1", // a run in progress
   "rankd-brightness",
   "rankd-strip-open",
 ] as const;
@@ -45,6 +45,8 @@ export function exportBackup(): void {
 
 export interface RestoreResult {
   films: number;
+  /** How many recorded duels came back with them; 0 for a pre-log backup. */
+  judgements: number;
   hadProfile: boolean;
 }
 
@@ -89,6 +91,29 @@ export function importBackup(text: string): RestoreResult {
   );
   if (!ok) throw new Error("Some films in that backup are missing an id, rating or score.");
 
+  // The evidence log, if the backup is new enough to carry one. Checked but not
+  // required: a backup written before the log existed is still a perfectly good
+  // backup, and refusing it would strand every file saved up to now. Note that
+  // restoring such a file DOES clear the log — a restore replaces the app's
+  // state wholesale, and a half-restore would be worse than none.
+  const rawLog = backup.keys["rankd-log-v1"];
+  let judgements = 0;
+  if (rawLog !== undefined) {
+    let rows: unknown;
+    try {
+      rows = JSON.parse(rawLog);
+    } catch {
+      throw new Error("The comparison log inside that backup is corrupt.");
+    }
+    // See lib/log.ts for the shape: a version, an interned film-id dictionary,
+    // and tuple rows [id, aIndex, bIndex, outcome, modeCode, at].
+    const log = rows as { v?: unknown; f?: unknown; r?: unknown };
+    if (!log || typeof log !== "object" || log.v !== 1 || !Array.isArray(log.f) || !Array.isArray(log.r)) {
+      throw new Error("The comparison log inside that backup isn't in a format this version reads.");
+    }
+    judgements = log.r.length;
+  }
+
   // Only now, with everything checked, does anything get written.
   for (const k of KEYS) {
     const v = backup.keys[k];
@@ -96,5 +121,5 @@ export function importBackup(text: string): RestoreResult {
     else localStorage.setItem(k, v);
   }
 
-  return { films: films.length, hadProfile: !!backup.keys["rankd-profile-v1"] };
+  return { films: films.length, judgements, hadProfile: !!backup.keys["rankd-profile-v1"] };
 }

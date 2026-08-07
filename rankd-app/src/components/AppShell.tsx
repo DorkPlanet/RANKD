@@ -10,7 +10,9 @@
 // are persisted this becomes the one place to swap in real routing.
 
 import { useEffect, useState } from "react";
-import DuelScreen, { FilmInfo, Settings, pickOpeningTier } from "./DuelScreen";
+import DuelScreen, { pickOpeningTier } from "./DuelScreen";
+import { FilmInfo } from "./FilmInfo";
+import { Settings } from "./Settings";
 import ListScreen from "./ListScreen";
 import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
@@ -26,6 +28,9 @@ export default function AppShell() {
   const [screen, setScreen] = useState<"duel" | "list" | "profile">("duel");
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
+  // A film the review card has handed over to be re-placed. It lives here rather
+  // than in ListScreen because answering the question means changing screens.
+  const [spotlightFilm, setSpotlightFilm] = useState<Film | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Lives here, not on the profile — the trophy sits in the shared header, so it
   // has to work from whichever screen you're looking at.
@@ -39,7 +44,7 @@ export default function AppShell() {
     try {
       setState(startRun(films, pickOpeningTier(films)));
     } catch {
-      setState({ films, session: null });
+      setState({ films, session: null, journal: [] });
     }
   }, []);
 
@@ -67,7 +72,7 @@ export default function AppShell() {
     try {
       setState(startRun(films, pickOpeningTier(films)));
     } catch {
-      setState({ films, session: null });
+      setState({ films, session: null, journal: [] });
     }
     setScreen("duel");
   };
@@ -90,6 +95,8 @@ export default function AppShell() {
         <DuelScreen
           state={state}
           setState={setState}
+          spotlightRequest={spotlightFilm}
+          onSpotlightHandled={() => setSpotlightFilm(null)}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
@@ -106,6 +113,10 @@ export default function AppShell() {
           onDuel={() => setScreen("duel")}
           onProfile={() => setScreen("profile")}
           onPoster={setMeta}
+          onSpotlight={(film) => {
+            setSpotlightFilm(film);
+            setScreen("duel");
+          }}
         />
       ) : (
         <ProfileScreen
@@ -122,7 +133,7 @@ export default function AppShell() {
 
       {trophiesOpen && <Trophies films={state.films} onClose={() => setTrophiesOpen(false)} />}
 
-      {infoFilm && <FilmInfo film={infoFilm} onClose={() => setInfoFilm(null)} />}
+      {infoFilm && <FilmInfo film={infoFilm} films={state.films} onClose={() => setInfoFilm(null)} />}
 
       {settingsOpen && (
         <Settings

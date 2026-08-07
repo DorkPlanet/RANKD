@@ -6,6 +6,7 @@
 // for the same 5MB of localStorage.
 
 import type { Film } from "./types";
+import { isPlaced } from "./lock";
 import type { Rating } from "./tiers";
 
 const KEY = "rankd-profile-v1";
@@ -279,5 +280,5 @@ export function favouriteFilms(profile: Profile, films: Film[], ranked: Film[]):
       .map((id) => films.find((f) => f.id === id))
       .filter((f): f is Film => !!f);
   }
-  return ranked.filter((f) => f.confirmed).slice(0, 4);
+  return ranked.filter(isPlaced).slice(0, 4);
 }

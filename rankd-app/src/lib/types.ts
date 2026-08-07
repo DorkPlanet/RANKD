@@ -1,4 +1,6 @@
 import type { Rating } from "./tiers";
+import type { Judgement } from "./log";
+import type { Lock } from "./lock";
 
 export interface Film {
   id: string;
@@ -8,7 +10,11 @@ export interface Film {
   tagline?: string;
   rating: Rating; // star rating = tier
   score: number; // derived position within the tier's band (written on confirm)
-  confirmed?: boolean; // committed placement this tier — soft, re-openable
+  // How this film came to have a position — see lib/lock.ts. "hard" is a
+  // placement the user committed to and the model may never move; "soft" is the
+  // model's own, which counts but stays open to revision. Absent means unplaced,
+  // and an unplaced film shows no number in the list.
+  lock?: Lock;
   // Kept so a film can be found by who made it. These arrive on the very same
   // response as the poster and used to be thrown away, so storing them costs no
   // extra requests — only the bytes. Absent until that film's artwork is fetched.
@@ -66,6 +72,11 @@ export interface PlacementSession {
   spotHi?: number;
   spotWins?: string[];
   spotLosses?: string[];
+  // Films the subject was declared too close to call against. Kept apart from
+  // wins and losses rather than folded into either, because a draw is neither —
+  // and a session that consisted only of draws still fought, so the summary and
+  // the "did this run establish anything?" check must be able to see them.
+  spotDraws?: string[];
   // A promotion run in progress: the subject is working through the weakest
   // films of the tier above, weakest first. Emptying it earns the promotion.
   promotionQueue?: string[];
@@ -74,4 +85,8 @@ export interface PlacementSession {
 export interface RankState {
   films: Film[];
   session: PlacementSession | null;
+  // Duels settled but not yet written to the evidence log. The engine is pure —
+  // it does no IO — so it hands judgements up here and the shell drains them.
+  // Every row carries an id, so draining twice writes once (see lib/log.ts).
+  journal: Judgement[];
 }

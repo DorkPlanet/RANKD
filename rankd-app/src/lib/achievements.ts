@@ -7,6 +7,7 @@
 // a list you can see before then is a set of goals.
 
 import type { Film } from "./types";
+import { isHard } from "./lock";
 import { ORDERED_TIERS, starsFor } from "./tiers";
 
 export interface Achievement {
@@ -18,15 +19,19 @@ export interface Achievement {
 }
 
 export function achievements(films: Film[]): Achievement[] {
-  const placed = films.filter((f) => f.confirmed).length;
+  // HARD locks only. These read "Settle 10 films" and one is called Committed —
+  // they reward what the user did, so a soft lock the model granted must not
+  // quietly unlock them. Running a shuffle session is not settling a film.
+  const placed = films.filter(isHard).length;
   const duels = films.reduce((n, f) => n + (f.duels ?? 0), 0);
   const withCredits = films.filter((f) => f.director).length;
 
-  // A tier counts as finished only when every film in it has been confirmed —
-  // and an empty tier isn't an achievement, it's an absence.
+  // A tier counts as finished only when the user has settled every film in it —
+  // and an empty tier isn't an achievement, it's an absence. Hard locks again:
+  // "Clean sweep" should mean you swept it, not that the model filled it in.
   const finishedTiers = ORDERED_TIERS.filter((t) => {
     const inTier = films.filter((f) => f.rating === t);
-    return inTier.length > 0 && inTier.every((f) => f.confirmed);
+    return inTier.length > 0 && inTier.every(isHard);
   });
 
   // `need > 0` matters: Completionist's target is "every tier you own films in",

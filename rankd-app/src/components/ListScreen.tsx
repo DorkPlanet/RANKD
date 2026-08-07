@@ -15,6 +15,9 @@ import { type Profile } from "@/lib/profile";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
 import { starsFor, ORDERED_TIERS, type Rating } from "@/lib/tiers";
+import { beliefsWhenIdle } from "@/lib/beliefs";
+import { loadLog } from "@/lib/log";
+import { dismiss, loadDismissed, suggestions, type Suggestion } from "@/lib/review";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 
@@ -44,6 +47,7 @@ export default function ListScreen({
   onProfile,
   onPoster,
   onTrophies,
+  onSpotlight,
 }: {
   films: Film[];
   profile: Profile;
@@ -53,10 +57,36 @@ export default function ListScreen({
   onProfile: () => void;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
+  /** Hand a film to the spotlight — how the review card's answer is given. */
+  onSpotlight: (film: Film) => void;
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
   const scroller = useRef<HTMLDivElement | null>(null);
+
+  // What the evidence would argue with. Computed off the interaction path — the
+  // fit is expensive and this screen must open instantly — so the list renders
+  // first and the card appears if there is anything to say.
+  const [review, setReview] = useState<Suggestion[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const log = await loadLog();
+      if (!alive || log.length === 0) return;
+      const beliefs = await beliefsWhenIdle(films, log);
+      if (!alive) return;
+      setReview(suggestions(films, beliefs, loadDismissed()));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [films]);
+
+  const top = review[0];
+  const waveAway = (id: string) => {
+    dismiss(id);
+    setReview((rs) => rs.filter((r) => r.film.id !== id));
+  };
 
   // Built once per library change, never inside a scroll handler — the
   // prototype re-sorted all 828 films on every scroll tick and it showed.
@@ -114,6 +144,14 @@ export default function ListScreen({
             <b className="text-text-hi">{model.placedCount}</b> placed · {model.total} films
           </span>
         </button>
+
+        {/* Deliberately in the header block and NOT in the scroller below: the
+            section spacers and the tier-jump offsets are computed from row
+            heights, so anything inserted above the sections would shift every
+            section top while `jumpTo` kept using the unshifted numbers. */}
+        {top && !searching && (
+          <ReviewCard suggestion={top} onAct={() => onSpotlight(top.film)} onDismiss={() => waveAway(top.film.id)} />
+        )}
 
         <div className="flex items-center gap-2">
           <input
@@ -208,6 +246,53 @@ export default function ListScreen({
         onProfile={onProfile}
       />
     </main>
+  );
+}
+
+// The model's one chance to speak, and it can only ask.
+//
+// Nth, seeing the same disagreement, moves the film and then explains itself
+// afterwards. This asks first, and the answer runs through the spotlight — the
+// mechanic already trusted to decide where something goes. So the list still
+// only ever changes because you changed it.
+//
+// PROVISIONAL LOOK — the wording and the mechanic are settled; the treatment is
+// not, and this has had no design pass.
+function ReviewCard({
+  suggestion,
+  onAct,
+  onDismiss,
+}: {
+  suggestion: Suggestion;
+  onAct: () => void;
+  onDismiss: () => void;
+}) {
+  const { film, kind, drift, promoteTo } = suggestion;
+  const line =
+    kind === "underrated"
+      ? `keeps beating your ${starsFor(promoteTo!)} films.`
+      : drift > 0
+        ? `keeps beating films ranked above it.`
+        : `keeps losing to films ranked below it.`;
+
+  return (
+    <div className="mb-3 rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border)" }}>
+      <p className="text-[12px] leading-snug text-text">
+        <span className="font-semibold text-text-hi">{film.title}</span> {line}
+      </p>
+      <div className="mt-2.5 flex items-center gap-2">
+        <button
+          onClick={onAct}
+          className="rounded-full border px-3.5 py-1.5 text-[11px] font-bold active:scale-95"
+          style={{ color: "var(--gold)", borderColor: "var(--gold)" }}
+        >
+          {kind === "underrated" ? "Test it against them" : "Re-place it"}
+        </button>
+        <button onClick={onDismiss} className="px-2 py-1.5 text-[11px] font-semibold text-dim active:scale-95">
+          Not now
+        </button>
+      </div>
+    </div>
   );
 }
 

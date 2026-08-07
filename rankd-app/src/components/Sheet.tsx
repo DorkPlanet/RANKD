@@ -1,9 +1,22 @@
 "use client";
 
-// The app's bottom sheet, shared by anything that isn't the duel screen's own
-// chrome. Same shape as the one inside DuelScreen — grabber, gold title, Done,
-// tap-outside to close — pulled out here so screens that aren't the duel can use
-// it without importing from it.
+// The app's bottom sheet, used by Profile and Trophies.
+//
+// DUPLICATE, KNOWINGLY. There is a second sheet in `ui.tsx` that the duel
+// screen's panels use. This one existed because the duel's copy was trapped
+// inside DuelScreen; that is no longer true, so the reason for the split is
+// gone — but the two do not behave identically and merging them would change
+// how these screens look:
+//
+//   ui.tsx    — plays an exit animation before unmounting; the whole sheet
+//               scrolls as one.
+//   this one  — closes immediately; the body scrolls inside a fixed frame, and
+//               a long title truncates rather than wrapping.
+//
+// The better sheet is arguably a merge of the two (animated exit AND an
+// internal scroll region), but that is a visual decision about screens that
+// already look the way someone wanted them to, so it is left alone rather than
+// quietly unified. Worth doing deliberately in a design pass.
 
 export default function Sheet({
   title,

@@ -1,5 +1,12 @@
 // The ranking engine — full head-to-head climb with confirm-to-commit.
 //
+// A note on what "records nothing" now means. The PLACEMENT still commits only
+// at a confirm — the in-between shuffle moves no scores and infers nothing, and
+// that is still the point. What changed is that every duel fought along the way
+// is now written down as evidence (lib/log.ts): not to move the list, but so the
+// judgements the user made are not destroyed by the act of using them. The
+// engine stays pure — it appends to `state.journal` and the shell does the IO.
+//
 // Every film goes head-to-head in a bottom-up climb: the contender duels the
 // film directly above it; a win swaps it up and it keeps climbing; a loss hands
 // the climb to the winner (the running-best sweeps to the top). Whoever reaches
@@ -9,6 +16,13 @@
 
 import type { Film, PlacementSession, RankState } from "./types";
 import { tierMin, tierMax, tierAbove, type Rating } from "./tiers";
+import { newJudgement, type LogMode } from "./log";
+
+// Which game a duel was fought in, for the evidence row. A promotion run is its
+// own thing rather than a spotlight: the subject is fighting a different tier,
+// which is a stronger claim than placing it among its peers.
+const logModeOf = (s: PlacementSession): LogMode =>
+  s.promotionQueue ? "promotion" : s.mode === "spotlight" ? "spotlight" : "koth";
 
 const clone = (films: Film[]): Film[] => films.map((f) => ({ ...f }));
 
@@ -150,7 +164,7 @@ export function startRun(
     needsConfirm: false,
   };
   refresh(s);
-  return { films: f, session: s };
+  return { films: f, session: s, journal: [] };
 }
 
 // Spotlight — re-place ONE film. It starts exactly where it already stands and
@@ -190,6 +204,7 @@ export function startSpotlight(
     spotHi: unconfirmed.length - 2, // every film except the subject itself
     spotWins: [],
     spotLosses: [],
+    spotDraws: [],
     confirmed: [],
     unconfirmed,
     contenderId: filmId,
@@ -197,7 +212,7 @@ export function startSpotlight(
     needsConfirm: false,
   };
   refresh(s);
-  return { films: f, session: s };
+  return { films: f, session: s, journal: [] };
 }
 
 // The films a spotlight could still be placed among. Everything outside this is
@@ -220,6 +235,8 @@ export interface SpotlightSummary {
   total: number;
   beat: Film[];
   lostTo: Film[];
+  /** Films it was declared too close to call against. */
+  drewWith: Film[];
 }
 
 // What the session actually established: where the film stood, where it stands
@@ -237,6 +254,7 @@ export function spotlightSummary(state: RankState): SpotlightSummary | null {
     total: session.unconfirmed.length,
     beat: (session.spotWins ?? []).map(byId).filter((f): f is Film => !!f),
     lostTo: (session.spotLosses ?? []).map(byId).filter((f): f is Film => !!f),
+    drewWith: (session.spotDraws ?? []).map(byId).filter((f): f is Film => !!f),
   };
 }
 
@@ -250,7 +268,10 @@ export function abandonSpotlight(state: RankState): RankState {
     if (session.origScore !== undefined) subject.score = session.origScore;
     if (session.origRating !== undefined) subject.rating = session.origRating;
   }
-  return { films, session: null };
+  // Abandoning undoes the PLACEMENT, not the judgements. The duels really were
+  // fought and really were answered; walking away from where they were leading
+  // doesn't unmake them, and throwing them out would be the old behaviour.
+  return { films, session: null, journal: state.journal };
 }
 
 // The current duel: contender vs the film directly above it. null while a film
@@ -279,10 +300,46 @@ export function pendingConfirm(state: RankState): Film | null {
 // it. Any distance the scrub covered collapses HERE, at the duel — the pile is
 // never reordered while the player is merely looking around.
 export function choose(state: RankState, winnerId: string): RankState {
+  return settle(state, winnerId);
+}
+
+// Too close to call. The user is declining to separate two films, which is a
+// real answer and not a failure to give one — forcing a coin-flip here would
+// write a winner nobody claimed and every belief downstream would inherit it.
+//
+// So it records a `draw` and, for placement, does the least presumptuous thing
+// each mechanic allows:
+//  - a SPOTLIGHT settles right there. "These are the same" is precisely the
+//    answer a search for one film's place was looking for, so it stops.
+//  - a CLIMB steps the contender in below the challenger, exactly as a loss
+//    would. The pile has to put it somewhere and "not above" is the only thing
+//    a draw actually licenses — but the log still says draw, so nothing
+//    downstream believes the challenger won.
+export function skipPair(state: RankState): RankState {
+  return settle(state, null);
+}
+
+// The shared body of `choose` and `skipPair`. A null `winnerId` is the draw.
+function settle(state: RankState, winnerId: string | null): RankState {
   const { session } = state;
   if (!session || session.needsConfirm) return state;
   const films = clone(state.films);
   const s: PlacementSession = { ...session, unconfirmed: [...session.unconfirmed] };
+  const drew = winnerId === null;
+
+  // The evidence row for this duel, minted once and used by every path below.
+  // `a` is always the contender and `b` the challenger, so the outcome reads the
+  // same whichever mechanic asked the question — which is what lets one log be
+  // re-derived from regardless of which game produced it.
+  const journal = [
+    ...state.journal,
+    newJudgement(
+      s.contenderId,
+      s.challengerId,
+      drew ? "draw" : winnerId === s.contenderId ? "a" : "b",
+      logModeOf(s),
+    ),
+  ];
 
   // Both films fought, whoever won. Counted here rather than at confirm, because
   // the question is how much evidence a placement rests on, and a duel is
@@ -299,6 +356,16 @@ export function choose(state: RankState, winnerId: string): RankState {
     const os = othersOf(s);
     const j = os.indexOf(s.challengerId);
     if (j < 0) return state;
+    if (drew) {
+      // Settle immediately, immediately above the film it drew with — closing the
+      // window (lo > hi) is what tells searchRefresh the search is over.
+      s.spotDraws = [...(s.spotDraws ?? []), s.challengerId];
+      s.spotLo = j;
+      s.spotHi = j - 1;
+      placeSubject(s);
+      searchRefresh(s);
+      return { films, session: s, journal };
+    }
     const beaten = winnerId === s.contenderId;
     s.spotWins = beaten ? [...(s.spotWins ?? []), s.challengerId] : (s.spotWins ?? []);
     s.spotLosses = beaten ? (s.spotLosses ?? []) : [...(s.spotLosses ?? []), s.challengerId];
@@ -306,7 +373,7 @@ export function choose(state: RankState, winnerId: string): RankState {
     else s.spotLo = j + 1;
     placeSubject(s);
     searchRefresh(s);
-    return { films, session: s };
+    return { films, session: s, journal };
   }
 
   const ci = s.unconfirmed.indexOf(s.contenderId);
@@ -322,10 +389,13 @@ export function choose(state: RankState, winnerId: string): RankState {
   const spotlight = s.mode === "spotlight";
   if (spotlight) {
     const beaten = winnerId === s.contenderId;
+    if (drew) s.spotDraws = [...(s.spotDraws ?? []), s.challengerId];
     s.spotWins = beaten ? [...(s.spotWins ?? []), s.challengerId] : (s.spotWins ?? []);
-    s.spotLosses = beaten ? (s.spotLosses ?? []) : [...(s.spotLosses ?? []), s.challengerId];
+    s.spotLosses = beaten || drew ? (s.spotLosses ?? []) : [...(s.spotLosses ?? []), s.challengerId];
   }
 
+  // A draw places like a loss — "not above" is all it licenses — so it falls
+  // through to the same branch. The log already recorded it as a draw.
   if (winnerId === s.contenderId) {
     s.unconfirmed.splice(target, 0, s.contenderId); // winner takes the loser's place
   } else {
@@ -334,12 +404,12 @@ export function choose(state: RankState, winnerId: string): RankState {
     // being placed, so it never hands the climb over — losing simply ends it.
     if (spotlight) {
       refresh(s);
-      return { films, session: s };
+      return { films, session: s, journal };
     }
     s.contenderId = s.challengerId; // the winner carries the climb on
   }
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal };
 }
 
 // Lock the top film into the ranked shelf, then restart the climb from the
@@ -358,24 +428,24 @@ export function confirm(state: RankState): RankState {
   // Scores still come from the pile's order, so its neighbours keep their places.
   if (isSearch(s)) {
     const subject = films.find((f) => f.id === s.subjectId);
-    if (subject) subject.confirmed = true;
+    if (subject) subject.lock = "hard";
     writeScores(films, s);
-    return { films, session: null };
+    return { films, session: null, journal: state.journal };
   }
   const championId = s.unconfirmed.shift(); // the top of the pile
   if (championId) {
     s.confirmed.push(championId);
     const champ = films.find((f) => f.id === championId);
-    if (champ) champ.confirmed = true;
+    if (champ) champ.lock = "hard";
   }
   writeScores(films, s);
   // A promotion run places one film and stops. A full run would hand off to the
   // next climber here; a spotlight has nothing further to place.
-  if (s.mode === "spotlight") return { films, session: null };
-  if (s.unconfirmed.length === 0) return { films, session: null }; // tier fully placed
+  if (s.mode === "spotlight") return { films, session: null, journal: state.journal };
+  if (s.unconfirmed.length === 0) return { films, session: null, journal: state.journal }; // tier fully placed
   s.contenderId = s.unconfirmed[s.unconfirmed.length - 1]; // restart from the bottom
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal: state.journal };
 }
 
 // ── Tier promotion (spotlight only) ─────────────────────────────────────
@@ -423,7 +493,7 @@ export function startPromotionDuel(state: RankState): RankState {
     needsConfirm: false,
   };
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal: state.journal };
 }
 
 // Assert it: skip the duels and take the higher rating outright.
@@ -437,12 +507,14 @@ export function promoteDirect(state: RankState): RankState {
   subject.rating = above;
   subject.score = tierMin(above); // enters at the foot of its new tier, to climb from there
   try {
-    return startSpotlight(films, subject.id, {});
+    // startSpotlight builds a fresh state from films alone, so carry the pending
+    // journal across by hand — a promotion must not swallow the duels that earned it.
+    return { ...startSpotlight(films, subject.id, {}), journal: state.journal };
   } catch {
     // Promoted into a tier with no one else in it — nothing to place against, so
     // it simply stands there as its own entry.
-    subject.confirmed = true;
-    return { films, session: null };
+    subject.lock = "hard";
+    return { films, session: null, journal: state.journal };
   }
 }
 
@@ -479,8 +551,8 @@ export function completePromotion(state: RankState): RankState {
 
   subject.rating = tier;
   subject.score = Math.round((floor + ceiling) / 2);
-  subject.confirmed = true;
-  return { films, session: null };
+  subject.lock = "hard";
+  return { films, session: null, journal: state.journal };
 }
 
 // Fast-forward: send an unconfirmed film to the top of the pile. If it's the
@@ -497,7 +569,7 @@ export function flickToTop(state: RankState, filmId: string): RankState {
     const s: PlacementSession = { ...session, spotLo: 0, spotHi: -1 };
     placeSubject(s);
     searchRefresh(s);
-    return { films, session: s };
+    return { films, session: s, journal: state.journal };
   }
   const unconfirmed = [...session.unconfirmed];
   unconfirmed.splice(idx, 1);
@@ -511,7 +583,7 @@ export function flickToTop(state: RankState, filmId: string): RankState {
     s.contenderId = unconfirmed[unconfirmed.length - 1];
   }
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal: state.journal };
 }
 
 // Mirror of flickToTop: throw a film to the BOTTOM of the pile. Same deal — a
@@ -529,7 +601,7 @@ export function flickToBottom(state: RankState, filmId: string): RankState {
     const s: PlacementSession = { ...session, spotLo: end, spotHi: end - 1 };
     placeSubject(s);
     searchRefresh(s);
-    return { films, session: s };
+    return { films, session: s, journal: state.journal };
   }
   const unconfirmed = [...session.unconfirmed];
   unconfirmed.splice(idx, 1);
@@ -537,7 +609,7 @@ export function flickToBottom(state: RankState, filmId: string): RankState {
   const s: PlacementSession = { ...session, unconfirmed };
   // Sending the climber to the bottom just means it starts its climb from there.
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal: state.journal };
 }
 
 // Back out of a pending confirm: drop the champion one place so it has to win
@@ -554,14 +626,14 @@ export function stepBackFromConfirm(state: RankState): RankState {
     const s: PlacementSession = { ...session, spotLo: Math.max(0, at - 1), spotHi: Math.max(0, at - 1) };
     placeSubject(s);
     searchRefresh(s);
-    return { films, session: s };
+    return { films, session: s, journal: state.journal };
   }
   const unconfirmed = [...session.unconfirmed];
   const [champ] = unconfirmed.splice(0, 1);
   unconfirmed.splice(1, 0, champ); // slot it back in just below the new top
   const s: PlacementSession = { ...session, unconfirmed, contenderId: champ };
   refresh(s);
-  return { films, session: s };
+  return { films, session: s, journal: state.journal };
 }
 
 // "Jump to top" button — flick the current contender up.

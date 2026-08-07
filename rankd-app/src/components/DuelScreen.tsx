@@ -8,6 +8,7 @@ import {
   abandonSpotlight,
   getPair,
   choose,
+  skipPair,
   confirm,
   pendingConfirm,
   flickToTop,
@@ -24,114 +25,48 @@ import {
   type SpotlightSummary,
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
-import { fetchMeta, backfillPosters, withMeta, needsMeta, type FilmMeta } from "@/lib/meta";
-import { parseLetterboxdCsv, mergeFilms } from "@/lib/importCsv";
-import { exportBackup, importBackup } from "@/lib/backup";
+import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
+import { appendJudgements } from "@/lib/log";
+import { poolFor } from "@/lib/matchmaker";
+import { isPlaced } from "@/lib/lock";
+import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
+import { LOSER, LastResult, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
+import { Rolodex } from "./Rolodex";
+import { SpotlightPicker } from "./SpotlightPicker";
+import {
+  BackRow,
+  RangeSlider,
+  ScopeTab,
+  Sheet,
+  ShuffleRow,
+  StartButton,
+} from "./ui";
+import {
+  ActivityIcon,
+  ClimbArrow,
+  GearIcon,
+  Hairline,
+  ListIcon,
+  PersonIcon,
+  RankdMark,
+  StopIcon,
+  TrophyIcon,
+} from "./Icons";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
+
+// Which game the setup panel is configuring; null while it is still asking.
+type ChosenMode = "koth" | "shuffle" | null;
 const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
-
-// Degrees each card leans. The climbing card tilts one way, the challenger the
-// other; clones have to match or they land crooked against the real poster.
-const TILT = 2;
-
-// Spawn a copy of a poster that outlives the re-render, so a film can be seen
-// leaving rather than simply being replaced. Positioned from the element's
-// CENTRE and its untransformed size — a rotated element's bounding rect is the
-// axis-aligned box around it, which is bigger than the poster itself.
-function posterClone(el: HTMLElement, poster: string, ring: string): HTMLElement {
-  const r = el.getBoundingClientRect();
-  const w = el.offsetWidth || r.width;
-  const h = el.offsetHeight || r.height;
-  const left = r.left + r.width / 2 - w / 2;
-  const top = r.top + r.height / 2 - h / 2;
-  const clone = document.createElement("div");
-  clone.style.cssText = `position:fixed;left:${left}px;top:${top}px;width:${w}px;height:${h}px;border-radius:12px;overflow:hidden;z-index:9999;pointer-events:none;box-shadow:${ring}`;
-  clone.innerHTML = `<img src="${poster}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
-  document.body.appendChild(clone);
-  return clone;
-}
-
-// Centre point of an element, which rotation about the centre leaves unmoved.
-function centreOf(el: HTMLElement) {
-  const r = el.getBoundingClientRect();
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-}
-
-// Flick: the poster carries on along the throw, so it leaves the way it was
-// thrown rather than always arcing to the same spot regardless of the gesture.
-function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, tilt: number) {
-  const mag = Math.hypot(vx, vy) || 1;
-  const ux = vx / mag;
-  const uy = vy / mag;
-  const travel = Math.max(window.innerWidth, window.innerHeight);
-  const spin = tilt + ux * 22; // start from the card's lean, then lean into the throw
-  const clone = posterClone(el, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
-  clone
-    .animate(
-      [
-        { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1, offset: 0 },
-        {
-          transform: `translate(${ux * travel * 0.3}px,${uy * travel * 0.3}px) rotate(${tilt + (spin - tilt) * 0.4}deg) scale(0.94)`,
-          opacity: 1,
-          offset: 0.35,
-        },
-        {
-          transform: `translate(${ux * travel}px,${uy * travel}px) rotate(${spin}deg) scale(0.45)`,
-          opacity: 0,
-          offset: 1,
-        },
-      ],
-      { duration: 520, easing: "cubic-bezier(.2,.7,.3,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
-}
-
-// The beaten challenger sinks and fades, revealing its replacement underneath,
-// rather than the two cutting straight from one film to the next.
-function fadeLoserOut(el: HTMLElement, poster: string) {
-  const clone = posterClone(el, poster, "0 8px 26px rgba(0,0,0,0.55)");
-  clone
-    .animate(
-      [
-        { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, opacity: 1 },
-        { transform: `translate(0,18px) rotate(${TILT}deg) scale(0.94)`, opacity: 0 },
-      ],
-      { duration: 320, easing: "cubic-bezier(.4,0,1,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
-}
-
-// The challenger sits on the right, but winning makes it the climbing film on
-// the left. Without this it simply appears over there the instant state updates
-// — the film you just chose jumps the screen. Slide a clone across so the pick
-// visibly takes its new seat.
-function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: string) {
-  const a = centreOf(fromImg);
-  const b = centreOf(toImg);
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)");
-  clone
-    .animate(
-      [
-        // Leaves at the challenger's lean and arrives at the climber's, so it
-        // settles flush against the card it is replacing rather than crooked.
-        { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, offset: 0 },
-        { transform: `translate(${dx * 0.5}px,${dy * 0.5 - 14}px) rotate(0deg) scale(1.04)`, offset: 0.5 },
-        { transform: `translate(${dx}px,${dy}px) rotate(${-TILT}deg) scale(1)`, offset: 1 },
-      ],
-      { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
-}
 
 // The library and the app-wide chrome now live in AppShell — this screen owns
 // only the duel. Everything it still holds is setup state for the next run.
 export default function DuelScreen({
   state,
   setState,
+  spotlightRequest,
+  onSpotlightHandled,
   onInfo,
   onSettings,
   onList,
@@ -140,6 +75,9 @@ export default function DuelScreen({
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
+  /** A film the review card asked to have re-placed; starts a spotlight on arrival. */
+  spotlightRequest?: Film | null;
+  onSpotlightHandled?: () => void;
   onInfo: (film: Film) => void;
   onSettings: () => void;
   onList: () => void;
@@ -155,7 +93,11 @@ export default function DuelScreen({
   const [pickedTier, setPickedTier] = useState<Rating | null>(null);
   // Which mode the setup panel is showing. Held here, not inside the panel, so
   // stepping out to the tier sheet and back doesn't reset you to the mode list.
-  const [chosenMode, setChosenMode] = useState<"koth" | null>(null);
+  const [chosenMode, setChosenMode] = useState<ChosenMode>(null);
+  // Fast Shuffle deliberately does NOT live in RankState.session: it places
+  // nothing and confirms nothing, so giving it a PlacementSession would mean
+  // teaching ladder.ts about a mode that never places a film.
+  const [shuffleRun, setShuffleRun] = useState<ShuffleOptions | null>(null);
   const [summary, setSummary] = useState<SpotlightSummary | null>(null);
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
@@ -179,6 +121,24 @@ export default function DuelScreen({
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
       return !v;
     });
+  // The review card's answer arrives as a film to re-place. Handled here rather
+  // than by the list, because starting a spotlight means replacing the run on
+  // this screen — which is this screen's business, not the list's.
+  useEffect(() => {
+    if (!spotlightRequest) return;
+    setState((s) => {
+      if (!s) return s;
+      try {
+        return { ...startSpotlight(s.films, spotlightRequest.id, { shuffle: false }), journal: s.journal };
+      } catch {
+        return s; // nothing to place it against — leave whatever was running alone
+      }
+    });
+    onSpotlightHandled?.();
+    // Only when a new request arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotlightRequest]);
+
   // Fill in artwork for the tier being played. Scoped to the active pile rather
   // than the whole library — an import can be hundreds of films, and only these
   // are ever on screen. Persists as each one lands so progress survives a reload.
@@ -223,34 +183,53 @@ export default function DuelScreen({
   if (!state) return null;
   const { session } = state;
 
+  // The one way a state from the engine reaches the screen.
+  //
+  // The engine is pure, so it cannot write; it hands settled duels up on
+  // `state.journal` and they are drained HERE, at the moment the judgement was
+  // made, rather than watched for in an effect. Draining on arrival is what
+  // keeps the journal near-empty — a marathon session would otherwise copy an
+  // ever-growing array on every single tap — and it means a duel is evidence the
+  // instant it is answered, whatever happens to the run afterwards.
+  const commit = (next: RankState, persist = true) => {
+    if (persist) saveFilms(next.films);
+    if (next.journal.length === 0) {
+      setState(next);
+      return;
+    }
+    void appendJudgements(next.journal);
+    setState({ ...next, journal: [] });
+  };
+
   // A duel result is written straight away. Placements still only commit on
   // confirm — what's saved here is the record that the comparison happened,
   // which is the one thing an abandoned run should still leave behind.
-  const decide = (winnerId: string) => {
-    const next = choose(state, winnerId);
-    saveFilms(next.films);
-    setState(next);
-  };
-  const flick = (filmId: string) => setState(flickToTop(state, filmId));
-  const sink = (filmId: string) => setState(flickToBottom(state, filmId));
+  const decide = (winnerId: string) => commit(choose(state, winnerId));
+  // Same shape as a decision, because that is what it is — a recorded answer of
+  // "neither". A spotlight settles here; a climb steps the contender in below.
+  const declineToCall = () => commit(skipPair(state));
+  // Assertions, not judgements: they reorder the pile and record nothing, so
+  // there is never a journal to drain and nothing to persist until a confirm.
+  const flick = (filmId: string) => commit(flickToTop(state, filmId), false);
+  const sink = (filmId: string) => commit(flickToBottom(state, filmId), false);
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
   const lockIn = () => {
     // Winning the promotion duels banks a new star rating instead of a position.
-    const next = promotionWon(state) ? completePromotion(state) : confirm(state);
-    saveFilms(next.films); // confirmation is the only committed data
-    setState(next);
+    commit(promotionWon(state) ? completePromotion(state) : confirm(state));
   };
-  const backOut = () => setState(stepBackFromConfirm(state));
+  const backOut = () => commit(stepBackFromConfirm(state), false);
 
   // Returns whether a run actually started, so the setup panel can stay open and
   // say why instead of dropping you on a "tier complete" screen that was really
   // "your range holds fewer than two films".
   const beginRun = (tier: Rating, films = state.films): boolean => {
+    // startRun/startSpotlight build a state from films alone, so any duels not yet
+    // drained to the log are carried across by hand rather than dropped.
     try {
-      setState(startRun(films, tier, { shuffle, below, above }));
+      commit({ ...startRun(films, tier, { shuffle, below, above }), journal: state.journal }, false);
       return true;
     } catch {
-      setState({ films, session: null });
+      commit({ films, session: null, journal: state.journal }, false);
       return false;
     }
   };
@@ -269,7 +248,7 @@ export default function DuelScreen({
 
   const beginSpotlight = (filmId: string) => {
     try {
-      setState(startSpotlight(state.films, filmId, { shuffle }));
+      commit({ ...startSpotlight(state.films, filmId, { shuffle }), journal: state.journal }, false);
     } catch {
       setState(state); // no peers to place against — leave the run alone
     }
@@ -279,40 +258,33 @@ export default function DuelScreen({
   // that did show what it established before committing anything.
   const endRun = () => {
     if (session?.mode === "spotlight") {
-      const fought = (session.spotWins?.length ?? 0) + (session.spotLosses?.length ?? 0);
+      const fought =
+        (session.spotWins?.length ?? 0) +
+        (session.spotLosses?.length ?? 0) +
+        (session.spotDraws?.length ?? 0);
       if (fought > 0) {
         setSummary(spotlightSummary(state));
         return;
       }
-      const next = abandonSpotlight(state);
-      saveFilms(next.films);
-      setState(next);
+      commit(abandonSpotlight(state));
       return;
     }
-    setState({ ...state, session: null });
+    commit({ ...state, session: null }, false);
   };
 
   // Keep the result, or throw the session away and leave the film where it was.
   const keepSpotlight = () => {
-    const next = confirm(state);
-    saveFilms(next.films);
-    setState(next);
+    commit(confirm(state));
     setSummary(null);
   };
   const discardSpotlight = () => {
-    const next = abandonSpotlight(state);
-    saveFilms(next.films);
-    setState(next);
+    commit(abandonSpotlight(state));
     setSummary(null);
   };
 
   const promoteTo = promotionTarget(state);
-  const takeOnTierAbove = () => setState(startPromotionDuel(state));
-  const assertPromotion = () => {
-    const next = promoteDirect(state);
-    saveFilms(next.films);
-    setState(next);
-  };
+  const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
+  const assertPromotion = () => commit(promoteDirect(state));
 
   const pair = getPair(state);
   const champion = pendingConfirm(state);
@@ -320,17 +292,36 @@ export default function DuelScreen({
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
-      <TierProgress
-        tier={session?.tier ?? DEFAULT_TIER}
-        mode={session?.mode ?? "koth"}
-        placed={session?.confirmed.length ?? 0}
-        toGo={session?.unconfirmed.length ?? 0}
-        onPickTier={() => setTierOpen(true)}
-      />
+      {/* Hidden during Fast Shuffle: it reports a tier, a placed count and a
+          to-go count, and that run has none of those. Left visible it read as
+          "KING OF THE HILL · 0 placed · 50 to go" over a completely different
+          game. ShuffleDuel carries its own status line instead. */}
+      {!shuffleRun && (
+        <TierProgress
+          tier={session?.tier ?? DEFAULT_TIER}
+          mode={session?.mode ?? "koth"}
+          placed={session?.confirmed.length ?? 0}
+          toGo={session?.unconfirmed.length ?? 0}
+          onPickTier={() => setTierOpen(true)}
+        />
+      )}
 
-      {/* A spotlight that has settled reports what it established rather than
-          asking for a bare number — the before/after is the whole point. */}
-      {champion && session?.mode === "spotlight" ? (
+      {/* Fast Shuffle owns the whole surface while it runs: it has no pile, no
+          climb and no confirm, so none of the branches below apply to it. */}
+      {shuffleRun ? (
+        <ShuffleDuel
+          films={state.films}
+          onFilms={(films) => {
+            saveFilms(films);
+            setState((s) => (s ? { ...s, films } : s));
+          }}
+          options={shuffleRun}
+          onInfo={onInfo}
+          onExit={() => setShuffleRun(null)}
+        />
+      ) : /* A spotlight that has settled reports what it established rather than
+          asking for a bare number — the before/after is the whole point. */
+      champion && session?.mode === "spotlight" ? (
         <SpotlightReport
           summary={spotlightSummary(state)!}
           promoteTo={promoteTo}
@@ -367,6 +358,7 @@ export default function DuelScreen({
           films={state.films}
           tier={session.tier}
           onPick={decide}
+          onDraw={declineToCall}
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
@@ -409,6 +401,10 @@ export default function DuelScreen({
           }}
           onSpotlight={(t) => {
             setSpotlightFor(t);
+            closeSetup();
+          }}
+          onFastShuffle={(opts) => {
+            setShuffleRun(opts);
             closeSetup();
           }}
           onPickTier={() => {
@@ -517,59 +513,6 @@ export function BottomNav({
   );
 }
 
-function ListIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6" />
-      <line x1="8" y1="12" x2="21" y2="12" />
-      <line x1="8" y1="18" x2="21" y2="18" />
-      <line x1="3" y1="6" x2="3.01" y2="6" />
-      <line x1="3" y1="12" x2="3.01" y2="12" />
-      <line x1="3" y1="18" x2="3.01" y2="18" />
-    </svg>
-  );
-}
-
-function ActivityIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
-function PersonIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-// A stop glyph — unambiguous as "end what's running", where an X read as "close".
-function StopIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-function TrophyIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-      <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-      <path d="M4 22h16" />
-      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-      <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-    </svg>
-  );
-}
-
 // Icon-only: labels cost vertical space the duel needs more than the nav does.
 function NavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void }) {
   return (
@@ -584,165 +527,11 @@ function NavItem({ label, icon, active, onClick }: { label: string; icon: React.
   );
 }
 
-function RankdMark() {
-  return <span className="font-display text-xl leading-none tracking-[0.1em]">RNK</span>;
-}
-
-function GearIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
-  );
-}
-
-// Shared sheet chrome — the Settings sheet established this; modes, tier and
-// spotlight all reuse it so every panel dismisses the same way.
-const SHEET_EXIT_MS = 220;
-
-function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  // The panel has to outlive the dismissal long enough to slide back down, so
-  // closing plays the exit first and only then unmounts.
-  const [closing, setClosing] = useState(false);
-  const close = () => {
-    if (closing) return;
-    setClosing(true);
-    setTimeout(onClose, SHEET_EXIT_MS);
-  };
-  return (
-    <div
-      className={`fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
-      onClick={close}
-    >
-      <div
-        className={`max-h-[82vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5 ${closing ? "sheet-out" : "sheet-in"}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <div className="mb-5 flex items-center justify-between">
-          <span className="font-display text-2xl tracking-wide text-gold">{title}</span>
-          <button onClick={close} className="text-sm font-semibold text-dim active:scale-95">
-            Done
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// How many rows the film picker builds per pass.
-const PICKER_PAGE = 60;
-
-// What the picker's search box is asking about.
-type SearchMode = "film" | "director" | "actor";
-
 export const tierCounts = (films: Film[]): Map<Rating, number> => {
   const m = new Map<Rating, number>();
   for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
   return m;
 };
-
-function ShuffleRow({ shuffle, onShuffle }: { shuffle: boolean; onShuffle: (v: boolean) => void }) {
-  return (
-    <label className="mb-3 flex items-center justify-between rounded-xl border border-border px-4 py-3">
-      <span>
-        <span className="block text-sm text-text-hi">Shuffle the order</span>
-        <span className="block text-[11px] leading-snug text-dim">
-          Face films in a random order instead of weakest first.
-        </span>
-      </span>
-      <input
-        type="checkbox"
-        checked={shuffle}
-        onChange={(e) => onShuffle(e.target.checked)}
-        style={{ accentColor: "var(--gold)", width: 18, height: 18 }}
-      />
-    </label>
-  );
-}
-
-function StartButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="mt-1 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-40"
-      style={{ color: "#1c1405", background: "var(--gold)" }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function BackRow({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="mt-3 w-full text-center text-xs font-semibold text-dim active:scale-95">
-      ‹ Back
-    </button>
-  );
-}
-
-// One track, two handles. Each input owns its own half — low runs from the
-// scale's floor up to the tier, high from the tier to the ceiling — so the two
-// can never sit on top of each other and both stay grabbable at any setting.
-function RangeSlider({
-  tier,
-  low,
-  high,
-  onLow,
-  onHigh,
-}: {
-  tier: number;
-  low: number;
-  high: number;
-  onLow: (v: number) => void;
-  onHigh: (v: number) => void;
-}) {
-  const MIN = 0.5;
-  const MAX = 5;
-  const pct = (v: number) => ((v - MIN) / (MAX - MIN)) * 100;
-  const split = pct(tier);
-  const ticks = ORDERED_TIERS.map((t) => pct(t));
-
-  return (
-    <div className="dual-range">
-      <div className="dual-track" />
-      {ticks.map((t) => (
-        <span key={t} className="dual-tick" style={{ left: `${t}%` }} />
-      ))}
-      <div className="dual-fill" style={{ left: `${pct(low)}%`, right: `${100 - pct(high)}%` }} />
-
-      {/* Below the tier. Hidden at ½★, where there's nothing further down. */}
-      {tier > MIN && (
-        <input
-          type="range"
-          min={MIN}
-          max={tier}
-          step={0.5}
-          value={low}
-          aria-label="Lowest rating to include"
-          style={{ left: 0, width: `${split}%` }}
-          onChange={(e) => onLow(parseFloat(e.target.value))}
-        />
-      )}
-      {/* Above the tier. Hidden at 5★. */}
-      {tier < MAX && (
-        <input
-          type="range"
-          min={tier}
-          max={MAX}
-          step={0.5}
-          value={high}
-          aria-label="Highest rating to include"
-          style={{ left: `${split}%`, width: `${100 - split}%` }}
-          onChange={(e) => onHigh(parseFloat(e.target.value))}
-        />
-      )}
-    </div>
-  );
-}
 
 function ModePanel({
   films,
@@ -758,12 +547,13 @@ function ModePanel({
   onClose,
   onKoth,
   onSpotlight,
+  onFastShuffle,
   onPickTier,
 }: {
   films: Film[];
   tier: Rating;
-  chosen: "koth" | null;
-  onChoose: (v: "koth" | null) => void;
+  chosen: ChosenMode;
+  onChoose: (v: ChosenMode) => void;
   shuffle: boolean;
   onShuffle: (v: boolean) => void;
   below: number;
@@ -773,6 +563,7 @@ function ModePanel({
   onClose: () => void;
   onKoth: (t: Rating) => void;
   onSpotlight: (t: Rating) => void;
+  onFastShuffle: (opts: ShuffleOptions) => void;
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
@@ -803,7 +594,31 @@ function ModePanel({
           blurb="Pick one film and find where it really belongs — it can push into the tier above."
           onClick={() => onSpotlight(tier)}
         />
+        {/* The one mode with no pile and no confirm. It asks whichever question
+            it can least predict the answer to, and stops when you do. */}
+        <ModeRow
+          title="Fast Shuffle"
+          blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."
+          onClick={() => setChosen("shuffle")}
+        />
       </Sheet>
+    );
+  }
+
+  if (chosen === "shuffle") {
+    return (
+      <ShuffleSetup
+        films={films}
+        tier={tier}
+        below={below}
+        above={above}
+        onBelow={onBelow}
+        onAbove={onAbove}
+        onClose={onClose}
+        onPickTier={onPickTier}
+        onBack={() => setChosen(null)}
+        onStart={onFastShuffle}
+      />
     );
   }
 
@@ -867,6 +682,117 @@ function ModePanel({
         </p>
       )}
       <BackRow onClick={() => setChosen(null)} />
+    </Sheet>
+  );
+}
+
+// Fast Shuffle's only setup. Two questions, because they change what the run
+// means rather than merely tuning it: what it may draw from, and whether it may
+// touch work you already did.
+//
+// PROVISIONAL LOOK — assembled from the panel's existing controls so it doesn't
+// invent a competing language, but it has had no design pass.
+function ShuffleSetup({
+  films,
+  tier,
+  below,
+  above,
+  onBelow,
+  onAbove,
+  onClose,
+  onPickTier,
+  onBack,
+  onStart,
+}: {
+  films: Film[];
+  tier: Rating;
+  below: number;
+  above: number;
+  onBelow: (v: number) => void;
+  onAbove: (v: number) => void;
+  onClose: () => void;
+  onPickTier: () => void;
+  onBack: () => void;
+  onStart: (opts: ShuffleOptions) => void;
+}) {
+  const [kind, setKind] = useState<"all" | "tier" | "range">("all");
+  const [includeConfirmed, setIncludeConfirmed] = useState(false);
+
+  const scope: ShuffleOptions["scope"] =
+    kind === "all"
+      ? { kind: "all" }
+      : kind === "tier"
+        ? { kind: "tier", tier }
+        : { kind: "range", tier, below, above };
+
+  // The count the run will actually use, from the run's own function — a second
+  // filter computed here would drift from it the first time either changed.
+  const count = poolFor(films, { scope, includeConfirmed }).length;
+  const playable = count >= 2;
+
+  return (
+    <Sheet title="Fast Shuffle" onClose={onClose}>
+      <div className="mb-3 flex gap-2">
+        <ScopeTab label="All films" active={kind === "all"} onClick={() => setKind("all")} />
+        <ScopeTab label="This tier" active={kind === "tier"} onClick={() => setKind("tier")} />
+        <ScopeTab label="Range" active={kind === "range"} onClick={() => setKind("range")} />
+      </div>
+
+      {kind !== "all" && (
+        <button
+          onClick={onPickTier}
+          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
+        >
+          <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
+          <span className="text-base text-gold">{starsFor(tier)} ›</span>
+        </button>
+      )}
+
+      {kind === "range" && (
+        <div className="mb-3 rounded-xl border border-border px-4 py-3">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-sm text-text-hi">Range</span>
+            <span className="text-[11px] text-gold">
+              {starsFor(tier - below)} – {starsFor(tier + above)}
+            </span>
+          </div>
+          <RangeSlider
+            tier={tier}
+            low={tier - below}
+            high={tier + above}
+            onLow={(v) => onBelow(tier - v)}
+            onHigh={(v) => onAbove(v - tier)}
+          />
+        </div>
+      )}
+
+      {/* Off, this ranks the films with no position yet. On, it is allowed to
+          re-order the ones you placed — which is why it is a deliberate tick
+          rather than a default. */}
+      <label className="mb-1 flex items-center justify-between rounded-xl border border-border px-4 py-3">
+        <span className="min-w-0 pr-3">
+          <span className="block text-sm text-text-hi">Include films I&apos;ve already placed</span>
+          <span className="block text-[11px] leading-snug text-dim">
+            {includeConfirmed
+              ? "Placed films can move within their star rating."
+              : "Placed films stay exactly where you put them."}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={includeConfirmed}
+          onChange={(e) => setIncludeConfirmed(e.target.checked)}
+          style={{ accentColor: "var(--gold)", width: 18, height: 18 }}
+        />
+      </label>
+
+      <StartButton label={`Start · ${count} films`} onClick={() => onStart({ scope, includeConfirmed })} disabled={!playable} />
+      {!playable && (
+        <p className="mt-2 text-center text-[11px] text-gold">
+          Only {count} film{count === 1 ? "" : "s"} in range — widen it or pick another tier.
+        </p>
+      )}
+      <BackRow onClick={onBack} />
     </Sheet>
   );
 }
@@ -940,296 +866,6 @@ function TierPicker({
 // Exported because picking a film out of the library is not a Spotlight idea —
 // the profile needs the same searchable, windowed list to choose a banner, an
 // avatar or a favourite. Only the words at the top change.
-export function SpotlightPicker({
-  films,
-  onClose,
-  onPick,
-  title = "Spotlight",
-  blurb = "Pick any film to test. It starts where it currently sits and moves as far as its results take it.",
-}: {
-  films: Film[];
-  onClose: () => void;
-  onPick: (id: string) => void;
-  title?: string;
-  blurb?: string;
-}) {
-  const [q, setQ] = useState("");
-  // "All" by default: a search that only covers one tier can't find the film
-  // you're thinking of unless you already know its rating.
-  const [filter, setFilter] = useState<Rating | "all">("all");
-  const [tierOpen, setTierOpen] = useState(false);
-  // What the search box is asking about. A film you want to re-place is often
-  // easier to reach through who made it than through its own name.
-  const [mode, setMode] = useState<SearchMode>("film");
-  const listRef = useRef<HTMLDivElement | null>(null);
-
-  const counts = tierCounts(films);
-  const query = q.trim().toLowerCase();
-
-  // Credits arrive with artwork, so they cover the tiers you've played and
-  // whatever the list has scrolled past — never the whole library at once. The
-  // count is shown rather than hidden, so an empty result reads as "not fetched
-  // yet" instead of "not in your library".
-  const withCredits = films.filter((f) => f.director || f.cast?.length).length;
-
-  const matches = (f: Film) => {
-    if (query === "") return true;
-    if (mode === "film") return f.title.toLowerCase().includes(query);
-    if (mode === "director") return !!f.director?.toLowerCase().includes(query);
-    return !!f.cast?.some((c) => c.toLowerCase().includes(query));
-  };
-
-  const shown = films
-    .filter((f) => (filter === "all" ? true : f.rating === filter))
-    .filter(matches)
-    // Highest tier first, then position within the tier — the same order the
-    // list strip shows, so a film sits where you'd expect to find it.
-    .sort((a, b) => b.rating - a.rating || b.score - a.score);
-
-  // Committing all 828 rows at once cost a measured 508ms of blocked main
-  // thread — the sheet appeared to hang before it opened. Only a screenful is
-  // built up front; scrolling near the end extends it.
-  const [limit, setLimit] = useState(PICKER_PAGE);
-  // A new result set starts fresh. Adjusted during render rather than in an
-  // effect, so the first paint of a search is never the previous list's length.
-  const sig = `${filter}|${query}|${mode}`;
-  const [prevSig, setPrevSig] = useState(sig);
-  if (sig !== prevSig) {
-    setPrevSig(sig);
-    setLimit(PICKER_PAGE);
-  }
-  const visible = shown.slice(0, limit);
-
-  const onScroll = () => {
-    const el = listRef.current;
-    if (!el || limit >= shown.length) return;
-    if (el.scrollTop + el.clientHeight > el.scrollHeight - 600) {
-      setLimit((l) => Math.min(shown.length, l + PICKER_PAGE));
-    }
-  };
-
-  const jump = (to: "top" | "bottom") => {
-    if (to === "top") {
-      listRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    // The end of the list has to exist before it can be scrolled to, so jumping
-    // down materialises the rest first and moves once they've laid out.
-    setLimit(shown.length);
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }),
-      ),
-    );
-  };
-
-  return (
-    <Sheet title={title} onClose={onClose}>
-      <p className="mb-3 text-[11px] leading-snug text-dim">{blurb}</p>
-
-      {/* Three ways in. The search box below changes what it asks about rather
-          than sitting beside three separate fields. */}
-      <div className="mb-2 flex gap-1">
-        {(["film", "director", "actor"] as SearchMode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`flex-1 rounded-lg border py-1.5 text-[11px] capitalize active:scale-95 ${
-              mode === m ? "border-gold text-gold" : "border-border text-dim"
-            }`}
-          >
-            {m}
-          </button>
-        ))}
-      </div>
-
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={
-          mode === "film" ? "Search all films" : mode === "director" ? "Search directors" : "Search actors"
-        }
-        className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
-      />
-
-      {/* One toolbar rather than a chip rail and a count line: the filter says
-          what you're looking at and how many, and everything else is an icon.
-          Shuffle is one bit of state — a full labelled row overstated it next to
-          the list it's a footnote to. */}
-      <div className="relative mb-2 flex items-center gap-1.5">
-        <button
-          onClick={() => setTierOpen((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] active:scale-95 ${
-            filter === "all" ? "border-border text-dim" : "border-gold text-gold"
-          }`}
-        >
-          <span className={filter === "all" ? "" : "text-sm"}>
-            {filter === "all" ? "All tiers" : starsFor(filter)}
-          </span>
-          <span className="opacity-60">{shown.length}</span>
-          <span className="opacity-60">▾</span>
-        </button>
-
-        <span className="flex-1" />
-
-        <IconToggle label="Jump to top" onClick={() => jump("top")} icon={<span className="text-xs">↑</span>} />
-        <IconToggle label="Jump to bottom" onClick={() => jump("bottom")} icon={<span className="text-xs">↓</span>} />
-
-        {/* Anchored to the control it belongs to, so the tier list appears where
-            you asked for it instead of pushing the film list down the screen. */}
-        {tierOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setTierOpen(false)} />
-            <div className="absolute left-0 top-full z-20 mt-1 max-h-56 w-44 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
-              <TierOption
-                label="All tiers"
-                count={films.length}
-                active={filter === "all"}
-                onClick={() => {
-                  setFilter("all");
-                  setTierOpen(false);
-                }}
-              />
-              {/* Tiers holding nothing would only be dead rows. */}
-              {ORDERED_TIERS.filter((t) => (counts.get(t) ?? 0) > 0).map((t) => (
-                <TierOption
-                  key={t}
-                  label={starsFor(t)}
-                  count={counts.get(t) ?? 0}
-                  active={filter === t}
-                  onClick={() => {
-                    setFilter(t);
-                    setTierOpen(false);
-                  }}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* The list scrolls inside the sheet rather than with it, so search, the
-          filter and the jump controls stay reachable however far down you are —
-          the whole library is in here, not a truncated first page. */}
-      <div ref={listRef} onScroll={onScroll} className="max-h-[54vh] overflow-y-auto rounded-xl">
-        {visible.map((f) => {
-          // A spotlight needs someone to face: a film alone in its tier has
-          // nobody, so it's shown but inert rather than silently doing nothing.
-          const peers = (counts.get(f.rating) ?? 0) - 1;
-          return (
-            <button
-              key={f.id}
-              disabled={peers < 1}
-              onClick={() => onPick(f.id)}
-              className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99] disabled:opacity-30"
-            >
-              {/* Most of the library has no artwork yet — backfill only covers
-                  the tier being played — so an empty <img> would just be a
-                  broken icon 600 times over. */}
-              {f.poster ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={f.poster}
-                  alt=""
-                  loading="lazy"
-                  style={{ width: 26, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }}
-                />
-              ) : (
-                <span
-                  className="shrink-0 bg-border"
-                  style={{ width: 26, aspectRatio: "2/3", borderRadius: 3 }}
-                />
-              )}
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-text-hi">{f.title}</span>
-                {/* In a people search, show who matched — otherwise the row gives
-                    no clue why it's in the results. */}
-                {mode !== "film" && query !== "" && (
-                  <span className="block truncate text-[10px] text-dim">
-                    {mode === "director" ? f.director : f.cast?.find((c) => c.toLowerCase().includes(query))}
-                  </span>
-                )}
-              </span>
-              {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
-              <span className="text-[11px] text-gold">{starsFor(f.rating)}</span>
-            </button>
-          );
-        })}
-        {shown.length === 0 &&
-          (mode === "film" ? (
-            <p className="text-[11px] text-dim">Nothing matches.</p>
-          ) : (
-            // Never imply a person isn't in the library when the truth is that
-            // most of it hasn't been looked up yet.
-            <p className="text-[11px] leading-snug text-dim">
-              No match among the{" "}
-              <span className="text-text-hi">
-                {withCredits} of {films.length}
-              </span>{" "}
-              films that know their credits. They fill in as artwork loads — play a tier or scroll
-              your list to gather more.
-            </p>
-          ))}
-      </div>
-    </Sheet>
-  );
-}
-
-function TierOption({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98] ${
-        active ? "bg-border/40" : ""
-      }`}
-    >
-      <span className={active ? "text-sm text-gold" : "text-sm text-text-hi"}>{label}</span>
-      <span className="text-[11px] text-dim">{count}</span>
-    </button>
-  );
-}
-
-// A square icon button that can carry an on/off state — gold when it's on.
-function IconToggle({
-  label,
-  active,
-  onClick,
-  icon,
-}: {
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      className={`flex h-7 w-7 items-center justify-center rounded-lg border active:scale-95 ${
-        active ? "border-gold text-gold" : "border-border text-dim"
-      }`}
-    >
-      {icon}
-    </button>
-  );
-}
-
-
-// The point of a spotlight isn't the number it lands on, it's what moved and
-// what decided it — so ending one shows the before, the after, and the films
-// responsible, before anything is committed.
 function SpotlightReport({
   summary,
   onKeep,
@@ -1247,7 +883,7 @@ function SpotlightReport({
   onAssertPromotion?: () => void;
   inline?: boolean;
 }) {
-  const { film, fromIndex, toIndex, total, beat, lostTo } = summary;
+  const { film, fromIndex, toIndex, total, beat, lostTo, drewWith } = summary;
   const moved = fromIndex - toIndex; // positive = climbed
 
   const body = (
@@ -1275,6 +911,7 @@ function SpotlightReport({
 
       {beat.length > 0 && <ReportList label="BEAT" films={beat} tone="var(--gold)" />}
       {lostTo.length > 0 && <ReportList label="LOST TO" films={lostTo} tone={LOSER} />}
+      {drewWith.length > 0 && <ReportList label="TOO CLOSE TO CALL" films={drewWith} tone="var(--dim)" />}
 
       {promoteTo !== undefined && (
         <div className="mb-3 flex flex-col items-center gap-2 border-t border-border pt-3">
@@ -1326,252 +963,6 @@ function ReportList({ label, films, tone }: { label: string; films: Film[]; tone
 }
 
 // A label wrapping a hidden file input — a styled <button> can't open a picker.
-function ImportButton({
-  label,
-  merge,
-  onFile,
-}: {
-  label: string;
-  merge?: boolean;
-  onFile: (file: File, merge: boolean) => void;
-}) {
-  return (
-    <label
-      className="flex-1 cursor-pointer rounded-full border border-border py-2.5 text-center text-xs font-bold tracking-wide text-text active:scale-95"
-      style={merge ? { color: "#1c1405", background: "var(--gold)", borderColor: "var(--gold)" } : undefined}
-    >
-      {label}
-      <input
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFile(file, !!merge);
-          e.target.value = ""; // so picking the same file twice still fires
-        }}
-      />
-    </label>
-  );
-}
-
-// Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
-// year and tagline are local and paint instantly; the TMDb detail streams in
-// underneath so the card is never blocked on the network.
-export function FilmInfo({ film, onClose }: { film: Film; onClose: () => void }) {
-  const [meta, setMeta] = useState<FilmMeta | null>(null);
-  useEffect(() => {
-    let live = true;
-    fetchMeta(film).then((m) => {
-      if (live) setMeta(m);
-    });
-    return () => {
-      live = false;
-    };
-  }, [film]);
-
-  const crew = meta
-    ? ([
-        ["Director", meta.director],
-        ["Written by", meta.writer],
-        ["Cinematography", meta.cinematographer],
-        ["Music", meta.composer],
-      ].filter(([, v]) => v) as [string, string][])
-    : [];
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm"
-      style={{ background: "rgba(0,0,0,0.7)", padding: "1.5rem" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full overflow-y-auto border border-border"
-        style={{ background: "var(--surface)", maxWidth: 300, maxHeight: "88vh", borderRadius: 16 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex gap-3 p-4">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={film.poster}
-            alt={film.title}
-            style={{ width: 88, flexShrink: 0, aspectRatio: "2 / 3", objectFit: "cover", borderRadius: 8 }}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
-            <div className="mt-1.5 text-[11px] font-bold tracking-[0.1em] text-gold">
-              {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
-            </div>
-            {meta?.genres?.length ? (
-              <div className="mt-1.5 text-[11px] leading-snug text-dim">{meta.genres.slice(0, 3).join(" · ")}</div>
-            ) : null}
-            {film.tagline && (
-              <p className="mt-2 font-serif text-[13px] italic leading-snug text-text">“{film.tagline}”</p>
-            )}
-          </div>
-        </div>
-
-        {meta?.synopsis && (
-          <p className="px-4 pb-3 text-[12px] leading-relaxed text-text">{meta.synopsis}</p>
-        )}
-
-        {meta?.cast?.length ? (
-          <div className="px-4 pb-3">
-            <div className="text-[10px] font-extrabold tracking-[0.12em] text-dim">STARRING</div>
-            <div className="mt-1 text-[12px] leading-snug text-text">{meta.cast.join(", ")}</div>
-          </div>
-        ) : null}
-
-        {crew.length > 0 && (
-          <div className="border-t border-border px-4 py-3">
-            {crew.map(([role, name]) => (
-              <div key={role} className="flex justify-between gap-3 py-0.5 text-[12px]">
-                <span className="text-dim">{role}</span>
-                <span className="text-right text-text-hi">{name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!meta && <div className="px-4 pb-4 text-[11px] text-dim">Loading details…</div>}
-      </div>
-    </div>
-  );
-}
-
-// Settings sheet — home for the brightness slider (and future settings).
-export function Settings({
-  brightness,
-  onChange,
-  onClose,
-  films,
-  onImport,
-}: {
-  brightness: number;
-  onChange: (t: number) => void;
-  onClose: () => void;
-  films: Film[];
-  onImport: (films: Film[]) => void;
-}) {
-  const [note, setNote] = useState<string | null>(null);
-
-  const takeFile = async (file: File, merge: boolean) => {
-    const { films: parsed, skipped } = parseLetterboxdCsv(await file.text());
-    if (parsed.length === 0) {
-      setNote("No rated films found — is that a Letterboxd ratings.csv?");
-      return;
-    }
-    const next = merge ? mergeFilms(films, parsed) : parsed;
-    onImport(next);
-    setNote(
-      `${merge ? "Merged" : "Imported"} ${parsed.length} films` +
-        (skipped ? ` · skipped ${skipped} unrated` : "") +
-        ". Posters are loading in the background.",
-    );
-  };
-
-  return (
-    <Sheet title="Settings" onClose={onClose}>
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-extrabold tracking-[0.12em] text-dim">BRIGHTNESS</span>
-          <span className="text-[11px] text-dim">{Math.round(brightness * 100)}%</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(brightness * 100)}
-          onChange={(e) => onChange(parseInt(e.target.value, 10) / 100)}
-          className="w-full"
-          style={{ accentColor: "var(--accent)" }}
-        />
-        <div className="mt-1.5 flex justify-between text-[11px] text-dim">
-          <span>Deep</span>
-          <span>Bright</span>
-        </div>
-
-        <div className="mt-7 border-t border-border pt-5">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">YOUR FILMS</span>
-            <span className="text-[11px] text-dim">{films.length} in the library</span>
-          </div>
-          <p className="mb-3 text-[11px] leading-snug text-dim">
-            Import a Letterboxd <span className="text-text">ratings.csv</span>. Merge keeps anything
-            you&apos;ve already placed; replace starts over.
-          </p>
-          <div className="flex gap-2">
-            <ImportButton label="Merge" merge onFile={takeFile} />
-            <ImportButton label="Replace" onFile={takeFile} />
-          </div>
-          {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
-        </div>
-
-        {/* Your library lives in this browser and nowhere else, so this is both
-            the only backup you have and the only way to open the same library on
-            your phone — a deployed Rankd is a different origin with its own
-            empty storage. */}
-        <div className="mt-7 border-t border-border pt-5">
-          <span className="text-xs font-extrabold tracking-[0.12em] text-dim">MOVE OR BACK UP</span>
-          <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-            One file holds everything — films, placements, duels and your profile. Save it, then
-            restore it wherever you want to carry on.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                exportBackup();
-                setNote("Saved. Send it to your other device and restore it there.");
-              }}
-              className="flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
-            >
-              Save a backup
-            </button>
-            <RestoreButton
-              onFile={async (file) => {
-                try {
-                  const r = importBackup(await file.text());
-                  setNote(`Restored ${r.films} films${r.hadProfile ? " and your profile" : ""}. Reloading…`);
-                  setTimeout(() => location.reload(), 900);
-                } catch (e) {
-                  setNote(e instanceof Error ? e.message : "That file couldn't be read.");
-                }
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Required by TMDB's API terms, and the right thing regardless — every
-            poster, still and credit in this app is their data. */}
-        <p className="mt-7 border-t border-border pt-5 text-[10px] leading-snug text-dim">
-          Artwork and film details from TMDB. This product uses the TMDB API but is not endorsed or
-          certified by TMDB.
-        </p>
-      </div>
-    </Sheet>
-  );
-}
-
-// A label wrapping a hidden file input, same trick as ImportButton — a styled
-// button can't open a file picker.
-function RestoreButton({ onFile }: { onFile: (file: File) => void }) {
-  return (
-    <label className="flex-1 cursor-pointer rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]">
-      Restore
-      <input
-        type="file"
-        accept="application/json,.json"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) onFile(file);
-          e.target.value = ""; // so picking the same file twice still fires
-        }}
-      />
-    </label>
-  );
-}
-
 export function Header({ onSettings, onTrophies }: { onSettings?: () => void; onTrophies?: () => void }) {
   return (
     <header
@@ -1720,6 +1111,7 @@ function Duel({
   films,
   tier,
   onPick,
+  onDraw,
   onFlick,
   onSink,
   onScrub,
@@ -1737,6 +1129,7 @@ function Duel({
   tier: Rating;
   spotlight?: boolean;
   onPick: (id: string) => void;
+  onDraw: () => void;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
   onScrub: (id: string) => void;
@@ -1748,7 +1141,17 @@ function Duel({
   const arenaRef = useRef<HTMLDivElement>(null);
   // Newest first, capped at two — the one before last is context, anything older
   // is clutter.
-  const [results, setResults] = useState<{ won: string; lost: string; at: number }[]>([]);
+  const [results, setResults] = useState<{ won: string; lost: string; at: number; drew?: boolean }[]>([]);
+
+  // A skip has to leave the same trace a pick does. Without it the pair changes
+  // under you while the recents line still reports the duel before — which reads
+  // as the tap having missed.
+  const declineToCall = () => {
+    setResults((prev) =>
+      [{ won: contender.title, lost: challenger.title, at: Date.now(), drew: true }, ...prev].slice(0, 2),
+    );
+    onDraw();
+  };
 
   // Intercept a win by the right-hand card so it slides into the climbing seat
   // before the state swap paints. Picking the left card needs none of this — it
@@ -1856,7 +1259,26 @@ function Duel({
             away, so rather than pinning it, the fade-in simply WAITS for the
             drawer to finish moving — invisible while the layout shifts, so it
             never appears to slide. Fading out has no delay. */}
-        <div style={{ flexGrow: 1.6 }} />
+        {/* "I can't separate these" is a real answer, not a failure to give one.
+            Without it the only way past a 50/50 is to invent a winner, and that
+            invention is then treated as fact by everything downstream.
+
+            PROVISIONAL LOOK AND PLACEMENT — not the finished affordance. This is
+            a plain pill dropped into space the layout already had, so it works
+            and costs no height, but it does not belong to the compare screen's
+            design and is not meant to read as final. The look and the position
+            are both still open; only the behaviour is settled. Whatever replaces
+            it must not disturb the existing arena, strip or action row. */}
+        <div style={{ flexGrow: 0.8 }} />
+        <div className="flex flex-shrink-0 justify-center">
+          <button
+            onClick={declineToCall}
+            className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+          >
+            Too close to call
+          </button>
+        </div>
+        <div style={{ flexGrow: 0.8 }} />
         {/* Stays in the layout whether or not it's visible. Unmounting it saved
             ~60px, but the mount landed in one frame while the drawer was still
             animating — the posters dipped and sprang back. Toggling the strip
@@ -1896,6 +1318,7 @@ const TIPS = [
   // "Tap the one you like more" is gone — the question under the posters now
   // says that, and a tip repeating it wastes a turn of the cycle.
   "Whichever film wins keeps climbing",
+  "Can't separate two? Say so — it counts",
   "Flick a film up to send it straight to the top",
   "Flick a film down to send it to the bottom",
   "Hold a film to see who's in it and what it's about",
@@ -1970,172 +1393,9 @@ function RankFace({ from, to, total }: { from: number | null; to: number | null;
   );
 }
 
-function ClimbArrow() {
-  return (
-    <svg width="26" height="10" viewBox="0 0 26 10" fill="none" aria-hidden>
-      <path d="M0 5h22" stroke="var(--border)" strokeWidth="1.5" />
-      <path d="M18 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-// Fades in from nothing so the numbers sit on a line that appears to emerge
-// rather than a rule that stops dead.
-function Hairline({ flip }: { flip?: boolean }) {
-  return (
-    <span
-      className="h-px w-12 flex-shrink-0"
-      style={{
-        background: `linear-gradient(to ${flip ? "left" : "right"}, transparent, var(--border))`,
-      }}
-    />
-  );
-}
-
-function PosterCard({
-  film,
-  badge,
-  pick,
-  onPick,
-  onFlick,
-  onSink,
-  onInfo,
-}: {
-  film: Film;
-  badge: string;
-  pick?: boolean;
-  onPick: (id: string) => void;
-  onFlick: (id: string) => void;
-  onSink: (id: string) => void;
-  onInfo: (film: Film) => void;
-}) {
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const held = useRef(false);
-
-  const cancelHold = () => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
-  };
-
-  const onPointerDown = (e: React.PointerEvent) => {
-    start.current = { x: e.clientX, y: e.clientY };
-    held.current = false;
-    // Capture the pointer so an upward drag off the poster still reports its
-    // release here — without this the flick is lost the moment you leave the card.
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore — capture is a best-effort enhancement
-    }
-    holdTimer.current = setTimeout(() => {
-      held.current = true; // swallows the tap on release, so holding never picks
-      onInfo(film);
-    }, 450);
-  };
-
-  // Any real movement means they're flicking or scrolling, not holding.
-  const onPointerMove = (e: React.PointerEvent) => {
-    const s = start.current;
-    if (!s) return;
-    if (Math.abs(e.clientX - s.x) > 8 || Math.abs(e.clientY - s.y) > 8) cancelHold();
-  };
-
-  const onPointerUp = (e: React.PointerEvent) => {
-    cancelHold();
-    const s = start.current;
-    start.current = null;
-    if (!s) return;
-    if (held.current) {
-      held.current = false;
-      return; // the hold already opened the info card
-    }
-    const dy = e.clientY - s.y;
-    const dx = e.clientX - s.x;
-    if (Math.abs(dy) > 45 && Math.abs(dy) > Math.abs(dx)) {
-      // vertical throw → up sends it to the top of the pile, down to the bottom
-      const img = e.currentTarget.querySelector("img");
-      if (img) flyPosterAway(img, film.poster ?? "", dx, dy, pick ? -TILT : TILT);
-      const land = dy < 0 ? onFlick : onSink;
-      setTimeout(() => land(film.id), 170);
-    } else {
-      onPick(film.id); // tap = pick winner
-    }
-  };
-
-  const onPointerCancel = () => {
-    cancelHold();
-    start.current = null;
-  };
-
-  return (
-    <button
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerCancel}
-      onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
-      style={{ touchAction: "none" }}
-      className="group relative flex h-full w-[46%] max-w-[180px] min-h-0 flex-col items-center transition-transform active:scale-95"
-    >
-      {/* A fixed two-line box, whatever the title's length. Sized to the text
-          rather than sized by it, so a film whose name wraps can never sit its
-          poster lower than its opponent's — the two cards always share a top and
-          a bottom edge, and so do their badges. */}
-      <span
-        className={`mb-3 flex w-full flex-shrink-0 items-end justify-center text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 ${pick ? "float-c" : "float-d"}`}
-        style={{
-          // Long titles step down instead of being silently cut off at two
-          // lines — the whole name is the point, it's what you're choosing between.
-          fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
-          minHeight: "2.3em",
-          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
-        }}
-      >
-        {film.title}
-      </span>
-      {/* Wrapper carries the float so the badge drifts with its poster. The
-          poster itself keeps overflow-hidden for its rounded corners, so the
-          badge has to hang off this wrapper to straddle the bottom edge. */}
-      {/* The tilt lives on the wrapper, not the poster, so the badge rotates with
-          the card and sits square to its bottom edge — a level badge on a tilted
-          card reads as off-centre even when it is mathematically centred. */}
-      {/* min-h-0 + flex-1 lets the poster take whatever height is left rather
-          than demanding width × 1.5, so a short screen shrinks the artwork
-          instead of driving the column past the bottom of the viewport. */}
-      <div
-        className={`relative flex min-h-0 w-full flex-1 justify-center ${pick ? "float-a" : "float-b"}`}
-        style={{ rotate: `${pick ? -TILT : TILT}deg` }}
-      >
-        <div
-          className="h-full overflow-hidden rounded-xl"
-          style={{
-            aspectRatio: "2 / 3",
-            boxShadow: pick
-              ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
-              : "0 8px 26px rgba(0,0,0,0.55)",
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
-        </div>
-        <span
-          className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
-          style={
-            pick
-              ? { color: "#1c1405", background: "var(--gold)" }
-              : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
-          }
-        >
-          {badge}
-        </span>
-      </div>
-    </button>
-  );
-}
-
+// Exported for ShuffleDuel, which needs the poster interaction exactly as it is
+// but none of the pile machinery around it. (DuelScreen is due a split — see the
+// plan's Phase 3 — at which point this and LastResult get their own file.)
 // ── The confirm moment: the champion tops the pile, take a real number ─────
 function ConfirmView({
   champion,
@@ -2218,7 +1478,7 @@ function ConfirmView({
 }
 
 function TierComplete({ films, tier, onPickTier }: { films: Film[]; tier: Rating; onPickTier: () => void }) {
-  const ranked = films.filter((f) => f.rating === tier && f.confirmed).sort((a, b) => b.score - a.score);
+  const ranked = films.filter((f) => f.rating === tier && isPlaced(f)).sort((a, b) => b.score - a.score);
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-8 text-center">
       <div className="font-display text-2xl tracking-wide text-gold">🏆 {starsFor(tier)} placed</div>
@@ -2242,302 +1502,3 @@ function TierComplete({ films, tier, onPickTier }: { films: Film[]; tier: Rating
 }
 
 // ── Rolodex — the unconfirmed pile, contender pinned as a gold YOU marker ──
-function Rolodex({
-  lowToHigh,
-  locked,
-  tier,
-  contenderId,
-  challengerId,
-  onScrub,
-  open,
-  onToggle,
-  inPlay,
-}: {
-  lowToHigh: Film[];
-  locked: { film: Film; rank: number }[];
-  tier: Rating;
-  contenderId: string;
-  challengerId: string;
-  onScrub: (id: string) => void;
-  open: boolean;
-  onToggle: () => void;
-  inPlay?: Set<string> | null;
-}) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rafRef = useRef(0);
-  const userScrolling = useRef(false);
-  const prevPileKey = useRef("");
-  const prevContenderId = useRef("");
-  const pullFrom = useRef<number | null>(null);
-  const pileKey = lowToHigh.map((f) => f.id).join(",");
-
-  const syncHighlight = () => {
-    const track = trackRef.current;
-    if (!track) return null;
-    const mid = track.getBoundingClientRect().left + track.clientWidth / 2;
-    let best: HTMLElement | null = null;
-    let bestD = Infinity;
-    const cells = track.querySelectorAll<HTMLElement>("[data-fid]");
-    cells.forEach((el) => {
-      const r = el.getBoundingClientRect();
-      const d = Math.abs(r.left + r.width / 2 - mid);
-      if (d < bestD) {
-        bestD = d;
-        best = el;
-      }
-    });
-    cells.forEach((el) => el.classList.toggle("rol-centered", el === best));
-    return (best as HTMLElement | null)?.dataset.fid ?? null;
-  };
-
-  const centerFilm = (id: string) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const el = track.querySelector<HTMLElement>(`[data-fid="${id}"]`);
-    if (el) track.scrollLeft = el.offsetLeft - track.clientWidth / 2 + el.clientWidth / 2;
-  };
-
-  // Re-centre the challenger when the PILE changes (flick / confirm / contender
-  // win) OR the contender changes — tapping the challenger makes IT the new
-  // contender without reordering the pile, so watching pileKey alone misses it.
-  // Never re-centre on a plain scrub (challengerId-only change) so the strip
-  // stays put under the thumb.
-  useEffect(() => {
-    if (prevPileKey.current === pileKey && prevContenderId.current === contenderId) return;
-    prevPileKey.current = pileKey;
-    prevContenderId.current = contenderId;
-    requestAnimationFrame(() => {
-      centerFilm(challengerId);
-      syncHighlight();
-    });
-  }, [pileKey, contenderId, challengerId]);
-
-  useEffect(() => {
-    syncHighlight();
-  });
-
-  // Re-opening mounts a fresh, unscrolled track, but prevPileKey still holds the
-  // key from before it was folded away — so clear it or the centring effect
-  // decides nothing has changed and leaves the strip parked at the far left.
-  useEffect(() => {
-    if (!open) return;
-    prevPileKey.current = "";
-    requestAnimationFrame(() => {
-      centerFilm(challengerId);
-      syncHighlight();
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const markUserScroll = () => (userScrolling.current = true);
-  const handleScroll = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(syncHighlight);
-    if (scrubTimer.current) clearTimeout(scrubTimer.current);
-    scrubTimer.current = setTimeout(() => {
-      const id = syncHighlight();
-      // Only commit a scrub for a user-driven scroll — a programmatic reorder
-      // (flick / confirm) also fires scroll events and must NOT override the challenger.
-      // Any film but the contender is a legal target: scrubbing up leaps past
-      // films it clears, scrubbing down drops it below a weaker one.
-      if (userScrolling.current && id && id !== challengerId) onScrub(id);
-      userScrolling.current = false;
-    }, 100);
-  };
-
-  return (
-    // flex-shrink-0 so the drawer keeps the height it asked for and the arena
-    // above gives way instead. Without it both fought for the same space and
-    // neither yielded, pushing the nav off the bottom of the screen.
-    <div className="relative w-full flex-shrink-0 pb-1">
-      {/* A grabber, not a chevron — the strip pulls open and closed like a
-          drawer, so drag it or tap it. */}
-      <button
-        onClick={onToggle}
-        onPointerDown={(e) => (pullFrom.current = e.clientY)}
-        onPointerUp={(e) => {
-          const from = pullFrom.current;
-          pullFrom.current = null;
-          if (from == null) return;
-          const dy = e.clientY - from;
-          // A deliberate pull wins over the tap; anything smaller is a tap.
-          if (Math.abs(dy) > 12) {
-            e.preventDefault();
-            if (dy > 0 === open) onToggle(); // pull down to close, up to open
-          }
-        }}
-        aria-label={open ? "Hide the film strip" : "Show the film strip"}
-        aria-expanded={open}
-        className="mx-auto flex h-7 w-20 items-center justify-center"
-        style={{ touchAction: "none" }}
-      >
-        <span
-          className="block rounded-full"
-          style={{
-            width: 34,
-            height: 4,
-            background: open ? "var(--border)" : "color-mix(in srgb, var(--gold) 55%, transparent)",
-            transition: "background 0.25s var(--ease)",
-          }}
-        />
-      </button>
-      {/* pt-7: the centred poster scales 1.16x upward from its bottom edge, and
-          overflow-x:auto forces overflow-y to auto — without headroom the track
-          slices the top off it and its glow. */}
-      {/* Stays mounted and animates its row from 0fr to 1fr, so it slides rather
-          than snaps — and keeps its scroll position while folded away. */}
-      <div
-        className="grid"
-        style={{ gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.3s var(--ease)" }}
-      >
-        <div style={{ overflow: "hidden", minHeight: 0 }}>
-        <div
-          ref={trackRef}
-          onScroll={handleScroll}
-          onPointerDown={markUserScroll}
-          onTouchStart={markUserScroll}
-          onWheel={markUserScroll}
-          className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
-        >
-        <TierDivider />
-        {lowToHigh.map((f) =>
-          f.id === contenderId ? (
-            // The climbing film sits IN the strip at its real position, so it
-            // occupies layout space — overlaying it caused it to stack on top of
-            // whichever cell happened to scroll under it. No data-fid: it must
-            // never be pickable as its own challenger.
-            <div key={f.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
-              <div
-                className="w-full overflow-hidden rounded-md"
-                style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent)" }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
-              </div>
-              <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
-            </div>
-          ) : (
-            // During a spotlight, films the search has already ruled out are
-            // faded: the strip stops offering duels that can't teach the session
-            // anything, and you can see the window closing in as you play.
-            <div
-              key={f.id}
-              data-fid={f.id}
-              className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]"
-              style={inPlay && !inPlay.has(f.id) ? { opacity: 0.3 } : undefined}
-            >
-              <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
-              </div>
-              <span className="text-[9px] font-bold tracking-wide text-dim/70">
-                {inPlay && !inPlay.has(f.id) ? "SETTLED" : "UN-RNKD"}
-              </span>
-            </div>
-          ),
-        )}
-        {/* Locked films tail the strip — they outrank the whole pile, so the
-            shelf you're building stays in view. They carry no data-fid, so they
-            can't be scrubbed to; re-opening them is a later feature. */}
-        {locked.map(({ film }) => (
-          <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
-            {/* A padlock, not a number. `confirmed` is per-tier, so a rank shown
-                here would read as "#1 of everything" when it only means "#1 of
-                this tier" — and a 5★ film already outranks the whole 4★ shelf.
-                The strip's job is "this is settled"; the real number belongs
-                where it can say "#2 overall, #1 in 4★" (overallRank exists for
-                that). */}
-            <LockIcon />
-            <div
-              className="w-full overflow-hidden rounded-md bg-surface"
-              style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
-            </div>
-            {/* Matches the UN-RNKD label height so every poster shares a baseline */}
-            <span className="text-[9px] leading-none text-transparent">.</span>
-          </div>
-        ))}
-        <TierDivider />
-        </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Bookends: the tier's own boundary marks. The strip only ever holds one star
-// tier, so these are the walls it runs between — and they'll read as real
-// dividers once more than one tier is in play.
-// Sits between the arena and the strip. Until now nothing on screen confirmed a
-// tap had registered — you picked, the posters changed, and that was it. Keyed
-// on the timestamp so it replays even when the same film wins twice running.
-// Beaten films read in a cool silver-blue — clearly not the gold of a winner,
-// but still legible rather than faded out.
-const LOSER = "#9db4d6";
-
-function LastResult({ results }: { results: { won: string; lost: string; at: number }[] }) {
-  // No fixed height: with one, padding only squeezed the text inside the box and
-  // the row still butted straight onto the strip's handle, so the line read as
-  // that control's label.
-  return (
-    <div className="flex flex-col items-center justify-center gap-1.5 px-6 pb-6 pt-2">
-      {results.length === 0 ? (
-        // Holds the question until the first pick answers it.
-        <span className="text-[13px] leading-none text-dim">Which film do you prefer?</span>
-      ) : (
-        results.map((r, i) => (
-          // Keyed on its own timestamp, so React moves the same element down a
-          // row rather than rebuilding it — which is what lets it shrink and
-          // fade on the way instead of snapping.
-          <span
-            key={r.at}
-            className={`result-line leading-none ${i === 0 ? "result-in" : ""}`}
-            style={{ fontSize: i === 0 ? 13 : 11, opacity: i === 0 ? 1 : 0.55 }}
-          >
-            <span className="font-semibold text-gold">{r.won}</span>
-            <span className="text-dim"> beat </span>
-            <span style={{ color: LOSER }}>{r.lost}</span>
-          </span>
-        ))
-      )}
-    </div>
-  );
-}
-
-function LockIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="11" width="16" height="10" rx="2" />
-      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-    </svg>
-  );
-}
-
-function TierDivider() {
-  const line = "color-mix(in srgb, var(--gold) 42%, transparent)";
-  return (
-    <div aria-hidden className="flex flex-shrink-0 flex-col items-center gap-1" style={{ width: 26 }}>
-      <div className="relative flex w-full items-center justify-center" style={{ aspectRatio: "1 / 3" }}>
-        <span
-          className="absolute"
-          style={{
-            width: 1,
-            height: "100%",
-            background: `linear-gradient(to bottom, transparent, ${line} 22%, ${line} 78%, transparent)`,
-          }}
-        />
-        {/* A single star breaks the line at its midpoint. The bookend marks
-            where the tier ends; which tier it is belongs in the header, and
-            stacking four stars down the strip only made it heavy. */}
-        <span className="relative text-[12px] leading-none text-gold" style={{ padding: "3px 0", background: "var(--bg)" }}>
-          ★
-        </span>
-      </div>
-      {/* Holds the label row's height so posters stay on one baseline */}
-      <span className="text-[10px] leading-none text-transparent">.</span>
-    </div>
-  );
-}

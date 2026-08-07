@@ -1,4 +1,5 @@
 import type { Film } from "./types";
+import { migrateLock } from "./lock";
 import { SEED_FILMS } from "./seed";
 
 // Local-first persistence. No backend yet — the master library lives in
@@ -9,7 +10,9 @@ export function loadFilms(): Film[] {
   if (typeof window === "undefined") return SEED_FILMS;
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as Film[];
+    // Migrated on the way in, so every reader downstream sees `lock` and the
+    // legacy `confirmed` flag exists nowhere except this one line.
+    if (raw) return (JSON.parse(raw) as Film[]).map(migrateLock);
   } catch {
     // ignore corrupt/absent storage — fall through to seed
   }
