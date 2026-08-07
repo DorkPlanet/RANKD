@@ -2,15 +2,25 @@
 
 /* Rankd palette — deep technicolor blue with two accents carried throughout:
    --accent (electric blue, structural) and --gold (popcorn, hero/celebration).
-   This :root holds the DEEP default (brightness slider at 0 — gold text on the
-   deepest blue). The Settings slider brightens --bg/--surface toward #0b2044 and
-   cools the text toward whiteish; --accent + --gold stay constant across it. */
+
+   TEXT IS NEUTRAL, and that is the point. Gold used to be the colour of TEXT
+   itself, which meant 228 of the app's 229 coloured elements were gold and none
+   of them stood out — an accent that is everywhere is not an accent. Ordinary
+   text is now a cool near-white and gold is spent only where it is asked for
+   explicitly (~47 places: ranks, stars, the climbing ring, the primary action).
+   Every contrast ratio improved by the change: secondary text went 5.12 -> 6.94
+   against a surface, body text 10.33 -> 12.96.
+
+   The Settings slider brightens --bg/--surface/--border toward #0b2044. It no
+   longer touches the text tokens: it used to warm them back to gold at the deep
+   end, which made "deep background with readable text" — the best-measuring
+   combination — impossible to select. */
 :root {
   --bg: #040c1a;
   --surface: #0a1424;
-  --text: #e7b53e;
-  --text-hi: #f4dd90;
-  --dim: #a5822f;
+  --text: #c6d3ea;
+  --text-hi: #eaf0fa;
+  --dim: #8ca0c0;
   --accent: #4c93ff;
   --gold: #e7b53e;
   --border: #122036;
@@ -53,43 +63,16 @@ img {
   user-select: none;
 }
 
-/* Tips — a slow sweep across the hint text so it reads as a live prompt rather
-   than static furniture. The highlight runs electric blue at its edges into a
-   near-white core, picking up the app's structural accent as it passes.
-   Opacity is transitioned (not keyframed) so swapping tips crossfades without
-   restarting the sweep mid-flight. */
-@keyframes tip-shine {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: 0 0;
-  }
-}
+/* Tips — the line that teaches the mechanic, so it is rendered to be read.
+   It used to sweep a near-white core across the text on a 5s loop, which meant
+   any given word sat at a different contrast from one moment to the next, on
+   the one piece of copy whose entire job is being understood. The sweep is
+   gone; only the crossfade between tips remains, since that carries no text
+   through a moving gradient. This is what the prefers-reduced-motion branch was
+   already falling back to — the accessible version is now the only version. */
 .tip {
-  background: linear-gradient(
-    90deg,
-    var(--dim) 0%,
-    var(--dim) 34%,
-    color-mix(in srgb, var(--accent) 55%, var(--dim)) 43%,
-    #eaf2ff 50%,
-    color-mix(in srgb, var(--accent) 55%, var(--dim)) 57%,
-    var(--dim) 66%,
-    var(--dim) 100%
-  );
-  background-size: 250% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: tip-shine 5s ease-in-out infinite;
+  color: var(--dim);
   transition: opacity 0.55s ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  .tip {
-    animation: none;
-    background: none;
-    color: var(--dim);
-  }
 }
 
 /* When the right-hand status outgrows its half of the row it's masked off at

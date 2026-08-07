@@ -1,8 +1,14 @@
-// User-tunable background brightness for the duel screen.
-//   0 = deepest blue (#040c1a) with gold text — the default look.
-//   1 = brightest blue (#0b2044) with whiteish text.
-// The slider lives in Settings; the choice persists in localStorage. --accent
-// (blue) and --gold stay constant across the range, so they aren't recomputed.
+// User-tunable BACKGROUND brightness for the duel screen.
+//   0 = deepest blue (#040c1a) — the default look.
+//   1 = brightest blue (#0b2044).
+// The slider lives in Settings; the choice persists in localStorage.
+//
+// It used to move the text colour too, warming it to gold at the deep end and
+// cooling it to near-white at the bright end. That coupling made the one
+// combination worth having — a deep background with neutral, readable text —
+// impossible to select: you could have the dark room or the legible text, never
+// both. The text tokens are now constants (see globals.css) and this controls
+// the surfaces only. --accent and --gold were already constant across the range.
 
 const KEY = "rankd-brightness";
 export const DEFAULT_BRIGHTNESS = 0;
@@ -26,18 +32,11 @@ function hslHex(h: number, s: number, l: number): string {
   return "#" + hx(255 * f(0)) + hx(255 * f(8)) + hx(255 * f(4));
 }
 
-function parseHex(c: string): [number, number, number] {
-  const n = c.replace("#", "");
-  return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
-}
-
-function lerpHex(a: string, b: string, t: number): string {
-  const pa = parseHex(a);
-  const pb = parseHex(b);
-  return "#" + hx(pa[0] + (pb[0] - pa[0]) * t) + hx(pa[1] + (pb[1] - pa[1]) * t) + hx(pa[2] + (pb[2] - pa[2]) * t);
-}
-
 // The brightness-driven tokens at position t (0 deep → 1 bright).
+//
+// Surfaces only. The text tokens are deliberately absent: they are fixed in
+// globals.css and must stay legible at every setting rather than changing hue
+// with the room.
 export function brightnessVars(t: number): Record<string, string> {
   const c = clamp01(t);
   return {
@@ -47,9 +46,6 @@ export function brightnessVars(t: number): Record<string, string> {
     "--header-bg": hslHex(218, 68, 12 * c),
     "--surface": hslHex(216, 55, 9 + 15 * c),
     "--border": hslHex(216, 50, 14 + 16 * c),
-    "--text": lerpHex("#e7b53e", "#c6d3ea", c),
-    "--text-hi": lerpHex("#f4dd90", "#eaf0fa", c),
-    "--dim": lerpHex("#a5822f", "#8ca0c0", c),
   };
 }
 

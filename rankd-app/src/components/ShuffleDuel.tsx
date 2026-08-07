@@ -25,6 +25,7 @@ import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
+import { libraryProgress, pct } from "@/lib/progress";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
@@ -300,13 +301,15 @@ export default function ShuffleDuel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* No rank, no target, no pile — there is genuinely nothing to be at. What
-          there is instead is how much you've done and how much is in play. */}
-      <div className="flex flex-shrink-0 items-baseline justify-between px-5 pt-2 pb-1">
+          there is instead is how far through the LIBRARY you are, which is the
+          question this mode exists to answer. */}
+      <div className="flex flex-shrink-0 items-baseline justify-between px-5 pt-2 pb-1.5">
         <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">FAST SHUFFLE</span>
         <span className="text-[11px] text-dim">
           <b className="text-text-hi">{count}</b> {count === 1 ? "duel" : "duels"} · {pool.length} in play
         </span>
       </div>
+      <LibraryBars films={films} log={log} />
 
       {/* A definite height that yields under pressure, matching the arena in the
           ordinary duel. Left as `flex-1` the cards grew to fill whatever was
@@ -361,6 +364,76 @@ export default function ShuffleDuel({
 }
 
 const noop = () => {};
+
+/**
+ * How far through the library you are, in two bars.
+ *
+ * SHUFFLED is coverage — how much of the collection has been compared at all.
+ * LOCKED is result — how much of it has a position, and who decided: gold for
+ * what you committed, a quieter blue for what the evidence placed. The two
+ * segments sit in one track because they are parts of the same whole, and this
+ * is the first place in the app where the hard/soft distinction is visible.
+ *
+ * Both are library-wide rather than pool-scoped, so the numbers do not lurch
+ * when the run's scope changes.
+ *
+ * PROVISIONAL LOOK — the shape is borrowed from TierProgress so it belongs to
+ * the same family, but it has had no design pass.
+ */
+function LibraryBars({ films, log }: { films: Film[]; log: Judgement[] }) {
+  const p = libraryProgress(films, log);
+  const hardPct = pct(p.hard, p.total);
+  const softPct = pct(p.soft, p.total);
+
+  return (
+    <div className="flex-shrink-0 px-5 pb-1">
+      <Bar
+        label="Shuffled"
+        value={`${p.shuffled} of ${p.total}`}
+        segments={[{ pct: pct(p.shuffled, p.total), colour: "var(--accent)" }]}
+      />
+      <Bar
+        label="Locked"
+        value={p.soft > 0 ? `${p.hard} + ${p.soft}` : `${p.hard} of ${p.total}`}
+        segments={[
+          { pct: hardPct, colour: "var(--gold)" },
+          // Distinct from the hard segment without competing with it — the
+          // model's placements count, but they are not your decisions.
+          { pct: softPct, colour: "color-mix(in srgb, var(--gold) 38%, var(--border))" },
+        ]}
+      />
+    </div>
+  );
+}
+
+function Bar({
+  label,
+  value,
+  segments,
+}: {
+  label: string;
+  value: string;
+  segments: { pct: number; colour: string }[];
+}) {
+  return (
+    <div className="mb-1.5 last:mb-0">
+      <div className="mb-1 flex items-baseline justify-between">
+        <span className="text-[9px] font-extrabold tracking-[0.12em] text-dim">{label.toUpperCase()}</span>
+        <span className="text-[10px] text-dim">{value}</span>
+      </div>
+      {/* Same track as TierProgress: one shape for "progress" across the app. */}
+      <div className="flex h-1 overflow-hidden rounded-full bg-border">
+        {segments.map((s, i) => (
+          <div
+            key={i}
+            className="h-full transition-[width] duration-500"
+            style={{ width: `${s.pct}%`, background: s.colour }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function Centre({ children }: { children: React.ReactNode }) {
   return (
