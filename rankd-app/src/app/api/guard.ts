@@ -3,34 +3,21 @@
 // These routes exist to keep the API key server-side, which means the key's
 // quota is spent by whoever can reach them. On a deployed URL that's the entire
 // internet, and /api/film?title= is a perfectly good free TMDb proxy for anyone
-// who finds it. Two cheap defences, neither of which pretends to be security:
-// only answer calls that came from this app, and cap how fast any one caller can
-// make them.
+// who finds it. One cheap defence, which doesn't pretend to be security: only
+// answer calls that came from this app.
+//
+// There was a per-caller rate limit here too — 90 requests a minute. It was
+// sized for browsing ("~8/sec, briefly") and an import is not brief: both
+// backfill loops pace at 120ms, so a fresh library spent the whole minute's
+// budget in about eleven seconds and then 429'd for the remaining forty-nine.
+// Worse, by the time a 429 reached the client it was indistinguishable from
+// "TMDb has nothing" (both arrive as {}), so those films were cached as
+// answered and never asked about again that session — posters stopped and
+// stayed stopped until a reload. TMDb's own limit is ~50/sec, far above
+// anything this app does, so the cap was only ever protecting against
+// strangers, which is what sameApp already does.
 
 import { NextResponse } from "next/server";
-
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 90; // a browsing session fetches at ~8/sec, briefly
-
-// Per-process and lost on cold start, which is fine — this stops casual abuse
-// and accidental loops, not a determined attacker. A real limiter needs shared
-// state, and that arrives with the backend.
-const hits = new Map<string, { n: number; until: number }>();
-
-function rateLimited(request: Request): boolean {
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    request.headers.get("x-real-ip") ??
-    "local";
-  const now = Date.now();
-  const seen = hits.get(ip);
-  if (!seen || now > seen.until) {
-    hits.set(ip, { n: 1, until: now + WINDOW_MS });
-    return false;
-  }
-  seen.n++;
-  return seen.n > MAX_PER_WINDOW;
-}
 
 // A browser always sends Origin on a cross-origin fetch and Referer on a
 // same-origin one. Anything with neither is a script rather than the app, and
@@ -55,9 +42,6 @@ function sameApp(request: Request): boolean {
 export function refuse(request: Request): NextResponse | null {
   if (!sameApp(request)) {
     return NextResponse.json({ error: "Not available from here" }, { status: 403 });
-  }
-  if (rateLimited(request)) {
-    return NextResponse.json({ error: "Slow down" }, { status: 429 });
   }
   return null;
 }
