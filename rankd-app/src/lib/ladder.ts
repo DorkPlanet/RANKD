@@ -138,6 +138,16 @@ function writeScores(films: Film[], s: PlacementSession): void {
 // ── Public API ──────────────────────────────────────────────────────────
 
 // Start placing the given tier. Throws if there aren't enough films (fail fast).
+//
+// `only` replaces the tier pool with an explicit set of films — a director's
+// work, say, which is not a tier and has no reason to be one. It keeps the
+// ORDER IT WAS GIVEN rather than re-sorting by score: the caller's order is
+// already the best standing it has (for a person run, the belief ranking), and
+// a score sort would silently regroup a cross-tier pile back into tier blocks,
+// putting every 5★ above every 4★ before a single duel had been fought. That is
+// exactly the ordering a cross-tier run exists to question.
+//
+// `crossTier` says the run may not write positions — see `confirm`.
 export function startRun(
   films: Film[],
   tier: PlacementSession["tier"],
@@ -145,10 +155,20 @@ export function startRun(
     below = 0,
     above = 0,
     shuffle = false,
-  }: { below?: number; above?: number; shuffle?: boolean } = {},
+    only,
+    crossTier = false,
+  }: {
+    below?: number;
+    above?: number;
+    shuffle?: boolean;
+    only?: string[];
+    crossTier?: boolean;
+  } = {},
 ): RankState {
   const f = clone(films);
-  const pool = poolFor(f, tier, below, above);
+  // Filtered through the library rather than trusted: an id naming a film that
+  // is not here would put a phantom in the pile that every lookup then misses.
+  const pool = only ? only.map((id) => f.find((x) => x.id === id)).filter((x): x is Film => !!x) : poolFor(f, tier, below, above);
   if (pool.length < 2) throw new Error("Need at least 2 films in range to start ranking");
   const ids = pool.map((p) => p.id);
   const unconfirmed = shuffle ? shuffled(ids) : ids;
@@ -157,6 +177,7 @@ export function startRun(
     spanBelow: below,
     spanAbove: above,
     mode: "koth",
+    ...(crossTier ? { crossTier: true } : {}),
     confirmed: [],
     unconfirmed,
     contenderId: unconfirmed[unconfirmed.length - 1], // bottom
@@ -331,21 +352,43 @@ function settle(state: RankState, winnerId: string | null): RankState {
   // `a` is always the contender and `b` the challenger, so the outcome reads the
   // same whichever mechanic asked the question — which is what lets one log be
   // re-derived from regardless of which game produced it.
-  const journal = [
-    ...state.journal,
-    newJudgement(
-      s.contenderId,
-      s.challengerId,
-      drew ? "draw" : winnerId === s.contenderId ? "a" : "b",
-      logModeOf(s),
-    ),
-  ];
+  //
+  // ── Except a cross-tier run, which records NOTHING ────────────────────────
+  //
+  // Elsewhere in the app the log always records; that rule exists so a setting
+  // can govern how much a duel INFLUENCES the list without ever destroying the
+  // fact that it was answered. A person run is outside that bargain, because it
+  // is not a claim about the library at all: it is a list you build to look at
+  // and to share, over a pile that can include films you have never seen. Those
+  // duels answer "which Nolan is better", not "where does this belong", and
+  // feeding them to a model that ranks your whole library would let a
+  // filmography argument leak into everything.
+  //
+  // So a cross-tier run writes no journal row and no duel count, on top of
+  // already writing no score and no lock (see `confirm`). It is the one game in
+  // the app that leaves no trace whatever. (User's explicit call — the cost,
+  // accepted knowingly, is that every person climb is a cold start: its opening
+  // order is read from belief means that these duels will never improve.)
+  const journal = s.crossTier
+    ? state.journal
+    : [
+        ...state.journal,
+        newJudgement(
+          s.contenderId,
+          s.challengerId,
+          drew ? "draw" : winnerId === s.contenderId ? "a" : "b",
+          logModeOf(s),
+        ),
+      ];
 
   // Both films fought, whoever won. Counted here rather than at confirm, because
   // the question is how much evidence a placement rests on, and a duel is
-  // evidence whichever way it goes.
-  for (const f of films) {
-    if (f.id === s.contenderId || f.id === s.challengerId) f.duels = (f.duels ?? 0) + 1;
+  // evidence whichever way it goes — which is exactly why a run that is not
+  // evidence does not count them.
+  if (!s.crossTier) {
+    for (const f of films) {
+      if (f.id === s.contenderId || f.id === s.challengerId) f.duels = (f.duels ?? 0) + 1;
+    }
   }
 
   // A spotlight resolves by narrowing, not by swapping places. Beating a film
@@ -433,12 +476,29 @@ export function confirm(state: RankState): RankState {
     return { films, session: null, journal: state.journal };
   }
   const championId = s.unconfirmed.shift(); // the top of the pile
-  if (championId) {
-    s.confirmed.push(championId);
+  if (championId) s.confirmed.push(championId);
+
+  // A cross-tier run confirms an ORDER and nothing else.
+  //
+  // `confirm` normally does three things at once: it moves the champion onto
+  // the shelf, it hard-locks it, and it re-spreads every film in the pile
+  // across its tier band. The last two are claims about the MAIN list, and a
+  // cross-tier run has not earned either of them. `writeScores` groups by
+  // rating so it would not corrupt the bands — but it would still reorder every
+  // film of a given rating inside its band on the strength of duels fought
+  // against films from other tiers, silently rewriting the main list from a run
+  // the user started to answer a different question. And a hard lock would
+  // assert the user had placed the film among its tier peers, which is
+  // precisely what they did not do.
+  //
+  // So it writes nothing. `s.confirmed` is already an ordered id array, which
+  // means the finished pile IS the ranked list — there is no second ordering to
+  // store, and nothing downstream to keep in sync. See lib/people.ts.
+  if (!s.crossTier) {
     const champ = films.find((f) => f.id === championId);
     if (champ) champ.lock = "hard";
+    writeScores(films, s);
   }
-  writeScores(films, s);
   // A promotion run places one film and stops. A full run would hand off to the
   // next climber here; a spotlight has nothing further to place.
   if (s.mode === "spotlight") return { films, session: null, journal: state.journal };

@@ -148,6 +148,14 @@ export default function AppShell() {
 
   if (!state) return null;
 
+  // What the user actually owns. A person run merges borrowed films into
+  // `state.films` so the engine can duel them, and the duel screen is the only
+  // screen entitled to see them — everywhere else they would read as films you
+  // logged. `saveFilms` keeps them out of storage; this keeps them off screen.
+  const library = state.films.some((f) => f.guest)
+    ? state.films.filter((f) => !f.guest)
+    : state.films;
+
   return (
     <>
       {screen === "duel" ? (
@@ -172,7 +180,7 @@ export default function AppShell() {
         />
       ) : screen === "list" ? (
         <ListScreen
-          films={state.films}
+          films={library}
           profile={profile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
@@ -188,7 +196,7 @@ export default function AppShell() {
         />
       ) : (
         <ProfileScreen
-          films={state.films}
+          films={library}
           profile={profile}
           onProfile={changeProfile}
           onInfo={setInfoFilm}
@@ -200,12 +208,12 @@ export default function AppShell() {
         />
       )}
 
-      {trophiesOpen && <Trophies films={state.films} onClose={() => setTrophiesOpen(false)} />}
+      {trophiesOpen && <Trophies films={library} onClose={() => setTrophiesOpen(false)} />}
 
       {infoFilm && (
         <FilmInfo
           film={infoFilm}
-          films={state.films}
+          films={library}
           onClose={() => setInfoFilm(null)}
           // The info card closes on the way through: two stacked sheets over the
           // duel is one too many, and you came here to leave this film behind.
@@ -222,7 +230,7 @@ export default function AppShell() {
       {person && (
         <PersonSheet
           person={person}
-          films={state.films}
+          films={library}
           onClose={() => setPerson(null)}
           onInfo={(f) => {
             setPerson(null);
@@ -231,7 +239,11 @@ export default function AppShell() {
           onAddFilm={addFilm}
           onRank={(p, guests) => {
             setPerson(null);
-            setPersonRun(p);
+            // A fresh object every time, so asking for the same person twice is
+            // two requests. The duel screen starts a run when this prop CHANGES,
+            // and handing back the identical object would be a no-op it read as
+            // "nothing new to do".
+            setPersonRun({ ...p });
             setPersonGuests(guests);
             setScreen("duel");
           }}
@@ -243,7 +255,7 @@ export default function AppShell() {
           brightness={brightness}
           onChange={changeBrightness}
           onClose={() => setSettingsOpen(false)}
-          films={state.films}
+          films={library}
           onImport={loadLibrary}
         />
       )}

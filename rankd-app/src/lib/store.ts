@@ -19,10 +19,19 @@ export function loadFilms(): Film[] {
   return SEED_FILMS;
 }
 
+// Guests are stripped HERE rather than at each call site.
+//
+// A person run puts borrowed films — ones you have never seen — into the pile,
+// and the pile is `RankState.films`, which is what every write hands to this
+// function. Two call sites already remembered to filter them (`onFilms` and
+// `onMeta` in the duel screen); the climb added a third, and "remember to
+// filter" is a rule that only matters at the moment it is forgotten. One choke
+// point means no path can persist a film the user never logged, whatever it
+// does upstream. See `guest` in lib/types.ts.
 export function saveFilms(films: Film[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(KEY, JSON.stringify(films));
+    localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
   } catch {
     // storage full / disabled — nothing we can do, and nothing to fall back to
   }

@@ -93,6 +93,12 @@ export interface PlacementSession {
   // A promotion run in progress: the subject is working through the weakest
   // films of the tier above, weakest first. Emptying it earns the promotion.
   promotionQueue?: string[];
+  // This run's pile spans star ratings, so its order is not a claim about any
+  // one tier — and `confirm` therefore writes no score and no lock. The order
+  // lives in `confirmed` and nowhere else, which is what lets a 3★ sit above a
+  // 4★ here without a band being broken anywhere in the library. Set by a
+  // person run; see the header of lib/people.ts for why that has to be true.
+  crossTier?: boolean;
 }
 
 export interface RankState {

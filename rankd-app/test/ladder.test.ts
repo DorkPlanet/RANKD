@@ -445,3 +445,137 @@ describe("reading the ranking", () => {
     expect(pendingConfirm(s)).not.toBeNull();
   });
 });
+
+// ── An arbitrary pile, and a run that may not write positions ──────────────
+//
+// A person's filmography is not a tier: it spans star ratings, and its order is
+// an answer to "what do I think of this director", not a claim about where any
+// of those films sit among their 4★ peers. So the pile comes in as an explicit
+// set, and confirming it must leave `score` and `lock` untouched — the whole
+// premise of lib/people.ts is that the cross-tier order is stored nowhere but
+// the run's own `confirmed` array.
+
+describe("a run over an arbitrary set of films", () => {
+  const mixed = (): Film[] => [
+    film("five", 5, tierMid(5)),
+    film("four", 4, tierMid(4)),
+    film("three", 3, tierMid(3)),
+    film("stranger", 4, tierMid(4)), // in the library, not in the run
+  ];
+
+  it("takes exactly the films it was given, ignoring tier", () => {
+    const s = startRun(mixed(), 4, { only: ["three", "five", "four"] });
+    expect([...s.session!.unconfirmed].sort()).toEqual(["five", "four", "three"]);
+  });
+
+  it("keeps the caller's order rather than re-sorting by score", () => {
+    // Score order would be five, four, three — the tier blocks the caller is
+    // deliberately overriding.
+    const s = startRun(mixed(), 4, { only: ["three", "five", "four"] });
+    expect(s.session!.unconfirmed).toEqual(["three", "five", "four"]);
+  });
+
+  it("ignores ids the library doesn't hold rather than piling up phantoms", () => {
+    const s = startRun(mixed(), 4, { only: ["five", "ghost", "four"] });
+    expect(s.session!.unconfirmed).toEqual(["five", "four"]);
+  });
+
+  it("still refuses a pile too small to duel", () => {
+    expect(() => startRun(mixed(), 4, { only: ["five"] })).toThrow();
+    expect(() => startRun(mixed(), 4, { only: ["ghost", "phantom"] })).toThrow();
+  });
+
+  it("climbs from the bottom of the given order, as any run does", () => {
+    const s = startRun(mixed(), 4, { only: ["three", "five", "four"] });
+    expect(contender(s)).toBe("four"); // last given = bottom of the pile
+    expect(challenger(s)).toBe("five");
+  });
+});
+
+describe("a cross-tier run", () => {
+  const mixed = (): Film[] => [film("five", 5, tierMid(5)), film("four", 4, tierMid(4)), film("three", 3, tierMid(3))];
+  const crossRun = () => startRun(mixed(), 4, { only: ["five", "four", "three"], crossTier: true });
+
+  it("writes no score when a film is confirmed", () => {
+    const before = new Map(mixed().map((f) => [f.id, f.score]));
+    let s = crossRun();
+    while (getPair(s)) s = win(s, "contender");
+    s = confirm(s);
+    for (const f of s.films) expect(f.score).toBe(before.get(f.id));
+  });
+
+  it("writes no lock when a film is confirmed", () => {
+    let s = crossRun();
+    while (getPair(s)) s = win(s, "contender");
+    s = confirm(s);
+    expect(s.films.every((f) => f.lock === undefined)).toBe(true);
+  });
+
+  it("leaves the master ranking exactly as it found it", () => {
+    let s = crossRun();
+    const before = ids(rankedFilms(s.films));
+    // Play the whole thing out, upsets and all.
+    while (s.session) {
+      s = pendingConfirm(s) ? confirm(s) : win(s, "contender");
+    }
+    expect(ids(rankedFilms(s.films))).toEqual(before);
+  });
+
+  it("still produces the order, in `confirmed`", () => {
+    // The bottom film wins everything, so it should finish first.
+    let s = crossRun();
+    const order: string[] = [];
+    while (s.session) {
+      if (pendingConfirm(s)) {
+        order.push(pendingConfirm(s)!.id);
+        s = confirm(s);
+      } else {
+        s = win(s, "contender");
+      }
+    }
+    expect(order).toEqual(["three", "four", "five"]);
+  });
+
+  // The run that leaves no trace. Everywhere else in the app the log always
+  // records — a person run is the deliberate exception, because it is a list you
+  // build to share rather than a claim about your library, and its pile can hold
+  // films you have never seen.
+  it("writes no evidence row for a duel", () => {
+    let s = crossRun();
+    s = win(s, "contender");
+    expect(s.journal).toHaveLength(0);
+  });
+
+  it("writes no evidence rows for a draw either", () => {
+    let s = crossRun();
+    s = skipPair(s);
+    expect(s.journal).toHaveLength(0);
+  });
+
+  it("counts no duels on the films that fought", () => {
+    let s = crossRun();
+    s = win(s, "contender");
+    expect(s.films.every((f) => f.duels === undefined)).toBe(true);
+  });
+
+  it("leaves nothing behind after a whole run, not just one duel", () => {
+    let s = crossRun();
+    while (s.session) s = pendingConfirm(s) ? confirm(s) : win(s, "contender");
+    expect(s.journal).toHaveLength(0);
+    expect(s.films.every((f) => f.duels === undefined && f.lock === undefined)).toBe(true);
+  });
+
+  it("does not silence an ordinary run, which still records", () => {
+    let s = startRun(tier(3), 4);
+    s = win(s, "contender");
+    expect(s.journal).toHaveLength(1);
+    expect(s.films.filter((f) => (f.duels ?? 0) > 0)).toHaveLength(2);
+  });
+
+  it("does not infect an ordinary run, which still writes positions", () => {
+    let s = startRun(tier(3), 4);
+    while (getPair(s)) s = win(s, "contender");
+    s = confirm(s);
+    expect(s.films.some((f) => f.lock === "hard")).toBe(true);
+  });
+});

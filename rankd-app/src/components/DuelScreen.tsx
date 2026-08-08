@@ -34,6 +34,7 @@ import { LOSER, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
 import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
+import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
 import { RunBars } from "./RunBars";
 import {
@@ -55,14 +56,15 @@ import {
   AddFilmIcon,
   TrophyIcon,
 } from "./Icons";
-import type { Person } from "@/lib/people";
+import { BARS } from "@/lib/brand";
+import { beliefsFor } from "@/lib/beliefs";
+import { filmsBy, rankByBelief, type Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
 
 // Which game the setup panel is configuring; null while it is still asking.
 type ChosenMode = "koth" | "shuffle" | null;
-const BARS = ["#D81E26", "#DAA520", "#00A3A3", "#1E3A8A", "#6B4E9E"];
 
 // The library and the app-wide chrome now live in AppShell — this screen owns
 // only the duel. Everything it still holds is setup state for the next run.
@@ -155,23 +157,29 @@ export default function DuelScreen({
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
       return !v;
     });
-  // A person's filmography, handed over to be ranked against itself. Arrives the
-  // same way the review card's request does, and for the same reason: starting a
-  // run means replacing what is on this screen, which is this screen's business.
-  //
-  // `includeConfirmed` is forced on. Every other run defaults it off because it
-  // is usually about the hundreds of films with no position yet — but a director
-  // has a handful of films and you have almost certainly placed the good ones, so
-  // leaving them out would serve you the two you care least about.
-  // Derived, not copied into state. An effect that mirrors a prop into local
-  // state is a cascading render and a second copy of the same fact that can
-  // disagree with the first; the run IS the request, so it is read straight off
-  // it. Clearing is the parent's job, which `onExit` already does.
-  const activeRun: ShuffleOptions | null =
-    shuffleRun ??
-    (personRun
-      ? { scope: { kind: "person", name: personRun.name, role: personRun.role }, includeConfirmed: true }
-      : null);
+  // Fast Shuffle is now the only thing that takes this screen over. A person run
+  // used to arrive here as a shuffle scope — which asked the right films the
+  // right questions and then had nowhere to put the answer, because a shuffle
+  // has no pile, no order and no end. It is a climb now; see `personRun` below.
+  const activeRun: ShuffleOptions | null = shuffleRun;
+
+  // What the run on screen is about, when it isn't a tier. Derived, not stored:
+  // a person run stays "handed over" until its summary is dismissed, so the
+  // request is still here to read from, and mirroring it into local state would
+  // be a second copy of one fact — plus a setState inside an effect, which is
+  // the cascading render the linter is right to object to.
+  const runTitle = personRun
+    ? { title: personRun.name, subtitle: personRun.role === "director" ? "Director" : "Actor" }
+    : null;
+  // A finished cross-tier order, waiting to be kept or exported. This is the one
+  // result the app cannot recover once it is gone: it lives in no film's score
+  // and in no tier, so the summary holds it until the user decides.
+  const [runResult, setRunResult] = useState<{
+    title: string;
+    subtitle: string;
+    films: Film[];
+    complete: boolean;
+  } | null>(null);
 
   // The review card's answer arrives as a film to re-place. Handled here rather
   // than by the list, because starting a spotlight means replacing the run on
@@ -190,6 +198,51 @@ export default function DuelScreen({
     // Only when a new request arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotlightRequest]);
+
+  // A person's filmography, handed over to be ranked against itself — as a
+  // KING OF THE HILL climb, cross-tier, over an explicit pile.
+  //
+  // Three things make it different from every other run, and all three are the
+  // reason it needed `only` and `crossTier` in ladder.ts:
+  //   · the pile is a person's work, which is not a tier and cannot be selected
+  //     by one;
+  //   · it starts in BELIEF order, the only ordering in the app that spans star
+  //     ratings, so the climb begins from the best guess rather than from stars;
+  //   · confirming writes no score and no lock, so ranking Mann against Mann
+  //     cannot quietly rewrite your main list.
+  // Borrowed films are merged in here and never leave: `saveFilms` strips them.
+  useEffect(() => {
+    if (!personRun) return;
+    const person = personRun;
+    setState((s) => {
+      if (!s) return s;
+      // Merged by id, not appended. An updater must be safe to run twice on the
+      // same input — React does exactly that in development — and a blind
+      // concat put every borrowed film in the pile a second time: a 19-film
+      // filmography started as a 35-film climb against duplicates of itself.
+      const have = new Set(s.films.map((f) => f.id));
+      const all = [...s.films, ...personGuests.filter((g) => !have.has(g.id))];
+      const order = rankByBelief(filmsBy(all, person), beliefsFor(all, log));
+      if (order.length < 2) return s; // nothing to duel — leave the run alone
+      try {
+        return {
+          ...startRun(all, order[0].rating, {
+            only: order.map((f) => f.id),
+            crossTier: true,
+          }),
+          journal: s.journal,
+        };
+      } catch {
+        return s;
+      }
+    });
+    // Deliberately NOT handing the request back here. The run needs to know
+    // whose films these are for as long as it is on screen — including the
+    // summary at the end, which is the only place the answer exists. It is
+    // released when that summary is dismissed.
+    // Only when a new request arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personRun]);
 
   // Fill in artwork for the tier being played. Scoped to the active pile rather
   // than the whole library — an import can be hundreds of films, and only these
@@ -273,8 +326,16 @@ export default function DuelScreen({
   const commitUndoable = (next: RankState) => {
     // The journal is drained by `commit`, so capture the ids first — after that
     // they are gone from state and there would be nothing left to retract.
-    setUndo({ state, judgements: next.journal.map((j) => j.id) });
+    const step = { state, judgements: next.journal.map((j) => j.id) };
+    // Set AFTER committing, not before. `commit` reads an empty journal as "no
+    // judgement happened — this was a confirm or a flick" and drops the undo
+    // step, which was true until a cross-tier run started answering duels
+    // without logging them. A person run would otherwise have lost undo
+    // entirely: every duel would arrive here with nothing to drain and clear the
+    // step it had just set. The pile still moved, so there is still something to
+    // take back; the retraction list is simply empty.
     commit(next);
+    setUndo(step);
   };
   const undo = () => {
     if (!undoStep) return;
@@ -301,9 +362,41 @@ export default function DuelScreen({
   const flick = (filmId: string) => commit(flickToTop(state, filmId), false);
   const sink = (filmId: string) => commit(flickToBottom(state, filmId), false);
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
+  // The films behind an id list, in that order. Read from the run's own films
+  // rather than the library, because a person run's pile can hold borrowed ones
+  // the library has never heard of.
+  const filmsOf = (ids: string[]): Film[] =>
+    ids.map((id) => state.films.find((f) => f.id === id)).filter((f): f is Film => !!f);
+
+  // Catch a cross-tier order on its way out of existence.
+  //
+  // `confirm` returns a null session once the pile empties, and for a cross-tier
+  // run that session was the ONLY place the order lived — nothing was written to
+  // any film. So it is captured at the moment of the last confirm, when
+  // `confirmed` holds everything already placed and the contender is the film
+  // about to join them.
+  const endCrossTier = (order: string[], complete: boolean) => {
+    if (!runTitle) return;
+    setRunResult({ ...runTitle, films: filmsOf(order), complete });
+  };
+
+  // Borrowed films go home when the run that borrowed them ends. `saveFilms`
+  // already stops them being written, but they would otherwise sit in the live
+  // library that the list, the profile and the trophies all read from — visible
+  // everywhere, saved nowhere, which is the worst of both. The summary holds its
+  // own copy of them, so the picture and the saved list keep every film.
+  const dropGuests = (st: RankState): RankState =>
+    st.films.some((f) => f.guest) ? { ...st, films: st.films.filter((f) => !f.guest) } : st;
+
   const lockIn = () => {
     // Winning the promotion duels banks a new star rating instead of a position.
-    commit(promotionWon(state) ? completePromotion(state) : confirm(state));
+    const next = promotionWon(state) ? completePromotion(state) : confirm(state);
+    if (session?.crossTier && !next.session) {
+      endCrossTier([...session.confirmed, session.contenderId], true);
+      commit(dropGuests(next));
+      return;
+    }
+    commit(next);
   };
   const backOut = () => commit(stepBackFromConfirm(state), false);
 
@@ -345,6 +438,15 @@ export default function DuelScreen({
   // Ending a spotlight that fought nobody just restores the film; ending one
   // that did show what it established before committing anything.
   const endRun = () => {
+    // "One climbing till I decide what's at the top" — so stopping is a real
+    // ending here, not an abandonment. The pile as it stands IS the answer: the
+    // films you settled are above the ones you haven't got to, which is exactly
+    // what the order means. It just says so on the summary.
+    if (session?.crossTier) {
+      endCrossTier([...session.confirmed, ...session.unconfirmed], false);
+      commit(dropGuests({ ...state, session: null }), false);
+      return;
+    }
     if (session?.mode === "spotlight") {
       const fought =
         (session.spotWins?.length ?? 0) +
@@ -370,6 +472,29 @@ export default function DuelScreen({
     setSummary(null);
   };
 
+  // Run the same pile again, starting from the order you just settled on rather
+  // than from scratch — a second pass is for refining an answer, not discarding
+  // it. The borrowed films come back with it: they are held on the result, which
+  // is the only place they still exist once the run let them go.
+  const rankAgain = () => {
+    const r = runResult;
+    if (!r || r.films.length < 2) return;
+    setState((s) => {
+      if (!s) return s;
+      const guests = r.films.filter((f) => f.guest);
+      const all = guests.length ? [...s.films, ...guests] : s.films;
+      try {
+        return {
+          ...startRun(all, r.films[0].rating, { only: r.films.map((f) => f.id), crossTier: true }),
+          journal: s.journal,
+        };
+      } catch {
+        return s;
+      }
+    });
+    setRunResult(null);
+  };
+
   const promoteTo = promotionTarget(state);
   const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
   const assertPromotion = () => commit(promoteDirect(state));
@@ -388,9 +513,12 @@ export default function DuelScreen({
           screen and never sets `shuffleRun`, so guarding on that one left the
           tier bar sitting above a filmography run — the exact thing the comment
           above was written to prevent, reintroduced by adding a second way in. */}
-      {!activeRun && (
+      {!activeRun && !runResult && (
         <RunBars
-          films={state.films}
+          // The bottom two bars measure the LIBRARY, so borrowed films must not
+          // swell their denominators — a Nolan run was reporting "0 of 42" for a
+          // library of ten.
+          films={state.films.some((f) => f.guest) ? state.films.filter((f) => !f.guest) : state.films}
           log={log}
           title={session?.mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
           run={{
@@ -400,18 +528,47 @@ export default function DuelScreen({
           }}
           // The tier reads as its stars and doubles as the quickest way to
           // switch — the label you're looking at is the control.
+          //
+          // Except in a cross-tier run, where the pile spans star ratings and a
+          // single tier is not a true thing to say about it, let alone a control
+          // that could switch it. It says whose films these are instead.
           lead={
-            <button onClick={() => setTierOpen(true)} className="flex items-baseline gap-1.5 active:scale-95">
-              <span className="text-base leading-none text-gold">{starsFor(session?.tier ?? DEFAULT_TIER)}</span>
-              <span className="text-[10px] leading-none text-dim">▾</span>
-            </button>
+            session?.crossTier ? (
+              <span className="max-w-[120px] truncate text-[11px] font-bold leading-none text-gold">
+                {runTitle?.title}
+              </span>
+            ) : (
+              <button onClick={() => setTierOpen(true)} className="flex items-baseline gap-1.5 active:scale-95">
+                <span className="text-base leading-none text-gold">{starsFor(session?.tier ?? DEFAULT_TIER)}</span>
+                <span className="text-[10px] leading-none text-dim">▾</span>
+              </button>
+            )
           }
         />
       )}
 
-      {/* Fast Shuffle owns the whole surface while it runs: it has no pile, no
-          climb and no confirm, so none of the branches below apply to it. */}
-      {activeRun ? (
+      {/* A finished cross-tier order takes the surface for the same reason Fast
+          Shuffle does: there is no duel to show, and what it holds cannot be
+          recovered from anywhere else once it is dismissed. */}
+      {/* `!session` as well as `runResult`: starting a new run supersedes a
+          summary that is still on screen, without anything having to remember to
+          clear it. */}
+      {runResult && !session ? (
+        <RunSummary
+          title={runResult.title}
+          subtitle={runResult.subtitle}
+          films={runResult.films}
+          complete={runResult.complete}
+          onList={onList}
+          onAgain={rankAgain}
+          onDone={() => {
+            setRunResult(null);
+            onPersonRunHandled?.(); // the request is finished with now, not before
+          }}
+        />
+      ) : /* Fast Shuffle owns the whole surface while it runs: it has no pile, no
+          climb and no confirm, so none of the branches below apply to it. */
+      activeRun ? (
         <ShuffleDuel
           // Borrowed films are handed to the run and to nothing else. Both
           // writes below strip them, so there is no path from "I ranked a
