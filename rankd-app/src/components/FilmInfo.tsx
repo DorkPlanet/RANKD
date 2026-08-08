@@ -31,14 +31,19 @@ export function FilmInfo({
   films,
   onClose,
   onPerson,
+  onRemove,
 }: {
   film: Film;
   films?: Film[];
   onClose: () => void;
   /** Open a director's or actor's filmography. */
   onPerson?: (person: Person) => void;
+  /** Take this film out of the library. Absent where removal makes no sense. */
+  onRemove?: (film: Film) => void;
 }) {
   const [meta, setMeta] = useState<FilmMeta | null>(null);
+  // Whether the remove control has been armed by a first tap.
+  const [armed, setArmed] = useState(false);
   useEffect(() => {
     let live = true;
     fetchMeta(film).then((m) => {
@@ -172,6 +177,53 @@ export function FilmInfo({
         )}
 
         {!meta && <div className="px-4 pb-4 text-[11px] text-dim">Loading details…</div>}
+
+        {/* Two taps, not one, and no browser confirm().
+            This is the only destructive control in the app, it sits on a card
+            you open by long-pressing a poster mid-duel, and a mis-tap here costs
+            a film and its history. The second tap states the consequence rather
+            than asking "are you sure" — the thing worth knowing is that the
+            duels it fought stay in the record, because someone about to lose a
+            film assumes they lose everything with it. */}
+        {onRemove && (
+          <div className="border-t border-border px-4 py-3">
+            {armed ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    onRemove(film);
+                    onClose();
+                  }}
+                  // The app has no danger colour — nothing else in it destroys
+                  // anything — so this borrows the wordmark bar's red directly
+                  // rather than inventing a token for one button.
+                  style={{ color: "#D81E26", borderColor: "#D81E26" }}
+                  className="flex-1 rounded-lg border py-2 text-[11px] font-bold active:scale-95"
+                >
+                  Remove it
+                </button>
+                <button
+                  onClick={() => setArmed(false)}
+                  className="flex-1 rounded-lg border border-border py-2 text-[11px] font-bold text-dim active:scale-95"
+                >
+                  Keep it
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setArmed(true)}
+                className="w-full text-center text-[11px] font-semibold text-dim active:scale-95"
+              >
+                Remove from library
+              </button>
+            )}
+            {armed && (
+              <p className="mt-2 text-center text-[10px] leading-snug text-dim">
+                Taken out of your list. The duels it fought stay in the record.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

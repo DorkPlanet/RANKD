@@ -113,6 +113,39 @@ export default function AppShell() {
       return { ...s, films };
     });
 
+  // Take a film out of the library.
+  //
+  // Until now nothing could: a bad import, a wrong TMDb match or a film you
+  // never actually watched was permanent, and the only escape was wiping the
+  // whole library and re-importing.
+  //
+  // The evidence log is deliberately NOT touched. Removal is not undo — the
+  // duels really happened, and a judgement naming a departed film is simply not
+  // evidence about anyone still here; `fitBeliefs` already skips those rows by
+  // id lookup, with a comment anticipating exactly this. Retracting them would
+  // also destroy what they say about the film on the OTHER side of each duel,
+  // which is still in your library and did nothing wrong.
+  //
+  // If the film is in the run on screen, the run ends. Splicing it out of a
+  // live pile means rewriting `contenderId`, `challengerId` and two arrays that
+  // ladder.ts alone is allowed to reason about; ending the session costs an
+  // unfinished climb and cannot leave the engine holding a film that no longer
+  // exists.
+  const removeFilm = (id: string) =>
+    setState((s) => {
+      if (!s) return s;
+      const films = s.films.filter((f) => f.id !== id);
+      if (films.length === s.films.length) return s;
+      saveFilms(films);
+      const inPlay =
+        !!s.session &&
+        (s.session.unconfirmed.includes(id) ||
+          s.session.confirmed.includes(id) ||
+          s.session.contenderId === id ||
+          s.session.challengerId === id);
+      return { ...s, films, session: inPlay ? null : s.session };
+    });
+
   if (!state) return null;
 
   return (
@@ -180,6 +213,9 @@ export default function AppShell() {
             setInfoFilm(null);
             setPerson(p);
           }}
+          // Guests are not in the library, so there is nothing to remove them
+          // from - offering it would be a button that silently does nothing.
+          onRemove={infoFilm.guest ? undefined : (f) => removeFilm(f.id)}
         />
       )}
 
