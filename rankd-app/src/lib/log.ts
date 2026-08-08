@@ -144,6 +144,32 @@ export async function appendJudgements(incoming: readonly Judgement[]): Promise<
   }
 }
 
+/**
+ * Remove judgements by id. The one exception to append-only, and deliberately
+ * narrow.
+ *
+ * The log's whole thesis is that a comparison you fought is never thrown away,
+ * so this must not become a general edit. It exists for Undo, which does not
+ * mean "I changed my mind" — that is a new judgement and belongs in the log
+ * like any other. It means "I did not make that call", a mis-tap on a screen
+ * whose entire interface is two large tap targets. Leaving that behind would
+ * put a judgement the user never made into every belief derived from it, and
+ * unlike a wrong placement there would be no way to ever see it or fix it.
+ *
+ * Callers should retract only what they themselves just appended.
+ */
+export async function retractJudgements(ids: readonly string[]): Promise<void> {
+  if (typeof window === "undefined" || ids.length === 0) return;
+  try {
+    const drop = new Set(ids);
+    const kept = (await loadLog()).filter((j) => !drop.has(j.id));
+    localStorage.setItem(KEY, JSON.stringify(encode(kept)));
+  } catch {
+    // Same reasoning as the append path: the library is the thing worth
+    // protecting, and a log that failed to shrink is merely over-informed.
+  }
+}
+
 /** Every row naming this film, either side. Pure — hand it a log you already hold. */
 export function logFor(log: readonly Judgement[], filmId: string): Judgement[] {
   return log.filter((j) => j.a === filmId || j.b === filmId);

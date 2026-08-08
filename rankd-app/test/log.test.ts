@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { appendJudgements, loadLog, logFor, logSize, newJudgement } from "@/lib/log";
+import { appendJudgements, loadLog, logFor, logSize, newJudgement, retractJudgements } from "@/lib/log";
 
 // log.ts guards on `typeof window` and talks to localStorage, so stand both up.
 // A real map, not a mock: the round trip through JSON — encode, intern, decode —
@@ -117,5 +117,51 @@ describe("logSize", () => {
     const { bytes, rows: n } = logSize(rows);
     expect(n).toBe(5000);
     expect(bytes / n).toBeLessThan(60);
+  });
+});
+
+// The one operation that removes evidence, so the tests are about what it must
+// NOT take with it as much as what it removes.
+describe("retractJudgements", () => {
+  it("removes only the named rows and leaves the rest intact", async () => {
+    const a = newJudgement("heat", "casino", "a", "koth");
+    const b = newJudgement("dune", "arrival", "b", "shuffle");
+    const c = newJudgement("zodiac", "sicario", "draw", "spotlight");
+    await appendJudgements([a, b, c]);
+
+    await retractJudgements([b.id]);
+
+    const log = await loadLog();
+    expect(log.map((j) => j.id)).toEqual([a.id, c.id]);
+    // The survivors must come back whole, not just present — retraction rewrites
+    // the interned dictionary, and a dropped film id would silently corrupt the
+    // rows that still reference it.
+    expect(log[1]).toMatchObject({ a: "zodiac", b: "sicario", o: "draw", m: "spotlight" });
+  });
+
+  it("is a no-op for ids that were never recorded", async () => {
+    const a = newJudgement("heat", "casino", "a", "koth");
+    await appendJudgements([a]);
+    await retractJudgements(["nothing-like-this"]);
+    expect(await loadLog()).toHaveLength(1);
+  });
+
+  it("does not disturb the log when handed nothing", async () => {
+    const a = newJudgement("heat", "casino", "a", "koth");
+    await appendJudgements([a]);
+    await retractJudgements([]);
+    expect(await loadLog()).toHaveLength(1);
+  });
+
+  // A retracted duel must be genuinely gone, not merely hidden — undo exists so
+  // the model never sees a judgement the user did not make, and re-appending is
+  // how a real mis-tap-then-redo sequence would come back through.
+  it("lets an id be recorded again after retraction", async () => {
+    const a = newJudgement("heat", "casino", "a", "koth");
+    await appendJudgements([a]);
+    await retractJudgements([a.id]);
+    expect(await loadLog()).toHaveLength(0);
+    await appendJudgements([a]);
+    expect(await loadLog()).toHaveLength(1);
   });
 });

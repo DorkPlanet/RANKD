@@ -26,7 +26,7 @@ import {
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
-import { appendJudgements } from "@/lib/log";
+import { appendJudgements, retractJudgements } from "@/lib/log";
 import { poolFor } from "@/lib/matchmaker";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
@@ -105,6 +105,12 @@ export default function DuelScreen({
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
   const [below, setBelow] = useState(0);
   const [above, setAbove] = useState(0);
+
+  // One step back: the state as it was before the last judgement, and the ids
+  // that judgement wrote to the log. Held here rather than in RankState because
+  // it is screen memory, not game state — it must not survive a reload, a mode
+  // change or a backup, and `ladder.ts` must never learn that undo exists.
+  const [undoStep, setUndo] = useState<{ state: RankState; judgements: string[] } | null>(null);
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
@@ -195,6 +201,12 @@ export default function DuelScreen({
   const commit = (next: RankState, persist = true) => {
     if (persist) saveFilms(next.films);
     if (next.journal.length === 0) {
+      // Nothing was judged, so this is a confirm, a flick, or a new run — and
+      // the step held from the last judgement now points into a game that no
+      // longer exists. Dropping it here rather than at each call site means a
+      // transition added later cannot forget to, which is the failure that
+      // would hand someone a stale library and look like data loss.
+      setUndo(null);
       setState(next);
       return;
     }
@@ -202,13 +214,39 @@ export default function DuelScreen({
     setState({ ...next, journal: [] });
   };
 
+  // Undo, in the only place it can be cheap: the engine is immutable in and out,
+  // so the previous state is simply the value `commit` was about to replace.
+  // Nothing has to be inverted, and no operation needs a matching un-operation —
+  // which is why this is three lines here and would have been a subsystem inside
+  // ladder.ts.
+  //
+  // One step deep on purpose. A full history invites treating the climb as a
+  // document to edit rather than a set of calls to make, and the mis-tap this
+  // exists for is always the one you just made.
+  const commitUndoable = (next: RankState) => {
+    // The journal is drained by `commit`, so capture the ids first — after that
+    // they are gone from state and there would be nothing left to retract.
+    setUndo({ state, judgements: next.journal.map((j) => j.id) });
+    commit(next);
+  };
+  const undo = () => {
+    if (!undoStep) return;
+    // Retract before restoring, so a mis-tap leaves nothing behind in either
+    // place. The placement and the evidence for it move together or the list
+    // and the model disagree about a duel that never happened.
+    void retractJudgements(undoStep.judgements);
+    saveFilms(undoStep.state.films);
+    setState(undoStep.state);
+    setUndo(null);
+  };
+
   // A duel result is written straight away. Placements still only commit on
   // confirm — what's saved here is the record that the comparison happened,
   // which is the one thing an abandoned run should still leave behind.
-  const decide = (winnerId: string) => commit(choose(state, winnerId));
+  const decide = (winnerId: string) => commitUndoable(choose(state, winnerId));
   // Same shape as a decision, because that is what it is — a recorded answer of
   // "neither". A spotlight settles here; a climb steps the contender in below.
-  const declineToCall = () => commit(skipPair(state));
+  const declineToCall = () => commitUndoable(skipPair(state));
   // Assertions, not judgements: they reorder the pile and record nothing, so
   // there is never a journal to drain and nothing to persist until a confirm.
   const flick = (filmId: string) => commit(flickToTop(state, filmId), false);
@@ -373,6 +411,8 @@ export default function DuelScreen({
           onPick={decide}
           onDraw={declineToCall}
           onDone={endRun}
+          onUndo={undo}
+          canUndo={!!undoStep}
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
@@ -1127,6 +1167,8 @@ function Duel({
   onPick,
   onDraw,
   onDone,
+  onUndo,
+  canUndo,
   onFlick,
   onSink,
   onScrub,
@@ -1147,6 +1189,8 @@ function Duel({
   onDraw: () => void;
   /** End the run — the same action as the nav's End session. */
   onDone: () => void;
+  onUndo: () => void;
+  canUndo: boolean;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
   onScrub: (id: string) => void;
@@ -1160,16 +1204,19 @@ function Duel({
   // is clutter.
   const [results, setResults] = useState<{ won: string; lost: string; at: number; drew?: boolean }[]>([]);
 
-  // The controls are revealed by answering, not by arriving. They stay for a
-  // beat and then hand the slot back to the question.
-  const [controlsShown, setControlsShown] = useState(false);
-  const controlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const revealControls = () => {
-    setControlsShown(true);
-    if (controlTimer.current) clearTimeout(controlTimer.current);
-    controlTimer.current = setTimeout(() => setControlsShown(false), CONTROLS_MS);
-  };
-  useEffect(() => () => void (controlTimer.current && clearTimeout(controlTimer.current)), []);
+  // The controls are revealed by answering, not by arriving — and once revealed
+  // they stay for the rest of the run.
+  //
+  // They used to time out after 2.5s and hand the slot back to the question,
+  // which was wrong for the one control that matters most: Done is how you stop,
+  // and you reach for it exactly when you have put the phone down and looked
+  // away — the moment a timer has already taken it. A control that is present
+  // only while you are mid-flow is missing whenever you actually want it.
+  //
+  // Sticky rather than always-on because arriving at a fresh duel with three
+  // buttons under it puts a decision in front of you before you have made the
+  // only one that matters. One tap teaches them, then they are furniture.
+  const [played, setPlayed] = useState(false);
 
   // A draw has to leave the same trace a pick does. Without it the pair changes
   // under you while the recents line still reports the duel before — which reads
@@ -1178,7 +1225,7 @@ function Duel({
     setResults((prev) =>
       [{ won: contender.title, lost: challenger.title, at: Date.now(), drew: true }, ...prev].slice(0, 2),
     );
-    revealControls();
+    setPlayed(true);
     onDraw();
   };
 
@@ -1191,7 +1238,7 @@ function Duel({
     const won = id === contender.id ? contender : challenger;
     const lost = id === contender.id ? challenger : contender;
     setResults((prev) => [{ won: won.title, lost: lost.title, at: Date.now() }, ...prev].slice(0, 2));
-    revealControls();
+    setPlayed(true);
 
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
@@ -1248,13 +1295,33 @@ function Duel({
           things fighting for the same line, one of which is live game state and
           one of which is a rotating suggestion. The suggestion yields.
 
-          Unmounted rather than faded, because the strip wants that height back —
-          it is the one thing on this screen that genuinely needs the ~24px. */}
-      {!stripOpen && (
-        <div className="mt-3 flex flex-col items-center">
-          <Tips />
+          It yields on the STRIP'S clock, not instantly. The first version simply
+          unmounted, which is the same mistake the controls slot below already
+          carries a comment about: the strip animates its height over 0.3s while
+          an unmount lands in a single frame, so the column snapped up ~36px and
+          then the drawer smoothed in behind it. One toggle, two clocks, and the
+          jump reads as the tip's fault because the tip is what disappears.
+
+          Collapsing 1fr → 0fr on the strip's own duration and easing means the
+          height leaves at exactly the rate the strip claims it, and the fade
+          runs ahead so no text is caught mid-squeeze. */}
+      <div
+        aria-hidden={stripOpen}
+        className="grid"
+        style={{
+          gridTemplateRows: stripOpen ? "0fr" : "1fr",
+          transition: "grid-template-rows 0.3s var(--ease)",
+        }}
+      >
+        <div className="overflow-hidden">
+          <div
+            className="mt-3 flex flex-col items-center"
+            style={{ opacity: stripOpen ? 0 : 1, transition: "opacity 0.18s var(--ease)" }}
+          >
+            <Tips />
+          </div>
         </div>
-      )}
+      </div>
 
       {/* The question belongs to the duel, so it lives inside the arena and
           travels with the posters. Left outside it, folding the strip away
@@ -1299,46 +1366,77 @@ function Duel({
             drawer to finish moving — invisible while the layout shifts, so it
             never appears to slide. Fading out has no delay. */}
         <div style={{ flexGrow: 1.6 }} />
-        {/* One slot, two states. The controls used to sit here permanently as a
-            pill, taking space from the arena and putting a decision in front of
-            you before you had made the only one that matters. Now the slot holds
-            the question until you answer it, then offers what you can do about
-            the answer, then goes quiet again. Discovery is by making a choice —
-            which everyone does immediately, because it is the whole screen.
+        {/* Two rows, each owning its own line, rather than one slot cycling
+            through three things.
 
-            Stays in the layout whether or not it's visible. Unmounting it saved
-            ~60px, but the mount landed in one frame while the drawer was still
-            animating — the posters dipped and sprang back. Toggling the strip
-            must change exactly one thing: the strip. */}
+            The slot used to alternate: the question, then the controls, then the
+            last result. Which meant the feed — the only running account of what
+            you have actually done — appeared in the gaps between the other two
+            and was gone again before it read as anything. Three tenants, one
+            line, and the one with no fixed home is the one that gets lost.
+
+            So the feed keeps the line under the posters permanently, and the
+            controls take a line of their own beneath it. That costs the arena
+            ~34px, which is the space the on-demand version was built to reclaim
+            — spent back deliberately, because a Done you cannot see when you
+            have stopped playing is not a Done.
+
+            Both rows stay in the layout whether or not they are visible.
+            Unmounting either saved height and cost a jump: the mount lands in
+            one frame while the drawer is still animating, and the posters dip
+            and spring back. Toggling the strip must change exactly one thing:
+            the strip. */}
         <div
           aria-hidden={stripOpen}
-          className="flex flex-shrink-0 justify-center"
+          className="flex flex-shrink-0 flex-col items-center"
           style={{
             opacity: stripOpen ? 0 : 1,
             transition: "opacity 0.25s var(--ease)",
             transitionDelay: stripOpen ? "0s" : "0.3s",
           }}
         >
-          {controlsShown ? (
-            <div className="flex items-center gap-2 px-6 pb-6 pt-2">
-              <button
-                onClick={declineToCall}
-                className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-              >
-                Draw
-              </button>
-              <button
-                onClick={onDone}
-                className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-              >
-                Done
-              </button>
-            </div>
-          ) : (
-            <div className="pointer-events-none">
-              <LastResult results={results} />
-            </div>
-          )}
+          <div className="pointer-events-none">
+            <LastResult results={results} />
+          </div>
+          {/* Undo sits between the two it mediates: it takes back the answer
+              Draw would give and Done would end on. Disabled rather than absent
+              once there is nothing to take back, so the row never changes width
+              under your thumb. */}
+          <div
+            className="flex items-center gap-2 px-6 pb-6 pt-2"
+            style={{
+              opacity: played ? 1 : 0,
+              pointerEvents: played ? "auto" : "none",
+              transition: "opacity 0.25s var(--ease)",
+            }}
+          >
+            <button
+              onClick={declineToCall}
+              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+            >
+              Draw
+            </button>
+            <button
+              onClick={() => {
+                // The feed is this component's own memory of the run, so the
+                // parent's undo cannot reach it. Left alone it would keep
+                // reporting a duel that has just been taken back — the one
+                // thing on screen still insisting it happened.
+                setResults((r) => r.slice(1));
+                onUndo();
+              }}
+              disabled={!canUndo}
+              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95 disabled:opacity-35 disabled:active:scale-100"
+            >
+              Undo
+            </button>
+            <button
+              onClick={onDone}
+              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+            >
+              Done
+            </button>
+          </div>
         </div>
         <div style={{ flexGrow: 1 }} />
       </div>
@@ -1374,15 +1472,6 @@ const TIPS = [
 ];
 const STRIP_KEY = "rankd-strip-open";
 
-/**
- * How long the duel controls stay on screen after an answer before the slot
- * hands itself back to "Which do you prefer?".
- *
- * Close to ShuffleDuel's UNDO_MS on purpose — the screen should have one
- * rhythm, and a control that outlives the undo it sits next to invites a tap
- * that no longer does what it looks like it does.
- */
-const CONTROLS_MS = 2500;
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
 
@@ -1549,22 +1638,33 @@ function TierComplete({
   onPickTier: () => void;
   onList: () => void;
 }) {
-  const ranked = films.filter((f) => f.rating === tier && isPlaced(f)).sort((a, b) => b.score - a.score);
-  const duels = films
-    .filter((f) => f.rating === tier)
-    .reduce((n, f) => n + (f.duels ?? 0), 0);
+  const inTier = films.filter((f) => f.rating === tier);
+  const ranked = inTier.filter(isPlaced).sort((a, b) => b.score - a.score);
+  const duels = inTier.reduce((n, f) => n + (f.duels ?? 0), 0);
+  // This screen is reached two ways — the tier ran out of films, or you pressed
+  // Done — and it used to say the same thing either way. Stopping after two
+  // duels was congratulated with "Every film in this tier has found its spot"
+  // above a count of zero, which is both false and, at the exact moment you
+  // chose to stop, faintly insulting. The distinction costs one subtraction.
+  const left = inTier.length - ranked.length;
+  const finished = left === 0 && ranked.length > 0;
   return (
     <SessionEnd
-      title={`${starsFor(tier)} ranked`}
-      blurb="Every film in this tier has found its spot."
+      title={finished ? `${starsFor(tier)} ranked` : "Session done"}
+      blurb={
+        finished
+          ? "Every film in this tier has found its spot."
+          : "Every answer is kept. Pick this tier back up whenever you like."
+      }
       films={ranked}
       stats={[
-        { label: "films", value: String(ranked.length) },
+        { label: "placed", value: String(ranked.length) },
+        ...(left > 0 ? [{ label: "still to place", value: String(left) }] : []),
         ...(duels > 0 ? [{ label: "duels", value: String(duels) }] : []),
       ]}
       onList={onList}
       onAgain={onPickTier}
-      againLabel="Rank another tier"
+      againLabel={finished ? "Rank another tier" : "Keep ranking"}
     />
   );
 }
