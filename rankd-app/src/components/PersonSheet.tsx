@@ -36,12 +36,33 @@ export function PersonSheet({
   films: Film[];
   onClose: () => void;
   /** Start a cross-tier run over this person's films, plus any borrowed ones. */
-  onRank: (person: Person, guests: Film[]) => void;
+  onRank: (person: Person, guests: Film[], portrait?: string) => void;
   onInfo: (film: Film) => void;
   onAddFilm: (film: Film) => void;
 }) {
   const [showMissing, setShowMissing] = useState(false);
   const [credits, setCredits] = useState<CreditRow[] | null>(null);
+  // Their face. One request, and only the person lookup — not the filmography,
+  // which is still paid for only when asked for. It is worth the request on open
+  // because it is also what the share card puts beside their name.
+  const [portrait, setPortrait] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    let stale = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/person?portrait=1&name=${encodeURIComponent(person.name)}&role=${person.role}`,
+        );
+        const data = await res.json();
+        if (!stale) setPortrait(data.profile);
+      } catch {
+        // No face is a smaller card, not a broken one.
+      }
+    })();
+    return () => {
+      stale = true;
+    };
+  }, [person.name, person.role]);
   // Derived, not stored: "asked for the filmography and haven't got it yet" is
   // exactly these two facts, and a third piece of state saying the same thing is
   // one more thing that can disagree with them.
@@ -116,10 +137,21 @@ export function PersonSheet({
 
   return (
     <Sheet title={person.name} onClose={onClose}>
-      <p className="mb-3 text-[11px] uppercase tracking-wider text-dim">
-        {person.role === "director" ? "Director" : "Actor"} · {mine.length} in your list
-        {showMissing && credits ? ` · ${missing.length} not logged` : ""}
-      </p>
+      <div className="mb-3 flex items-center gap-3">
+        {portrait && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={portrait}
+            alt=""
+            className="h-11 w-11 flex-shrink-0 rounded-full object-cover"
+            style={{ objectPosition: "50% 30%" }}
+          />
+        )}
+        <p className="text-[11px] uppercase tracking-wider text-dim">
+          {person.role === "director" ? "Director" : "Actor"} · {mine.length} in your list
+          {showMissing && credits ? ` · ${missing.length} not logged` : ""}
+        </p>
+      </div>
 
       {/* Ranked, and honest that the ranking ignores stars — otherwise a 3★ above
           a 4★ reads as a bug rather than as the point. */}
@@ -179,7 +211,7 @@ export function PersonSheet({
 
       {total >= 2 && (
         <button
-          onClick={() => onRank(person, showMissing ? guests : [])}
+          onClick={() => onRank(person, showMissing ? guests : [], portrait)}
           disabled={showMissing && !credits}
           className="mt-2 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
           style={{ color: "#1c1405", background: "var(--gold)" }}

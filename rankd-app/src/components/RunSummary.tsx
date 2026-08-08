@@ -17,16 +17,17 @@
 // PROVISIONAL LOOK — the shape is settled, the styling has had no design pass.
 
 import { useState } from "react";
-import { cardFilename, renderCard, shareCard } from "@/lib/card";
+import { CardPicker } from "./CardPicker";
+import { cardDataFromFilms } from "@/lib/card/data";
 import { saveList } from "@/lib/lists";
+import { subjectEyebrow, subjectTitle, type RankSubject } from "@/lib/subject";
 import { starsFor } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
 type Saving = "idle" | "working" | "saved" | "failed";
 
 export function RunSummary({
-  title,
-  subtitle,
+  subject,
   films,
   /** Whether the climb reached the top or you called it early. */
   complete,
@@ -34,8 +35,8 @@ export function RunSummary({
   onAgain,
   onDone,
 }: {
-  title: string;
-  subtitle?: string;
+  /** What the ranking is of — a director, an actor, a genre. */
+  subject: RankSubject;
   /** The result, best first. This order is the whole output of the run. */
   films: Film[];
   complete: boolean;
@@ -44,7 +45,9 @@ export function RunSummary({
   onDone: () => void;
 }) {
   const [saved, setSaved] = useState<Saving>("idle");
-  const [exported, setExported] = useState<Saving>("idle");
+
+  const title = subjectTitle(subject);
+  const subtitle = subjectEyebrow(subject);
 
   const save = () => {
     setSaved("working");
@@ -56,16 +59,9 @@ export function RunSummary({
     }
   };
 
-  const exportJpg = async () => {
-    setExported("working");
-    try {
-      const blob = await renderCard({ title, subtitle, films });
-      await shareCard(blob, cardFilename(title));
-      setExported("saved");
-    } catch {
-      setExported("failed");
-    }
-  };
+  // Built once and handed to the picker, so all three designs draw from exactly
+  // the same snapshot — same entries, same stats, same insight line.
+  const card = cardDataFromFilms(subject, films);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
@@ -86,11 +82,19 @@ export function RunSummary({
           )}
         </div>
 
+        {/* The cards come FIRST, above the list.
+            The list is what you just made and you have been staring at it for
+            twenty duels; the cards are the thing you did not know you were
+            getting. Putting the ranking first would bury them under a scroll. */}
+        <div className="mt-4">
+          <CardPicker data={card} />
+        </div>
+
         {/* The whole order, not a top five. A director has a dozen films and the
             bottom of that list is as much of the answer as the top; SessionEnd
             shows five because a tier run has 130 and the list screen holds the
             rest. Here there is no elsewhere. */}
-        <div className="mt-4 flex flex-col gap-1">
+        <div className="mt-5 flex flex-col gap-1">
           {films.map((f, i) => (
             <div
               key={f.id}
@@ -127,20 +131,6 @@ export function RunSummary({
         </p>
 
         <div className="mt-3 flex flex-col gap-2">
-          <button
-            onClick={exportJpg}
-            disabled={exported === "working"}
-            className="w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-60"
-            style={{ color: "#1c1405", background: "var(--gold)" }}
-          >
-            {exported === "working"
-              ? "Drawing it…"
-              : exported === "saved"
-                ? "Saved as a picture ✓"
-                : exported === "failed"
-                  ? "Couldn't make the image — try again"
-                  : "Export as a picture"}
-          </button>
           <button
             onClick={save}
             disabled={saved !== "idle"}

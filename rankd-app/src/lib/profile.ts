@@ -142,7 +142,12 @@ export interface Fingerprint {
 
 const LIBRARY_MIDPOINT = 2.75; // halfway up the half-star scale
 
-export function fingerprint(films: Film[]): Fingerprint {
+// Takes the fields it actually reads rather than a whole `Film`, so a share card
+// can characterise a saved ranking's entries without inventing an `id` and a
+// `score` for rows that have neither. Every existing caller still passes `Film[]`.
+export function fingerprint(
+  films: readonly Pick<Film, "rating" | "year" | "genres" | "duels">[],
+): Fingerprint {
   const duels = films.reduce((n, f) => n + (f.duels ?? 0), 0);
   if (films.length === 0) return { duels };
 

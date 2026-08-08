@@ -44,6 +44,9 @@ export default function AppShell() {
   const [person, setPerson] = useState<Person | null>(null);
   const [personRun, setPersonRun] = useState<Person | null>(null);
   const [personGuests, setPersonGuests] = useState<Film[]>([]);
+  // Their face, fetched by the sheet and carried through to the share card. A
+  // plain value rather than another request, so it starts no effect of its own.
+  const [personPortrait, setPersonPortrait] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     const films = loadFilms();
@@ -172,10 +175,12 @@ export default function AppShell() {
           onAddFilm={addFilm}
           personRun={personRun}
           personGuests={personGuests}
+          personPortrait={personPortrait}
           onPerson={setPerson}
           onPersonRunHandled={() => {
             setPersonRun(null);
             setPersonGuests([]);
+            setPersonPortrait(undefined);
           }}
         />
       ) : screen === "list" ? (
@@ -237,8 +242,9 @@ export default function AppShell() {
             setInfoFilm(f);
           }}
           onAddFilm={addFilm}
-          onRank={(p, guests) => {
+          onRank={(p, guests, portrait) => {
             setPerson(null);
+            setPersonPortrait(portrait);
             // A fresh object every time, so asking for the same person twice is
             // two requests. The duel screen starts a run when this prop CHANGES,
             // and handing back the identical object would be a no-op it read as

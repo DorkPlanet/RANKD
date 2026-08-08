@@ -59,6 +59,7 @@ import {
 import { BARS } from "@/lib/brand";
 import { beliefsFor } from "@/lib/beliefs";
 import { filmsBy, rankByBelief, type Person } from "@/lib/people";
+import { subjectFromPerson, subjectTitle, type RankSubject } from "@/lib/subject";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
@@ -81,6 +82,7 @@ export default function DuelScreen({
   onAddFilm,
   personRun,
   personGuests = [],
+  personPortrait,
   onPersonRunHandled,
   onPerson,
 }: {
@@ -99,6 +101,8 @@ export default function DuelScreen({
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
   personGuests?: Film[];
+  /** Their photo, for the share card. Absent when TMDb had none. */
+  personPortrait?: string;
   onPersonRunHandled?: () => void;
   /** Open a filmography from the spotlight picker. */
   onPerson?: (person: Person) => void;
@@ -168,15 +172,14 @@ export default function DuelScreen({
   // request is still here to read from, and mirroring it into local state would
   // be a second copy of one fact — plus a setState inside an effect, which is
   // the cascading render the linter is right to object to.
-  const runTitle = personRun
-    ? { title: personRun.name, subtitle: personRun.role === "director" ? "Director" : "Actor" }
+  const runSubject: RankSubject | null = personRun
+    ? subjectFromPerson(personRun, personPortrait)
     : null;
   // A finished cross-tier order, waiting to be kept or exported. This is the one
   // result the app cannot recover once it is gone: it lives in no film's score
   // and in no tier, so the summary holds it until the user decides.
   const [runResult, setRunResult] = useState<{
-    title: string;
-    subtitle: string;
+    subject: RankSubject;
     films: Film[];
     complete: boolean;
   } | null>(null);
@@ -376,8 +379,8 @@ export default function DuelScreen({
   // `confirmed` holds everything already placed and the contender is the film
   // about to join them.
   const endCrossTier = (order: string[], complete: boolean) => {
-    if (!runTitle) return;
-    setRunResult({ ...runTitle, films: filmsOf(order), complete });
+    if (!runSubject) return;
+    setRunResult({ subject: runSubject, films: filmsOf(order), complete });
   };
 
   // Borrowed films go home when the run that borrowed them ends. `saveFilms`
@@ -535,7 +538,7 @@ export default function DuelScreen({
           lead={
             session?.crossTier ? (
               <span className="max-w-[120px] truncate text-[11px] font-bold leading-none text-gold">
-                {runTitle?.title}
+                {runSubject ? subjectTitle(runSubject) : ""}
               </span>
             ) : (
               <button onClick={() => setTierOpen(true)} className="flex items-baseline gap-1.5 active:scale-95">
@@ -555,8 +558,7 @@ export default function DuelScreen({
           clear it. */}
       {runResult && !session ? (
         <RunSummary
-          title={runResult.title}
-          subtitle={runResult.subtitle}
+          subject={runResult.subject}
           films={runResult.films}
           complete={runResult.complete}
           onList={onList}

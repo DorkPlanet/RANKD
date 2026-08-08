@@ -22,6 +22,12 @@ export interface Credit {
   poster?: string;
 }
 
+export interface PersonResponse {
+  credits: Credit[];
+  /** Their photo, when TMDb has one. Used on the share cards. */
+  profile?: string;
+}
+
 interface TmdbCredit {
   title?: string;
   release_date?: string;
@@ -40,6 +46,11 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const name = params.get("name")?.trim();
   const role = params.get("role") === "actor" ? "actor" : "director";
+  // Just the face, for the share card and the sheet's header. Resolving a person
+  // is one request; their filmography is a second and much larger one, and the
+  // note above is explicit that the filmography must not be the price of opening
+  // a page. So a portrait can be asked for on its own.
+  const portraitOnly = params.get("portrait") === "1";
   if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
   try {
@@ -54,7 +65,16 @@ export async function GET(request: Request) {
     // No such person is a normal answer, not a failure: the library's credits can
     // name someone TMDb has since merged or renamed. The screen then shows only
     // what you already have, which is still useful.
-    if (!person?.id) return NextResponse.json({ credits: [] });
+    if (!person?.id) return NextResponse.json({ credits: [] } satisfies PersonResponse);
+
+    // TMDb gives a headshot on the search result itself, so this costs nothing
+    // extra — the first version resolved the person, read the id and threw the
+    // rest of the object away.
+    const profile: string | undefined = person.profile_path
+      ? `https://image.tmdb.org/t/p/w185${person.profile_path}`
+      : undefined;
+
+    if (portraitOnly) return NextResponse.json({ credits: [], profile } satisfies PersonResponse);
 
     const creditsUrl = new URL(`${BASE}/person/${person.id}/movie_credits`);
     creditsUrl.searchParams.set("api_key", key);
@@ -94,7 +114,7 @@ export async function GET(request: Request) {
       .slice(0, 60)
       .map(({ title, year, poster }) => ({ title, year, poster }));
 
-    return NextResponse.json({ credits });
+    return NextResponse.json({ credits, profile } satisfies PersonResponse);
   } catch {
     return NextResponse.json({ error: "TMDb request failed" }, { status: 502 });
   }
