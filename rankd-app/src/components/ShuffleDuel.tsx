@@ -13,20 +13,21 @@
 // falls out of how scores are written rather than being clamped afterwards.
 //
 // PROVISIONAL LOOK — the mechanic is settled, the presentation is not. This
-// reuses PosterCard and LastResult so it inherits the compare screen's language
+// reuses PosterCard so it inherits the compare screen's language
 // rather than inventing a competing one, but the layout around them has had no
 // design pass and is not meant to read as finished.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { LastResult, PosterCard, fadeLoserOut } from "./PosterCard";
+import { PosterCard, fadeLoserOut } from "./PosterCard";
 import { SessionEnd } from "./SessionEnd";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
 import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
-import { libraryProgress, pct, sessionProgress } from "@/lib/progress";
+import { sessionProgress } from "@/lib/progress";
+import { RunBars } from "./RunBars";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
@@ -75,7 +76,6 @@ export default function ShuffleDuel({
   const [log, setLog] = useState<Judgement[] | null>(null);
   const [beliefs, setBeliefs] = useState<Map<string, Belief>>(new Map());
   const [pair, setPair] = useState<[Film, Film] | null>(null);
-  const [results, setResults] = useState<{ won: string; lost: string; at: number; drew?: boolean }[]>([]);
   const [count, setCount] = useState(0);
   // One undoable judgement, with the library exactly as it was before it — so
   // taking it back restores the scores too, not just the log row.
@@ -235,17 +235,6 @@ export default function ShuffleDuel({
       ? films
       : placeSettled(respreadFor(films, [a, b], nextBeliefs, options.includeConfirmed), nextBeliefs);
 
-    setResults((prev) =>
-      [
-        {
-          won: outcome === "b" ? b.title : a.title,
-          lost: outcome === "b" ? a.title : b.title,
-          at: Date.now(),
-          drew: outcome === "draw",
-        },
-        ...prev,
-      ].slice(0, 2),
-    );
     setPending({ judgement, films, pair });
     undoTimer.current = setTimeout(flush, UNDO_MS);
 
@@ -265,7 +254,6 @@ export default function ShuffleDuel({
       undoTimer.current = null;
     }
     setLog((l) => (l ? l.filter((j) => j.id !== pending.judgement.id) : l));
-    setResults((r) => r.slice(1));
     setCount((n) => Math.max(0, n - 1));
     onFilms(pending.films);
     setPair(pending.pair);
@@ -347,18 +335,28 @@ export default function ShuffleDuel({
   const a = films.find((f) => f.id === servedA.id) ?? servedA;
   const b = films.find((f) => f.id === servedB.id) ?? servedB;
 
+  // Derived from the log rather than counted as you go, so walking away
+  // mid-session and coming back an hour later resumes where you left off.
+  const session = sessionProgress(
+    poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed }),
+    log ?? [],
+  );
+  // A person run is a shuffle underneath, but labelling it FAST SHUFFLE hides
+  // the only thing that makes it different from one.
+  const person = options.scope.kind === "person" ? options.scope.name : null;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* No rank, no target, no pile — there is genuinely nothing to be at. What
-          there is instead is how far through the LIBRARY you are, which is the
-          question this mode exists to answer. */}
-      <div className="flex flex-shrink-0 items-baseline justify-between px-5 pt-2 pb-1.5">
-        <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">FAST SHUFFLE</span>
-        <span className="text-[11px] text-dim">
-          <b className="text-text-hi">{count}</b> {count === 1 ? "duel" : "duels"} · {pool.length} in play
-        </span>
-      </div>
-      <LibraryBars films={films} log={log} pool={pool} />
+      {/* The same three bars the climb shows, in the same order, meaning the same
+          things. This mode grew its own readout first and the climb kept a single
+          tier bar, so "how far through this am I" had two different answers
+          depending on which game you were in. */}
+      <RunBars
+        films={films}
+        log={log ?? []}
+        title={person ? person.toUpperCase() : "FAST SHUFFLE"}
+        run={{ label: "This run", done: session.compared, total: session.total }}
+      />
 
       {/* A definite height that yields under pressure, matching the arena in the
           ordinary duel. Left as `flex-1` the cards grew to fill whatever was
@@ -404,9 +402,10 @@ export default function ShuffleDuel({
           flush under the controls with no space of its own, which made the line
           read as a caption on the buttons instead of a record of what you just
           did. */}
-      <div className="flex flex-shrink-0 justify-center pb-2 pt-1">
-        <LastResult results={results} />
-      </div>
+      {/* The results feed was here. Removed for the same reason as the climb's:
+          it narrated what you had just done back to you, on the screen where the
+          next question is the only thing that matters. Undo does the job it was
+          standing in for. */}
       <div style={{ flexGrow: 0.6 }} />
     </div>
   );
@@ -414,83 +413,7 @@ export default function ShuffleDuel({
 
 const noop = () => {};
 
-/**
- * How far through the library you are, in two bars.
- *
- * SHUFFLED is coverage — how much of the collection has been compared at all.
- * LOCKED is result — how much of it has a position, and who decided: gold for
- * what you committed, a quieter blue for what the evidence placed. The two
- * segments sit in one track because they are parts of the same whole, and this
- * is the first place in the app where the hard/soft distinction is visible.
- *
- * Both are library-wide rather than pool-scoped, so the numbers do not lurch
- * when the run's scope changes.
- *
- * PROVISIONAL LOOK — the shape is borrowed from TierProgress so it belongs to
- * the same family, but it has had no design pass.
- */
-function LibraryBars({ films, log, pool }: { films: Film[]; log: Judgement[]; pool: Film[] }) {
-  const p = libraryProgress(films, log);
-  const s = sessionProgress(pool, log);
-  const hardPct = pct(p.hard, p.total);
-  const softPct = pct(p.soft, p.total);
-
-  return (
-    <div className="flex-shrink-0 px-5 pb-1">
-      {/* This run's scope, derived from the log — so walking away mid-session and
-          coming back an hour later resumes exactly where you left off. */}
-      <Bar
-        label="This run"
-        value={`${s.compared} of ${s.total}`}
-        segments={[{ pct: pct(s.compared, s.total), colour: "var(--accent)" }]}
-      />
-      <Bar
-        label="Shuffled"
-        value={`${p.shuffled} of ${p.total}`}
-        segments={[{ pct: pct(p.shuffled, p.total), colour: "color-mix(in srgb, var(--accent) 55%, var(--border))" }]}
-      />
-      <Bar
-        label="Locked"
-        value={p.soft > 0 ? `${p.hard} + ${p.soft}` : `${p.hard} of ${p.total}`}
-        segments={[
-          { pct: hardPct, colour: "var(--gold)" },
-          // Distinct from the hard segment without competing with it — the
-          // model's placements count, but they are not your decisions.
-          { pct: softPct, colour: "color-mix(in srgb, var(--gold) 38%, var(--border))" },
-        ]}
-      />
-    </div>
-  );
-}
-
-function Bar({
-  label,
-  value,
-  segments,
-}: {
-  label: string;
-  value: string;
-  segments: { pct: number; colour: string }[];
-}) {
-  return (
-    <div className="mb-1.5 last:mb-0">
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-[9px] font-extrabold tracking-[0.12em] text-dim">{label.toUpperCase()}</span>
-        <span className="text-[10px] text-dim">{value}</span>
-      </div>
-      {/* Same track as TierProgress: one shape for "progress" across the app. */}
-      <div className="flex h-1 overflow-hidden rounded-full bg-border">
-        {segments.map((s, i) => (
-          <div
-            key={i}
-            className="h-full transition-[width] duration-500"
-            style={{ width: `${s.pct}%`, background: s.colour }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+// The three progress bars now live in RunBars.tsx, shared with the climb.
 
 function Centre({ children }: { children: React.ReactNode }) {
   return (

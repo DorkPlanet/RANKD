@@ -26,15 +26,16 @@ import {
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
-import { appendJudgements, retractJudgements } from "@/lib/log";
+import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/lib/log";
 import { poolFor } from "@/lib/matchmaker";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
-import { LOSER, LastResult, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
+import { LOSER, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
 import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
 import { LogFilm } from "./LogFilm";
+import { RunBars } from "./RunBars";
 import {
   BackRow,
   RangeSlider,
@@ -126,6 +127,17 @@ export default function DuelScreen({
   // it is screen memory, not game state — it must not survive a reload, a mode
   // change or a backup, and `ladder.ts` must never learn that undo exists.
   const [undoStep, setUndo] = useState<{ state: RankState; judgements: string[] } | null>(null);
+
+  // The evidence log, for the two library-wide progress bars.
+  //
+  // Kept in state and appended to locally rather than re-read after every duel:
+  // the bars must move on the tap that moved them, and a re-read would be a
+  // storage round trip per judgement to learn something this screen already
+  // knows — it is the thing that just wrote it.
+  const [log, setLog] = useState<Judgement[]>([]);
+  useEffect(() => {
+    void loadLog().then(setLog);
+  }, []);
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
@@ -244,6 +256,8 @@ export default function DuelScreen({
       return;
     }
     void appendJudgements(next.journal);
+    // The bars read from this, so it has to move on the same tap the duel did.
+    setLog((l) => [...l, ...next.journal]);
     setState({ ...next, journal: [] });
   };
 
@@ -268,6 +282,8 @@ export default function DuelScreen({
     // place. The placement and the evidence for it move together or the list
     // and the model disagree about a duel that never happened.
     void retractJudgements(undoStep.judgements);
+    const dropped = new Set(undoStep.judgements);
+    setLog((l) => l.filter((j) => !dropped.has(j.id)));
     saveFilms(undoStep.state.films);
     setState(undoStep.state);
     setUndo(null);
@@ -368,13 +384,28 @@ export default function DuelScreen({
           to-go count, and that run has none of those. Left visible it read as
           "KING OF THE HILL · 0 placed · 50 to go" over a completely different
           game. ShuffleDuel carries its own status line instead. */}
-      {!shuffleRun && (
-        <TierProgress
-          tier={session?.tier ?? DEFAULT_TIER}
-          mode={session?.mode ?? "koth"}
-          placed={session?.confirmed.length ?? 0}
-          toGo={session?.unconfirmed.length ?? 0}
-          onPickTier={() => setTierOpen(true)}
+      {/* `activeRun`, not `shuffleRun`: a person run is started from outside this
+          screen and never sets `shuffleRun`, so guarding on that one left the
+          tier bar sitting above a filmography run — the exact thing the comment
+          above was written to prevent, reintroduced by adding a second way in. */}
+      {!activeRun && (
+        <RunBars
+          films={state.films}
+          log={log}
+          title={session?.mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
+          run={{
+            label: "This run",
+            done: session?.confirmed.length ?? 0,
+            total: (session?.confirmed.length ?? 0) + (session?.unconfirmed.length ?? 0),
+          }}
+          // The tier reads as its stars and doubles as the quickest way to
+          // switch — the label you're looking at is the control.
+          lead={
+            <button onClick={() => setTierOpen(true)} className="flex items-baseline gap-1.5 active:scale-95">
+              <span className="text-base leading-none text-gold">{starsFor(session?.tier ?? DEFAULT_TIER)}</span>
+              <span className="text-[10px] leading-none text-dim">▾</span>
+            </button>
+          }
         />
       )}
 
@@ -1136,91 +1167,8 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
 // Right-hand status. It's held to its own half of the row so it can never push
 // the centre label off true; if the text doesn't fit, the edge nearest the
 // middle is feathered away and the text drifts across to reveal the rest.
-function RowStatus({ children }: { children: React.ReactNode }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [overflowBy, setOverflowBy] = useState(0);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const over = el.scrollWidth - el.clientWidth;
-    setOverflowBy(over > 1 ? over : 0);
-  });
-
-  return (
-    <span
-      ref={ref}
-      className="ml-auto overflow-hidden whitespace-nowrap text-right text-[11px] text-text/55"
-      style={{
-        maxWidth: "42%",
-        // Feather only the inner edge, and only when something is actually cut.
-        maskImage: overflowBy ? "linear-gradient(to right, transparent, #000 14px)" : undefined,
-      }}
-    >
-      <span
-        className={overflowBy ? "row-reveal inline-block" : undefined}
-        style={overflowBy ? ({ "--reveal-x": `-${overflowBy}px` } as React.CSSProperties) : undefined}
-      >
-        {children}
-      </span>
-    </span>
-  );
-}
-
 // The tier + progress strip, sitting on the body just under the header feather.
-function TierProgress({
-  tier,
-  mode,
-  placed,
-  toGo,
-  onPickTier,
-}: {
-  tier: Rating;
-  mode: string;
-  placed: number;
-  toGo: number;
-  onPickTier: () => void;
-}) {
-  return (
-    <div className="px-6">
-      {/* mt-11 clears the header's 44px feather so the progress bar doesn't sit
-          inside the fade. */}
-      <div className="mx-auto mt-11 max-w-[330px]">
-        {/* Each part is anchored rather than flowed, so the middle label sits on
-            the true centre no matter how long the status beside it grows. */}
-        <div className="relative mb-1.5 flex items-baseline">
-          {/* The tier reads as its stars, and doubles as the quickest way to
-              switch — the label you're looking at is the control. */}
-          <button onClick={onPickTier} className="flex shrink-0 items-baseline gap-1.5 active:scale-95">
-            <span className="text-base leading-none text-gold">{starsFor(tier)}</span>
-            <span className="text-[10px] leading-none text-dim">▾</span>
-          </button>
-          <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-extrabold tracking-[0.1em] text-dim">
-            {mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
-          </span>
-          <RowStatus>
-            {mode === "spotlight" ? (
-              <b className="text-text-hi">1 film</b>
-            ) : (
-              <>
-                <b className="text-text-hi">{placed}</b> placed · {toGo} to go
-              </>
-            )}
-          </RowStatus>
-        </div>
-        <div className="h-1 overflow-hidden rounded-full bg-border">
-          <div
-            className="h-full rounded-full transition-[width] duration-500"
-            style={{
-              width: `${Math.round((placed / Math.max(placed + toGo, 1)) * 100)}%`,
-              background: "var(--accent)",
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
+// TierProgress lived here. Replaced by RunBars, which every mode now shares.
 
 // ── The climb: contender vs the film above, both UN-RNKD ───────────────────
 function Duel({
@@ -1266,9 +1214,6 @@ function Duel({
   inPlay?: Set<string> | null;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
-  // Newest first, capped at two — the one before last is context, anything older
-  // is clutter.
-  const [results, setResults] = useState<{ won: string; lost: string; at: number; drew?: boolean }[]>([]);
 
   // The controls are revealed by answering, not by arriving — and once revealed
   // they stay for the rest of the run.
@@ -1284,13 +1229,7 @@ function Duel({
   // only one that matters. One tap teaches them, then they are furniture.
   const [played, setPlayed] = useState(false);
 
-  // A draw has to leave the same trace a pick does. Without it the pair changes
-  // under you while the recents line still reports the duel before — which reads
-  // as the tap having missed.
   const declineToCall = () => {
-    setResults((prev) =>
-      [{ won: contender.title, lost: challenger.title, at: Date.now(), drew: true }, ...prev].slice(0, 2),
-    );
     setPlayed(true);
     onDraw();
   };
@@ -1299,11 +1238,6 @@ function Duel({
   // before the state swap paints. Picking the left card needs none of this — it
   // is already where it is going to be.
   const pick = (id: string) => {
-    // Record the result before state moves on — the screen otherwise gives no
-    // acknowledgement that a tap landed at all.
-    const won = id === contender.id ? contender : challenger;
-    const lost = id === contender.id ? challenger : contender;
-    setResults((prev) => [{ won: won.title, lost: lost.title, at: Date.now() }, ...prev].slice(0, 2));
     setPlayed(true);
 
     const arena = arenaRef.current;
@@ -1473,9 +1407,12 @@ function Duel({
             transitionDelay: stripOpen ? "0s" : "0.3s",
           }}
         >
-          <div className="pointer-events-none">
-            <LastResult results={results} />
-          </div>
+          {/* The results feed used to sit here. Removed rather than restyled:
+              it reported what you had just done to someone who had just done it,
+              on the one screen where the next question is the only thing that
+              matters, and it cost the arena a line to say so. Undo is the honest
+              version of what it was for — if a result was wrong, the feed only
+              let you read about it. */}
           {/* Undo sits between the two it mediates: it takes back the answer
               Draw would give and Done would end on. Disabled rather than absent
               once there is nothing to take back, so the row never changes width
@@ -1495,14 +1432,7 @@ function Duel({
               Draw
             </button>
             <button
-              onClick={() => {
-                // The feed is this component's own memory of the run, so the
-                // parent's undo cannot reach it. Left alone it would keep
-                // reporting a duel that has just been taken back — the one
-                // thing on screen still insisting it happened.
-                setResults((r) => r.slice(1));
-                onUndo();
-              }}
+              onClick={onUndo}
               disabled={!canUndo}
               className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95 disabled:opacity-35 disabled:active:scale-100"
             >
