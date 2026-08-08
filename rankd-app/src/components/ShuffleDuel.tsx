@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LastResult, PosterCard, fadeLoserOut } from "./PosterCard";
+import { SessionEnd } from "./SessionEnd";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
 import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
@@ -53,6 +54,7 @@ export default function ShuffleDuel({
   options,
   onInfo,
   onExit,
+  onList,
 }: {
   films: Film[];
   onFilms: (films: Film[]) => void;
@@ -67,6 +69,8 @@ export default function ShuffleDuel({
   options: ShuffleOptions;
   onInfo: (film: Film) => void;
   onExit: () => void;
+  /** Leave for the list — where what you just made now lives. */
+  onList: () => void;
 }) {
   const [log, setLog] = useState<Judgement[] | null>(null);
   const [beliefs, setBeliefs] = useState<Map<string, Belief>>(new Map());
@@ -259,12 +263,45 @@ export default function ShuffleDuel({
   // Leaving must not silently drop the last answer.
   useEffect(() => flush, [flush]);
 
+  // Done ends the session rather than just closing it. The mode used to drop you
+  // straight back where you started with nothing said, which is why finishing a
+  // run felt like nothing had happened — the app went quiet at the exact moment
+  // you had done the most work.
+  const [ended, setEnded] = useState(false);
   const leave = () => {
     flush();
-    onExit();
+    setEnded(true);
   };
 
   const pool = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed });
+
+  if (ended) {
+    // Best of what this run touched, so the result is what YOU just worked on
+    // rather than the whole library's top — which the list already shows.
+    const touched = new Set((log ?? []).slice(-count * 2).flatMap((j) => [j.a, j.b]));
+    const ranked = films
+      .filter((f) => touched.has(f.id))
+      .sort((a, b) => b.score - a.score);
+    const placed = pool.filter((f) => f.lock !== undefined).length;
+    return (
+      <SessionEnd
+        title={count > 0 ? "Session done" : "Nothing settled"}
+        blurb={
+          count > 0
+            ? "Every answer is kept. The list has moved to match."
+            : "No duels this time, so nothing changed."
+        }
+        films={ranked}
+        stats={[
+          { label: count === 1 ? "duel" : "duels", value: String(count) },
+          { label: "in range placed", value: String(placed) },
+        ]}
+        onList={onList}
+        onAgain={onExit}
+        againLabel="Keep shuffling"
+      />
+    );
+  }
 
   if (!log) {
     return <Centre>Reading the evidence…</Centre>;

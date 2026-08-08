@@ -33,6 +33,7 @@ import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
 import { LOSER, LastResult, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
 import { SpotlightPicker } from "./SpotlightPicker";
+import { SessionEnd } from "./SessionEnd";
 import {
   BackRow,
   RangeSlider,
@@ -329,6 +330,7 @@ export default function DuelScreen({
           options={shuffleRun}
           onInfo={onInfo}
           onExit={() => setShuffleRun(null)}
+          onList={onList}
         />
       ) : /* A spotlight that has settled reports what it established rather than
           asking for a bare number — the before/after is the whole point. */
@@ -381,7 +383,7 @@ export default function DuelScreen({
           inPlay={searchWindow(state)}
         />
       ) : (
-        <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} />
+        <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} onList={onList} />
       )}
 
       <BottomNav
@@ -1536,27 +1538,34 @@ function ConfirmView({
   );
 }
 
-function TierComplete({ films, tier, onPickTier }: { films: Film[]; tier: Rating; onPickTier: () => void }) {
+function TierComplete({
+  films,
+  tier,
+  onPickTier,
+  onList,
+}: {
+  films: Film[];
+  tier: Rating;
+  onPickTier: () => void;
+  onList: () => void;
+}) {
   const ranked = films.filter((f) => f.rating === tier && isPlaced(f)).sort((a, b) => b.score - a.score);
+  const duels = films
+    .filter((f) => f.rating === tier)
+    .reduce((n, f) => n + (f.duels ?? 0), 0);
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-8 text-center">
-      <div className="font-display text-2xl tracking-wide text-gold">🏆 {starsFor(tier)} placed</div>
-      <p className="font-serif italic text-dim">Every film in this tier has found its spot.</p>
-      <button
-        onClick={onPickTier}
-        className="rounded-full border border-gold px-5 py-2 text-xs font-bold tracking-wide text-gold active:scale-95"
-      >
-        Choose another tier
-      </button>
-      <ol className="mt-2 w-full max-w-xs space-y-1 text-left">
-        {ranked.map((f, i) => (
-          <li key={f.id} className="flex gap-3 text-sm text-text">
-            <span className="w-6 text-right font-serif font-bold text-gold">{i + 1}</span>
-            <span>{f.title}</span>
-          </li>
-        ))}
-      </ol>
-    </div>
+    <SessionEnd
+      title={`${starsFor(tier)} ranked`}
+      blurb="Every film in this tier has found its spot."
+      films={ranked}
+      stats={[
+        { label: "films", value: String(ranked.length) },
+        ...(duels > 0 ? [{ label: "duels", value: String(duels) }] : []),
+      ]}
+      onList={onList}
+      onAgain={onPickTier}
+      againLabel="Rank another tier"
+    />
   );
 }
 
