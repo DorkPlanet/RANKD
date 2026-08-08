@@ -35,12 +35,20 @@ export function PersonIcon() {
   );
 }
 
-// A stop glyph — unambiguous as "end what's running", where an X read as "close".
-export function StopIcon() {
+// Adding a film you've just watched. A plus inside the poster's own proportions
+// rather than a bare +, so the cell reads as "another one of these" — the nav's
+// other four icons all name a place, and this one names a thing.
+//
+// It replaced the stop glyph, which lost its job when Done moved into the duel
+// itself. Stop-in-the-nav was always slightly wrong anyway: it was inert on
+// every screen except one, and it sat two cells from the button that starts a
+// run, which is a lot of consequence for a mis-tap.
+export function AddFilmIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <rect x="9" y="9" width="6" height="6" rx="1.2" fill="currentColor" stroke="none" />
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <line x1="12" y1="9" x2="12" y2="15" />
+      <line x1="9" y1="12" x2="15" y2="12" />
     </svg>
   );
 }

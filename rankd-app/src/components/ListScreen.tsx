@@ -49,6 +49,7 @@ export default function ListScreen({
   onPoster,
   onTrophies,
   onSpotlight,
+  onAddFilm,
 }: {
   films: Film[];
   profile: Profile;
@@ -60,6 +61,7 @@ export default function ListScreen({
   onTrophies: () => void;
   /** Hand a film to the spotlight — how the review card's answer is given. */
   onSpotlight: (film: Film) => void;
+  onAddFilm: (film: Film) => void;
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
@@ -245,6 +247,8 @@ export default function ListScreen({
         onModes={onDuel}
         onList={() => {}}
         onProfile={onProfile}
+        films={films}
+        onAddFilm={onAddFilm}
       />
     </main>
   );

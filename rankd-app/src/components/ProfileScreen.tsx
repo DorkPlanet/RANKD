@@ -41,6 +41,7 @@ export default function ProfileScreen({
   onDuel,
   onList,
   onTrophies,
+  onAddFilm,
 }: {
   films: Film[];
   profile: Profile;
@@ -50,6 +51,7 @@ export default function ProfileScreen({
   onDuel: () => void;
   onList: () => void;
   onTrophies: () => void;
+  onAddFilm: (film: Film) => void;
 }) {
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
@@ -328,7 +330,7 @@ export default function ProfileScreen({
         </div>
       </div>
 
-      <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} />
+      <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} films={films} onAddFilm={onAddFilm} />
 
       {open && <CollectionSheet c={open} onInfo={onInfo} onClose={() => setOpen(null)} />}
       {editing && <EditIdentity profile={profile} onSave={onProfile} onClose={() => setEditing(false)} />}

@@ -87,6 +87,24 @@ export default function AppShell() {
       return { ...s, films };
     });
 
+  // A film you just watched, joining the library from the nav on any screen.
+  //
+  // Deliberately does NOT touch a running session. Adding a film mid-climb and
+  // splicing it into the pile would change the thing being fought over while it
+  // was being fought over — so it lands in the library unplaced and waits for
+  // the next run, which is also what an import does.
+  const addFilm = (film: Film) =>
+    setState((s) => {
+      if (!s) return s;
+      // Same title and year is the same film. The list is keyed by that id, so
+      // adding a duplicate would not create two rows, it would quietly replace
+      // one — including its rating and everything it has been through.
+      if (s.films.some((f) => f.id === film.id)) return s;
+      const films = [...s.films, film];
+      saveFilms(films);
+      return { ...s, films };
+    });
+
   if (!state) return null;
 
   return (
@@ -102,6 +120,7 @@ export default function AppShell() {
           onTrophies={() => setTrophiesOpen(true)}
           onList={() => setScreen("list")}
           onProfile={() => setScreen("profile")}
+          onAddFilm={addFilm}
         />
       ) : screen === "list" ? (
         <ListScreen
@@ -117,6 +136,7 @@ export default function AppShell() {
             setSpotlightFilm(film);
             setScreen("duel");
           }}
+          onAddFilm={addFilm}
         />
       ) : (
         <ProfileScreen
@@ -128,6 +148,7 @@ export default function AppShell() {
           onTrophies={() => setTrophiesOpen(true)}
           onDuel={() => setScreen("duel")}
           onList={() => setScreen("list")}
+          onAddFilm={addFilm}
         />
       )}
 

@@ -34,6 +34,7 @@ import { LOSER, LastResult, PosterCard, fadeLoserOut, flyPosterAcross } from "./
 import { Rolodex } from "./Rolodex";
 import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
+import { LogFilm } from "./LogFilm";
 import {
   BackRow,
   RangeSlider,
@@ -50,7 +51,7 @@ import {
   ListIcon,
   PersonIcon,
   RankdMark,
-  StopIcon,
+  AddFilmIcon,
   TrophyIcon,
 } from "./Icons";
 import type { Film, RankState } from "@/lib/types";
@@ -73,6 +74,7 @@ export default function DuelScreen({
   onList,
   onProfile,
   onTrophies,
+  onAddFilm,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -84,6 +86,7 @@ export default function DuelScreen({
   onList: () => void;
   onProfile: () => void;
   onTrophies: () => void;
+  onAddFilm: (film: Film) => void;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
@@ -430,9 +433,10 @@ export default function DuelScreen({
         screen="duel"
         onSettings={onSettings}
         onModes={() => setModeOpen(true)}
-        onEnd={endRun}
         onList={onList}
         onProfile={onProfile}
+        films={state.films}
+        onAddFilm={onAddFilm}
       />
 
       {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
@@ -528,17 +532,25 @@ export function BottomNav({
   screen,
   onSettings,
   onModes,
-  onEnd,
   onList,
   onProfile,
+  films,
+  onAddFilm,
 }: {
   screen: "duel" | "list" | "profile";
   onSettings: () => void;
   onModes?: () => void;
-  onEnd?: () => void;
   onList: () => void;
   onProfile?: () => void;
+  /** The library, so logging can say when a film is already in it. */
+  films?: Film[];
+  onAddFilm?: (film: Film) => void;
 }) {
+  // The sheet lives here rather than in each screen because the button does.
+  // Three screens render this nav, and threading an open-flag through all three
+  // would put the same state in three places to serve one control — the nav is
+  // shared chrome, so the thing it opens is shared too.
+  const [logging, setLogging] = useState(false);
   return (
     <nav
       className="flex flex-shrink-0 items-stretch border-t"
@@ -546,13 +558,22 @@ export function BottomNav({
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Five equal cells so RNK sits dead centre — it's the core loop. Ending
-          the session sits beside it, since that's the duel's own control.
-          Add-film and Search live inside List, not out here. */}
+      {/* Five equal cells so RNK sits dead centre — it's the core loop. */}
       <NavItem label="Your list" active={screen === "list"} onClick={onList} icon={<ListIcon />} />
-      {/* Ending a session only means something mid-duel, so it's inert on the
-          list — the cell stays for the nav's fixed five-column rhythm. */}
-      <NavItem label="End session" onClick={onEnd} icon={<StopIcon />} />
+      {/* Was End session, which is now Done inside the duel where it belongs —
+          you stop a run from the run, not from the chrome. The cell goes to
+          logging a film you've just watched, which is the one thing the app
+          could not do at all: the library only ever arrived by CSV, so it knew
+          your past and had nothing to say about tonight. Works on every screen,
+          unlike the control it replaced. */}
+      <NavItem
+        label="Log a film"
+        onClick={onAddFilm ? () => setLogging(true) : undefined}
+        icon={<AddFilmIcon />}
+      />
+      {logging && onAddFilm && (
+        <LogFilm films={films ?? []} onAdd={onAddFilm} onClose={() => setLogging(false)} />
+      )}
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} />
       <NavItem label="Activity" icon={<ActivityIcon />} />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
