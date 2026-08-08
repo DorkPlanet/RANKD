@@ -21,6 +21,8 @@ import { loadFilms, saveFilms } from "@/lib/store";
 import { startRun } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { withMeta, type FilmMeta } from "@/lib/meta";
+import { PersonSheet } from "./PersonSheet";
+import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
 export default function AppShell() {
@@ -36,6 +38,11 @@ export default function AppShell() {
   // has to work from whichever screen you're looking at.
   const [trophiesOpen, setTrophiesOpen] = useState(false);
   const [brightness, setBrightness] = useState(0);
+  // Whose filmography is open, and who a cross-tier run was just asked for.
+  // Both live here because opening one means closing the info card, and starting
+  // the other means changing screens.
+  const [person, setPerson] = useState<Person | null>(null);
+  const [personRun, setPersonRun] = useState<Person | null>(null);
 
   useEffect(() => {
     const films = loadFilms();
@@ -121,6 +128,8 @@ export default function AppShell() {
           onList={() => setScreen("list")}
           onProfile={() => setScreen("profile")}
           onAddFilm={addFilm}
+          personRun={personRun}
+          onPersonRunHandled={() => setPersonRun(null)}
         />
       ) : screen === "list" ? (
         <ListScreen
@@ -154,7 +163,37 @@ export default function AppShell() {
 
       {trophiesOpen && <Trophies films={state.films} onClose={() => setTrophiesOpen(false)} />}
 
-      {infoFilm && <FilmInfo film={infoFilm} films={state.films} onClose={() => setInfoFilm(null)} />}
+      {infoFilm && (
+        <FilmInfo
+          film={infoFilm}
+          films={state.films}
+          onClose={() => setInfoFilm(null)}
+          // The info card closes on the way through: two stacked sheets over the
+          // duel is one too many, and you came here to leave this film behind.
+          onPerson={(p) => {
+            setInfoFilm(null);
+            setPerson(p);
+          }}
+        />
+      )}
+
+      {person && (
+        <PersonSheet
+          person={person}
+          films={state.films}
+          onClose={() => setPerson(null)}
+          onInfo={(f) => {
+            setPerson(null);
+            setInfoFilm(f);
+          }}
+          onAddFilm={addFilm}
+          onRank={(p) => {
+            setPerson(null);
+            setPersonRun(p);
+            setScreen("duel");
+          }}
+        />
+      )}
 
       {settingsOpen && (
         <Settings

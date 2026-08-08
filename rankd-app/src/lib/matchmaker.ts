@@ -49,7 +49,12 @@ export const EXPLORATION_RATE = 0.15;
 export type Scope =
   | { kind: "all" }
   | { kind: "tier"; tier: Rating }
-  | { kind: "range"; tier: Rating; below: number; above: number };
+  | { kind: "range"; tier: Rating; below: number; above: number }
+  // Everything one person made, whatever stars each film got. The only scope
+  // that spans tiers, and the only one whose result is never written back to
+  // `score` — see the note at the top of lib/people.ts for why that pairing is
+  // deliberate rather than an oversight.
+  | { kind: "person"; name: string; role: "director" | "actor" };
 
 export interface MatchOptions {
   scope: Scope;
@@ -74,6 +79,10 @@ export interface MatchOptions {
 export function inScope(films: readonly Film[], scope: Scope): Film[] {
   if (scope.kind === "all") return [...films];
   if (scope.kind === "tier") return films.filter((f) => f.rating === scope.tier);
+  if (scope.kind === "person")
+    return films.filter((f) =>
+      scope.role === "director" ? f.director === scope.name : (f.cast ?? []).includes(scope.name),
+    );
   const low = scope.tier - scope.below;
   const high = scope.tier + scope.above;
   return films.filter((f) => f.rating >= low && f.rating <= high);

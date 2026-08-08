@@ -54,6 +54,7 @@ import {
   AddFilmIcon,
   TrophyIcon,
 } from "./Icons";
+import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
@@ -75,6 +76,8 @@ export default function DuelScreen({
   onProfile,
   onTrophies,
   onAddFilm,
+  personRun,
+  onPersonRunHandled,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -87,6 +90,9 @@ export default function DuelScreen({
   onProfile: () => void;
   onTrophies: () => void;
   onAddFilm: (film: Film) => void;
+  /** A person whose films should be ranked against each other, across tiers. */
+  personRun?: Person | null;
+  onPersonRunHandled?: () => void;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
@@ -131,6 +137,24 @@ export default function DuelScreen({
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
       return !v;
     });
+  // A person's filmography, handed over to be ranked against itself. Arrives the
+  // same way the review card's request does, and for the same reason: starting a
+  // run means replacing what is on this screen, which is this screen's business.
+  //
+  // `includeConfirmed` is forced on. Every other run defaults it off because it
+  // is usually about the hundreds of films with no position yet — but a director
+  // has a handful of films and you have almost certainly placed the good ones, so
+  // leaving them out would serve you the two you care least about.
+  // Derived, not copied into state. An effect that mirrors a prop into local
+  // state is a cascading render and a second copy of the same fact that can
+  // disagree with the first; the run IS the request, so it is read straight off
+  // it. Clearing is the parent's job, which `onExit` already does.
+  const activeRun: ShuffleOptions | null =
+    shuffleRun ??
+    (personRun
+      ? { scope: { kind: "person", name: personRun.name, role: personRun.role }, includeConfirmed: true }
+      : null);
+
   // The review card's answer arrives as a film to re-place. Handled here rather
   // than by the list, because starting a spotlight means replacing the run on
   // this screen — which is this screen's business, not the list's.
@@ -350,7 +374,7 @@ export default function DuelScreen({
 
       {/* Fast Shuffle owns the whole surface while it runs: it has no pile, no
           climb and no confirm, so none of the branches below apply to it. */}
-      {shuffleRun ? (
+      {activeRun ? (
         <ShuffleDuel
           films={state.films}
           onFilms={(films) => {
@@ -368,9 +392,12 @@ export default function DuelScreen({
               return { ...s, films };
             })
           }
-          options={shuffleRun}
+          options={activeRun}
           onInfo={onInfo}
-          onExit={() => setShuffleRun(null)}
+          onExit={() => {
+            setShuffleRun(null);
+            onPersonRunHandled?.();
+          }}
           onList={onList}
         />
       ) : /* A spotlight that has settled reports what it established rather than

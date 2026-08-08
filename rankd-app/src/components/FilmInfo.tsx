@@ -13,6 +13,7 @@ import { beliefsWhenIdle } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { confidenceOf } from "@/lib/shuffle";
+import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 
 // Confidence as words rather than a percentage. "0.62" invites the question
@@ -25,7 +26,18 @@ const settledness = (confidence: number): string =>
 // Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
 // year and tagline are local and paint instantly; the TMDb detail streams in
 // underneath so the card is never blocked on the network.
-export function FilmInfo({ film, films, onClose }: { film: Film; films?: Film[]; onClose: () => void }) {
+export function FilmInfo({
+  film,
+  films,
+  onClose,
+  onPerson,
+}: {
+  film: Film;
+  films?: Film[];
+  onClose: () => void;
+  /** Open a director's or actor's filmography. */
+  onPerson?: (person: Person) => void;
+}) {
   const [meta, setMeta] = useState<FilmMeta | null>(null);
   useEffect(() => {
     let live = true;
@@ -114,10 +126,25 @@ export function FilmInfo({ film, films, onClose }: { film: Film; films?: Film[];
           <p className="px-4 pb-3 text-[12px] leading-relaxed text-text">{meta.synopsis}</p>
         )}
 
+        {/* Names are the way in to a person's filmography, so they are controls
+            rather than text. This card was already the one place the app showed
+            you who made a film and then gave you nowhere to go with it. */}
         {meta?.cast?.length ? (
           <div className="px-4 pb-3">
             <div className="text-[10px] font-extrabold tracking-[0.12em] text-dim">STARRING</div>
-            <div className="mt-1 text-[12px] leading-snug text-text">{meta.cast.join(", ")}</div>
+            <div className="mt-1 text-[12px] leading-snug text-text">
+              {meta.cast.map((name, i) => (
+                <span key={name}>
+                  {i > 0 && ", "}
+                  <button
+                    onClick={() => onPerson?.({ name, role: "actor", count: 0 })}
+                    className="underline decoration-border underline-offset-2 active:text-gold"
+                  >
+                    {name}
+                  </button>
+                </span>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -126,7 +153,19 @@ export function FilmInfo({ film, films, onClose }: { film: Film; films?: Film[];
             {crew.map(([role, name]) => (
               <div key={role} className="flex justify-between gap-3 py-0.5 text-[12px]">
                 <span className="text-dim">{role}</span>
-                <span className="text-right text-text-hi">{name}</span>
+                {/* Only the director opens a filmography: they are the only crew
+                    role the library stores per film, so the others have nothing
+                    to search on. */}
+                {role === "Director" ? (
+                  <button
+                    onClick={() => onPerson?.({ name, role: "director", count: 0 })}
+                    className="text-right text-text-hi underline decoration-border underline-offset-2 active:text-gold"
+                  >
+                    {name}
+                  </button>
+                ) : (
+                  <span className="text-right text-text-hi">{name}</span>
+                )}
               </div>
             ))}
           </div>

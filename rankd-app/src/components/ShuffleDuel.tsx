@@ -220,8 +220,20 @@ export default function ShuffleDuel({
     // Online update — the cheap per-swipe path. The batch refit that erases its
     // drift runs when the session ends, not between taps.
     const nextBeliefs = applyJudgement(beliefs, judgement, fallback);
-    const respread = respreadFor(films, [a, b], nextBeliefs, options.includeConfirmed);
-    const placed = placeSettled(respread, nextBeliefs);
+    // A person run must not write scores.
+    //
+    // Its whole point is comparing films ACROSS tiers, and `score` is defined
+    // inside a tier band — `respreadTier` would take a cross-tier answer and
+    // fold it back inside the stars each film already has, which is worse than
+    // ignoring it: the duel would appear to count and would silently mean
+    // something else. So the judgement still lands in the log and the belief
+    // still moves; only the write-back is skipped. The person's ordering is read
+    // from the beliefs (rankByBelief), which is where a cross-tier answer can
+    // actually live.
+    const crossTier = options.scope.kind === "person";
+    const placed = crossTier
+      ? films
+      : placeSettled(respreadFor(films, [a, b], nextBeliefs, options.includeConfirmed), nextBeliefs);
 
     setResults((prev) =>
       [
