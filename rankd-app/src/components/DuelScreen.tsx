@@ -1343,9 +1343,21 @@ function Duel({
             size, so 12 against the row's 1 means this gap gives up roughly four
             times as much height). Opening the drawer therefore tightens this
             space instead of resizing the artwork. */}
+        {/* Eager to shrink, but never to nothing.
+            The weighting is deliberate — 12 against the poster row's 1 means
+            opening the drawer tightens this gap instead of resizing the artwork,
+            which is right. What was missing was a floor. On a phone with the
+            strip open this collapsed to 8px, and since the box clips its
+            overflow, the rank face did not compress: it disappeared. The screen
+            silently dropped the only live game state it shows — which position
+            is being fought over, out of how many — and the titles rose into the
+            progress bar behind it.
+            minHeight is what the shrink weighting always needed: give up the
+            slack first, then stop. Anything still missing after that comes off
+            the posters, which have 328px to spare and degrade gracefully. */}
         <div
           className="flex min-h-0 items-center justify-center overflow-hidden"
-          style={{ height: 110, flexShrink: 12 }}
+          style={{ height: 110, minHeight: 56, flexShrink: 12 }}
         >
           <RankFace from={rankOf(contender.id)} to={rankOf(challenger.id)} total={total} />
         </div>
