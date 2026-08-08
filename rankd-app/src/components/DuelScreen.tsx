@@ -77,7 +77,9 @@ export default function DuelScreen({
   onTrophies,
   onAddFilm,
   personRun,
+  personGuests = [],
   onPersonRunHandled,
+  onPerson,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -92,7 +94,11 @@ export default function DuelScreen({
   onAddFilm: (film: Film) => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
+  /** Films borrowed for that run only — never saved to the library. */
+  personGuests?: Film[];
   onPersonRunHandled?: () => void;
+  /** Open a filmography from the spotlight picker. */
+  onPerson?: (person: Person) => void;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   const [tierOpen, setTierOpen] = useState(false);
@@ -376,10 +382,15 @@ export default function DuelScreen({
           climb and no confirm, so none of the branches below apply to it. */}
       {activeRun ? (
         <ShuffleDuel
-          films={state.films}
+          // Borrowed films are handed to the run and to nothing else. Both
+          // writes below strip them, so there is no path from "I ranked a
+          // director's whole filmography" to "my library gained forty films I
+          // have never seen".
+          films={personGuests.length ? [...state.films, ...personGuests] : state.films}
           onFilms={(films) => {
-            saveFilms(films);
-            setState((s) => (s ? { ...s, films } : s));
+            const mine = films.filter((f) => !f.guest);
+            saveFilms(mine);
+            setState((s) => (s ? { ...s, films: mine } : s));
           }}
           // Applied as a functional update, so artwork arriving mid-streak folds
           // into whatever the library is NOW rather than into a stale snapshot
@@ -387,6 +398,9 @@ export default function DuelScreen({
           onMeta={(id, meta) =>
             setState((s) => {
               if (!s) return s;
+              // A guest is not in `s.films`, so this maps over nothing and saves
+              // the library unchanged — correct, but stated rather than relied on.
+              if (personGuests.some((g) => g.id === id)) return s;
               const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
               saveFilms(films);
               return { ...s, films };
@@ -526,6 +540,10 @@ export default function DuelScreen({
           onPick={(id) => {
             beginSpotlight(id);
             setSpotlightFor(null);
+          }}
+          onPerson={(p) => {
+            setSpotlightFor(null);
+            onPerson?.(p);
           }}
         />
       )}

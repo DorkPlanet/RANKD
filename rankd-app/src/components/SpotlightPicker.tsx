@@ -10,6 +10,7 @@
 import { useRef, useState } from "react";
 
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
+import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 import { IconToggle, Sheet } from "./ui";
 
@@ -31,10 +32,13 @@ export function SpotlightPicker({
   onPick,
   title = "Spotlight",
   blurb = "Pick any film to test. It starts where it currently sits and moves as far as its results take it.",
+  onPerson,
 }: {
   films: Film[];
   onClose: () => void;
   onPick: (id: string) => void;
+  /** Open a whole filmography instead of one film. */
+  onPerson?: (person: Person) => void;
   title?: string;
   blurb?: string;
 }) {
@@ -63,6 +67,22 @@ export function SpotlightPicker({
     if (mode === "director") return !!f.director?.toLowerCase().includes(query);
     return !!f.cast?.some((c) => c.toLowerCase().includes(query));
   };
+
+  // Whose name the query actually landed on. The search matches a substring, so
+  // "villen" has to become "Denis Villeneuve" before anything can be looked up
+  // by it — and taking it from a matching film means it is always a name the
+  // library really holds, spelled the way the library spells it.
+  const matchedName: string | null = (() => {
+    if (mode === "film" || query === "") return null;
+    for (const f of films) {
+      if (mode === "director" && f.director?.toLowerCase().includes(query)) return f.director;
+      if (mode === "actor") {
+        const hit = f.cast?.find((c) => c.toLowerCase().includes(query));
+        if (hit) return hit;
+      }
+    }
+    return null;
+  })();
 
   const shown = films
     .filter((f) => (filter === "all" ? true : f.rating === filter))
@@ -136,6 +156,28 @@ export function SpotlightPicker({
         }
         className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
       />
+
+      {/* Searching a director and then tapping one of their films re-places that
+          ONE film inside its own tier, which is what this picker has always been
+          for. It is not what searching a director makes you want to do: you came
+          here holding a question about their whole body of work, and every row
+          answers a different, smaller one.
+          So a people search offers the bigger action directly. */}
+      {onPerson && mode !== "film" && query !== "" && matchedName && (
+        <button
+          onClick={() => onPerson({ name: matchedName, role: mode, count: 0 })}
+          className="mb-2 flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left active:scale-[0.99]"
+          style={{ color: "#1c1405", background: "var(--gold)" }}
+        >
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-extrabold">Rank {matchedName}</span>
+            <span className="block truncate text-[11px] opacity-75">
+              All {shown.length} against each other, across tiers
+            </span>
+          </span>
+          <span className="flex-shrink-0 text-lg leading-none">›</span>
+        </button>
+      )}
 
       {/* One toolbar rather than a chip rail and a count line: the filter says
           what you're looking at and how many, and everything else is an icon.

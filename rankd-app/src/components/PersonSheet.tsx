@@ -35,8 +35,8 @@ export function PersonSheet({
   person: Person;
   films: Film[];
   onClose: () => void;
-  /** Start a cross-tier run over this person's films. */
-  onRank: (person: Person) => void;
+  /** Start a cross-tier run over this person's films, plus any borrowed ones. */
+  onRank: (person: Person, guests: Film[]) => void;
   onInfo: (film: Film) => void;
   onAddFilm: (film: Film) => void;
 }) {
@@ -95,6 +95,25 @@ export function PersonSheet({
 
   const missing = credits?.filter((c) => !c.film) ?? [];
 
+  // The unseen films, as things a duel can actually hold.
+  //
+  // Seeded at 3★ because the model needs somewhere to start and the midpoint is
+  // the only honest guess about a film you have not seen — it is a prior, not a
+  // rating, and nothing writes it anywhere. The duels themselves are what move
+  // these, which is the whole point of including them.
+  const guests: Film[] = missing.map((c) => ({
+    id: slugId(c.title, c.year),
+    title: c.title,
+    year: c.year,
+    rating: 3,
+    score: seedScore(3),
+    poster: c.poster,
+    guest: true,
+    ...(person.role === "director" ? { director: person.name } : { cast: [person.name] }),
+  }));
+
+  const total = mine.length + (showMissing ? guests.length : 0);
+
   return (
     <Sheet title={person.name} onClose={onClose}>
       <p className="mb-3 text-[11px] uppercase tracking-wider text-dim">
@@ -137,24 +156,37 @@ export function PersonSheet({
         )}
       </div>
 
-      {mine.length >= 2 && (
+      {/* The gap, and the choice about it. Ranking a director means ranking
+          their work, not the subset you happen to have logged — so the unseen
+          films can join the run. They are BORROWED, never added: see `guest` in
+          lib/types.ts for why that distinction is enforced rather than trusted. */}
+      <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
+        <span className="min-w-0">
+          <span className="block text-sm text-text-hi">Include films I haven&rsquo;t seen</span>
+          <span className="block text-[11px] leading-snug text-dim">
+            {credits
+              ? `${missing.length} more by ${person.name}. They won't be added to your library.`
+              : "Pulls in the rest of their work, just for this session."}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={showMissing}
+          onChange={(e) => setShowMissing(e.target.checked)}
+          className="tickbox"
+        />
+      </label>
+
+      {total >= 2 && (
         <button
-          onClick={() => onRank(person)}
-          className="mt-3 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95"
+          onClick={() => onRank(person, showMissing ? guests : [])}
+          disabled={showMissing && !credits}
+          className="mt-2 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
           style={{ color: "#1c1405", background: "var(--gold)" }}
         >
-          Rank these {mine.length}
+          {showMissing && !credits ? "Finding their films…" : `Rank these ${total}`}
         </button>
       )}
-
-      {/* The gap. This is the reason to be on this screen at all — a list of only
-          what you already have answers a question you could already answer. */}
-      <button
-        onClick={() => setShowMissing((v) => !v)}
-        className="mt-3 w-full rounded-xl border border-border py-2.5 text-xs font-bold text-dim active:scale-95"
-      >
-        {showMissing ? "Hide what I haven't logged" : "Show what I haven't logged"}
-      </button>
 
       {showMissing && (
         <div className="mt-2 flex flex-col gap-1">

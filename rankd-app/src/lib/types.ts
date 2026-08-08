@@ -35,6 +35,19 @@ export interface Film {
   // How many duels this film has been through. Cheap to keep, and it's the only
   // record of how much evidence sits behind a placement.
   duels?: number;
+  // A film borrowed for one session and never added to the library.
+  //
+  // Ranking a director means ranking their work, not the subset of it you have
+  // logged — so a person run can pull in films you have not seen. Those must not
+  // silently join your library: you never rated them, and they would appear in
+  // your list, your tier counts and your profile as though you had.
+  //
+  // So they are marked, and the two writes that could persist them —
+  // `onFilms` and `onMeta` in the duel screen — drop them on the way out. The
+  // flag exists on Film rather than in a side-set because every function that
+  // handles films can then see it; a set held elsewhere is a rule you have to
+  // remember, and this one is only load-bearing at the moment it is forgotten.
+  guest?: boolean;
 }
 
 // One in-flight tier placement. The only committed data is `confirmed`; the

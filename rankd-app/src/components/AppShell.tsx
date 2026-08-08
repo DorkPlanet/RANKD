@@ -43,6 +43,7 @@ export default function AppShell() {
   // the other means changing screens.
   const [person, setPerson] = useState<Person | null>(null);
   const [personRun, setPersonRun] = useState<Person | null>(null);
+  const [personGuests, setPersonGuests] = useState<Film[]>([]);
 
   useEffect(() => {
     const films = loadFilms();
@@ -129,7 +130,12 @@ export default function AppShell() {
           onProfile={() => setScreen("profile")}
           onAddFilm={addFilm}
           personRun={personRun}
-          onPersonRunHandled={() => setPersonRun(null)}
+          personGuests={personGuests}
+          onPerson={setPerson}
+          onPersonRunHandled={() => {
+            setPersonRun(null);
+            setPersonGuests([]);
+          }}
         />
       ) : screen === "list" ? (
         <ListScreen
@@ -187,9 +193,10 @@ export default function AppShell() {
             setInfoFilm(f);
           }}
           onAddFilm={addFilm}
-          onRank={(p) => {
+          onRank={(p, guests) => {
             setPerson(null);
             setPersonRun(p);
+            setPersonGuests(guests);
             setScreen("duel");
           }}
         />
