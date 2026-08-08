@@ -1241,9 +1241,18 @@ function Duel({
 
   return (
     <>
-      <div className="mt-3 flex flex-col items-center">
-        <Tips />
-      </div>
+      {/* The tip stands down when the strip is up. Open, the strip takes ~110px
+          and on a phone the rank numbers were landing on top of the hint — two
+          things fighting for the same line, one of which is live game state and
+          one of which is a rotating suggestion. The suggestion yields.
+
+          Unmounted rather than faded, because the strip wants that height back —
+          it is the one thing on this screen that genuinely needs the ~24px. */}
+      {!stripOpen && (
+        <div className="mt-3 flex flex-col items-center">
+          <Tips />
+        </div>
+      )}
 
       {/* The question belongs to the duel, so it lives inside the arena and
           travels with the posters. Left outside it, folding the strip away

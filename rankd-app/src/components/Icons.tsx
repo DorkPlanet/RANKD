@@ -82,15 +82,21 @@ export function RankdMark() {
 
 // Points the way the pile is climbed — up the order, toward #1.
 //
-// The box is 22 wide because the ART is 22 wide. It used to be 26, leaving four
-// dead pixels on the right, which put the drawn glyph two pixels left of the
-// box's centre — and since the layout centres the BOX, the arrow read as
-// off-centre between the two numbers however carefully they were balanced.
+// A chevron and nothing else, because that is all anyone could ever see.
+//
+// This read as off-centre through two fixes that both measured perfectly. The
+// box was widened, then the flanking numbers were given equal widths, and the
+// glyph still looked wrong — because the maths was never the problem. The
+// original was a 22px line with the chevron at its far right end, and the line
+// was drawn in `--border`: 1.2:1 against the background, which is to say
+// invisible. So the box centred, the numbers balanced, and the only VISIBLE ink
+// — the gold chevron — sat nine pixels right of where the eye expected it.
+//
+// The lesson worth keeping: centre what can be seen, not what is in the DOM.
 export function ClimbArrow() {
   return (
-    <svg width="22" height="10" viewBox="0 0 22 10" fill="none" aria-hidden>
-      <path d="M0 5h22" stroke="var(--border)" strokeWidth="1.5" />
-      <path d="M18 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+      <path d="M3 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
