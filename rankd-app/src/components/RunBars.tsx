@@ -56,7 +56,7 @@ export function RunBars({
             layout said "0 placed · 134 to go" on this line and then drew a bar
             meaning the same thing — two readings of one number, which is how you
             end up with them disagreeing. */}
-        <div className="relative mb-2 flex items-baseline">
+        <div className="relative mb-1.5 flex items-baseline">
           <span className="shrink-0">{lead}</span>
           <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-extrabold tracking-[0.1em] text-dim">
             {title}
@@ -90,6 +90,19 @@ export function RunBars({
   );
 }
 
+/**
+ * One bar, one row: label, track, count.
+ *
+ * These used to stack three elements each — label and count on one line, bar
+ * underneath — so three bars cost six rows and 105px of a phone screen before
+ * the posters got any. Reading them meant travelling down and back up: name,
+ * across to the number, down to the bar it belongs to.
+ *
+ * On one line the name, the fill and the number are the same glance, and the
+ * block is roughly half the height. The label column is fixed so the three
+ * tracks start at the same x — ragged starts made them read as three unrelated
+ * measurements rather than one set.
+ */
 function Bar({
   label,
   value,
@@ -100,20 +113,22 @@ function Bar({
   segments: { pct: number; colour: string }[];
 }) {
   return (
-    <div className="mb-1.5 last:mb-0">
-      <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-[9px] font-extrabold tracking-[0.12em] text-dim">{label.toUpperCase()}</span>
-        <span className="text-[10px] text-dim">{value}</span>
-      </div>
-      <div className="flex h-1 overflow-hidden rounded-full bg-border">
+    <div className="mb-1.5 flex items-center gap-2.5 last:mb-0">
+      <span className="w-[52px] flex-shrink-0 text-[8px] font-extrabold leading-none tracking-[0.1em] text-dim">
+        {label.toUpperCase()}
+      </span>
+      <span className="flex h-1 flex-1 overflow-hidden rounded-full bg-border">
         {segments.map((s, i) => (
-          <div
+          <span
             key={i}
             className="h-full transition-[width] duration-500"
             style={{ width: `${s.pct}%`, background: s.colour }}
           />
         ))}
-      </div>
+      </span>
+      <span className="w-[54px] flex-shrink-0 text-right text-[9px] leading-none text-dim tabular-nums">
+        {value}
+      </span>
     </div>
   );
 }

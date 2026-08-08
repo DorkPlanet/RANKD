@@ -1365,9 +1365,17 @@ function Duel({
             pressure. 356px = the original 270px poster plus the two-line title
             box above it, so a full-height phone looks exactly as it did; flex
             shrink hands the space back on anything shorter. */}
+        {/* marginBottom is not decoration: the CLIMBING and UN-RNKD pills are
+            positioned to STRADDLE the bottom edge of their card, so the row's
+            visible ink ends below its box. Nothing enforced clearance for that,
+            and while the results feed sat underneath, the feed's own line
+            absorbed it by accident. Removing the feed put the controls flush
+            against the box — measured at exactly 0px gap, with the pill hanging
+            4px past it — so the buttons collided with the badges.
+            The overhang belongs to the posters, so the space does too. */}
         <div
           className="relative flex items-stretch justify-center gap-3"
-          style={{ height: 356, flexShrink: 1, minHeight: 0 }}
+          style={{ height: 356, flexShrink: 1, minHeight: 0, marginBottom: 16 }}
         >
         <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
