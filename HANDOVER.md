@@ -1,117 +1,82 @@
-# Rankd — Handover
+# ⚑ HANDOVER — read this first
 
-> **Read this first.** This describes the **original single-file prototype**,
-> not the app in `rankd-app/`. The file it refers to (`rankd.html`) has been
-> deleted, and none of the function names below exist in the current codebase.
->
-> It's kept because the placement mechanic described under "The ranking
-> mechanic" is the **direct ancestor of the live engine** — the floor `lo` and
-> cap `hi` that collapse until they meet is exactly what `spotLo`/`spotHi` do in
-> `rankd-app/src/lib/ladder.ts` today. Read this for the reasoning; read the code
-> for the implementation.
+**Repo:** `github.com/DorkPlanet/RANKD`, branch `master`, public. App in `rankd-app/`.
+Commit identity is `Rankd Dev <dev@rankd.local>` — set locally, never the real email.
+Verify with `git log --format='%an <%ae>' | sort -u` before any push.
 
-Self-contained context for a fresh chat. Read this + `CLAUDE.md` before working.
+**Live:** https://rankd-app-eight.vercel.app — deploy with `npx vercel --prod --yes`
+from `rankd-app/`. Auth is already in place (`jarradrbishop-2544`, project
+`rankd2/rankd-app`, `TMDB_API_KEY` set for Production). Always verify the URL serves a
+200 rather than trusting the CLI's success line.
 
-## What Rankd is
-A single-file film-ranking web app: `rankd.html` (HTML/CSS/JS, **no build step, no
-framework**, `localStorage` persistence, TMDb API for metadata). You import a
-Letterboxd-style ratings CSV, then refine the order by pairwise comparison.
-Repo is **local-only, never pushed**.
+**State:** last commit `fca4308`, pushed, remote in sync. **214 tests, typecheck clean,
+lint at 3 problems** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused
+`tier` in `Rolodex`. **That is the new baseline (it used to be 4). Do not "fix" them.**
 
-## The core vision (the thing that matters most)
-Ranking should feel like **deliberately slotting a film into its true position**,
-with numbers that move sequentially and legibly — not jumping around. Tiers hold
-films at a star rating (0.5–5); within a tier you place films by comparing them.
+---
 
-### The ranking mechanic (just reworked — this is the heart of the app)
-Picking a tier starts a placement run (`startTournament(tier)` — legacy name; it's
-no longer a bracket tournament). The contender is the lowest unranked film; it's
-inserted among the films above it:
-- It has a **floor `lo`** (films it's surely beaten) and **cap `hi`** (films it
-  could still beat). These collapse to its exact slot; it **locks** at `lo===hi`.
-- **Normal play** tests the next film up one at a time (feels sequential).
-- **Skip** (`ladderSkip(n)`) tests N films up at once — the repetition-killer for
-  big tiers. A win keeps climbing; an **overshoot** (loss after a skip) caps `hi`
-  and the window **bisects, settling back DOWN** — never gets stuck.
-- Scores only move at lock (`ladderSettleAndNext`), spread evenly per-rating across
-  each tier's score band, so every placement is an **exact, tie-proof reorder**
-  even when dozens of films start tied at one score.
-- **Locked films** can still be beaten but need a confirm ("bump it?"). When the
-  whole tier is placed, you're **asked** to promote the top film up a tier.
-- **Undo** rewinds the placement window (`tournamentState` is in `undoSnap`).
+## Landed since the last handover
 
-Verified end-to-end (worst-case fully-tied 12-film tier sorts correctly, 0 errors;
-skip cut 61→47 comparisons; overshoots recover; undo + promotion intact).
+Session end screens · Undo in the climb (one step, with log retraction) · rank-face
+clipping fix · **Log Film** (nav, replacing Stop) · `/api/search` returning candidates ·
+**director/actor ranking, cross-tier** · `/api/person` filmographies · borrowed "guest"
+films · one shared `RunBars` across all modes · results feed removed · **remove a film**.
 
-Key state/functions (all in `rankd.html`): `tournamentState =
-{tier,maxDiff,filmId,lo,hi,capped,streak,skipN}`; `ladderAbove()`,
-`ladderProbeIndex()`, `ladderApplyWin/Loss(j)`, `ladderSettleAndNext()`,
-`ladderSkip(n)`, `ladderOverrideConfirm/Decline()`, `promptTierPromotion()`.
-In a run, `currentPair[0]` is always the contender (left), `currentPair[1]` the
-opponent (right).
+## Decisions taken — do not relitigate
 
-## IMMEDIATE NEXT TASK — port the bottom-band visual (task #26)
-The **logic works but the compare screen still wears the OLD look** (top status
-text + poster rank badges). The agreed new look was fully mocked live (via injected
-CSS/JS, since discarded) and signed off. Port it into source, screenshot-iterating
-like the mock. The agreed design:
+- **Person rankings are cross-tier and write NO scores.** The order is read from belief
+  means (one 1–10 scale that never knew about tiers), so `score` and its tier bands stay
+  untouched. See the header comment in `src/lib/people.ts`.
+- **Guest films** (`Film.guest`) are borrowed for one run and never persisted. Both
+  `onFilms` and `onMeta` in `DuelScreen` strip them.
+- **Saved lists will freeze their order at save time**, not stay live. (User delegated
+  this call.)
+- **Removal never touches the evidence log.** Retracting would destroy what a duel says
+  about the film on the *other* side. `fitBeliefs` already skips absent ids.
+- **The log always records**, whatever a setting says. Settings govern influence only.
+- The TMDb key is in public history (`ab25cf58`). **User has declined rotation five
+  times — note it if relevant, never argue it.**
 
-- **Anchor the contender: always the LEFT card**, badged **YOUR PICK**. The right
-  card is the opponent — plain **CHALLENGER · #n**, or **🔒 HOLDING #n** with a
-  gold-ringed poster when it's a locked film.
-- **One "placing" band** sits **below the posters, above the recents bar**
-  (NOT at the top). It contains: `▲ NOW PLACING · <title> · 🔥<streak>`, then the
-  rank as **`#cur ▸ #tgt`** (you're at cur, beat the right card to take tgt), then
-  **skip controls**. The number ticks **up green (▲)** on a win, **down amber (▼)**
-  on a settle — watching one number move is the whole legibility fix ("I get lost"
-  was the complaint).
-- **Skip controls, two variants** — build both, user picks by feel: an always-on
-  `Skip ahead +5 / +10 / +50` row, and a **streak-gated banner** that appears after
-  ~5 wins ("🔥 5 in a row — skip ahead?"). Both call `ladderSkip(n)`.
-- **Hide the old** top status row and the poster `#cp-rank-a/b` / `#cp-new-a/b`
-  badges during a ladder run.
-- Display math: current rank ≈ `poolSize - (ci + lo)`; target ≈ opponent's current
-  rank. `ci` = contender index in `ladderStableOrder(ladderPool())`.
+## Next, in order
 
-**Layout landmine (why it's a careful pass):** the bottom already has the
-undo/save/stop/skip **action row** in normal flow, plus a **fixed session panel**
-(progress bar + recents timeline, `#cp-session-panel`, hidden below 700px height).
-The band must not collide with those, and must work across the three device-height
-tiers (`@media max-height:849px / 700px`). In the mock the band collided with the
-action row — reconcile by folding the band and action buttons together or a slim
-combined row. Reuse the live-measured `--cp-session-panel-h` / `--cp-status-row-h`
-pattern already in the code for reserving space. Wire a `cpRenderLadder()` from
-`renderPair()`.
+1. **#38 + #37 together.** Person runs should follow King of the Hill ("one climbing till
+   I decide what's at the top") and finish on a summary offering a **JPG export** and
+   **save as a list**. They must land together — a person climb with nowhere to put its
+   answer is worse than the shuffle it replaces.
+   - `startRun` needs an `only?: string[]` option so the pile can be an arbitrary film
+     set rather than a tier.
+   - **The hard part:** `confirm` currently writes a score inside a tier band. A person
+     run must not. Proposed: a `crossTier` session flag so `confirm` appends to
+     `session.confirmed` (already an ordered id array) *without* writing a score — at
+     which point the finished pile IS the ranked list, ready for the summary.
+   - `ladder.ts` is the most guarded module in the app (49 behavioural tests, immutable
+     in/out). Giving `confirm` a second meaning needs its own test pass.
+   - JPG export: posters are remote TMDb images, so **canvas will taint** unless they are
+     fetched as blobs or proxied through our own origin. Check this first; it decides the
+     whole approach.
+2. **#24 — advisory-only switch.** `withdrawSoftLocks()` is built and tested but
+   unreachable from the UI. Cheapest real win left.
+3. **#14 — design pass.** `SessionEnd`, `PersonSheet`, `LogFilm` and `RunBars` all ship
+   marked PROVISIONAL and are overdue the user's eye. The compare screen's own design is
+   protected — new UI fits around it.
 
-## Other open threads (deferred, lower priority)
-- **"Not this film" re-match** in the compare mini-card (task #25): correct a wrong
-  TMDb match (wrong film/year) via re-search + metadata overwrite. Not a quick fix.
-- **Tier-vs-tier combat** — user's "later" idea: top N of a tier vs lowest N of the
-  tier above; a boundary-refinement layer that plugs into `promptTierPromotion`.
-- **Full ground-up code-review / efficiency pass** — user asked for it; not started.
-- Color-palette redesign; onboarding polish; random list-top pull-gesture.
-- A "verification sweep" (bubble to no-upset) was discussed as an accuracy finisher;
-  currently superseded by the skip+settle mechanic — revisit only if endings still
-  feel off.
+## Gotchas that have already cost time
 
-## Constraints that must hold (from CLAUDE.md + memory)
-- **Never let the user's real email into git.** Identity is the placeholder
-  `Rankd Dev <dev@rankd.local>`; verify with `git log --format='%an <%ae>'` before
-  any push. Repo has never been pushed.
-- **TMDb API key is hardcoded** in `rankd.html` — flag before any public hosting.
-- **Working agreement:** confirm before building anything nontrivial; **mock in the
-  live preview before writing real code**; ask when ambiguous; always give a
-  recommendation; be a detective (theory → evidence → fix), don't guess-and-patch.
-- Commit only when asked; branch off `main`/`master` isn't needed (local-only).
-  End commit messages with the `Co-Authored-By` trailer.
-
-## Dev setup notes
-- Preview via the `Claude_Preview` MCP tools (`preview_start` name `rankd`,
-  `preview_eval`, `preview_screenshot`, `preview_resize`). Server is
-  `.claude/server.ps1` (a PowerShell static server; occasionally hangs — restart).
-- The **test browser has no real library** (localStorage empty) — seed synthetic
-  films for testing, or the user loads their real CSV on their device. Test writes
-  don't touch the user's real data.
-- Recent commits: `d519f07` skip+binary-settle rework · `4d993a6` tied-cluster fix ·
-  `14a8494` insertion ladder · `5c8fef7` mode-switch/swipe/Stop/tag-ranking.
-- Working tree is clean as of this handover (except this untracked `HANDOVER.md`).
+- `next build` and `next dev` share `.next` — stop the preview before building.
+- `ROW_H = 96` in `ListScreen.tsx` drives section spacers and tier-jump offsets. Nothing
+  may change a list row's height, and nothing new goes *inside* the list scroller.
+- **The CLIMBING / UN-RNKD pills straddle the bottom edge of their poster**, so the row's
+  visible ink ends below its box. Anything placed under the posters needs explicit
+  clearance — this caused a real collision when the results feed was removed.
+- **Verify by looking at rendered output, not stored state.** Several bugs this project
+  passed a storage check and were still broken on screen.
+- **The dev console retains stale build errors.** A fixed parse error keeps reappearing in
+  `read_console_messages`. Confirm against a fresh fetch and `tsc`, not the console.
+- **Never use `s|...|...|` in perl when the pattern contains escaped pipes** — the
+  delimiter collides and silently rewrites the wrong line. It cut a type declaration in
+  half this session.
+- Commit messages: write to a file and use `git commit -F`. PowerShell here-strings mangle
+  messages containing quotes.
+- The preview pane does not composite: animations never *finish* there. Control-test with
+  a plain `element.animate()` before reporting an animation bug.
+- `test/fixtures/ratings.csv` is gitignored; `import.test.ts` skips loudly without it.
