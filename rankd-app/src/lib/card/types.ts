@@ -59,7 +59,7 @@ export interface CardData {
   dateLabel: string;
 }
 
-export type CardDesign = "classic" | "wrapped" | "collector";
+export type CardDesign = "classic" | "marquee" | "paul-allen";
 
 export interface Faces {
   display: string;

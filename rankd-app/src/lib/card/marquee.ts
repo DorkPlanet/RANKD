@@ -1,6 +1,6 @@
 "use client";
 
-// WRAPPED — the loud one. Big type, bold colour, the finding first.
+// MARQUEE — the loud one. Named for the lit sign outside a cinema. Big type, bold colour, the finding first.
 //
 // ── What it borrows ────────────────────────────────────────────────────────
 //
@@ -17,14 +17,15 @@
 //
 // No gradient. The 2024 gradient era would look borrowed on a dark, gold, serif
 // app, and the user ruled it out explicitly. The boldness comes instead from a
-// solid block of the poster's own colour, filling the left third — which makes
-// every card visibly different without inventing a palette, because the colour
-// is the film's.
+// solid block of colour filling the left third.
 //
-// Type on that block has to survive whatever colour a poster produces, so it is
-// drawn in near-black rather than white: `accentFrom` floors its result at a
-// lightness of 170, so the block is always light enough for dark text and never
-// reliably dark enough for light text.
+// That block was originally the poster's own colour, and it was the wrong source
+// for it. A muted poster made a muted wall, which is fatal to the one design
+// whose entire job is to be loud — and `lift` brightening a nearly-grey poster
+// produced something close to off-white. The block now comes from the five bars
+// under the RANKD wordmark: vintage technicolour, always vivid, picked
+// deterministically per subject. Poster colour is still right for a hairline —
+// it is a whisper of the film — so it stays on the #1 ring and the stat values.
 
 import { BARS } from "../brand";
 import { drawCircleImage, drawCover, ellipsis, fitText, roundRect, wrap } from "./canvas";
@@ -38,9 +39,33 @@ const BLOCK_W = 396; // the colour panel
 const RIGHT_X = BLOCK_W + 46;
 const RIGHT_W = W - RIGHT_X - PAD;
 
-const INK = "#14100a"; // near-black, for type on the colour block
+// Ink follows the block rather than being fixed.
+//
+// The five bars are not equally dark: white reads well on the navy, the purple
+// and the deep red, and is close to illegible on the gold. Picking one ink for
+// all five means one of the five cards is broken, so it is chosen by the block's
+// own luminance instead.
+const LIGHT_INK = "#fdfaf4";
+const DARK_INK = "#14100a";
 
-export const wrapped: Renderer = {
+function inkOn(hex: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  // Rec. 601 luma — good enough for a two-way choice, and it weights green the
+  // way the eye does, which is what makes the teal come out light rather than dark.
+  return (r * 299 + g * 587 + b * 114) / 1000 > 140 ? DARK_INK : LIGHT_INK;
+}
+
+/** Stable pick from the palette: the same subject always gets the same colour. */
+function hashOf(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h | 0;
+}
+
+export const marquee: Renderer = {
   size: { w: W, h: H, scale: 2, pad: PAD },
 
   fonts: (f: Faces) => [
@@ -74,8 +99,18 @@ export const wrapped: Renderer = {
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, W, H);
 
-    // ── The colour block: the film's own colour, at full strength ──────────
-    ctx.fillStyle = accent;
+    // ── The colour block: technicolour, from the wordmark ──────────────────
+    //
+    // Taken from the five bars under the RANKD logo rather than from the
+    // poster. Poster-derived colour is right for a hairline — it is a whisper
+    // of the film — but wrong for a third of the card: a muted poster produced a
+    // muted wall, and this design's whole job is to be loud. The five bars are
+    // vintage technicolour and always vivid, and picking one deterministically
+    // from the subject means two directors reliably get different cards while
+    // the same director always gets the same one.
+    const block = BARS[Math.abs(hashOf(d.title + d.eyebrow)) % BARS.length];
+    const INK = inkOn(block);
+    ctx.fillStyle = block;
     ctx.fillRect(0, 0, BLOCK_W, H);
 
     ctx.fillStyle = INK;

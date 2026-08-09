@@ -122,6 +122,9 @@ export function readPalette(): Palette {
  * The result is then floored for lightness, because the card is dark and a
  * genuinely dark accent on a dark background is not an accent.
  */
+/** Below this the poster is too colourless to be anyone's accent. */
+const MIN_CHROMA = 28;
+
 export function accentFrom(img: HTMLImageElement | null, fallback: string): string {
   if (!img) return fallback;
   try {
@@ -145,7 +148,18 @@ export function accentFrom(img: HTMLImageElement | null, fallback: string): stri
       weight += w;
     }
     if (weight === 0) return fallback; // a genuinely greyscale poster
-    return lift(r / weight, g / weight, b / weight);
+
+    const [mr, mg, mb] = [r / weight, g / weight, b / weight];
+    // A MINIMUM CHROMA, not merely a non-zero one.
+    //
+    // The first version only bailed on a *perfectly* grey poster, so a nearly
+    // grey one — Inception's concrete and steel, say — returned a nearly grey
+    // colour, which `lift` then brightened into off-white. The card came back
+    // looking like it had no accent at all, which is worse than having an
+    // obviously wrong one. Below this threshold the poster does not get a vote
+    // and the brand colour is used instead.
+    if (Math.max(mr, mg, mb) - Math.min(mr, mg, mb) < MIN_CHROMA) return fallback;
+    return lift(mr, mg, mb);
   } catch {
     return fallback; // a tainted or unreadable image simply doesn't get a say
   }

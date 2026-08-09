@@ -16,18 +16,18 @@
 
 import { accentFrom, encode, loadFonts, loadImage, readFaces, readPalette } from "./canvas";
 import { classic } from "./classic";
-import { collector } from "./collector";
-import { wrapped } from "./wrapped";
+import { marquee } from "./marquee";
+import { paulAllen } from "./paulAllen";
 import type { CardData, CardDesign, Renderer } from "./types";
 
-const RENDERERS: Record<CardDesign, Renderer> = { classic, wrapped, collector };
+const RENDERERS: Record<CardDesign, Renderer> = { classic, marquee, "paul-allen": paulAllen };
 
-export const designs: readonly CardDesign[] = ["classic", "wrapped", "collector"];
+export const designs: readonly CardDesign[] = ["classic", "marquee", "paul-allen"];
 
 export const designName: Record<CardDesign, string> = {
   classic: "Classic",
-  wrapped: "Wrapped",
-  collector: "Collector",
+  marquee: "Marquee",
+  "paul-allen": "Paul Allen",
 };
 
 export async function renderCard(design: CardDesign, data: CardData): Promise<Blob> {

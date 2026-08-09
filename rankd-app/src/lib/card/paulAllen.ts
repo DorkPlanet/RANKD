@@ -1,6 +1,10 @@
 "use client";
 
-// COLLECTOR — the quiet one. A trading card, and almost no words.
+// PAUL ALLEN — the quiet one. A business card, and almost no words.
+//
+// Named for the card in American Psycho, because that is the joke the design was
+// already making: the whole scene is four men comparing objects that carry almost
+// no information, and losing their minds over the thickness of the stock.
 //
 // ── What restraint is for here ─────────────────────────────────────────────
 //
@@ -39,7 +43,7 @@ const HERO_H = Math.round(HERO_W * 1.5);
 const HERO_Y = Math.round((H - HERO_H) / 2);
 const STAT_Y = 426; // labels; values sit 30 below
 
-export const collector: Renderer = {
+export const paulAllen: Renderer = {
   size: { w: W, h: H, scale: 2, pad: PAD },
 
   fonts: (f: Faces) => [

@@ -138,7 +138,12 @@ export function CardPicker({ data }: { data: CardData }) {
             <div
               key={design}
               data-design={design}
-              className="w-full flex-shrink-0 snap-center"
+              // `snap-always` is load-bearing, not decoration: without
+              // `scroll-snap-stop: always` a fast flick keeps its momentum
+              // straight past a snap point, so on a three-card pager the middle
+              // card is unreachable — you can only ever get to the two ends.
+              // Mandatory snapping alone does not prevent skipping; this does.
+              className="w-full flex-shrink-0 snap-center snap-always"
             >
               <div
                 className="w-full overflow-hidden rounded-xl border border-border"

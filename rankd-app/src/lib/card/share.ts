@@ -1,35 +1,49 @@
 "use client";
 
 /**
- * Hand a card to the user.
+ * Save a card.
  *
- * The share sheet first, when the platform has one: on a phone this is the
- * difference between "the picture is now in your camera roll somewhere" and
- * "the picture is in the message you were about to send". Falls back to a
- * download everywhere else.
+ * ── Download first, share only where downloading is impossible ─────────────
+ *
+ * This used to prefer `navigator.share` wherever the platform offered it, on
+ * the theory that a share sheet puts the picture straight into the message you
+ * were about to send. In use that was wrong: tapping Save on Android Chrome
+ * produced a sheet full of destinations to choose between, when what was wanted
+ * was the file in Downloads and nothing else to think about. A save button
+ * should save.
+ *
+ * So the anchor download is the default, and the share sheet is the fallback
+ * for the one platform that genuinely cannot download a blob to anywhere the
+ * user can find it: iOS Safari, where the camera roll is only reachable through
+ * the share sheet. Detected by capability rather than by user-agent sniffing —
+ * `download` on an anchor is the exact thing being relied on.
  */
 export async function shareCard(blob: Blob, filename: string): Promise<"shared" | "downloaded"> {
+  const a = document.createElement("a");
+  const canDownload = "download" in a;
+
+  if (canDownload) {
+    const url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    a.click();
+    // Revoked on a delay rather than immediately — Safari has not started
+    // reading the blob by the time click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    return "downloaded";
+  }
+
   const file = new File([blob], filename, { type: "image/jpeg" });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });
-      return "shared";
     } catch {
-      // Dismissing the share sheet lands here, and so does a platform that
-      // claimed it could share and then would not. Falling through to the
-      // download would drop a file on someone who just cancelled, so: nothing.
-      return "shared";
+      // Dismissing the sheet lands here, and so does a platform that claimed it
+      // could share and then would not. Either way there is nothing left to try.
     }
+    return "shared";
   }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  // Revoked on the next tick rather than immediately — Safari has not started
-  // reading the blob by the time click() returns.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
   return "downloaded";
 }
 
