@@ -4,155 +4,163 @@
 Commit identity is `Rankd Dev <dev@rankd.local>` — set locally, never the real email.
 Verify with `git log --format='%an <%ae>' | sort -u` before any push.
 
-**Live:** https://rankd-app-eight.vercel.app — deploy with `npx vercel --prod --yes`
-from `rankd-app/`. Auth is already in place (`jarradrbishop-2544`, project
-`rankd2/rankd-app`, `TMDB_API_KEY` set for Production). Always verify the URL serves a
-200 rather than trusting the CLI's success line.
+**Live:** https://rankd-app-eight.vercel.app — deploy with
+`npx vercel --prod --yes --scope rankd2` from `rankd-app/`. **The `--scope rankd2` is
+required**: without it Vercel answers "Not authorized" even though `vercel whoami`
+succeeds, which reads like an expired login and is not. **Verify a deploy by grepping the
+live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
+"deployed" (that mistake cost the user a session; see below).
 
-**State:** **240 tests, typecheck clean, lint unchanged at 3 problems in `src`** — 2
-pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in `Rolodex`. **That
-is the baseline (it used to be 4). Do not "fix" them, and do not add a fourth** — the
-person-run effect needed rewriting to derive its title instead of setting state, which is
-the better shape anyway.
+**State:** last commit `c4cff13`, pushed. **261 tests, typecheck clean, lint at 3 problems
+in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in
+`Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
 
 ---
 
-## Landed since the last handover
+## Landed
 
-Session end screens · Undo in the climb (one step, with log retraction) · rank-face
-clipping fix · **Log Film** (nav, replacing Stop) · `/api/search` returning candidates ·
-**director/actor ranking, cross-tier** · `/api/person` filmographies · borrowed "guest"
-films · one shared `RunBars` across all modes · results feed removed · **remove a film** ·
-**#38 + #37: person runs are a cross-tier King of the Hill climb ending on a summary with
-JPG export and save-as-list.**
+**Session A (`c31416d`) — a director's work as a climb.**
+`startRun` gained `only?: string[]` (an arbitrary pile, not a tier) and sessions gained
+`crossTier`. A person run is a King of the Hill climb over their filmography in belief
+order, and it **records nothing at all** — no score, no lock, no evidence row, no duel
+count. Borrowed "guest" films can join it. It ends on `RunSummary`.
+
+**Session B (`c4cff13`) — three share cards.**
+`card.ts` became `card/` (`canvas`, `types`, `render`, `data`, `share` + one file per
+design). Three designs, swipeable via `CardPicker`, downloaded individually, all
+1920×1080. A personalised insight engine (`lib/insight.ts`, 15 tests). Director/actor
+portraits from `/api/person?portrait=1`.
 
 ## Decisions taken — do not relitigate
 
-- **Person rankings are cross-tier and write NO scores.** The order is read from belief
-  means (one 1–10 scale that never knew about tiers), so `score` and its tier bands stay
-  untouched. See the header comment in `src/lib/people.ts`.
-- **The export card is 4:5 (1080×1350) and stays a CARD.** It was briefly 9:16, by copying
-  Wrapped's slides literally — the wrong lesson. Wrapped is a full-screen story you swipe;
-  this is one image posted to a feed, and a 9:16 feed post is a long thin sliver. 4:5 is
-  the tallest Instagram shows uncropped and Twitter renders it whole. **A short card is the
-  point, not a limitation** — it shows the top handful and says how many it left out.
-  (User's call: "a clean card not a long one".)
-- **The hero numeral is set in the DISPLAY face (Bebas), never the serif.** Source Serif's
-  "1" is fine at 19px in a list row and genuinely ugly at 100px, where its bracketed base
-  reads as a stray bar. User flagged it; don't reintroduce it by making the card's type
-  "consistent".
-- **No gradients on the card.** Wrapped 2024's vibrant-gradient era would look borrowed on
-  a dark/gold/serif app; the reference is Wrapped 2025's restraint. Colour IS pulled from
-  the winning poster (`accentFrom`), but spent only on two hairlines and the hero ring.
-  (User's call, agreed explicitly.)
-- **Guest films** (`Film.guest`) are borrowed for one run and never persisted. This is now
-  enforced in ONE place: `saveFilms` filters them, so no write path can leak one whatever
-  it does upstream. `AppShell` derives a guest-free `library` for every screen except the
-  duel, so they are also never *shown* outside the run that borrowed them.
-- **Saved lists freeze their order at save time**, not stay live — built that way in
-  `lib/lists.ts`, with the reasoning in its header. (User delegated this call.)
-- **Removal never touches the evidence log.** Retracting would destroy what a duel says
-  about the film on the *other* side. `fitBeliefs` already skips absent ids.
-- **The log always records**, whatever a setting says. Settings govern influence only —
-  **with exactly one exception, below.**
-- **A person run records NOTHING. Not a score, not a lock, not a log row, not a duel
-  count.** It is the only game in the app that leaves no trace whatever. The reasoning:
-  it is not a claim about your library at all — it is a list you build to look at and to
-  share, over a pile that can include films you have never seen, answering "which Nolan is
-  better" rather than "where does this belong". `settle` and `confirm` in `ladder.ts` both
-  branch on `session.crossTier`.
-  - **The cost, accepted knowingly (user's explicit call): every person climb is a cold
-    start.** Its opening order comes from belief means that its own duels will never
-    improve. Do not "fix" that by quietly re-enabling the log.
-  - **Watch the undo path if you touch this.** `commit` in `DuelScreen` reads an empty
-    journal as "no judgement happened — a confirm or a flick" and drops the undo step.
-    That was true until a run started answering duels without logging them, so
-    `commitUndoable` now sets its step AFTER committing rather than before. Without that,
-    person runs lose undo entirely.
-- The TMDb key is in public history (`ab25cf58`). **User has declined rotation five
-  times — note it if relevant, never argue it.**
+- **Curated lists are INDEPENDENT of the master scoring system.** Director, actor and
+  (later) genre rankings exist to be looked at and shared. `settle` and `confirm` in
+  `ladder.ts` both branch on `session.crossTier`.
+  - **The cost, accepted knowingly: every person climb is a cold start.** Its opening
+    order comes from belief means its own duels will never improve. Do not "fix" that by
+    quietly re-enabling the log.
+  - **Watch the undo path.** `commit` in `DuelScreen` reads an empty journal as "no
+    judgement happened" and drops the undo step. `commitUndoable` therefore sets its step
+    AFTER committing. Without that, person runs lose undo entirely.
+- **The log always records — with that one exception.** Settings govern influence only.
+- **Guest films are never persisted and never shown outside their run.** Enforced in one
+  place each: `saveFilms` filters them, and `AppShell` derives a guest-free `library` for
+  every screen but the duel.
+- **Cards are 16:9 (1920×1080).** Not 9:16 — that was copying Wrapped's slides literally,
+  and Wrapped is a full-screen story you swipe while this is one image in a feed.
+- **The hero numeral is set in the DISPLAY face (Bebas), never the serif**, and positioned
+  by `actualBoundingBoxLeft` so the *stroke* lands on the margin rather than the glyph box.
+- **No gradients.** Colour comes from the artwork as an accent only.
+- **A portrait complements, never competes**: a small circle beside the name; the big image
+  stays the winning film.
+- **Insight preconditions are COUNTS, never vibes.** ≥4 rated films for any rating claim; a
+  genre needs ≥3 entries AND ≥40% of the list; ≥60% coverage for optional fields. A guest's
+  seed 3★ is never counted as an opinion. **A bare genre count is the weakest claim
+  available** — most directors have a genre, so naming it reports the obvious back.
+- **Stats are drawn from two populations, deliberately.** The AVERAGE is about you (seen
+  films only); GENRE and DECADE are about the list (everything in it). Getting this wrong
+  put `GENRE: ACTION` beside "10 of these 19 are drama" on the same picture.
+- **Saved lists freeze their order at save time.** See the header of `lib/lists.ts`.
+- **Removal never touches the evidence log.**
+- The TMDb key is in public history (`ab25cf58`). **User has declined rotation five times —
+  note it if relevant, never argue it.**
 
 ## Next, in order
 
-1. **Saved lists have nowhere to be read.** `lib/lists.ts` stores them and the summary
-   saves to it, but nothing in the app lists them back — the only way to see one is
-   `localStorage`. Finishing #37 properly means a shelf: probably on the profile, since
-   the list screen's scroller may not gain anything new (see `ROW_H` below).
-2. **BUG — a person's film list is incomplete until you've scrolled past the films.**
-   Reported: opening a director or actor sometimes omits films you *have* seen, as if you
-   hadn't; going to the list and looking at it directly fixes it.
-   - **Theory, evidence gathered, not yet reproduced live.** `director` and `cast` only
-     land on a `Film` when its meta has been fetched — `withMeta` in `lib/meta.ts`. Nothing
-     fetches meta for the whole library. The only two things that do it are
-     `useVisiblePosters` (ListScreen, driven by the *viewport*: `[data-film-id]` rows
-     within `600px` of the scroller) and `backfillPosters` from the duel screens. So a film
-     you have never scrolled to carries no credits, `filmsBy` matches on
-     `f.director === name` / `f.cast.includes(name)` and cannot see it. Scrolling it into
-     view backfills and persists the credits — which is exactly the "going back to the list
-     fixes it" the user describes.
-   - Same root cause makes `peopleIn` under-count, so the person list itself is
-     incomplete, and a `count` shown next to a name can be wrong.
-   - Fix directions, cheapest first: (a) drive a background credits-only sweep on idle so
-     the library converges without needing the viewport; (b) on opening a `PersonSheet`,
-     fetch meta for films still missing credits before rendering `mine`. (b) alone is a
-     band-aid — it cannot find a film it doesn't know is theirs. **(a) is the real fix**;
-     (b) only narrows an already-narrowed set. Verify against rendered output, not stored
-     state.
-3. **Fast Shuffle doesn't share the climb's animation.** KotH and Spotlight fly the winning
-   poster into the climbing seat (`flyPosterAcross` / `fadeLoserOut` in `PosterCard`);
-   Fast Shuffle just swaps. User noticed. `ShuffleDuel` is a separate component with its own
-   render, which is why it never inherited it — the animation helpers are already exported
-   and take two `<img>` elements, so this is mostly wiring, not new work.
-4. **Feedback review.** A pass through the app with the user, collecting what does and
-   doesn't land, rather than shipping the next feature blind. Overlaps #14 but is not the
-   same job: #14 is styling the PROVISIONAL screens, this is finding out what's wrong.
-5. **#24 — advisory-only switch.** `withdrawSoftLocks()` is built and tested but
-   unreachable from the UI. Cheapest real win left.
-6. **#14 — design pass.** `SessionEnd`, `PersonSheet`, `LogFilm` and `RunBars` all ship
-   marked PROVISIONAL and are overdue the user's eye. The compare screen's own design is
-   protected — new UI fits around it.
+**The full plan with reasoning is at**
+`C:\Users\jarra\.claude\plans\distributed-conjuring-oasis.md`. Summarised here so this file
+stands alone.
+
+1. **Save, don't share.** `shareCard` prefers `navigator.share` whenever offered, which on
+   the user's Android Chrome is a sheet full of destinations instead of the file landing in
+   Downloads. **Invert it: download by default, share sheet only where download is
+   impossible** (iOS Safari). User asked for exactly this.
+2. **Rename the designs `classic` / `marquee` / `paul-allen`.** "Wrapped" is borrowed and
+   the user said so. A marquee is the lit sign outside a cinema. The third leans into the
+   business-card joke (American Psycho — the film's prop spells it "Paul Allen"; confirm
+   whether the user's shorter spelling was deliberate). Touches `CardDesign`, the
+   `RENDERERS` map, `designName`, the filenames, and the two renamed files.
+3. **Colour: technicolour, from the logo.** `accentFrom` only falls back when a poster is
+   *perfectly* greyscale (`weight === 0`), so a nearly-grey poster returns a nearly-grey
+   colour that `lift()` brightens into off-white — the "white on the Nolan one looked so
+   off". Give it a **minimum-chroma floor**, and have Marquee's colour block take one of the
+   five `BARS` from `lib/brand.ts`, picked deterministically from `subjectKey`.
+4. **BUG — credits and genres only arrive when you scroll past a film.** `director`, `cast`
+   and `genres` land only via `withMeta`, and only `useVisiblePosters` (the list viewport)
+   and the duel screens' `backfillPosters` fetch it. A film you have never scrolled to has
+   no credits, so `filmsBy` cannot see it and a filmography silently omits films you HAVE
+   seen. Same cause under-counts `peopleIn`. **The real fix is a background credits-only
+   sweep on idle** — fetching inside `PersonSheet` is a band-aid that cannot find a film it
+   does not know is theirs. **Do this before genre lists**, which read the same data.
+5. **The single Director / Actor / Genre button** in the Play sheet. Its only hard
+   dependency is #4. Today a person run is reachable only by opening a film and tapping its
+   director, which is why it feels hidden. **Collapse `personRun` / `personGuests` /
+   `personPortrait` into one `runRequest` prop first** — otherwise director, actor, genre
+   and resume become four effects racing to own `state.session`. Genre needs a size cap
+   ("Drama" is ~300 films in a real library). **A tier card is a live view over
+   `rankedFilms(films).slice(0,10)`**, not a curated run — a KotH tier run already writes
+   scores, and a second cross-tier order would contradict it.
+6. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
+   gain `rating`/`genres`/`director` (**without `rating` a saved list cannot re-render its
+   own card — an existing bug**), a `{v:2, lists}` payload with in-memory migration,
+   auto-save with a floor (complete, or ≥half the pile confirmed), and a "YOUR RANKINGS"
+   shelf on `ProfileScreen`.
+   - **`backup.ts` trap:** its restore loop `removeItem`s any key absent from the file, and
+     line 68 is a strict `format !== FORMAT`. Adding `rankd-lists-v1` to `KEYS` naively means
+     **restoring an older backup deletes every saved ranking**. Needs a per-format key set.
+     `rankd-review-dismissed-v1` is also missing from the manifest.
+7. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+   session and **`guests: Film[]` in full** — ids alone lose every unseen film.
+   `adoptRun(films, session)` belongs in `ladder.ts` with its own tests.
+8. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
+   exported already; `ShuffleDuel` just never used them.
+9. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
+   over with separate control over **soft** locks (`withdrawSoftLocks()` is built, tested and
+   simply has no UI — that IS #24) and **hard** locks. Keep the library and star ratings;
+   offer the backup export first.
+10. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+
+## Backlog — captured, not scheduled
+
+- **A switch to turn Fast Shuffle off entirely.** The user is cooling on it and wants to opt
+  out rather than have it removed for everyone.
 
 ## Pinned — decide later, don't act yet
 
-- **Finishing a run doesn't feel like anything happened.** User's words, about `SessionEnd`
-  as it stands. **Pinned deliberately against the JPG export in #37**: a thing you can take
-  away and show someone may be the payoff the screen is missing, so build that first and
-  re-judge the feeling afterwards. Do not design a separate celebration in the meantime.
 - **Fast Shuffle may not deserve to exist.** From watching real people use the app: they
-  "hardly like the idea of something else shuffling their list for them". The mode may need
-  removing or rethinking outright. **Explicitly deferred — not this session, and to be
-  taken up at the very end**, since it is a question about what the app is for rather than
-  a bug, and answering it early would block work that doesn't depend on it. Note that the
-  person run no longer relies on it (it is a climb now), so Fast Shuffle is already less
-  load-bearing than it was.
+  "hardly like the idea of something else shuffling their list for them." **Deferred to the
+  very end deliberately** — it is a question about what the app is for, not a bug. The person
+  run no longer depends on it.
+- **"Finishing a run doesn't feel like anything."** Partly answered now that the cards exist
+  — re-judge once they are on a phone.
 
 ## Gotchas that have already cost time
 
+- **"Committed" is not "deployed".** Three card designs sat pushed-but-unshipped while the
+  user tried to use them and got the old export. Deploy, then grep the live bundle.
+- **A synthetic `.click()` does not drive `PosterCard`.** It listens for pointer events, so
+  scripted tests must dispatch `pointerdown`/`pointerup`. Without that the duel looks frozen
+  and you will hunt a bug that isn't there.
+- **The dev console retains stale errors.** A `BARS is not defined` from a hot-reload kept
+  reappearing long after the header rendered correctly on screen. Confirm against rendered
+  output and `tsc`, never the console.
+- **A `setState` updater runs TWICE in dev.** A blind concat of borrowed films turned a
+  19-film filmography into a 35-film climb against duplicates of itself. Merge by id.
+- **TMDb images do NOT taint a canvas — the browser cache does.** A poster already shown via
+  a plain `<img>` is cached WITHOUT CORS, and every later CORS request for that exact URL
+  fails. `card/canvas.ts` adds a query parameter so the card gets its own cache entry.
+- **Canvas does not trigger font loading.** An unloaded face falls back silently and the card
+  ships in Times, on some machines only. Each renderer declares its own font specs; never
+  hard-code one list in the loader.
 - `next build` and `next dev` share `.next` — stop the preview before building.
-- `ROW_H = 96` in `ListScreen.tsx` drives section spacers and tier-jump offsets. Nothing
-  may change a list row's height, and nothing new goes *inside* the list scroller.
-- **The CLIMBING / UN-RNKD pills straddle the bottom edge of their poster**, so the row's
-  visible ink ends below its box. Anything placed under the posters needs explicit
-  clearance — this caused a real collision when the results feed was removed.
-- **Verify by looking at rendered output, not stored state.** Several bugs this project
-  passed a storage check and were still broken on screen.
-- **The dev console retains stale build errors.** A fixed parse error keeps reappearing in
-  `read_console_messages`. Confirm against a fresh fetch and `tsc`, not the console.
-- **Never use `s|...|...|` in perl when the pattern contains escaped pipes** — the
-  delimiter collides and silently rewrites the wrong line. It cut a type declaration in
-  half this session.
+- `ROW_H = 96` in `ListScreen.tsx` drives section spacers and tier-jump offsets. Nothing may
+  change a list row's height, and nothing new goes *inside* the list scroller.
+- **The CLIMBING / UN-RNKD pills straddle the bottom edge of their poster**, so a row's
+  visible ink ends below its box. Anything placed underneath needs explicit clearance.
+- **Verify by looking at rendered output, not stored state.** Every card defect this project
+  has had — a row through the footer, a label through a name, a stat contradicting its own
+  insight — passed typecheck and tests and was only visible in the exported JPEG.
 - Commit messages: write to a file and use `git commit -F`. PowerShell here-strings mangle
-  messages containing quotes.
-- The preview pane does not composite: animations never *finish* there. Control-test with
-  a plain `element.animate()` before reporting an animation bug.
+  quotes.
+- The preview pane does not composite: animations never *finish* there.
 - `test/fixtures/ratings.csv` is gitignored; `import.test.ts` skips loudly without it.
-- **A `setState` updater runs TWICE in dev.** The person run merged its borrowed films
-  with a plain concat, and React's double-invoke turned a 19-film filmography into a
-  35-film climb against duplicates of itself. Any updater that derives from previous state
-  must be idempotent — merge by id, never append.
-- **TMDb images do NOT taint a canvas — the browser cache does.** `image.tmdb.org` sends
-  `Access-Control-Allow-Origin: *`, but a poster the app has already shown via a plain
-  `<img>` is cached WITHOUT CORS, and every later CORS request for that exact URL fails
-  outright. `lib/card.ts` requests each poster with an extra query parameter so it gets its
-  own cache entry. Verified live: same URL, cached-plain then CORS = LOAD FAILED; untouched
-  then CORS = draws and exports clean.
