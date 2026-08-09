@@ -11,7 +11,7 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State:** last commit `c85d60e`, pushed. Deployed through `92d03dd`. **261 tests, typecheck clean, lint at 3 problems
+**State:** last commit `62f2ab3`, pushed. Deployed through `76ea08a`. **261 tests, typecheck clean, lint at 3 problems
 in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in
 `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
 
@@ -37,6 +37,11 @@ portraits from `/api/person?portrait=1`.
 **Session C (`c85d60e`) — the credits sweep.** The library now walks itself on a
 timer and fills in missing `director` / `cast` / `genres`, so a filmography no longer
 depends on which rows you happened to scroll past.
+
+**Session D (`62f2ab3`) — one way in.** "Rank a list" in the Play sheet covers director,
+actor and genre. Director/actor hand to `PersonSheet`; genre is new (`lib/genres.ts`,
+`CuratedPicker.tsx`), ranks the library only, and defaults to the whole genre with
+Top 50/25/10 offered when it is bigger.
 
 ## Decisions taken — do not relitigate
 
@@ -78,13 +83,13 @@ depends on which rows you happened to scroll past.
 `C:\Users\jarra\.claude\plans\distributed-conjuring-oasis.md`. Summarised here so this file
 stands alone.
 
-1. **The single Director / Actor / Genre button** in the Play sheet. Today a person run is reachable only by opening a film and tapping its
-   director, which is why it feels hidden. **Collapse `personRun` / `personGuests` /
-   `personPortrait` into one `runRequest` prop first** — otherwise director, actor, genre
-   and resume become four effects racing to own `state.session`. Genre needs a size cap
-   ("Drama" is ~300 films in a real library). **A tier card is a live view over
-   `rankedFilms(films).slice(0,10)`**, not a curated run — a KotH tier run already writes
-   scores, and a second cross-tier order would contradict it.
+1. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
+   `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
+   writes scores and a second cross-tier order would contradict it. Do the prop collapse
+   with it: `personRun` / `personGuests` / `personPortrait` plus the genre run are already
+   two effects reaching for `state.session`, and resume would make it three. They cannot
+   race today because only one is ever set at a time, but that is a property nobody is
+   enforcing.
 2. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
    gain `rating`/`genres`/`director` (**without `rating` a saved list cannot re-render its
    own card — an existing bug**), a `{v:2, lists}` payload with in-memory migration,
@@ -109,6 +114,9 @@ stands alone.
 
 - **A switch to turn Fast Shuffle off entirely.** The user is cooling on it and wants to opt
   out rather than have it removed for everyone.
+- **Subgenre runs** — "zombie films" rather than "horror". A keyword is narrow enough to
+  have a real edge, so unlike a genre it could borrow unseen films the way a director run
+  does. `topPeople` in `profile.ts` already derives subgenres from `f.keywords`.
 
 ## Pinned — decide later, don't act yet
 
