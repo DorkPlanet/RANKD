@@ -60,6 +60,8 @@ import { BARS } from "@/lib/brand";
 import { beliefsFor } from "@/lib/beliefs";
 import { filmsBy, rankByBelief, type Person } from "@/lib/people";
 import { subjectFromPerson, subjectTitle, type RankSubject } from "@/lib/subject";
+import { filmsInGenre, MIN_GENRE_RUN } from "@/lib/genres";
+import { CuratedPicker } from "./CuratedPicker";
 import type { Film, RankState } from "@/lib/types";
 
 const DEFAULT_TIER = 4 as const;
@@ -172,9 +174,15 @@ export default function DuelScreen({
   // request is still here to read from, and mirroring it into local state would
   // be a second copy of one fact — plus a setState inside an effect, which is
   // the cascading render the linter is right to object to.
+  // A genre run has no `Person` to derive a subject from, so it carries its own.
+  // Only ever one of these is set: a run replaces whatever was on screen, and
+  // `beginGenre` clears the person request on its way in.
+  const [genreSubject, setGenreSubject] = useState<RankSubject | null>(null);
+  const [curatedOpen, setCuratedOpen] = useState(false);
+
   const runSubject: RankSubject | null = personRun
     ? subjectFromPerson(personRun, personPortrait)
-    : null;
+    : genreSubject;
   // A finished cross-tier order, waiting to be kept or exported. This is the one
   // result the app cannot recover once it is gone: it lives in no film's score
   // and in no tier, so the summary holds it until the user decides.
@@ -498,6 +506,28 @@ export default function DuelScreen({
     setRunResult(null);
   };
 
+  // A genre climb. The same engine as a person run — an explicit pile, cross-tier,
+  // recording nothing — and started here rather than through a prop because
+  // nothing outside this screen needs to know it happened.
+  //
+  // Highest-belief first, then truncated. That ordering is what makes a shortened
+  // genre worth playing: "the top 25 dramas I own" is a list; the first 25 in
+  // library order would be an arbitrary slice.
+  const beginGenre = (genre: string, limit: number) => {
+    setCuratedOpen(false);
+    const pool = rankByBelief(filmsInGenre(state.films, genre), beliefsFor(state.films, log));
+    const only = pool.slice(0, limit).map((f) => f.id);
+    if (only.length < MIN_GENRE_RUN) return;
+    setGenreSubject({ kind: "genre", name: genre });
+    setRunResult(null);
+    onPersonRunHandled?.(); // a genre run supersedes any person request still held
+    try {
+      commit({ ...startRun(state.films, pool[0].rating, { only, crossTier: true }), journal: state.journal }, false);
+    } catch {
+      setGenreSubject(null);
+    }
+  };
+
   const promoteTo = promotionTarget(state);
   const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
   const assertPromotion = () => commit(promoteDirect(state));
@@ -696,6 +726,10 @@ export default function DuelScreen({
             setShuffleRun(opts);
             closeSetup();
           }}
+          onCurated={() => {
+            closeSetup();
+            setCuratedOpen(true);
+          }}
           onPickTier={() => {
             setModeOpen(false);
             setTierOpen(true);
@@ -720,6 +754,18 @@ export default function DuelScreen({
             setTierOpen(false);
             setModeOpen(true);
           }}
+        />
+      )}
+
+      {curatedOpen && (
+        <CuratedPicker
+          films={state.films}
+          onClose={() => setCuratedOpen(false)}
+          onPerson={(p) => {
+            setCuratedOpen(false);
+            onPerson?.(p);
+          }}
+          onGenre={beginGenre}
         />
       )}
 
@@ -858,6 +904,7 @@ function ModePanel({
   onKoth,
   onSpotlight,
   onFastShuffle,
+  onCurated,
   onPickTier,
 }: {
   films: Film[];
@@ -874,6 +921,7 @@ function ModePanel({
   onKoth: (t: Rating) => void;
   onSpotlight: (t: Rating) => void;
   onFastShuffle: (opts: ShuffleOptions) => void;
+  onCurated: () => void;
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
@@ -906,10 +954,21 @@ function ModePanel({
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
+        {/* The one mode with no pile and no confirm. It asks whichever question
+            it can least predict the answer to, and stops when you do. */}
         <ModeRow
           title="Fast Shuffle"
           blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."
           onClick={() => setChosen("shuffle")}
+        />
+        {/* Curated lists sit with the modes rather than behind a film's info
+            card, which is where the only route to one used to be. They are a
+            different KIND of thing — they change no scores and settle nothing —
+            so the blurb has to say so, or it reads as a fourth way to rank. */}
+        <ModeRow
+          title="Rank a list"
+          blurb="A director, an actor or a genre — just for the list and the picture. Changes nothing in your rankings."
+          onClick={onCurated}
         />
       </Sheet>
     );
