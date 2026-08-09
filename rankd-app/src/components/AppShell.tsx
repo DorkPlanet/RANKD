@@ -26,10 +26,12 @@ import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
 // Slow on purpose: the sweep must always lose a race against artwork you are
-// actually looking at. A full 828-film library takes a few minutes to converge,
+// actually looking at. A real 861-film library takes a few minutes to converge,
 // which is fine for something nobody is waiting on.
 const SWEEP_DELAY_MS = 4000;
 const SWEEP_GAP_MS = 400;
+// How many films land before the library is written to disk. See the sweep.
+const SWEEP_BATCH = 10;
 
 export default function AppShell() {
   const [state, setState] = useState<RankState | null>(null);
@@ -93,21 +95,47 @@ export default function AppShell() {
   useEffect(() => {
     if (!state) return;
     let stopped = false;
+    // State updates every film, but the WRITE is batched.
+    //
+    // The real library in test/fixtures is 861 films, and a fresh CSV import has credits
+    // for none of them — so this walk is 861 long. `saveFilms` serialises the
+    // entire library on every call, so persisting per film meant 861 full
+    // serialisations of an 861-film array, back to back, on a phone. React state
+    // is cheap and localStorage is not, so the screen still updates on every
+    // film and only the disk write waits.
+    //
+    // The cost of a batch is that closing the tab mid-run can lose up to
+    // `SWEEP_BATCH` films' credits. They are simply re-fetched next session, and
+    // the API route caches for a week, so that is a few requests rather than a
+    // loss.
     const start = setTimeout(() => {
       const need = state.films.filter(needsCredits);
       if (need.length === 0) return;
+      // The batch is counted out here rather than inside the updater. A setState
+      // updater must be PURE — React calls it twice in development — so writing
+      // to localStorage from within one is both a double write and the exact
+      // impurity that turned a 19-film pile into a 35-film one earlier.
+      let since = 0;
+      let pending: Film[] | null = null;
+      const flush = () => {
+        if (pending) saveFilms(pending);
+        pending = null;
+        since = 0;
+      };
       void backfillPosters(
         need,
-        (id, meta) =>
+        (id, meta) => {
           setState((s) => {
             if (!s) return s;
             const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
-            saveFilms(films);
+            pending = films;
             return { ...s, films };
-          }),
+          });
+          if (++since >= SWEEP_BATCH) flush();
+        },
         () => stopped,
         SWEEP_GAP_MS,
-      );
+      ).finally(flush); // whatever the last partial batch was
     }, SWEEP_DELAY_MS);
     return () => {
       stopped = true;
