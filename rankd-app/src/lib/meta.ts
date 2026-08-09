@@ -59,6 +59,14 @@ export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch;
 export const needsMeta = (f: Film): boolean =>
   !f.noMatch && (!f.poster || !f.director || !f.genres || !f.keywords);
 
+// Who made it, and what kind of thing it is.
+//
+// This is the field set that decides whether a film can be FOUND — by director,
+// by actor, by genre — as opposed to merely displayed. A film with artwork and
+// no credits looks complete on the list screen and is invisible to every one of
+// those questions, which is why the gap went unnoticed for so long.
+export const needsCredits = (f: Film): boolean => !f.noMatch && (!f.director || !f.genres);
+
 // Fold a fetched response into the stored film. Only the fields worth persisting
 // are taken — synopsis, runtime and genres stay derived, since they'd bloat
 // localStorage and can go stale, but who made a film does not change.

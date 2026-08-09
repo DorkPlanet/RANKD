@@ -20,10 +20,16 @@ import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/pro
 import { loadFilms, saveFilms } from "@/lib/store";
 import { startRun } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
-import { withMeta, type FilmMeta } from "@/lib/meta";
+import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
 import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
+
+// Slow on purpose: the sweep must always lose a race against artwork you are
+// actually looking at. A full 828-film library takes a few minutes to converge,
+// which is fine for something nobody is waiting on.
+const SWEEP_DELAY_MS = 4000;
+const SWEEP_GAP_MS = 400;
 
 export default function AppShell() {
   const [state, setState] = useState<RankState | null>(null);
@@ -58,6 +64,60 @@ export default function AppShell() {
       setState({ films, session: null, journal: [] });
     }
   }, []);
+
+  // ── The credits sweep ──────────────────────────────────────────────────────
+  //
+  // Until this existed, a film only learned who made it if you happened to
+  // SCROLL PAST IT. `director`, `cast` and `genres` arrive on the same response
+  // as the artwork, and only two things ever asked for that response: the list
+  // screen's viewport queue and the duel screens' backfill. So a film you had
+  // never scrolled to carried no credits — and `filmsBy` matches on
+  // `f.director === name`, so it was invisible to its own director. Opening
+  // Michael Mann showed four films when you owned nine, and the fix looked like
+  // "go and scroll the list", which is exactly what the user reported.
+  //
+  // The real fix is that the library converges on its own, so nothing depends on
+  // where you have happened to look. That is this: a slow, patient walk over
+  // every film still missing credits, persisting each as it lands.
+  //
+  // Three things keep it out of the way of the app:
+  //  · It starts after a delay, so opening the app is never competing with it.
+  //  · It is paced far slower than the viewport queue (which uses 120ms). A
+  //    poster you are looking at is urgent; a credit you are not is not, and
+  //    losing that race is the correct outcome.
+  //  · `fetchMeta` caches per film for the session, so the viewport queue and
+  //    this sweep can want the same film without it being fetched twice.
+  //
+  // `noMatch` is what stops it running forever: a film TMDb cannot find is
+  // recorded as such and never qualifies again.
+  useEffect(() => {
+    if (!state) return;
+    let stopped = false;
+    const start = setTimeout(() => {
+      const need = state.films.filter(needsCredits);
+      if (need.length === 0) return;
+      void backfillPosters(
+        need,
+        (id, meta) =>
+          setState((s) => {
+            if (!s) return s;
+            const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
+            saveFilms(films);
+            return { ...s, films };
+          }),
+        () => stopped,
+        SWEEP_GAP_MS,
+      );
+    }, SWEEP_DELAY_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(start);
+    };
+    // Deliberately once, on the first library it sees. Re-running whenever
+    // `films` changed would restart the walk on every single duel — and since
+    // each fetch writes a film, it would restart itself forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!state]);
 
   useEffect(() => {
     const b = loadBrightness();
