@@ -11,7 +11,7 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State:** last commit `92d03dd`, pushed and deployed. **261 tests, typecheck clean, lint at 3 problems
+**State:** last commit `c85d60e`, pushed. Deployed through `92d03dd`. **261 tests, typecheck clean, lint at 3 problems
 in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in
 `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
 
@@ -33,6 +33,10 @@ rather than opening a share sheet.
 design). Three designs, swipeable via `CardPicker`, downloaded individually, all
 1920×1080. A personalised insight engine (`lib/insight.ts`, 15 tests). Director/actor
 portraits from `/api/person?portrait=1`.
+
+**Session C (`c85d60e`) — the credits sweep.** The library now walks itself on a
+timer and fills in missing `director` / `cast` / `genres`, so a filmography no longer
+depends on which rows you happened to scroll past.
 
 ## Decisions taken — do not relitigate
 
@@ -74,21 +78,14 @@ portraits from `/api/person?portrait=1`.
 `C:\Users\jarra\.claude\plans\distributed-conjuring-oasis.md`. Summarised here so this file
 stands alone.
 
-1. **BUG — credits and genres only arrive when you scroll past a film.** `director`, `cast`
-   and `genres` land only via `withMeta`, and only `useVisiblePosters` (the list viewport)
-   and the duel screens' `backfillPosters` fetch it. A film you have never scrolled to has
-   no credits, so `filmsBy` cannot see it and a filmography silently omits films you HAVE
-   seen. Same cause under-counts `peopleIn`. **The real fix is a background credits-only
-   sweep on idle** — fetching inside `PersonSheet` is a band-aid that cannot find a film it
-   does not know is theirs. **Do this before genre lists**, which read the same data.
-2. **The single Director / Actor / Genre button** in the Play sheet. Its only hard dependency is #1. Today a person run is reachable only by opening a film and tapping its
+1. **The single Director / Actor / Genre button** in the Play sheet. Today a person run is reachable only by opening a film and tapping its
    director, which is why it feels hidden. **Collapse `personRun` / `personGuests` /
    `personPortrait` into one `runRequest` prop first** — otherwise director, actor, genre
    and resume become four effects racing to own `state.session`. Genre needs a size cap
    ("Drama" is ~300 films in a real library). **A tier card is a live view over
    `rankedFilms(films).slice(0,10)`**, not a curated run — a KotH tier run already writes
    scores, and a second cross-tier order would contradict it.
-3. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
+2. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
    gain `rating`/`genres`/`director` (**without `rating` a saved list cannot re-render its
    own card — an existing bug**), a `{v:2, lists}` payload with in-memory migration,
    auto-save with a floor (complete, or ≥half the pile confirmed), and a "YOUR RANKINGS"
@@ -97,16 +94,16 @@ stands alone.
      line 68 is a strict `format !== FORMAT`. Adding `rankd-lists-v1` to `KEYS` naively means
      **restoring an older backup deletes every saved ranking**. Needs a per-format key set.
      `rankd-review-dismissed-v1` is also missing from the manifest.
-4. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+3. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
    session and **`guests: Film[]` in full** — ids alone lose every unseen film.
    `adoptRun(films, session)` belongs in `ladder.ts` with its own tests.
-5. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
+4. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
    exported already; `ShuffleDuel` just never used them.
-6. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
+5. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
    over with separate control over **soft** locks (`withdrawSoftLocks()` is built, tested and
    simply has no UI — that IS #24) and **hard** locks. Keep the library and star ratings;
    offer the backup export first.
-7. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+6. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
 
 ## Backlog — captured, not scheduled
 
