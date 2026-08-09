@@ -11,9 +11,27 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State:** last commit `62f2ab3`, pushed. Deployed through `76ea08a`. **261 tests, typecheck clean, lint at 3 problems
-in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in
-`Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
+**State:** everything on master is pushed AND deployed — check with `git log --oneline -1`
+against the live bundle rather than assuming. **261 tests, typecheck clean, lint at 3
+problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused
+`tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
+
+## How to get oriented in five minutes
+
+- **The app is a ranking game.** You rate films 1–5★ on import; the game is deciding the
+  ORDER within and across those ratings, by head-to-head duels. `lib/ladder.ts` is the
+  engine and the most guarded module here (61 behavioural tests, immutable in and out).
+- **There are two kinds of ranking, and keeping them apart is the load-bearing idea.**
+  The MASTER list — King of the Hill over a tier, Spotlight, Fast Shuffle — writes `score`
+  and `lock` and is the app's real opinion of your library. CURATED lists — a director, an
+  actor, a genre, reached through the **Curator** — write *nothing at all* and exist to be
+  looked at and shared. Every decision below follows from that split.
+- **The user's real 861-film library is at `rankd-app/test/fixtures/ratings.csv`** and is
+  gitignored. `import.test.ts` runs against it. Use it: bugs that only appear at 861 films
+  (see the sweep's batching) do not appear at the 10-film seed.
+- **Read `CLAUDE.md`.** Form a theory, get evidence, then fix. This project has repeatedly
+  punished guess-and-patch — see the gotchas at the bottom, most of which are cases where
+  something *looked* fixed and was not.
 
 ---
 
@@ -38,7 +56,7 @@ portraits from `/api/person?portrait=1`.
 timer and fills in missing `director` / `cast` / `genres`, so a filmography no longer
 depends on which rows you happened to scroll past.
 
-**Session D (`62f2ab3`) — one way in.** "Rank a list" in the Play sheet covers director,
+**Session D (`62f2ab3`) — the Curator.** "Curator" in the Play sheet covers director,
 actor and genre. Director/actor hand to `PersonSheet`; genre is new (`lib/genres.ts`,
 `CuratedPicker.tsx`), ranks the library only, and defaults to the whole genre with
 Top 50/25/10 offered when it is bigger.

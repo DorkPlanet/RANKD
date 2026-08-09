@@ -1,6 +1,6 @@
 "use client";
 
-// One way in to every curated list: a director, an actor, or a genre.
+// THE CURATOR — one way in to every curated list: a director, an actor, a genre.
 //
 // Until this existed the only route to a person run was opening a film and
 // tapping its director — so the feature was reachable only by someone who
@@ -58,7 +58,7 @@ export function CuratedPicker({
   const chosen = genre ? genres.find((g) => g.name === genre) : undefined;
 
   return (
-    <Sheet title="Rank a list" onClose={onClose}>
+    <Sheet title="Curator" onClose={onClose}>
       <div className="mb-3 flex gap-2">
         <ScopeTab label="Directors" active={tab === "director"} onClick={() => { setTab("director"); setGenre(null); }} />
         <ScopeTab label="Actors" active={tab === "actor"} onClick={() => { setTab("actor"); setGenre(null); }} />

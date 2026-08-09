@@ -966,7 +966,7 @@ function ModePanel({
             different KIND of thing — they change no scores and settle nothing —
             so the blurb has to say so, or it reads as a fourth way to rank. */}
         <ModeRow
-          title="Rank a list"
+          title="Curator"
           blurb="A director, an actor or a genre — just for the list and the picture. Changes nothing in your rankings."
           onClick={onCurated}
         />
