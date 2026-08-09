@@ -11,7 +11,7 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State:** last commit `c4cff13`, pushed. **261 tests, typecheck clean, lint at 3 problems
+**State:** last commit `92d03dd`, pushed and deployed. **261 tests, typecheck clean, lint at 3 problems
 in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `tier` in
 `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
 
@@ -25,7 +25,10 @@ in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused `
 order, and it **records nothing at all** — no score, no lock, no evidence row, no duel
 count. Borrowed "guest" films can join it. It ends on `RunSummary`.
 
-**Session B (`c4cff13`) — three share cards.**
+**Session B (`c4cff13`, `92d03dd`) — three share cards.**
+Named Classic, Marquee and Paul Allen. Marquee's colour block comes from the five brand
+bars (poster colour washed out to off-white on muted posters); saving downloads the file
+rather than opening a share sheet.
 `card.ts` became `card/` (`canvas`, `types`, `render`, `data`, `share` + one file per
 design). Three designs, swipeable via `CardPicker`, downloaded individually, all
 1920×1080. A personalised insight engine (`lib/insight.ts`, 15 tests). Director/actor
@@ -71,36 +74,21 @@ portraits from `/api/person?portrait=1`.
 `C:\Users\jarra\.claude\plans\distributed-conjuring-oasis.md`. Summarised here so this file
 stands alone.
 
-1. **Save, don't share.** `shareCard` prefers `navigator.share` whenever offered, which on
-   the user's Android Chrome is a sheet full of destinations instead of the file landing in
-   Downloads. **Invert it: download by default, share sheet only where download is
-   impossible** (iOS Safari). User asked for exactly this.
-2. **Rename the designs `classic` / `marquee` / `paul-allen`.** "Wrapped" is borrowed and
-   the user said so. A marquee is the lit sign outside a cinema. The third leans into the
-   business-card joke (American Psycho — the film's prop spells it "Paul Allen"; confirm
-   whether the user's shorter spelling was deliberate). Touches `CardDesign`, the
-   `RENDERERS` map, `designName`, the filenames, and the two renamed files.
-3. **Colour: technicolour, from the logo.** `accentFrom` only falls back when a poster is
-   *perfectly* greyscale (`weight === 0`), so a nearly-grey poster returns a nearly-grey
-   colour that `lift()` brightens into off-white — the "white on the Nolan one looked so
-   off". Give it a **minimum-chroma floor**, and have Marquee's colour block take one of the
-   five `BARS` from `lib/brand.ts`, picked deterministically from `subjectKey`.
-4. **BUG — credits and genres only arrive when you scroll past a film.** `director`, `cast`
+1. **BUG — credits and genres only arrive when you scroll past a film.** `director`, `cast`
    and `genres` land only via `withMeta`, and only `useVisiblePosters` (the list viewport)
    and the duel screens' `backfillPosters` fetch it. A film you have never scrolled to has
    no credits, so `filmsBy` cannot see it and a filmography silently omits films you HAVE
    seen. Same cause under-counts `peopleIn`. **The real fix is a background credits-only
    sweep on idle** — fetching inside `PersonSheet` is a band-aid that cannot find a film it
    does not know is theirs. **Do this before genre lists**, which read the same data.
-5. **The single Director / Actor / Genre button** in the Play sheet. Its only hard
-   dependency is #4. Today a person run is reachable only by opening a film and tapping its
+2. **The single Director / Actor / Genre button** in the Play sheet. Its only hard dependency is #1. Today a person run is reachable only by opening a film and tapping its
    director, which is why it feels hidden. **Collapse `personRun` / `personGuests` /
    `personPortrait` into one `runRequest` prop first** — otherwise director, actor, genre
    and resume become four effects racing to own `state.session`. Genre needs a size cap
    ("Drama" is ~300 films in a real library). **A tier card is a live view over
    `rankedFilms(films).slice(0,10)`**, not a curated run — a KotH tier run already writes
    scores, and a second cross-tier order would contradict it.
-6. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
+3. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
    gain `rating`/`genres`/`director` (**without `rating` a saved list cannot re-render its
    own card — an existing bug**), a `{v:2, lists}` payload with in-memory migration,
    auto-save with a floor (complete, or ≥half the pile confirmed), and a "YOUR RANKINGS"
@@ -109,16 +97,16 @@ stands alone.
      line 68 is a strict `format !== FORMAT`. Adding `rankd-lists-v1` to `KEYS` naively means
      **restoring an older backup deletes every saved ranking**. Needs a per-format key set.
      `rankd-review-dismissed-v1` is also missing from the manifest.
-7. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+4. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
    session and **`guests: Film[]` in full** — ids alone lose every unseen film.
    `adoptRun(films, session)` belongs in `ladder.ts` with its own tests.
-8. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
+5. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
    exported already; `ShuffleDuel` just never used them.
-9. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
+6. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
    over with separate control over **soft** locks (`withdrawSoftLocks()` is built, tested and
    simply has no UI — that IS #24) and **hard** locks. Keep the library and star ratings;
    offer the backup export first.
-10. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+7. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
 
 ## Backlog — captured, not scheduled
 
