@@ -174,10 +174,17 @@ anything new is built.
    instantly. Now a 14-day snooze, a separate quieter "Never", and a 20-hour cooldown
    after any answer — checked BEFORE the belief fit, so the quiet period costs nothing.
    v1's bare id array migrates to mutes.
-3. **Reset, with granularity.** Explicitly asked for: start again but KEEP the imported
-   films and star ratings. Separate control over **soft** locks (`withdrawSoftLocks()` in
-   `shuffle.ts` is built and tested and simply has no UI — that IS #24) and **hard** locks.
-   Offer the backup export first.
+3. ~~Reset, with granularity~~ **LANDED.** Two acts, not two degrees. "Drop the N the
+   model placed" is `withdrawSoftLocks` finally given a UI (that IS #24) — cheap, no
+   confirm, nothing lost. "Clear the whole ranking" is `resetRanking` plus `clearLog`,
+   arms before it fires, and names the counts it is about to destroy.
+   - **The log HAD to go with it.** Soft locks are granted from beliefs and beliefs are
+     fitted from the log, so a reset that spared the evidence refills the list with the
+     order you were leaving. `clearLog()` is the second and last exception to
+     append-only and has exactly one caller — keep it that way.
+   - Films, star ratings, artwork and credits are always kept. Scores return to
+     `seedScore(rating)`, because an unranked library that keeps its old scores still
+     sorts itself into last session's order.
 4. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
    exported already; `ShuffleDuel` just never used them.
 5. **King of the Hill in shuffled order.** Once in a tier, offer the pile shuffled but with
