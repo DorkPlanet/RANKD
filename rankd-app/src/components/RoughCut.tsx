@@ -17,7 +17,7 @@
 
 import { useRef, useState } from "react";
 
-import { applyRoughCut, roughCutPool, type Bucket } from "@/lib/roughCut";
+import { applyRoughCut, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
 import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 import { Header } from "./DuelScreen";
@@ -43,10 +43,15 @@ export default function RoughCut({
   onSettings: () => void;
   onTrophies: () => void;
 }) {
-  // The pile is taken ONCE, on mount. Re-deriving it as scores change would
-  // reorder the queue under the user mid-pass — they would see films they had
-  // already placed come back around.
-  const [pool] = useState(() => roughCutPool(films, tier));
+  // The pile is fixed for the duration of a pass. Re-deriving it as scores
+  // change would reorder the queue under the user mid-pass — they would see
+  // films they had already placed come back around. `refine` replaces it
+  // wholesale to start a second pass over one pile.
+  const [pass, setPass] = useState<{ films: Film[]; n: number }>(() => ({
+    films: roughCutPool(films, tier),
+    n: 1,
+  }));
+  const pool = pass.films;
   const [at, setAt] = useState(0);
   const [choices, setChoices] = useState<Map<string, Bucket>>(new Map());
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -68,6 +73,25 @@ export default function RoughCut({
     setAt((i) => i + 1);
   };
 
+  /**
+   * Apply this pass, then start another over one of its piles.
+   *
+   * The scores have to LAND before the next pass reads them — `applyRoughCut`
+   * spreads films across a sub-band, and the second pass narrows within that
+   * band. Running it against the pre-pass library would re-derive from the flat
+   * order and throw the first pass away.
+   */
+  const refine = (bucket: Bucket) => {
+    const applied = applyRoughCut(films, tier, choices);
+    onFilms(applied);
+    const keep = new Set(
+      [...choices.entries()].filter(([, b]) => b === bucket).map(([id]) => id),
+    );
+    setPass({ films: applied.filter((f) => keep.has(f.id)), n: pass.n + 1 });
+    setChoices(new Map());
+    setAt(0);
+  };
+
   const undo = () => {
     if (at === 0) return;
     const back = at - 1;
@@ -78,6 +102,10 @@ export default function RoughCut({
   };
 
   if (done) {
+    const counts = BUCKETS.map((b) => ({
+      bucket: b,
+      n: [...choices.values()].filter((v) => v === b).length,
+    }));
     return (
       <main className="relative flex h-dvh flex-col overflow-hidden select-none">
         <Header onSettings={onSettings} onTrophies={onTrophies} />
@@ -87,9 +115,34 @@ export default function RoughCut({
             {starsFor(tier)} is roughly in order now. Ranking it properly from here is a fraction of
             the work — the climb starts from what you just decided rather than from nothing.
           </p>
+
+          {/* Going again on ONE pile is the answer to "I can see clumps that
+              belong together but I can't place the whole tier". The sub-band
+              maths already composes (see lib/roughCut.ts), so a second pass over
+              a third refines it to ninths and keeps everything the first pass
+              established. */}
+          <div className="mt-7 w-full max-w-[300px]">
+            <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
+              Go again on one pile
+            </p>
+            <div className="flex gap-2">
+              {counts.map(({ bucket, n }) => (
+                <button
+                  key={bucket}
+                  disabled={n < 2}
+                  onClick={() => refine(bucket)}
+                  className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
+                >
+                  {bucket === "top" ? "Upper" : bucket === "middle" ? "Middle" : "Lower"}
+                  <span className="ml-1.5 text-dim tabular-nums">{n}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             onClick={() => commit(choices)}
-            className="mt-8 rounded-xl border border-gold/50 px-8 py-3 text-xs font-bold text-gold active:scale-[0.98]"
+            className="mt-7 rounded-xl border border-gold/50 px-8 py-3 text-xs font-bold text-gold active:scale-[0.98]"
           >
             Keep it
           </button>
@@ -111,7 +164,9 @@ export default function RoughCut({
       <div className="mx-auto mt-11 w-full max-w-[330px] flex-shrink-0 px-5">
         <div className="mb-2.5 flex items-baseline justify-between">
           <span className="text-base text-gold">{starsFor(tier)}</span>
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-dim">Rough cut</span>
+          <span className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-dim">
+            Rough cut{pass.n > 1 ? ` · pass ${pass.n}` : ""}
+          </span>
         </div>
         <span className="flex h-1 w-full overflow-hidden rounded-full bg-border">
           <span
@@ -162,17 +217,19 @@ export default function RoughCut({
 
       <div style={{ flexGrow: 1.4 }} />
 
-      {/* Three targets, weighted by where the eye already is. Gold on the top so
-          the scale reads upward, matching the list and the climb. */}
+      {/* Lowest on the left, rising to the right — the same direction the scale
+          runs everywhere else. It read the other way round at first, which put
+          the best pile where the eye expects the worst and quietly inverted
+          every decision made in the first minute. */}
       <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-center px-5">
-        <button onClick={() => place("top")} className={`${TARGET} text-gold`}>
-          Upper
+        <button onClick={() => place("bottom")} className={`${TARGET} text-dim`}>
+          Lower
         </button>
         <button onClick={() => place("middle")} className={`${TARGET} text-text-hi`}>
           Middle
         </button>
-        <button onClick={() => place("bottom")} className={`${TARGET} text-dim`}>
-          Lower
+        <button onClick={() => place("top")} className={`${TARGET} text-gold`}>
+          Upper
         </button>
       </div>
 

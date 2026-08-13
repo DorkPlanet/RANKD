@@ -103,8 +103,15 @@ export function RunStatus({
           inside the fade. */}
       <div className="mx-auto mt-11 max-w-[330px]">
         {/* Anchored rather than flowed, so the centre label sits on the true
-            centre whatever sits beside it. */}
-        <div className="relative mb-2.5 flex items-baseline">
+            centre whatever sits beside it.
+
+            `min-h-5` is not decoration. The title is absolutely positioned and
+            the only thing in normal flow is `lead` — which Fast Shuffle does not
+            pass, having no tier to name. The row therefore collapsed to zero
+            height there and the title rendered straight over the track below it,
+            which is exactly what the screenshot showed. The climb escaped it
+            only because its stars happened to give the row a line box. */}
+        <div className="relative mb-2.5 flex min-h-5 items-baseline">
           <span className="shrink-0">{lead}</span>
           <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-extrabold tracking-[0.1em] text-dim">
             {title}

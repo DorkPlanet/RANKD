@@ -63,6 +63,18 @@ img {
   user-select: none;
 }
 
+/* The same protection for TEXT inside anything tappable. The rule above only
+   covered images, so holding a poster suppressed the image callout and then the
+   browser selected the film's TITLE instead — a blue highlight and a selection
+   handle over the card you were trying to open. `select-none` on the screen root
+   is not enough on its own: a long press on a text node still starts a selection
+   in Android Chrome unless the element itself declines it. */
+button,
+button * {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
 /* Checkboxes. A native one paints a pure-white square when unchecked — the only
    white anything in an app of navy and gold, and `accent-color` does nothing
    until it is ticked, so the DEFAULT state was the broken-looking one. Drawn

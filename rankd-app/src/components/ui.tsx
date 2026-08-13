@@ -10,12 +10,16 @@
 // Nothing here knows about films, ranking or sessions. If a component needs to,
 // it belongs in the screen that owns that concern, not in here.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ORDERED_TIERS } from "@/lib/tiers";
 
 // The panel has to outlive its dismissal long enough to slide back down.
 const SHEET_EXIT_MS = 220;
+/** How far the sheet must be pulled down before it counts as a dismissal. */
+const PULL_TO_CLOSE_PX = 40;
+// Long enough to outlast the browser's synthesised click after a touch (~300ms).
+const SCRIM_ARM_MS = 400;
 
 /**
  * Shared sheet chrome. Settings established this shape; modes, tier and
@@ -38,17 +42,74 @@ export function Sheet({
     setClosing(true);
     setTimeout(onClose, SHEET_EXIT_MS);
   };
+
+  // ── The backdrop ignores clicks for its first moment on screen ────────────
+  //
+  // A GHOST CLICK closed the setup panel every time you chose a tier, and the
+  // logic was innocent: picking a tier correctly closed the picker and reopened
+  // King of the Hill. But a browser synthesises a `click` roughly 300ms after
+  // your finger lifts, at the coordinates it lifted from — and by then the
+  // picker has gone and the reopened panel's BACKDROP is what sits under that
+  // point. Measured: `elementFromPoint` on the tap position two frames later
+  // returns the new sheet's scrim, whose handler is `close`.
+  //
+  // It never showed up in testing with synthetic clicks, which fire once and
+  // immediately. Arming the backdrop after the fact is the narrow fix: a sheet
+  // that has just appeared cannot be dismissed by a tap the user aimed at
+  // something else.
+  // Armed by a timer rather than by comparing clocks during render — reading
+  // `Date.now()` while rendering is impure and the compiler rejects it.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setArmed(true), SCRIM_ARM_MS);
+    return () => clearTimeout(t);
+  }, []);
+  const onBackdrop = () => {
+    if (armed) close();
+  };
+
+  // Pull the sheet down to dismiss it.
+  //
+  // The grabber at the top has always LOOKED like a drag handle and done
+  // nothing, which is worse than not drawing one — the Rolodex's identical
+  // grabber does pull, so the app was teaching a gesture on one surface and
+  // ignoring it on every other. Same threshold as the Rolodex, for the same
+  // reason: anything shorter is a tap on the handle, not a pull.
+  const pullFrom = useRef<number | null>(null);
+  const pullHandlers = {
+    onPointerDown: (e: React.PointerEvent) => {
+      pullFrom.current = e.clientY;
+    },
+    onPointerUp: (e: React.PointerEvent) => {
+      const from = pullFrom.current;
+      pullFrom.current = null;
+      if (from !== null && e.clientY - from > PULL_TO_CLOSE_PX) close();
+    },
+    onPointerCancel: () => {
+      pullFrom.current = null;
+    },
+  };
   return (
     <div
       className={`fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
-      onClick={close}
+      onClick={onBackdrop}
     >
       <div
         className={`max-h-[82vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5 ${closing ? "sheet-out" : "sheet-in"}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <div className="mb-5 flex items-center justify-between">
+        {/* The grabber and the title row are both pull targets: a 4px bar is a
+            hard thing to catch with a thumb, and the header above the content is
+            where a hand naturally lands. `touch-action: none` so the browser
+            does not claim the drag for scrolling before we see it. */}
+        <div
+          {...pullHandlers}
+          style={{ touchAction: "none" }}
+          className="mx-auto -mt-2 flex h-7 w-24 cursor-grab items-center justify-center"
+        >
+          <span className="h-1 w-10 rounded-full bg-border" />
+        </div>
+        <div {...pullHandlers} style={{ touchAction: "none" }} className="mb-5 flex items-center justify-between">
           <span className="font-display text-2xl tracking-wide text-gold">{title}</span>
           <button onClick={close} className="text-sm font-semibold text-dim active:scale-95">
             Done
