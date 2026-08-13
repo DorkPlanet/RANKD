@@ -68,7 +68,7 @@ import type { Film, RankState } from "@/lib/types";
 const DEFAULT_TIER = 4 as const;
 
 // Which game the setup panel is configuring; null while it is still asking.
-type ChosenMode = "koth" | "shuffle" | null;
+type ChosenMode = "koth" | "shuffle" | "roughcut" | null;
 
 // The library and the app-wide chrome now live in AppShell — this screen owns
 // only the duel. Everything it still holds is setup state for the next run.
@@ -549,6 +549,22 @@ export default function DuelScreen({
           setState((s) => (s ? { ...s, films } : s));
         }}
         onExit={() => setRoughCutTier(null)}
+        // Climb just the pile that was cut, not the whole tier again. `only`
+        // takes an arbitrary set of ids and is independent of `crossTier`, so
+        // this is an ordinary run that writes scores and locks — it simply has a
+        // smaller pool. The films come in from Rough Cut rather than being read
+        // from `state`, because its own write has not landed yet.
+        onRankPile={(films, ids) => {
+          saveFilms(films);
+          setRoughCutTier(null);
+          try {
+            commit({ ...startRun(films, roughCutTier, { only: ids }), journal: state.journal }, false);
+          } catch {
+            // Fewer than two films left in the pile — nothing to climb. The cut
+            // itself is already saved, so this is a no-op rather than a loss.
+            setState((s) => (s ? { ...s, films } : s));
+          }
+        }}
         onSettings={onSettings}
         onTrophies={onTrophies}
       />
@@ -1007,7 +1023,7 @@ function ModePanel({
         <ModeRow
           title="Rough Cut"
           blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
-          onClick={() => onRoughCut(tier)}
+          onClick={() => setChosen("roughcut")}
         />
         <ModeRow
           title="Fast Shuffle"
@@ -1041,6 +1057,46 @@ function ModePanel({
         onBack={() => setChosen(null)}
         onStart={onFastShuffle}
       />
+    );
+  }
+
+  // Rough Cut needs a tier and nothing else — no range, no shuffle, because it
+  // asks about one tier's own contents and asks it in the order they already
+  // sit. It shipped without this step, taking whatever `setupTier` happened to
+  // be, which on a fresh session is DEFAULT_TIER — so it always opened on 4★ and
+  // there was no way to say otherwise.
+  if (chosen === "roughcut") {
+    const inTier = films.filter((f) => f.rating === tier && f.lock !== "hard").length;
+    return (
+      <Sheet title="Rough Cut" onClose={onClose}>
+        <p className="mb-3 text-[11px] leading-snug text-dim">
+          One pass, one decision per film. Nothing is settled — it just gives the tier a rough
+          order so ranking it properly afterwards is a fraction of the work.
+        </p>
+        <button
+          onClick={onPickTier}
+          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
+        >
+          <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
+          <span className="flex items-baseline gap-2">
+            <span className="text-base text-gold">{starsFor(tier)}</span>
+            <span className="text-[11px] text-dim">
+              {inTier} film{inTier === 1 ? "" : "s"} ›
+            </span>
+          </span>
+        </button>
+        <StartButton
+          label={`Start · ${inTier} film${inTier === 1 ? "" : "s"}`}
+          onClick={() => onRoughCut(tier)}
+          disabled={inTier < 3}
+        />
+        {inTier < 3 && (
+          <p className="mt-2 text-center text-[11px] text-gold">
+            Needs at least 3 films to split into three piles.
+          </p>
+        )}
+        <BackRow onClick={() => setChosen(null)} />
+      </Sheet>
     );
   }
 

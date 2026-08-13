@@ -97,8 +97,12 @@ export function LogFilm({
         <RatingStep hit={chosen} onPick={(r) => add(chosen, r)} onBack={() => setChosen(null)} />
       ) : (
         <>
+          {/* No autoFocus. It threw the keyboard up the instant the sheet
+              opened, which covers half the screen before you have read what the
+              sheet is for — and the sheet's own entrance animation plays behind
+              it. Tapping the field is one tap, and it is the tap that means "I
+              am ready to type". */}
           <input
-            autoFocus
             value={q}
             onChange={(e) => {
               const v = e.target.value;

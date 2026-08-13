@@ -33,6 +33,7 @@ export default function RoughCut({
   tier,
   onFilms,
   onExit,
+  onRankPile,
   onSettings,
   onTrophies,
 }: {
@@ -40,6 +41,8 @@ export default function RoughCut({
   tier: Rating;
   onFilms: (films: Film[]) => void;
   onExit: () => void;
+  /** Apply the pass and start a King of the Hill run over just this pile. */
+  onRankPile: (films: Film[], ids: string[]) => void;
   onSettings: () => void;
   onTrophies: () => void;
 }) {
@@ -54,6 +57,7 @@ export default function RoughCut({
   const pool = pass.films;
   const [at, setAt] = useState(0);
   const [choices, setChoices] = useState<Map<string, Bucket>>(new Map());
+  const [next, setNext] = useState<"rank" | "split">("rank");
   const start = useRef<{ x: number; y: number } | null>(null);
 
   const film = pool[at];
@@ -71,6 +75,20 @@ export default function RoughCut({
     const next = new Map(choices).set(film.id, bucket);
     setChoices(next);
     setAt((i) => i + 1);
+  };
+
+  /**
+   * Apply this pass, then climb one of its piles.
+   *
+   * The applied library is handed OUT rather than read back from the prop: the
+   * parent's state update has not landed by the time this returns, so a caller
+   * reading `state.films` would start the run against the pre-pass scores and
+   * throw the whole pass away.
+   */
+  const rankPile = (bucket: Bucket) => {
+    const applied = applyRoughCut(films, tier, choices);
+    const ids = [...choices.entries()].filter(([, b]) => b === bucket).map(([id]) => id);
+    onRankPile(applied, ids);
   };
 
   /**
@@ -116,21 +134,36 @@ export default function RoughCut({
             the work — the climb starts from what you just decided rather than from nothing.
           </p>
 
-          {/* Going again on ONE pile is the answer to "I can see clumps that
-              belong together but I can't place the whole tier". The sub-band
-              maths already composes (see lib/roughCut.ts), so a second pass over
-              a third refines it to ninths and keeps everything the first pass
-              established. */}
+          {/* Taking ONE pile forward is the natural next move, and dropping back
+              into the whole tier is not — you have just decided these films
+              belong together, so the run that follows should be about them.
+              `startRun` has always accepted an arbitrary pile (`only`), and it
+              is independent of `crossTier`, so a pile run still writes scores
+              and locks like any other climb.
+
+              RANK or SPLIT, chosen first, so the three piles are one row of
+              buttons rather than six. Split is the answer when a pile is still
+              too big to duel; rank is the answer when it isn't. */}
           <div className="mt-7 w-full max-w-[300px]">
-            <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
-              Go again on one pile
-            </p>
+            <div className="mb-2 flex gap-1">
+              {(["rank", "split"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setNext(m)}
+                  className={`flex-1 rounded-lg border py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] active:scale-95 ${
+                    next === m ? "border-gold text-gold" : "border-border text-dim"
+                  }`}
+                >
+                  {m === "rank" ? "Rank a pile" : "Split again"}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               {counts.map(({ bucket, n }) => (
                 <button
                   key={bucket}
                   disabled={n < 2}
-                  onClick={() => refine(bucket)}
+                  onClick={() => (next === "rank" ? rankPile(bucket) : refine(bucket))}
                   className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
                 >
                   {bucket === "top" ? "Upper" : bucket === "middle" ? "Middle" : "Lower"}
