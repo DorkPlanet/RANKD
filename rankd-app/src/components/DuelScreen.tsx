@@ -36,6 +36,7 @@ import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
+import RoughCut from "./RoughCut";
 import { RunStatus } from "./RunStatus";
 import {
   BackRow,
@@ -179,6 +180,9 @@ export default function DuelScreen({
   // `beginGenre` clears the person request on its way in.
   const [genreSubject, setGenreSubject] = useState<RankSubject | null>(null);
   const [curatedOpen, setCuratedOpen] = useState(false);
+  // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
+  // it has no pile, no climb and no confirm, so none of the duel branches apply.
+  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
 
   const runSubject: RankSubject | null = personRun
     ? subjectFromPerson(personRun, personPortrait)
@@ -532,6 +536,25 @@ export default function DuelScreen({
   const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
   const assertPromotion = () => commit(promoteDirect(state));
 
+  // Rough Cut takes the whole surface, like Fast Shuffle: it has no pile, no
+  // climb and no confirm, so none of the branches below apply to it. Placed
+  // after every hook so the early return cannot change the hook order.
+  if (roughCutTier !== null) {
+    return (
+      <RoughCut
+        films={state.films}
+        tier={roughCutTier}
+        onFilms={(films) => {
+          saveFilms(films);
+          setState((s) => (s ? { ...s, films } : s));
+        }}
+        onExit={() => setRoughCutTier(null)}
+        onSettings={onSettings}
+        onTrophies={onTrophies}
+      />
+    );
+  }
+
   const pair = getPair(state);
   const champion = pendingConfirm(state);
 
@@ -700,6 +723,17 @@ export default function DuelScreen({
 
       {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
 
+      {/* Every mode below stands the Fast Shuffle run down first.
+          `activeRun` is what decides whether ShuffleDuel owns the whole surface,
+          and only Done used to clear it — so choosing King of the Hill from
+          inside a shuffle started the climb underneath and left the shuffle
+          still drawn on top of it. It read as the button not working, and the
+          only way through was to exit first.
+
+          Fast Shuffle loses nothing by being stood down: it writes every
+          judgement to the log and every score as it goes, so there is no unsaved
+          run to protect. An in-progress CLIMB is a different matter and is not
+          persisted yet — see the resume work in HANDOVER. */}
       {modeOpen && (
         <ModePanel
           films={state.films}
@@ -714,9 +748,11 @@ export default function DuelScreen({
           onAbove={setAbove}
           onClose={closeSetup}
           onKoth={(t) => {
+            setShuffleRun(null);
             if (beginRun(t)) closeSetup(); // a run that couldn't start leaves you in setup
           }}
           onSpotlight={(t) => {
+            setShuffleRun(null);
             setSpotlightFor(t);
             closeSetup();
           }}
@@ -725,8 +761,14 @@ export default function DuelScreen({
             closeSetup();
           }}
           onCurated={() => {
+            setShuffleRun(null);
             closeSetup();
             setCuratedOpen(true);
+          }}
+          onRoughCut={(t) => {
+            setShuffleRun(null);
+            setRoughCutTier(t);
+            closeSetup();
           }}
           onPickTier={() => {
             setModeOpen(false);
@@ -771,6 +813,11 @@ export default function DuelScreen({
         <SpotlightPicker
           films={state.films}
           onClose={() => setSpotlightFor(null)}
+          // The setting was always threaded into `startSpotlight`; only the
+          // control was missing, so a spotlight silently inherited whatever the
+          // King of the Hill panel had been left on.
+          shuffle={shuffle}
+          onShuffle={setShuffle}
           onPick={(id) => {
             beginSpotlight(id);
             setSpotlightFor(null);
@@ -903,6 +950,7 @@ function ModePanel({
   onSpotlight,
   onFastShuffle,
   onCurated,
+  onRoughCut,
   onPickTier,
 }: {
   films: Film[];
@@ -920,6 +968,7 @@ function ModePanel({
   onSpotlight: (t: Rating) => void;
   onFastShuffle: (opts: ShuffleOptions) => void;
   onCurated: () => void;
+  onRoughCut: (tier: Rating) => void;
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
@@ -952,8 +1001,14 @@ function ModePanel({
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
-        {/* The one mode with no pile and no confirm. It asks whichever question
-            it can least predict the answer to, and stops when you do. */}
+        {/* Offered before Fast Shuffle on purpose: on a tier of any size this is
+            the thing that should happen first, and burying it under the mode
+            people are already unsure about would hide the cheapest win. */}
+        <ModeRow
+          title="Rough Cut"
+          blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
+          onClick={() => onRoughCut(tier)}
+        />
         <ModeRow
           title="Fast Shuffle"
           blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."

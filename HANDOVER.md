@@ -215,12 +215,32 @@ anything new is built.
    actors, runtime, the full star scale, and `fingerprint`/`topPeople`.
    - **Kept honest:** anything about *settling* still counts HARD locks only. A badge for
      owning films is not a badge for ranking them.
-7. **Lock films in at the BOTTOM, and a reverse climb.** Deciding what you like least is
-   easier than what you like most, so working upward from the worst is a real mode.
-   `flickToBottom` already exists and is wired to swipe-down (`DuelScreen.tsx`) — what is
-   missing is that sinking PLACES without COMMITTING, and there is no run that climbs from
-   the bottom. Design alongside #8; the user's instinct to review the gestures together is
-   right.
+7. **ROUGH CUT — the answer to large tiers, and it replaces most of what was here.**
+
+   The problem was never the gestures. `ladder.ts` costs **n(n-1)/2 duels** to rank a tier,
+   and 3★ holds 185 films — several thousand comparisons. Bottom-locks, armed strip taps,
+   sink-to-settle and a reverse climb were all constant-factor patches on a quadratic sort.
+
+   **The fix is bucketing, which is how anyone sorts a large pile of cards.** One pass over
+   the tier, one decision per film — upper / middle / lower third — no comparisons at all.
+   185 taps instead of thousands of duels, and every decision still the user's.
+
+   **Why it needs no engine change:** `poolFor` sorts the pile BY SCORE, so the climb's
+   order is score order. Rough Cut writes better scores; insertion sort on a nearly-sorted
+   pile is close to linear. `ladder.ts` is untouched.
+
+   - **Writes scores, never log rows.** No pair was compared, so inventing judgements would
+     be a lie — and the whole app rests on the log being true.
+   - **No locks.** It is coarse, not a commitment. Films stay UN-RNKD; the climb afterwards
+     is simply far cheaper.
+   - **Composable:** within each third, films keep their existing relative order and spread
+     across the new sub-band, so a second pass refines to ninths.
+   - **Absorbs the gestures rather than adding to them:** flick up = upper, flick down =
+     lower. Bottom-locking stops being a feature and becomes "lower pile, used a lot".
+
+   **Deleted from this backlog because Rough Cut subsumes them:** lock-at-the-bottom, the
+   reverse climb, sink-to-settle, batch-the-tail, and the armed lock on the film strip.
+   Three separate mechanisms for "get this film out of my way" collapse into one.
 8. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
    **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a row's
    height, and nothing new goes inside the list scroller** — drag handles and lock toggles

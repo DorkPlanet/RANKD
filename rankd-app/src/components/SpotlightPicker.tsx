@@ -31,6 +31,8 @@ export function SpotlightPicker({
   onClose,
   onPick,
   title = "Spotlight",
+  shuffle,
+  onShuffle,
   blurb = "Pick any film to test. It starts where it currently sits and moves as far as its results take it.",
   onPerson,
 }: {
@@ -41,6 +43,16 @@ export function SpotlightPicker({
   onPerson?: (person: Person) => void;
   title?: string;
   blurb?: string;
+  /**
+   * Face the pile in a random order rather than weakest first.
+   *
+   * King of the Hill has offered this since it shipped and Spotlight never did,
+   * even though `startSpotlight` has always accepted it — the setting existed,
+   * the control did not. Optional so the profile's picker, which opens a
+   * filmography rather than starting a run, can leave it out.
+   */
+  shuffle?: boolean;
+  onShuffle?: (v: boolean) => void;
 }) {
   const [q, setQ] = useState("");
   // "All" by default: a search that only covers one tier can't find the film
@@ -199,6 +211,14 @@ export function SpotlightPicker({
 
         <span className="flex-1" />
 
+        {onShuffle && (
+          <IconToggle
+            label={shuffle ? "Facing films in a random order" : "Face films in a random order"}
+            active={shuffle}
+            onClick={() => onShuffle(!shuffle)}
+            icon={<span className="text-xs">⤨</span>}
+          />
+        )}
         <IconToggle label="Jump to top" onClick={() => jump("top")} icon={<span className="text-xs">↑</span>} />
         <IconToggle label="Jump to bottom" onClick={() => jump("bottom")} icon={<span className="text-xs">↓</span>} />
 

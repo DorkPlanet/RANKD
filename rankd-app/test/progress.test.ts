@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { newJudgement } from "@/lib/log";
 import {
-  leastRanked,
   libraryProgress,
   pct,
   sessionProgress,
@@ -131,39 +130,6 @@ describe("tierProgress", () => {
   it("counts soft and hard locks alike as ranked", () => {
     const out = tierProgress([film("a", "hard", 3), film("b", "soft", 3), film("c", undefined, 3)]);
     expect(out.find((s) => s.rating === 3)).toEqual({ rating: 3, total: 3, ranked: 2 });
-  });
-});
-
-describe("leastRanked", () => {
-  it("says nothing about an empty library", () => {
-    expect(leastRanked(tierProgress([]))).toBeUndefined();
-  });
-
-  it("says nothing when everything is already placed", () => {
-    expect(leastRanked(tierProgress([film("a", "hard", 4)]))).toBeUndefined();
-  });
-
-  it("picks the least-ranked tier that still has films", () => {
-    const out = leastRanked(
-      tierProgress([
-        film("a", "hard", 5),
-        film("b", undefined, 2),
-        film("c", undefined, 2),
-        film("d", "hard", 3),
-        film("e", undefined, 3),
-      ]),
-    );
-    expect(out?.rating).toBe(2); // 0/2 beats 1/2
-  });
-
-  it("breaks a tie on size — the bigger job is the more useful nudge", () => {
-    const films = [
-      film("a", undefined, 4),
-      film("b", undefined, 4),
-      film("c", undefined, 4),
-      film("d", undefined, 1),
-    ];
-    expect(leastRanked(tierProgress(films))?.rating).toBe(4);
   });
 });
 

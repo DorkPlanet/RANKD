@@ -132,20 +132,6 @@ export function tierProgress(films: readonly Film[]): TierSlice[] {
 }
 
 /**
- * The tier most worth going to next: the least-ranked one that still has films
- * in it, biggest first when two are equally unranked.
- *
- * Returns undefined when there is nothing to suggest — an empty library, or one
- * where everything is already placed. Saying nothing is correct there; inventing
- * a recommendation for a finished library is how a helpful line becomes noise.
- */
-export function leastRanked(slices: readonly TierSlice[]): TierSlice | undefined {
-  return slices
-    .filter((s) => s.total > 0 && s.ranked < s.total)
-    .sort((a, b) => a.ranked / a.total - b.ranked / b.total || b.total - a.total)[0];
-}
-
-/**
  * What you have done in THIS SITTING.
  *
  * The library bars could not do this job. At 861 films one duel moves a 204px
