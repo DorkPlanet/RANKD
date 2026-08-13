@@ -8,6 +8,7 @@
 import type { Film } from "./types";
 import { isPlaced } from "./lock";
 import type { Rating } from "./tiers";
+import { markDirty } from "./syncState";
 
 const KEY = "rankd-profile-v1";
 
@@ -43,6 +44,7 @@ export function saveProfile(p: Profile): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(KEY, JSON.stringify(p));
+    markDirty();
   } catch {
     // storage full — the library matters more than the profile, so drop it
   }

@@ -1,6 +1,7 @@
 import type { Film } from "./types";
 import { migrateLock } from "./lock";
 import { SEED_FILMS } from "./seed";
+import { markDirty } from "./syncState";
 
 // Local-first persistence. No backend yet — the master library lives in
 // localStorage, seeded on first run. (Accounts/sync arrive in a later phase.)
@@ -32,6 +33,7 @@ export function saveFilms(films: Film[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
+    markDirty();
   } catch {
     // storage full / disabled — nothing we can do, and nothing to fall back to
   }

@@ -1,41 +1,42 @@
 "use client";
 
-// Taking your library with you.
+// Taking your library with you — as a file.
 //
-// localStorage is per-origin, so a deployed Rankd opens empty even on the
-// machine that has 828 films in it — different origin, different storage. Until
-// there's a backend this file is the only bridge between devices, and the only
-// backup that exists at all: clearing your browser data today destroys every
-// duel you've ever fought.
+// This was once the ONLY bridge between devices and the only backup that existed
+// at all. Signing in now mirrors the same payload to a server (`sync.ts`), but
+// this stays, and stays first-class: it is the path that works with no account,
+// no network and no trust in anyone else's uptime, and it is how you leave.
 //
-// Everything the app owns goes in one file, so a restore is complete rather than
-// nearly complete.
+// The format itself lives in `backupFormat.ts` so the file and the wire cannot
+// drift apart.
 
-const KEYS = [
-  "rankd-app-v1", // the library — films, scores, placements, duels
-  "rankd-log-v1", // the evidence — every duel ever settled
-  "rankd-profile-v1", // name, bio, banner
-  "rankd-brightness",
-  "rankd-strip-open",
-] as const;
+import { KEYS, FORMAT, parseBackup, type Backup, type BackupSummary } from "./backupFormat";
 
-const FORMAT = 1;
+export type { BackupSummary };
 
-interface Backup {
-  format: number;
-  savedAt: string;
-  keys: Record<string, string>;
-}
-
-export function exportBackup(): void {
+/** Collect everything the app owns into one payload. Shared with `sync.ts`. */
+export function collectBackup(): Backup {
   const keys: Record<string, string> = {};
   for (const k of KEYS) {
     const v = localStorage.getItem(k);
     if (v !== null) keys[k] = v;
   }
-  const backup: Backup = { format: FORMAT, savedAt: new Date().toISOString(), keys };
+  return { format: FORMAT, savedAt: new Date().toISOString(), keys };
+}
 
-  const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: "application/json" }));
+/** Write a validated payload into storage, replacing what is there. */
+export function applyBackup(backup: Backup): void {
+  for (const k of KEYS) {
+    const v = backup.keys[k];
+    if (v === undefined) localStorage.removeItem(k);
+    else localStorage.setItem(k, v);
+  }
+}
+
+export function exportBackup(): void {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(collectBackup())], { type: "application/json" }),
+  );
   const a = document.createElement("a");
   a.href = url;
   a.download = `rankd-backup-${new Date().toISOString().slice(0, 10)}.json`;
@@ -43,83 +44,14 @@ export function exportBackup(): void {
   URL.revokeObjectURL(url);
 }
 
-export interface RestoreResult {
-  films: number;
-  /** How many recorded duels came back with them; 0 for a pre-log backup. */
-  judgements: number;
-  hadProfile: boolean;
-}
+export type RestoreResult = BackupSummary;
 
 // Validated before a single key is written. A half-applied restore would be
 // worse than a failed one — you'd lose what you had and not gain what you meant
 // to, so anything suspect throws and nothing is touched.
 export function importBackup(text: string): RestoreResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error("That file isn't valid JSON.");
-  }
-
-  const backup = parsed as Partial<Backup>;
-  if (!backup || typeof backup !== "object" || !backup.keys || typeof backup.keys !== "object") {
-    throw new Error("That doesn't look like a Rankd backup.");
-  }
-  if (backup.format !== FORMAT) {
-    throw new Error(`That backup is format ${backup.format ?? "unknown"}; this version reads ${FORMAT}.`);
-  }
-
-  const raw = backup.keys["rankd-app-v1"];
-  if (!raw) throw new Error("That backup has no library in it.");
-
-  let films: unknown;
-  try {
-    films = JSON.parse(raw);
-  } catch {
-    throw new Error("The library inside that backup is corrupt.");
-  }
-  if (!Array.isArray(films) || films.length === 0) {
-    throw new Error("The library inside that backup is empty.");
-  }
-  const ok = films.every(
-    (f) =>
-      f &&
-      typeof f === "object" &&
-      typeof (f as { id?: unknown }).id === "string" &&
-      typeof (f as { rating?: unknown }).rating === "number" &&
-      typeof (f as { score?: unknown }).score === "number",
-  );
-  if (!ok) throw new Error("Some films in that backup are missing an id, rating or score.");
-
-  // The evidence log, if the backup is new enough to carry one. Checked but not
-  // required: a backup written before the log existed is still a perfectly good
-  // backup, and refusing it would strand every file saved up to now. Note that
-  // restoring such a file DOES clear the log — a restore replaces the app's
-  // state wholesale, and a half-restore would be worse than none.
-  const rawLog = backup.keys["rankd-log-v1"];
-  let judgements = 0;
-  if (rawLog !== undefined) {
-    let rows: unknown;
-    try {
-      rows = JSON.parse(rawLog);
-    } catch {
-      throw new Error("The comparison log inside that backup is corrupt.");
-    }
-    // See lib/log.ts for the shape: a version, an interned film-id dictionary,
-    // and tuple rows [id, aIndex, bIndex, outcome, modeCode, at].
-    const log = rows as { v?: unknown; f?: unknown; r?: unknown };
-    if (!log || typeof log !== "object" || log.v !== 1 || !Array.isArray(log.f) || !Array.isArray(log.r)) {
-      throw new Error("The comparison log inside that backup isn't in a format this version reads.");
-    }
-    judgements = log.r.length;
-  }
-
+  const { backup, summary } = parseBackup(text);
   // Only now, with everything checked, does anything get written.
-  for (const k of KEYS) {
-    const v = backup.keys[k];
-    if (v === undefined) localStorage.removeItem(k);
-    else localStorage.setItem(k, v);
-  }
-
-  return { films: films.length, judgements, hadProfile: !!backup.keys["rankd-profile-v1"] };
+  applyBackup(backup);
+  return summary;
 }

@@ -12,6 +12,7 @@ import { exportBackup, importBackup } from "@/lib/backup";
 import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
 import { loadLog, logSize } from "@/lib/log";
 import type { Film } from "@/lib/types";
+import { Account } from "./Account";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
 
 export function Settings({
@@ -87,10 +88,11 @@ export function Settings({
           {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
         </div>
 
-        {/* Your library lives in this browser and nowhere else, so this is both
-            the only backup you have and the only way to open the same library on
-            your phone — a deployed Rankd is a different origin with its own
-            empty storage. */}
+        <Account />
+
+        {/* Signing in mirrors all of this to an account, but the file stays
+            first-class: it is the path that works with no account, no network
+            and no trust in anyone else's uptime, and it is how you leave. */}
         <div className="mt-7 border-t border-border pt-5">
           <span className="text-xs font-extrabold tracking-[0.12em] text-dim">MOVE OR BACK UP</span>
           <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">

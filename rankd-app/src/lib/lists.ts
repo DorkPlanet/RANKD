@@ -19,6 +19,7 @@
 // costs its poster, not the row. `hydrate` is where the two are reconciled.
 
 import type { Film } from "./types";
+import { markDirty } from "./syncState";
 
 const KEY = "rankd-lists-v1";
 
@@ -59,9 +60,19 @@ function writeLists(lists: SavedList[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(KEY, JSON.stringify(lists));
+    markDirty();
   } catch {
     // storage full or disabled — nothing to fall back to
   }
+}
+
+/**
+ * Replace the whole shelf with the account's copy. Only `sync.ts` calls this,
+ * and only after the server's answer has been validated — it is a pull landing,
+ * not an edit, so it deliberately has no merge behaviour of its own.
+ */
+export function replaceLists(lists: SavedList[]): void {
+  writeLists(lists);
 }
 
 /**

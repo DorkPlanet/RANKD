@@ -1,0 +1,28 @@
+# Local Postgres for development. Production uses Neon; this exists so dev is
+# self-contained — no cloud database or credentials needed to run the app.
+#
+#   docker compose up -d      # start
+#   docker compose down       # stop (keeps data)
+#   docker compose down -v    # stop and wipe data
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: rankd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rankd
+      POSTGRES_PASSWORD: rankd
+      POSTGRES_DB: rankd
+    ports:
+      - "5432:5432"
+    volumes:
+      - rankd-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rankd -d rankd"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  rankd-pgdata:

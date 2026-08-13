@@ -15,6 +15,8 @@
 // It stays deliberately dumb. No inference, no scores, no opinions about what a
 // row means. Just what happened, in order.
 
+import { markDirty } from "./syncState";
+
 // Which side won, naming the two ids the row carries: "a" = a beat b, "b" = b
 // beat a. "draw" is a Skip — the user declined to separate them — and is never
 // turned into a winner by anything reading this log.
@@ -136,6 +138,7 @@ export async function appendJudgements(incoming: readonly Judgement[]): Promise<
     const fresh = incoming.filter((j) => !seen.has(j.id));
     if (fresh.length === 0) return;
     localStorage.setItem(KEY, JSON.stringify(encode([...existing, ...fresh])));
+    markDirty();
   } catch {
     // Storage full or disabled. The judgement is lost as evidence, but the
     // placement it produced is already in the library — so the app is consistent,
@@ -164,6 +167,7 @@ export async function retractJudgements(ids: readonly string[]): Promise<void> {
     const drop = new Set(ids);
     const kept = (await loadLog()).filter((j) => !drop.has(j.id));
     localStorage.setItem(KEY, JSON.stringify(encode(kept)));
+    markDirty();
   } catch {
     // Same reasoning as the append path: the library is the thing worth
     // protecting, and a log that failed to shrink is merely over-informed.
