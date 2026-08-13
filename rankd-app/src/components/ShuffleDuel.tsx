@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { PosterCard, fadeLoserOut } from "./PosterCard";
+import { PosterCard, TILT, fadeLoserOut, liftWinner } from "./PosterCard";
 import { SessionEnd } from "./SessionEnd";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
 import { PRIOR_SPREAD } from "@/lib/bayes";
@@ -27,7 +27,7 @@ import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { sessionProgress } from "@/lib/progress";
-import { RunBars } from "./RunBars";
+import { RunStatus } from "./RunStatus";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
@@ -42,6 +42,10 @@ import type { Film } from "@/lib/types";
  * What survives is the part that earns its keep: one undoable judgement.
  */
 const UNDO_MS = 2600;
+
+/** Matches the climb's controls exactly — one language across both modes. */
+const SHUFFLE_CONTROL =
+  "px-4 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
 
 export interface ShuffleOptions {
   scope: MatchOptions["scope"];
@@ -198,13 +202,28 @@ export default function ShuffleDuel({
   // into the climbing seat — meaningless here, where neither card is a seat and
   // both films are peers — so the loser sinks and fades instead, and a draw
   // sinks both, because a draw is precisely the claim that neither won.
+  //
+  // The winner LIFTS rather than travelling, which is the part this was missing.
+  // Only the loser used to animate, so the film you actually chose did nothing
+  // and the moment read as a card vanishing rather than as a pick. A lift says
+  // "this one" while still claiming no position — the distinction above is what
+  // makes flying it across wrong, not the idea of acknowledging it at all.
   const playExit = (outcome: "a" | "b" | "draw") => {
     const cards = arenaRef.current?.querySelectorAll<HTMLElement>("button");
     const imgs = [cards?.[0]?.querySelector("img"), cards?.[1]?.querySelector("img")];
     const losers = outcome === "draw" ? [0, 1] : [outcome === "a" ? 1 : 0];
+    // Each clone has to match the lean of the card it stands in for, or it lands
+    // crooked against it — index 0 leans left now, index 1 right.
+    const leanOf = (i: number) => (i === 0 ? -TILT : TILT);
     for (const i of losers) {
       const img = imgs[i];
-      if (img) fadeLoserOut(img, pair?.[i].poster ?? "");
+      if (img) fadeLoserOut(img, pair?.[i].poster ?? "", leanOf(i));
+    }
+    // A draw has no winner to lift, which is the whole claim it makes.
+    if (outcome !== "draw") {
+      const w = outcome === "a" ? 0 : 1;
+      const img = imgs[w];
+      if (img) liftWinner(img, pair?.[w].poster ?? "", leanOf(w));
     }
   };
 
@@ -351,7 +370,7 @@ export default function ShuffleDuel({
           its own first and the climb kept a single tier bar, so "how far through
           this am I" had two different answers depending on which game you were
           in. */}
-      <RunBars
+      <RunStatus
         films={films}
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
@@ -368,31 +387,32 @@ export default function ShuffleDuel({
         className="relative flex items-stretch justify-center gap-3 px-4"
         style={{ height: 356, flexShrink: 1, minHeight: 0 }}
       >
-        <PosterCard film={a} badge="" onPick={() => answer("a")} onFlick={noop} onSink={noop} onInfo={onInfo} />
-        <PosterCard film={b} badge="" onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        {/* `side`, not `pick`: neither film is the pick here — they are peers and
+            neither wears the gold — but the PAIR should still lean away from each
+            other the way the climb's does. Without it both fell through to the
+            same lean and sat parallel, which is what made this mode look unlike
+            the compare screen it deliberately reuses. */}
+        <PosterCard film={a} badge="" side="left" onPick={() => answer("a")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        <PosterCard film={b} badge="" side="right" onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
       </div>
-      <div style={{ flexGrow: 1 }} />
+      {/* Nearly all the slack above, matching the climb: the controls sit low,
+          near the thumb that reaches for them, rather than floating mid-gap. */}
+      <div style={{ flexGrow: 2.6 }} />
 
-      <div className="flex flex-shrink-0 justify-center gap-2 px-5">
-        <button
-          onClick={() => answer("draw")}
-          className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-        >
+      {/* Text, not pills — the same change the climb's Draw/Undo/Done had, for
+          the same reason. Boxes gave three secondary actions the weight of the
+          two posters, on a screen whose whole subject is the artwork. The
+          padding stays because it is the tap target. */}
+      <div className="flex flex-shrink-0 items-center justify-center gap-1 px-5">
+        <button onClick={() => answer("draw")} className={SHUFFLE_CONTROL}>
           Draw
         </button>
         {pending ? (
-          <button
-            onClick={undo}
-            className="rounded-full border px-4 py-1.5 text-[11px] font-bold tracking-wide active:scale-95"
-            style={{ color: "var(--gold)", borderColor: "var(--gold)" }}
-          >
+          <button onClick={undo} className={`${SHUFFLE_CONTROL} text-gold`}>
             Undo
           </button>
         ) : (
-          <button
-            onClick={leave}
-            className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-          >
+          <button onClick={leave} className={`${SHUFFLE_CONTROL} text-gold/70`}>
             Done
           </button>
         )}
@@ -406,14 +426,14 @@ export default function ShuffleDuel({
           it narrated what you had just done back to you, on the screen where the
           next question is the only thing that matters. Undo does the job it was
           standing in for. */}
-      <div style={{ flexGrow: 0.6 }} />
+      <div style={{ flexGrow: 0.1 }} />
     </div>
   );
 }
 
 const noop = () => {};
 
-// The three progress bars now live in RunBars.tsx, shared with the climb.
+// The run readout lives in RunStatus.tsx, shared with the climb.
 
 function Centre({ children }: { children: React.ReactNode }) {
   return (

@@ -110,6 +110,20 @@ below.
 - The TMDb key is in public history (`ab25cf58`). **User has declined rotation five times —
   note it if relevant, never argue it.**
 
+### Motion (Session F)
+
+- **Nothing that floats may share a beat.** There were four fixed float classes, and a
+  poster and its own title shared a `0s` delay while Fast Shuffle's two cards — neither
+  of which is a `pick` — fell through to the *same* class and bobbed in perfect lockstep.
+  Phase is now per-element, hashed from the film id (`floatPhase` in `PosterCard`), with
+  the duration jittered so anything that starts together drifts apart. **Never go back to
+  a shared delay.**
+- **Use `Math.imul` for hashing, not `*`.** A 32-bit multiply overflows to a float and
+  drops the low bits, which washed the seed out — the first attempt handed a poster and
+  its title 0.336 and 0.331 and they bobbed together anyway.
+- **`side` is not `pick`.** Lean belongs to the PAIR, gold belongs to the STATE. Fast
+  Shuffle has no pick, so before this both cards leaned the same way.
+
 ### The duel screen's top zone (Session F)
 
 - **This app speaks in TYPE, not graphics.** A tier map was built twice — ten rounded
@@ -185,13 +199,22 @@ anything new is built.
    - Films, star ratings, artwork and credits are always kept. Scores return to
      `seedScore(rating)`, because an unranked library that keeps its old scores still
      sorts itself into last session's order.
-4. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
-   exported already; `ShuffleDuel` just never used them.
-5. **King of the Hill in shuffled order.** Once in a tier, offer the pile shuffled but with
-   **no duel skipped** — repetition, not sampling. A run-setup option; no new mechanics.
-6. **Many more badges.** `achievements.ts` is a flat array of 11, all DERIVED, so anything
-   added applies retroactively. The evidence log and `fingerprint`/`topPeople` are entirely
-   untapped as sources.
+4. ~~Fast Shuffle animation~~ **LANDED, and the backlog entry was wrong.** `ShuffleDuel`
+   DID call `fadeLoserOut`, and it deliberately does not fly the winner across — there is
+   no climbing seat there and both films are peers. The real gap was that **only the loser
+   animated**, so the film you chose did nothing and the moment read as a card vanishing.
+   `liftWinner` fixes that without implying a position. Two other parity bugs went with it:
+   both cards fell through to the same lean (`side` now separates lean from `pick`), and
+   the controls were still pills.
+5. ~~King of the Hill in shuffled order~~ **ALREADY EXISTS.** `ShuffleRow` in the KotH
+   setup: "Shuffle the order — face films in a random order instead of weakest first." It
+   skips no duels; only the starting order changes. **This is a discoverability problem,
+   not a missing feature** — the user asked for something already built, buried in setup.
+6. ~~Many more badges~~ **LANDED.** 11 → 34. All still derived, so they apply
+   retroactively and need no migration. New ones draw on decades, genres, directors,
+   actors, runtime, the full star scale, and `fingerprint`/`topPeople`.
+   - **Kept honest:** anything about *settling* still counts HARD locks only. A badge for
+     owning films is not a badge for ranking them.
 7. **Lock films in at the BOTTOM, and a reverse climb.** Deciding what you like least is
    easier than what you like most, so working upward from the worst is a real mode.
    `flickToBottom` already exists and is wired to swipe-down (`DuelScreen.tsx`) — what is

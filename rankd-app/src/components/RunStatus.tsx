@@ -39,7 +39,7 @@ import type { Film } from "@/lib/types";
 // sessionStorage, which is per-TAB and dies with it. That is a sitting almost
 // exactly, and it is the only store with the right lifetime: module-level
 // variables are read during render (the React compiler rejects that, rightly),
-// and component state resets on remount — `RunBars` unmounts every time you look
+// and component state resets on remount — `RunStatus` unmounts every time you look
 // at your list, so a baseline in state would silently reset "6 settled" to "0"
 // while the user watched.
 //
@@ -67,7 +67,7 @@ function openSitting(hardNow: number): Sitting {
   return fresh;
 }
 
-export function RunBars({
+export function RunStatus({
   films,
   log,
   /** What this run is working through, and out of how many. */

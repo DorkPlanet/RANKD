@@ -445,8 +445,18 @@ img {
 }
 
 /* Floating posters + titles — ported from rankd.html (cpPosterFloat/cpTitleFloat):
-   a gentle vertical bob, with the B side delayed so the pair never syncs. Uses
-   the `translate` property so it composes with each poster's static `rotate`. */
+   a gentle vertical bob. Uses the `translate` property so it composes with each
+   poster's static `rotate`.
+
+   There used to be four fixed classes here — two poster phases and two title
+   phases — and the whole screen breathed as one animal. A poster and its own
+   title shared a 0s delay, so they rose and fell together, and the same two
+   phases came back on every film you were ever shown.
+
+   Phase is now per-element and set inline from the film's id (see `floatPhase`
+   in PosterCard). The duration is jittered with it, so two things that happen to
+   start together drift apart instead of staying locked. Nothing here should ever
+   go back to a shared delay: things that float in nature do not keep time. */
 @keyframes float-poster {
   0%, 100% { translate: 0 0; }
   50% { translate: 0 -9px; }
@@ -455,10 +465,8 @@ img {
   0%, 100% { translate: 0 0; }
   50% { translate: 0 -6px; }
 }
-.float-a { animation: float-poster 6.5s ease-in-out 0s infinite; }
-.float-b { animation: float-poster 6.5s ease-in-out 3.8s infinite; }
-.float-c { animation: float-title 5s ease-in-out 0s infinite; }
-.float-d { animation: float-title 5s ease-in-out 2.5s infinite; }
+.float-poster { animation: float-poster 6.5s ease-in-out infinite; }
+.float-title { animation: float-title 5s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .float-a, .float-b, .float-c, .float-d { animation: none; }
+  .float-poster, .float-title { animation: none; }
 }

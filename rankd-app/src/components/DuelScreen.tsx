@@ -36,7 +36,7 @@ import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
-import { RunBars } from "./RunBars";
+import { RunStatus } from "./RunStatus";
 import {
   BackRow,
   RangeSlider,
@@ -547,7 +547,7 @@ export default function DuelScreen({
           tier bar sitting above a filmography run — the exact thing the comment
           above was written to prevent, reintroduced by adding a second way in. */}
       {!activeRun && !runResult && (
-        <RunBars
+        <RunStatus
           // Borrowed films must not count toward what you have settled — a Nolan
           // run was reporting "0 of 42" for a library of ten.
           films={state.films.some((f) => f.guest) ? state.films.filter((f) => !f.guest) : state.films}
@@ -1384,7 +1384,7 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
 // the centre label off true; if the text doesn't fit, the edge nearest the
 // middle is feathered away and the text drifts across to reveal the rest.
 // The tier + progress strip, sitting on the body just under the header feather.
-// TierProgress lived here. Replaced by RunBars, which every mode now shares.
+// TierProgress lived here. Replaced by RunStatus, which every mode now shares.
 
 // ── The climb: contender vs the film above, both UN-RNKD ───────────────────
 function Duel({
