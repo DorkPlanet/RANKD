@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { PosterCard, TILT, fadeLoserOut, liftWinner } from "./PosterCard";
+import { PosterCard, TILT, fadeLoserOut } from "./PosterCard";
 import { SessionEnd } from "./SessionEnd";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
 import { PRIOR_SPREAD } from "@/lib/bayes";
@@ -203,11 +203,12 @@ export default function ShuffleDuel({
   // both films are peers — so the loser sinks and fades instead, and a draw
   // sinks both, because a draw is precisely the claim that neither won.
   //
-  // The winner LIFTS rather than travelling, which is the part this was missing.
-  // Only the loser used to animate, so the film you actually chose did nothing
-  // and the moment read as a card vanishing rather than as a pick. A lift says
-  // "this one" while still claiming no position — the distinction above is what
-  // makes flying it across wrong, not the idea of acknowledging it at all.
+  // A winner "lift" was tried here and removed — the user disliked it on sight.
+  // The reasoning was sound (only the loser animated, so the film you chose did
+  // nothing) but the answer was not: a card that swells and fades in place reads
+  // as a notification, not as a choice landing. If this is revisited, the thing
+  // to solve is the ASYMMETRY, and the candidate is the surviving card settling
+  // into the space rather than the chosen one performing.
   const playExit = (outcome: "a" | "b" | "draw") => {
     const cards = arenaRef.current?.querySelectorAll<HTMLElement>("button");
     const imgs = [cards?.[0]?.querySelector("img"), cards?.[1]?.querySelector("img")];
@@ -218,12 +219,6 @@ export default function ShuffleDuel({
     for (const i of losers) {
       const img = imgs[i];
       if (img) fadeLoserOut(img, pair?.[i].poster ?? "", leanOf(i));
-    }
-    // A draw has no winner to lift, which is the whole claim it makes.
-    if (outcome !== "draw") {
-      const w = outcome === "a" ? 0 : 1;
-      const img = imgs[w];
-      if (img) liftWinner(img, pair?.[w].poster ?? "", leanOf(w));
     }
   };
 
@@ -392,8 +387,8 @@ export default function ShuffleDuel({
             other the way the climb's does. Without it both fell through to the
             same lean and sat parallel, which is what made this mode look unlike
             the compare screen it deliberately reuses. */}
-        <PosterCard film={a} badge="" side="left" onPick={() => answer("a")} onFlick={noop} onSink={noop} onInfo={onInfo} />
-        <PosterCard film={b} badge="" side="right" onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        <PosterCard film={a} badge="" side="left" pairId={a.id} onPick={() => answer("a")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        <PosterCard film={b} badge="" side="right" pairId={a.id} onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
       </div>
       {/* Nearly all the slack above, matching the climb: the controls sit low,
           near the thumb that reaches for them, rather than floating mid-gap. */}

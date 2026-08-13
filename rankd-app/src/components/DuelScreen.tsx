@@ -1601,8 +1601,8 @@ function Duel({
           className="relative flex items-stretch justify-center gap-3"
           style={{ height: 356, flexShrink: 1, minHeight: 0, marginBottom: 16 }}
         >
-        <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={contender} badge="CLIMBING" pick pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         </div>
         {/* Stays in the layout flow so it can never overlap anything at any
             screen height. It only needs to look right with the strip folded
