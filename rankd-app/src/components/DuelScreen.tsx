@@ -548,14 +548,12 @@ export default function DuelScreen({
           above was written to prevent, reintroduced by adding a second way in. */}
       {!activeRun && !runResult && (
         <RunBars
-          // The bottom two bars measure the LIBRARY, so borrowed films must not
-          // swell their denominators — a Nolan run was reporting "0 of 42" for a
-          // library of ten.
+          // Borrowed films must not count toward what you have settled — a Nolan
+          // run was reporting "0 of 42" for a library of ten.
           films={state.films.some((f) => f.guest) ? state.films.filter((f) => !f.guest) : state.films}
           log={log}
           title={session?.mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
           run={{
-            label: "This run",
             done: session?.confirmed.length ?? 0,
             total: (session?.confirmed.length ?? 0) + (session?.unconfirmed.length ?? 0),
           }}
@@ -1536,7 +1534,15 @@ function Duel({
             className="mt-3 flex flex-col items-center"
             style={{ opacity: stripOpen ? 0 : 1, transition: "opacity 0.18s var(--ease)" }}
           >
-            <Tips />
+            {/* Only near the end. Announced too early it is noise; at three to
+                go it is the reason you play three more. */}
+            <Tips
+              guidance={
+                pile.length > 0 && pile.length <= RUN_ENDGAME
+                  ? `Only ${pile.length} left in this run`
+                  : undefined
+              }
+            />
           </div>
         </div>
       </div>
@@ -1603,7 +1609,11 @@ function Duel({
             away, so rather than pinning it, the fade-in simply WAITS for the
             drawer to finish moving — invisible while the layout shifts, so it
             never appears to slide. Fading out has no delay. */}
-        <div style={{ flexGrow: 1.6 }} />
+        {/* Nearly all the slack goes ABOVE the controls (3.4 : 0.1, from 1.6 : 1).
+            They sit low, near the thumb that reaches for them, instead of
+            floating mid-gap under the posters — and the space that freed up goes
+            to the arena rather than to a hole underneath. */}
+        <div style={{ flexGrow: 3.4 }} />
         {/* Two rows, each owning its own line, rather than one slot cycling
             through three things.
 
@@ -1644,7 +1654,7 @@ function Duel({
               once there is nothing to take back, so the row never changes width
               under your thumb. */}
           <div
-            className="flex items-center gap-2 px-6 pb-6 pt-2"
+            className="flex items-center gap-1 px-6 pb-2 pt-0"
             style={{
               opacity: played ? 1 : 0,
               pointerEvents: played ? "auto" : "none",
@@ -1653,26 +1663,27 @@ function Duel({
           >
             <button
               onClick={declineToCall}
-              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
+              className={CONTROL}
             >
               Draw
             </button>
             <button
               onClick={onUndo}
               disabled={!canUndo}
-              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95 disabled:opacity-35 disabled:active:scale-100"
+              className={`${CONTROL} disabled:opacity-30 disabled:active:scale-100`}
             >
               Undo
             </button>
-            <button
-              onClick={onDone}
-              className="rounded-full border border-border px-4 py-1.5 text-[11px] font-bold tracking-wide text-dim active:scale-95"
-            >
+            {/* Done is the only one that ENDS something, so it carries a little
+                gold — the same accent the climber wears. Kept to 70% because
+                promoting "stop playing" into the brightest thing on screen
+                would be an odd thing for the game to want. */}
+            <button onClick={onDone} className={`${CONTROL} text-gold/70`}>
               Done
             </button>
           </div>
         </div>
-        <div style={{ flexGrow: 1 }} />
+        <div style={{ flexGrow: 0.1 }} />
       </div>
 
       <Rolodex
@@ -1708,8 +1719,28 @@ const STRIP_KEY = "rankd-strip-open";
 
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
+/** How few films left counts as the endgame, and earns a line saying so. */
+const RUN_ENDGAME = 10;
 
-function Tips() {
+// Text, not buttons. Pills gave three secondary actions the same visual weight
+// as the thing you are actually here to do, and drew a box around each one at
+// the bottom of a screen whose whole subject is two pieces of artwork. Stripped
+// to labels they read as available without competing.
+//
+// The padding stays: it is the tap target (~38px tall), and losing it to make
+// them look lighter would make them harder to hit. Small caps matches the
+// session line and RankFace's "of 134", so the screen keeps one voice.
+const CONTROL =
+  "px-4 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
+
+// `guidance` is a line about THIS run rather than about the app — "only 3 left"
+// rather than "flick a film up". It joins the rotation at the front instead of
+// replacing it: a fixed line stops being read after the second time you see it,
+// and the hints are still worth teaching. The end of a run is the one moment
+// worth naming, because it is the only one where knowing how close you are
+// changes whether you keep going.
+function Tips({ guidance }: { guidance?: string }) {
+  const items = useMemo(() => (guidance ? [guidance, ...TIPS] : TIPS), [guidance]);
   const [i, setI] = useState(0);
   const [shown, setShown] = useState(true);
 
@@ -1720,7 +1751,7 @@ function Tips() {
     const cycle = setInterval(() => {
       setShown(false);
       setTimeout(() => {
-        setI((n) => (n + 1) % TIPS.length);
+        setI((n) => n + 1);
         setShown(true);
       }, TIP_FADE_MS);
     }, TIP_MS);
@@ -1729,7 +1760,10 @@ function Tips() {
 
   return (
     <span className="tip px-6 text-center text-[11px] leading-snug" style={{ opacity: shown ? 1 : 0 }}>
-      {TIPS[i]}
+      {/* Wrapped here rather than in the setter: `items` changes length when
+          guidance appears or goes, and a stored index modulo the OLD length
+          would point somewhere else the moment it did. */}
+      {items[i % items.length]}
     </span>
   );
 }

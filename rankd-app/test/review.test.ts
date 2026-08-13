@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { PRIOR_SPREAD, type Belief } from "@/lib/bayes";
-import { REVIEW_CONFIDENCE_FLOOR, suggestions } from "@/lib/review";
+import {
+  allowedFrom,
+  COOLDOWN_HOURS,
+  hiddenFrom,
+  REVIEW_CONFIDENCE_FLOOR,
+  suggestions,
+} from "@/lib/review";
 import type { Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
@@ -201,5 +207,56 @@ describe("suggestions", () => {
     expect(out.length).toBeGreaterThanOrEqual(2);
     expect(Math.abs(out[0].drift)).toBeGreaterThanOrEqual(Math.abs(out[1].drift));
     expect(out[0].film.id).toBe("f19");
+  });
+});
+
+// ── Snooze, mute and the cooldown ──────────────────────────────────────────
+//
+// The card used to have one exit: a button labelled "Not now" that silenced a
+// film permanently. And because only the top suggestion renders, dismissing one
+// promoted the next instantly — an unbounded queue that refilled on the spot,
+// which is why it felt relentless on a real library.
+
+describe("hiddenFrom", () => {
+  const now = 1_000_000_000_000;
+
+  it("hides nothing when nothing has been dismissed", () => {
+    expect(hiddenFrom({ snoozed: {}, muted: [] }, now).size).toBe(0);
+  });
+
+  it("hides a muted film forever", () => {
+    const far = now + 365 * 86_400_000;
+    expect(hiddenFrom({ snoozed: {}, muted: ["a"] }, far).has("a")).toBe(true);
+  });
+
+  it("hides a snoozed film until it is due", () => {
+    const state = { snoozed: { a: now + 1000 }, muted: [] };
+    expect(hiddenFrom(state, now).has("a")).toBe(true);
+  });
+
+  it("lets a snoozed film back once the snooze expires", () => {
+    const state = { snoozed: { a: now - 1 }, muted: [] };
+    expect(hiddenFrom(state, now).has("a")).toBe(false);
+  });
+});
+
+describe("allowedFrom", () => {
+  const now = 1_000_000_000_000;
+  const hours = (n: number) => n * 3_600_000;
+
+  it("offers a card when none has ever been answered", () => {
+    expect(allowedFrom({ snoozed: {}, muted: [] }, now)).toBe(true);
+  });
+
+  // The fix for "far too many popups": answering one card buys quiet, so the
+  // next never steps straight into the space the last one left.
+  it("stays quiet inside the cooldown", () => {
+    const state = { snoozed: {}, muted: [], lastSeen: now - hours(1) };
+    expect(allowedFrom(state, now)).toBe(false);
+  });
+
+  it("offers again once the cooldown has passed", () => {
+    const state = { snoozed: {}, muted: [], lastSeen: now - hours(COOLDOWN_HOURS + 1) };
+    expect(allowedFrom(state, now)).toBe(true);
   });
 });

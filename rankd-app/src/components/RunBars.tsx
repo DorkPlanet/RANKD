@@ -2,30 +2,70 @@
 
 // The one progress readout, for every mode.
 //
-// The climb and Fast Shuffle grew their own separately: the climb had a single
-// bar reporting a tier, Fast Shuffle had three reporting the library. Which
-// meant the same question — how far through this am I — was answered in two
-// different shapes depending on which game you happened to be in, and a person
-// run, started from outside both, briefly showed you both at once.
+// ── Why this stopped being a table ─────────────────────────────────────────
 //
-// So there is one component and three bars, always in the same order and always
-// meaning the same thing:
+// It was three rows of label column, track, value column. That is the shape of
+// a settings screen, and it sat directly above `RankFace` — which is centred
+// typography, one gold numeral against one grey, no columns at all. Two visual
+// languages on one screen, with the tabular one on top, and the whole zone read
+// (in the user's words) "a little menu-like".
 //
-//   THIS RUN  what you are doing now, whatever "now" is — a tier, a shuffle
-//             scope, a filmography. The only bar whose denominator changes.
-//   SHUFFLED  how much of the whole library has ever been compared.
-//   LOCKED    how much of it has a position, and who decided: gold for what you
-//             committed, quieter for what the evidence placed.
+// So the columns are gone. One unlabelled track, one centred line beneath it, in
+// the same small-caps treatment `RankFace` uses for its own `of 134`. The track
+// shows the SHAPE of the run; `RankFace` below owns the NUMBERS. Previously both
+// stated the same denominator 100px apart, which is exactly the trap the old
+// comment here warned about — two readings of one number is how you end up with
+// them disagreeing.
 //
-// The bottom two are library-wide in every mode on purpose. They are the slow
-// numbers — the ones that make an hour of ranking visible — and rescoping them
-// per run would make them lurch every time you changed what you were doing.
+// ── Why the library bars left ──────────────────────────────────────────────
 //
-// PROVISIONAL LOOK — the shape is settled, the styling has had no design pass.
+// SHUFFLED and LOCKED measured the whole library. At 861 films one duel moves a
+// 204px track by a quarter of a pixel, so they could not respond to anything you
+// did — a progress bar that is physically incapable of moving is furniture. They
+// belong where you go to reflect, not where you play: `ListScreen`'s header
+// already reads "232 ranked · 861 films".
+//
+// What replaces them answers to the duel you just fought. See `sessionStats`.
 
-import { libraryProgress, pct, type LibraryProgress } from "@/lib/progress";
+import { useState } from "react";
+
+import { pct, sessionStats } from "@/lib/progress";
+import { isHard } from "@/lib/lock";
 import type { Judgement } from "@/lib/log";
 import type { Film } from "@/lib/types";
+
+// ── What a "sitting" is, and where its baseline lives ──────────────────────
+//
+// sessionStorage, which is per-TAB and dies with it. That is a sitting almost
+// exactly, and it is the only store with the right lifetime: module-level
+// variables are read during render (the React compiler rejects that, rightly),
+// and component state resets on remount — `RunBars` unmounts every time you look
+// at your list, so a baseline in state would silently reset "6 settled" to "0"
+// while the user watched.
+//
+// Read through a `useState` initialiser so it runs once per mount rather than
+// once per render — the same trick `DuelScreen` uses for the strip preference.
+const SITTING_KEY = "rankd-sitting-v1";
+
+interface Sitting {
+  start: number;
+  /** Hard locks at the moment the sitting began, so "settled" can be a delta. */
+  hard: number;
+}
+
+function openSitting(hardNow: number): Sitting {
+  const fresh: Sitting = { start: Date.now(), hard: hardNow };
+  if (typeof window === "undefined") return fresh;
+  try {
+    const raw = sessionStorage.getItem(SITTING_KEY);
+    if (raw) return JSON.parse(raw) as Sitting;
+    sessionStorage.setItem(SITTING_KEY, JSON.stringify(fresh));
+  } catch {
+    // Storage disabled. The sitting becomes "since this mount", which is wrong
+    // only in the mild sense that the counts restart when you change screens.
+  }
+  return fresh;
+}
 
 export function RunBars({
   films,
@@ -39,11 +79,23 @@ export function RunBars({
 }: {
   films: Film[];
   log: readonly Judgement[];
-  run: { label: string; done: number; total: number };
+  run: { done: number; total: number };
   lead?: React.ReactNode;
   title: string;
 }) {
-  const p: LibraryProgress = libraryProgress(films, log);
+  const hardNow = films.filter(isHard).length;
+  const [sitting] = useState(() => openSitting(hardNow));
+  const stats = sessionStats(log, sitting.start, hardNow, sitting.hard);
+
+  // Never a zero. "0 DUELS · 0 SETTLED" is a scoreboard for someone who has not
+  // played yet, which is the opposite of inviting — so before the first duel the
+  // line says what there is to do instead of what has not been done.
+  const line =
+    stats.duels === 0
+      ? `${Math.max(0, run.total - run.done)} to rank`
+      : stats.settled === 0
+        ? `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} this sitting`
+        : `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} · ${stats.settled} settled`;
 
   return (
     <div className="flex-shrink-0 px-5">
@@ -51,84 +103,30 @@ export function RunBars({
           inside the fade. */}
       <div className="mx-auto mt-11 max-w-[330px]">
         {/* Anchored rather than flowed, so the centre label sits on the true
-            centre whatever sits beside it.
-            No count here: the THIS RUN bar directly below states it, and the old
-            layout said "0 placed · 134 to go" on this line and then drew a bar
-            meaning the same thing — two readings of one number, which is how you
-            end up with them disagreeing. */}
-        <div className="relative mb-1.5 flex items-baseline">
+            centre whatever sits beside it. */}
+        <div className="relative mb-2.5 flex items-baseline">
           <span className="shrink-0">{lead}</span>
           <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-extrabold tracking-[0.1em] text-dim">
             {title}
           </span>
         </div>
 
-        <Bar
-          label={run.label}
-          value={`${run.done} of ${run.total}`}
-          segments={[{ pct: pct(run.done, run.total), colour: "var(--accent)" }]}
-        />
-        <Bar
-          label="Shuffled"
-          value={`${p.shuffled} of ${p.total}`}
-          segments={[
-            { pct: pct(p.shuffled, p.total), colour: "color-mix(in srgb, var(--accent) 55%, var(--border))" },
-          ]}
-        />
-        <Bar
-          label="Locked"
-          value={p.soft > 0 ? `${p.hard} + ${p.soft}` : `${p.hard} of ${p.total}`}
-          segments={[
-            { pct: pct(p.hard, p.total), colour: "var(--gold)" },
-            // Distinct from the hard segment without competing with it — the
-            // model's placements count, but they are not your decisions.
-            { pct: pct(p.soft, p.total), colour: "color-mix(in srgb, var(--gold) 38%, var(--border))" },
-          ]}
-        />
-      </div>
-    </div>
-  );
-}
-
-/**
- * One bar, one row: label, track, count.
- *
- * These used to stack three elements each — label and count on one line, bar
- * underneath — so three bars cost six rows and 105px of a phone screen before
- * the posters got any. Reading them meant travelling down and back up: name,
- * across to the number, down to the bar it belongs to.
- *
- * On one line the name, the fill and the number are the same glance, and the
- * block is roughly half the height. The label column is fixed so the three
- * tracks start at the same x — ragged starts made them read as three unrelated
- * measurements rather than one set.
- */
-function Bar({
-  label,
-  value,
-  segments,
-}: {
-  label: string;
-  value: string;
-  segments: { pct: number; colour: string }[];
-}) {
-  return (
-    <div className="mb-1.5 flex items-center gap-2.5 last:mb-0">
-      <span className="w-[52px] flex-shrink-0 text-[8px] font-extrabold leading-none tracking-[0.1em] text-dim">
-        {label.toUpperCase()}
-      </span>
-      <span className="flex h-1 flex-1 overflow-hidden rounded-full bg-border">
-        {segments.map((s, i) => (
+        {/* Full width and unlabelled. The only bar left is the only one that
+            visibly moves: at 134 films in a tier it advances ~1.5px per duel,
+            where the library bars managed a quarter of a pixel. */}
+        <span className="flex h-1 w-full overflow-hidden rounded-full bg-border">
           <span
-            key={i}
             className="h-full transition-[width] duration-500"
-            style={{ width: `${s.pct}%`, background: s.colour }}
+            style={{ width: `${pct(run.done, run.total)}%`, background: "var(--accent)" }}
           />
-        ))}
-      </span>
-      <span className="w-[54px] flex-shrink-0 text-right text-[9px] leading-none text-dim tabular-nums">
-        {value}
-      </span>
+        </span>
+
+        {/* Same treatment as RankFace's "of 134" — one type language for the
+            whole zone rather than a table above a title. */}
+        <p className="mt-2.5 text-center text-[9px] font-extrabold uppercase tracking-[0.22em] text-dim tabular-nums">
+          {line}
+        </p>
+      </div>
     </div>
   );
 }

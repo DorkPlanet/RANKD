@@ -13,12 +13,21 @@ import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
 import { isHard } from "@/lib/lock";
 import { type Profile } from "@/lib/profile";
+import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
 import { starsFor, ORDERED_TIERS, type Rating } from "@/lib/tiers";
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { loadLog } from "@/lib/log";
-import { dismiss, loadDismissed, suggestions, type Suggestion } from "@/lib/review";
+import {
+  loadDismissed,
+  markAnswered,
+  mute,
+  offerAllowed,
+  snooze,
+  suggestions,
+  type Suggestion,
+} from "@/lib/review";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 
@@ -76,6 +85,9 @@ export default function ListScreen({
     void (async () => {
       const log = await loadLog();
       if (!alive || log.length === 0) return;
+      // Checked before the fit, not after: inside the quiet period there is
+      // nothing to show, so there is no reason to spend the expensive part.
+      if (!offerAllowed()) return;
       const beliefs = await beliefsWhenIdle(films, log);
       if (!alive) return;
       setReview(suggestions(films, beliefs, loadDismissed()));
@@ -85,10 +97,22 @@ export default function ListScreen({
     };
   }, [films]);
 
+  // Only ever the first, and once it is answered the rest wait for the next
+  // quiet period rather than stepping forward one at a time. The old version
+  // filtered the queue in place, so waving one away promoted the next
+  // immediately — dozens deep on a real library, which is what made the card
+  // feel relentless.
   const top = review[0];
-  const waveAway = (id: string) => {
-    dismiss(id);
-    setReview((rs) => rs.filter((r) => r.film.id !== id));
+  const closeCard = (act: (id: string) => void) => (id: string) => {
+    act(id);
+    setReview([]);
+  };
+  const notNow = closeCard(snooze);
+  const never = closeCard(mute);
+  const act = (film: Film) => {
+    markAnswered();
+    setReview([]);
+    onSpotlight(film);
   };
 
   // Built once per library change, never inside a scroll handler — the
@@ -101,6 +125,14 @@ export default function ListScreen({
   useDriftScroll(scroller, !searching && !jumpOpen);
 
   const counts = tierCounts(films);
+  // How much of each tier has a position, for the Jump menu.
+  //
+  // This is where "where are the unranked films" gets answered — in the control
+  // you already open to go somewhere, rather than as a chart above the list. A
+  // bar drawn permanently at the top has to justify its space every time you
+  // look at the screen; a number inside a menu is only there when you asked the
+  // question it answers.
+  const ranked = new Map(tierProgress(films).map((s) => [s.rating, s.ranked]));
 
   // Where each section starts, and how tall it is. Derived from the model, never
   // measured from the DOM — the whole point is that it's known before the rows
@@ -143,17 +175,27 @@ export default function ListScreen({
           <span className="min-w-0 flex-1 truncate text-left font-display text-xl tracking-wide text-gold">
             {profile.name}
           </span>
+          {/* "ranked", not "placed" — the same count the RANKED bar reports and
+              the exact inverse of the UN-RNKD pills below it. Three words for one
+              idea across three components is how the bars came to look like they
+              were contradicting this line. */}
           <span className="text-[11px] text-dim">
-            <b className="text-text-hi">{model.placedCount}</b> placed · {model.total} films
+            <b className="text-text-hi">{model.placedCount}</b> ranked · {model.total} films
           </span>
         </button>
 
-        {/* Deliberately in the header block and NOT in the scroller below: the
-            section spacers and the tier-jump offsets are computed from row
-            heights, so anything inserted above the sections would shift every
-            section top while `jumpTo` kept using the unshifted numbers. */}
+        {/* Both of these are deliberately in the header block and NOT in the
+            scroller below: the section spacers and the tier-jump offsets are
+            computed from row heights, so anything inserted above the sections
+            would shift every section top while `jumpTo` kept using the
+            unshifted numbers. */}
         {top && !searching && (
-          <ReviewCard suggestion={top} onAct={() => onSpotlight(top.film)} onDismiss={() => waveAway(top.film.id)} />
+          <ReviewCard
+            suggestion={top}
+            onAct={() => act(top.film)}
+            onNotNow={() => notNow(top.film.id)}
+            onNever={() => never(top.film.id)}
+          />
         )}
 
         <div className="flex items-center gap-2">
@@ -181,7 +223,14 @@ export default function ListScreen({
                       className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98]"
                     >
                       <span className="text-sm text-gold">{starsFor(t)}</span>
-                      <span className="text-[11px] text-dim">{counts.get(t)}</span>
+                      {/* "12/134", not "134". The count alone said how big the
+                          tier is; the pair says how much of it is left, which is
+                          the thing you are actually choosing on. A finished tier
+                          reads as its own total on both sides and needs no
+                          separate tick. */}
+                      <span className="text-[11px] tabular-nums text-dim">
+                        <span className="text-text-hi">{ranked.get(t) ?? 0}</span>/{counts.get(t)}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -266,11 +315,15 @@ export default function ListScreen({
 function ReviewCard({
   suggestion,
   onAct,
-  onDismiss,
+  onNotNow,
+  onNever,
 }: {
   suggestion: Suggestion;
   onAct: () => void;
-  onDismiss: () => void;
+  /** A real snooze — back in a fortnight. */
+  onNotNow: () => void;
+  /** What "Not now" used to do silently. */
+  onNever: () => void;
 }) {
   const { film, kind, drift, promoteTo } = suggestion;
   const line =
@@ -293,8 +346,17 @@ function ReviewCard({
         >
           {kind === "underrated" ? "Test it against them" : "Re-place it"}
         </button>
-        <button onClick={onDismiss} className="px-2 py-1.5 text-[11px] font-semibold text-dim active:scale-95">
+        {/* Two exits, because there were two meanings hiding behind one button.
+            "Not now" is the common one and reads first; "Never" is quieter, and
+            deliberately harder to press by accident than the reprieve is. */}
+        <button onClick={onNotNow} className="px-2 py-1.5 text-[11px] font-semibold text-dim active:scale-95">
           Not now
+        </button>
+        <button
+          onClick={onNever}
+          className="ml-auto px-2 py-1.5 text-[10px] font-semibold text-dim/60 active:scale-95"
+        >
+          Never
         </button>
       </div>
     </div>

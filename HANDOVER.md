@@ -12,9 +12,11 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 "deployed" (that mistake cost the user a session; see below).
 
 **State:** everything on master is pushed AND deployed — check with `git log --oneline -1`
-against the live bundle rather than assuming. **261 tests, typecheck clean, lint at 3
-problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1 unused
-`tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
+against the live bundle rather than assuming. **Accounts live on the `accounts` branch,
+deliberately unmerged and undeployed** (see Pinned). **305 tests on master, typecheck
+clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect
+errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do
+not add a fourth.** The `accounts` branch adds 24 tests of its own on top.
 
 ## How to get oriented in five minutes
 
@@ -61,6 +63,19 @@ actor and genre. Director/actor hand to `PersonSheet`; genre is new (`lib/genres
 `CuratedPicker.tsx`), ranks the library only, and defaults to the whole genre with
 Top 50/25/10 offered when it is bigger.
 
+**Session E (branch `accounts`, NOT merged) — Google sign-in and a server mirror.**
+Auth.js, Postgres via Drizzle, and a mirror of the library. **Kept off master on
+purpose:** `vercel` deploys the working directory rather than git, so merging it would
+put a "Continue with Google" button on production that errors — there is no
+`AUTH_GOOGLE_ID` or `DATABASE_URL` in the Vercel environment. `lib/auth.ts` is the
+single session seam, `lib/sync.ts` the mirror, `lib/reconcile.ts` the conflict decision.
+Sign-in, push, pull and the conflict chooser are **unrun** — they need a database.
+Full plan: `C:\Users\jarra\.claude\plans\foamy-painting-hammock.md`.
+
+**Session F (this one) — the duel screen's top zone, and the review card.** See the
+first two entries under "Next, in order", both now landed, and the two decision blocks
+below.
+
 ## Decisions taken — do not relitigate
 
 - **Curated lists are INDEPENDENT of the master scoring system.** Director, actor and
@@ -95,38 +110,141 @@ Top 50/25/10 offered when it is bigger.
 - The TMDb key is in public history (`ab25cf58`). **User has declined rotation five times —
   note it if relevant, never argue it.**
 
+### The duel screen's top zone (Session F)
+
+- **This app speaks in TYPE, not graphics.** A tier map was built twice — ten rounded
+  columns, then a 2px segmented hairline — and rejected both times ("chunky", "the app
+  is eloquent film not Chungo bar"). The only non-type elements here are hairline
+  SEPARATORS and the brand rules, and neither carries data. **Before drawing a chart in
+  this app, check whether a number in an existing control would do.** It did: tier
+  progress now reads `77/134` in the Jump menu, which is zero new furniture and appears
+  exactly when you are choosing where to go.
+- **`tierProgress` / `leastRanked` in `progress.ts` are kept and tested.** `leastRanked`
+  currently has no caller — deliberate, it is the ingredient an opening/resume selector
+  (#10) would want.
+- **A progress bar must be able to move.** The library bars were true and useless: 204px
+  of track over 861 films is a quarter-pixel per duel. If a readout cannot respond to
+  the thing the user just did, it is furniture — scope it to the sitting or cut it.
+
+### Accounts (Session E)
+
+- **localStorage stays the source of truth; the server is a mirror.** This is the whole
+  constraint. It is what keeps sync out of `ladder.ts` and off the duel path, where a
+  failed request must never cost somebody a judgement they already made. `saveFilms`
+  therefore stays SYNCHRONOUS — each writer calls `markDirty()` (one line, `syncState.ts`)
+  and `sync.ts` notices, rather than any caller awaiting a network round trip.
+- **Sync never merges, and that is not a shortfall.** Two libraries cannot be combined
+  without inventing judgements nobody made: `score` and `lock` are derived from a
+  particular sequence of duels, and interleaving two sequences yields an order neither
+  device ever showed anyone. `reconcile.ts` asks instead. **Do not "improve" it into a
+  merge.**
+- **The library is one opaque blob; saved lists are rows.** A list is what someone could
+  one day follow, like or comment on, and each of those needs a stable row to point at.
+  The library is read by exactly one person — its owner — and never appears on a social
+  read path, which is what makes the blob permanently safe.
+- **The profile must leave the blob when social arrives.** `rankd-profile-v1` is inside
+  the payload today, which is right while it is private — but a profile CARD is rendered
+  for a viewer who must never see the library, so it cannot stay sealed in an opaque
+  blob. It becomes columns on `user`, plus a small stat snapshot the client computes on
+  push (`fingerprint`/`topPeople` derive from the whole library; the server can't). Not
+  done now because, unlike `handle` and `visibility`, extracting it later is an additive
+  migration plus one push per device — not a rewrite.
+- **The file backup stays first-class.** It is the path that works with no account, no
+  network and no trust in anyone else's uptime, and it is how you leave.
+
 ## Next, in order
 
-**The full plan with reasoning is at**
-`C:\Users\jarra\.claude\plans\distributed-conjuring-oasis.md`. Summarised here so this file
-stands alone.
+**Reordered 13 Aug 2026** against eleven pieces of feedback from real use. Reasoning and
+the code findings behind the order are at
+`C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Part Two); the older plan at
+`distributed-conjuring-oasis.md` still holds for items 6 and 9.
 
-1. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
-   `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
-   writes scores and a second cross-tier order would contradict it. Do the prop collapse
-   with it: `personRun` / `personGuests` / `personPortrait` plus the genre run are already
-   two effects reaching for `state.session`, and resume would make it three. They cannot
-   race today because only one is ever set at a time, but that is a property nobody is
-   enforcing.
-2. **Profile library + auto-save.** Nothing reads saved lists back. Needs `SavedEntry` to
-   gain `rating`/`genres`/`director` (**without `rating` a saved list cannot re-render its
-   own card — an existing bug**), a `{v:2, lists}` payload with in-memory migration,
-   auto-save with a floor (complete, or ≥half the pile confirmed), and a "YOUR RANKINGS"
-   shelf on `ProfileScreen`.
-   - **`backup.ts` trap:** its restore loop `removeItem`s any key absent from the file, and
-     line 68 is a strict `format !== FORMAT`. Adding `rankd-lists-v1` to `KEYS` naively means
-     **restoring an older backup deletes every saved ranking**. Needs a per-format key set.
-     `rankd-review-dismissed-v1` is also missing from the manifest.
-3. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
-   session and **`guests: Film[]` in full** — ids alone lose every unseen film.
-   `adoptRun(films, session)` belongs in `ladder.ts` with its own tests.
+**Items 1–6 are all small, and three of them are things the user described as not
+feeling right.** That is trust decay, it is cheap to reverse, and it gets cleared before
+anything new is built.
+
+1. ~~The progress bars~~ **LANDED.** They were misnamed, not miscounted: `SHUFFLED` counted
+   films that had fought ≥1 duel while `UN-RNKD` meant no position at all, so the bar hit
+   100% over a list of UN-RNKD pills. Now COMPARED / RANKED, one vocabulary with the list
+   and the pills. The two library-wide bars then left the duel screen entirely — at 861
+   films one duel moved them 0.24px, so they could not respond to anything. `RunBars` is
+   one unlabelled track plus a session line, and is due a rename (one bar, not bars).
+2. ~~The review card~~ **LANDED.** Two bugs compounding: "Not now" called a permanent
+   dismiss, and because only `review[0]` renders, waving one away promoted the next
+   instantly. Now a 14-day snooze, a separate quieter "Never", and a 20-hour cooldown
+   after any answer — checked BEFORE the belief fit, so the quiet period costs nothing.
+   v1's bare id array migrates to mutes.
+3. **Reset, with granularity.** Explicitly asked for: start again but KEEP the imported
+   films and star ratings. Separate control over **soft** locks (`withdrawSoftLocks()` in
+   `shuffle.ts` is built and tested and simply has no UI — that IS #24) and **hard** locks.
+   Offer the backup export first.
 4. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
    exported already; `ShuffleDuel` just never used them.
-5. **Reset, with granularity — and #24 turns out to be half of it.** The user wants to start
-   over with separate control over **soft** locks (`withdrawSoftLocks()` is built, tested and
-   simply has no UI — that IS #24) and **hard** locks. Keep the library and star ratings;
-   offer the backup export first.
-6. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+5. **King of the Hill in shuffled order.** Once in a tier, offer the pile shuffled but with
+   **no duel skipped** — repetition, not sampling. A run-setup option; no new mechanics.
+6. **Many more badges.** `achievements.ts` is a flat array of 11, all DERIVED, so anything
+   added applies retroactively. The evidence log and `fingerprint`/`topPeople` are entirely
+   untapped as sources.
+7. **Lock films in at the BOTTOM, and a reverse climb.** Deciding what you like least is
+   easier than what you like most, so working upward from the worst is a real mode.
+   `flickToBottom` already exists and is wired to swipe-down (`DuelScreen.tsx`) — what is
+   missing is that sinking PLACES without COMMITTING, and there is no run that climbs from
+   the bottom. Design alongside #8; the user's instinct to review the gestures together is
+   right.
+8. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
+   **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a row's
+   height, and nothing new goes inside the list scroller** — drag handles and lock toggles
+   want to violate both. That constraint IS this item.
+9. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
+   `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
+   writes scores and a second cross-tier order would contradict it. **This is also the
+   Profile Card's "Top 10" slot** (#11), described from the other direction. Do the prop
+   collapse with it: `personRun` / `personGuests` / `personPortrait` plus the genre run are
+   already two effects reaching for `state.session`, and resume would make it three. They
+   cannot race today because only one is ever set at a time, but that is a property nobody
+   is enforcing.
+10. **Opening and returning to the app.** EXPLORATION, not implementation — the user can
+    feel something missing and cannot yet name it. Sequenced BEFORE the profile redesign
+    deliberately: the answer may change what the profile is for.
+11. **Profile card slots + persistence + JPG re-export.** Empty slots for Top 10, favourite
+    actor, favourite director and so on, filled by making a list, persisted, viewable
+    socially later, and re-exportable as the JPG. Absorbs the old #2 (profile library +
+    auto-save): needs `SavedEntry` to gain `rating`/`genres`/`director` (**without `rating`
+    a saved list cannot re-render its own card — an existing bug**), a `{v:2, lists}`
+    payload with in-memory migration, auto-save with a floor (complete, or ≥half the pile
+    confirmed), and a "YOUR RANKINGS" shelf on `ProfileScreen`.
+    - **`backup.ts` trap:** its restore loop `removeItem`s any key absent from the file.
+      Adding `rankd-lists-v1` to `KEYS` naively means **restoring an older backup deletes
+      every saved ranking**. Needs a per-format key set. `rankd-review-dismissed-v1` is
+      also missing from the manifest.
+12. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
+    and #11's structures first.
+13. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
+    stores NO images — a banner is a film id and a still URL, so the whole profile costs a
+    few hundred bytes. Real uploads need server storage, which needs the pinned accounts
+    work. **An unblocked version exists now:** choose an avatar from artwork already in the
+    library, exactly as `bannerStill` already works.
+14. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+    session and **`guests: Film[]` in full** — ids alone lose every unseen film.
+    `adoptRun(films, session)` belongs in `ladder.ts` with its own tests. Stays device-local
+    forever; it is deliberately excluded from the synced payload.
+15. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+
+## Pinned — built but not shipped
+
+- **Accounts (Session E).** On branch `accounts`, written and tested. Needs a Neon database
+  (**use the POOLED connection string**) and a Google OAuth client with redirect URIs
+  `http://localhost:3000/api/auth/callback/google` and
+  `https://rankd-app-eight.vercel.app/api/auth/callback/google`. Then `npm run db:migrate`
+  and the four end-to-end checks. Neon recommended because the social model — lists and
+  profile cards, never a whole library — puts every social read on small indexed rows and
+  leaves the blob off the hot path; the connection pooler matters more than the storage
+  tier once API routes run as serverless functions.
+- **Known wart:** a brand-new phone hits the conflict chooser rather than a silent pull,
+  because the credits sweep writes the seed library within seconds of first load and marks
+  the browser dirty. Safe, and the choice reads "10 films, 0 duels" against "861 films,
+  1,204 duels" — but noisier than it should be on the most common path. Fix if wanted:
+  treat a library still exactly equal to `SEED_FILMS` as absent.
 
 ## Backlog — captured, not scheduled
 
@@ -168,6 +286,10 @@ stands alone.
   change a list row's height, and nothing new goes *inside* the list scroller.
 - **The CLIMBING / UN-RNKD pills straddle the bottom edge of their poster**, so a row's
   visible ink ends below its box. Anything placed underneath needs explicit clearance.
+- **Reading a session must never open a database connection.** `lib/auth.ts` defers its
+  `users.ts` import into the two functions that need it for exactly this reason. With a
+  static import, `/api/auth/session` 500s on any deployment without `DATABASE_URL` — on a
+  screen whose whole promise is that the app works without an account.
 - **Verify by looking at rendered output, not stored state.** Every card defect this project
   has had — a row through the footer, a label through a name, a stat contradicting its own
   insight — passed typecheck and tests and was only visible in the exported JPEG.

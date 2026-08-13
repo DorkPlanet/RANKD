@@ -133,29 +133,136 @@ export function suggestions(
 }
 
 // ── Dismissals ──────────────────────────────────────────────────────────
+//
+// There used to be one verb. The button said "Not now" and called a function
+// that added the film to a permanent list, so the only way to clear a card was
+// to silence that film forever — a snooze control wired to a mute switch. And
+// because only the top suggestion renders, dismissing one put the next in its
+// place instantly: an unbounded queue that refilled on the spot, which is why
+// the card felt like it was following you around.
+//
+// Two verbs now, and they mean what they say.
+//
+//   SNOOZE — "not now". Comes back after SNOOZE_DAYS. This is the common one.
+//   MUTE   — "never". What the old dismiss did, but now only when asked for.
+//
+// The cooldown is separate from both and does the actual work of making the card
+// rare: after you answer or wave away ANY card, nothing is offered again for
+// COOLDOWN_HOURS. One question per sitting is a prompt; four is nagging.
 
 const KEY = "rankd-review-dismissed-v1";
 
-export function loadDismissed(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+/** How long "not now" lasts. Long enough to be a real reprieve. */
+const SNOOZE_DAYS = 14;
+/** Quiet period after any answer, so cards never queue up behind each other. */
+const COOLDOWN_HOURS = 20;
+
+const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
+
+interface DismissState {
+  /** Film id → epoch ms when it may be shown again. */
+  snoozed: Record<string, number>;
+  /** Film ids silenced for good. */
+  muted: string[];
+  /** When the last card was answered or waved away. */
+  lastSeen?: number;
+}
+
+const EMPTY: DismissState = { snoozed: {}, muted: [] };
+
+// v1 was a bare array of ids, all of them permanent. Read as mutes, because that
+// is what they did — the user pressed a button labelled "Not now" and got a mute,
+// and quietly downgrading those to snoozes would resurface films they have not
+// thought about in months. The label was wrong; their intent to stop seeing that
+// card was not.
+function read(): DismissState {
+  if (typeof window === "undefined") return EMPTY;
   try {
     const raw = localStorage.getItem(KEY);
-    return new Set(raw ? (JSON.parse(raw) as string[]) : []);
+    if (!raw) return EMPTY;
+    const parsed = JSON.parse(raw) as string[] | DismissState;
+    if (Array.isArray(parsed)) return { snoozed: {}, muted: parsed };
+    return { snoozed: parsed.snoozed ?? {}, muted: parsed.muted ?? [], lastSeen: parsed.lastSeen };
   } catch {
-    return new Set();
+    return EMPTY;
   }
 }
 
-export function dismiss(id: string): Set<string> {
-  const next = loadDismissed();
-  next.add(id);
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.setItem(KEY, JSON.stringify([...next]));
-    } catch {
-      // A dismissal that fails to persist costs one repeated prompt. Not worth
-      // failing anything over.
-    }
+function write(state: DismissState): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch {
+    // A dismissal that fails to persist costs one repeated prompt. Not worth
+    // failing anything over.
   }
-  return next;
 }
+
+// The two decisions are pure so they can be tested without a DOM — the suite
+// runs in node, and this file's storage half cannot be exercised there. The
+// exported wrappers below are the thin part: read, delegate, done.
+
+/** Hidden right now: muted for good, or snoozed and not yet due. */
+export function hiddenFrom(state: DismissState, now: number): Set<string> {
+  const hidden = new Set(state.muted);
+  for (const [id, until] of Object.entries(state.snoozed)) {
+    if (until > now) hidden.add(id);
+  }
+  return hidden;
+}
+
+/** Whether the quiet period since the last answered card has elapsed. */
+export function allowedFrom(state: DismissState, now: number): boolean {
+  return state.lastSeen === undefined || now - state.lastSeen >= COOLDOWN_HOURS * HOUR_MS;
+}
+
+/**
+ * Everything that should not be offered right now.
+ *
+ * Expired snoozes simply stop matching rather than being swept on a timer, so
+ * nothing has to remember to tidy the record.
+ */
+export function loadDismissed(now: number = Date.now()): Set<string> {
+  return hiddenFrom(read(), now);
+}
+
+/** "Not now" — back in a fortnight. */
+export function snooze(id: string, now: number = Date.now()): void {
+  const state = read();
+  write({
+    ...state,
+    snoozed: { ...state.snoozed, [id]: now + SNOOZE_DAYS * DAY_MS },
+    lastSeen: now,
+  });
+}
+
+/** "Never" — the old behaviour, now only when it is actually chosen. */
+export function mute(id: string, now: number = Date.now()): void {
+  const state = read();
+  // Drop any snooze on the way — a muted film must not sit in both records,
+  // where an expiring snooze would look like it should come back.
+  const snoozed = { ...state.snoozed };
+  delete snoozed[id];
+  write({ ...state, snoozed, muted: [...new Set([...state.muted, id])], lastSeen: now });
+}
+
+/** Answering a card counts as engagement, and starts the same quiet period. */
+export function markAnswered(now: number = Date.now()): void {
+  write({ ...read(), lastSeen: now });
+}
+
+/**
+ * Whether a card may be shown at all.
+ *
+ * This is what stops the queue. Without it, waving one card away simply promoted
+ * the next — the supply is dozens deep on a real library, so "dismiss" felt like
+ * it did nothing.
+ */
+export function offerAllowed(now: number = Date.now()): boolean {
+  return allowedFrom(read(), now);
+}
+
+/** Exported for tests; the shape `hiddenFrom` and `allowedFrom` read. */
+export type { DismissState };
+export { SNOOZE_DAYS, COOLDOWN_HOURS };

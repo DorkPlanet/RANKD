@@ -347,15 +347,15 @@ export default function ShuffleDuel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The same three bars the climb shows, in the same order, meaning the same
-          things. This mode grew its own readout first and the climb kept a single
-          tier bar, so "how far through this am I" had two different answers
-          depending on which game you were in. */}
+      {/* The same readout the climb shows, meaning the same thing. This mode grew
+          its own first and the climb kept a single tier bar, so "how far through
+          this am I" had two different answers depending on which game you were
+          in. */}
       <RunBars
         films={films}
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
-        run={{ label: "This run", done: session.compared, total: session.total }}
+        run={{ done: session.compared, total: session.total }}
       />
 
       {/* A definite height that yields under pressure, matching the arena in the
