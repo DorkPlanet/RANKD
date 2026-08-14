@@ -394,6 +394,13 @@ export default function AppShell() {
   const tourFor = (s: Screen): TourId | null => {
     const id: TourId | null = s === "duel" ? "duel" : s === "list" ? "list" : null;
     if (!id || seen.has(id)) return null;
+    // The duel tour points at two posters and the film strip, and none of them
+    // exist until a run is actually running. Since the RNK screen now opens on
+    // `RunStart`, firing on arrival resolved the whole tour down to its one
+    // Rough Cut step and then marked it seen — so the first user to need it was
+    // the one guaranteed not to get it. `onRunBegan` fires it at the moment the
+    // duel appears instead, which is also when the marks make most sense.
+    if (id === "duel" && !state?.session) return null;
     return newLibrary || replaying ? id : null;
   };
 
@@ -459,6 +466,13 @@ export default function AppShell() {
           onList={() => go("list")}
           onProfile={() => go("profile")}
           onAddFilm={addFilm}
+          // A run just started, so the duel's targets exist now. Deferred a tick
+          // for the same reason every other tour start is: `Coach` measures as
+          // it renders, and the posters have not committed yet.
+          onRunBegan={() => {
+            if (seen.has("duel") || !(newLibrary || replaying)) return;
+            setTimeout(() => setTourDue("duel"), 20);
+          }}
           personRun={personRun}
           personGuests={personGuests}
           personPortrait={personPortrait}

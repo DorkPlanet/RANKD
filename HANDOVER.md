@@ -185,6 +185,12 @@ this is what you have left kinda idea."
   duels under "Session done".** The transition is now caught in `commit`, which sees both
   ways a run ends (Done, and `confirm` emptying the pile), so the natural completion
   cannot be the path that forgets. Cross-tier runs are excluded: `RunSummary` owns those.
+- **The duel tour fires on `onRunBegan`, not on arriving at the screen.** Caught only by
+  looking at the deployed first-run: RNK now opens on `RunStart`, where none of the tour's
+  targets exist, so the tour resolved down to its single Rough Cut step and marked itself
+  seen. **The one user who needed it was the one guaranteed not to get it.** Two features
+  shipped the same day, each correct alone. If you add a screen in front of another, check
+  what the tour resolves to on it.
 - **Known, not fixed:** `TierComplete`'s "duels" stat sums the per-film counter, so it
   double-counts exactly like the profile's DUELS stat. Same root cause, same reason for
   leaving it alone.

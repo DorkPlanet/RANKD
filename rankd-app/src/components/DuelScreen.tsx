@@ -90,6 +90,7 @@ export default function DuelScreen({
   personGuests = [],
   personPortrait,
   onPersonRunHandled,
+  onRunBegan,
   onPerson,
 }: {
   state: RankState | null;
@@ -103,6 +104,8 @@ export default function DuelScreen({
   onProfile: () => void;
   onTrophies: () => void;
   onAddFilm: (film: Film) => void;
+  /** A run just started, so the duel's posters and strip are about to exist. */
+  onRunBegan?: () => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
@@ -445,6 +448,7 @@ export default function DuelScreen({
     // drained to the log are carried across by hand rather than dropped.
     try {
       commit({ ...startRun(films, tier, { shuffle, below, above }), journal: state.journal }, false);
+      onRunBegan?.();
       return true;
     } catch {
       commit({ films, session: null, journal: state.journal }, false);
