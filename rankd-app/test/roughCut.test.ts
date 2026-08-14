@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { choose, confirm, startRun } from "@/lib/ladder";
 import { applyRoughCut, roughCutPool, type Bucket } from "@/lib/roughCut";
 import { tierMax, tierMin } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
@@ -120,5 +121,64 @@ describe("roughCutPool", () => {
       film("open", 7100),
     ];
     expect(roughCutPool(films, 4).map((f) => f.id)).toEqual(["soft", "open"]);
+  });
+});
+
+// ── Ranking a pile must not undo the cut that made it ──────────────────────
+//
+// `writeScores` spreads a run's films across the whole tier band, which is right
+// when the run IS the tier and destructive when it is a slice. Confirming the
+// first film of a four-film pile used to re-spread those four from tierMin to
+// tierMax, scattering them straight back through the piles they had just been
+// separated from — the user's cut, undone by using it.
+
+describe("ranking one pile of a cut", () => {
+  const tierFilms = () =>
+    Array.from({ length: 9 }, (_, i) => film(`f${i}`, 7500));
+
+  const cut = () => {
+    const films = tierFilms();
+    const assignment = new Map<string, Bucket>(
+      films.map((f, i) => [f.id, (["top", "middle", "bottom"] as Bucket[])[Math.floor(i / 3)]]),
+    );
+    return applyRoughCut(films, 4, assignment);
+  };
+
+  it("keeps the pile inside the band it already occupied", () => {
+    const after = cut();
+    const upper = after.filter((f) => f.score > 7667).sort((a, b) => b.score - a.score);
+    expect(upper).toHaveLength(3);
+    const lo = Math.min(...upper.map((f) => f.score));
+    const hi = Math.max(...upper.map((f) => f.score));
+
+    // Climb just that pile, and confirm every film in it.
+    let state = startRun(after, 4, { only: upper.map((f) => f.id) });
+    expect(state.session?.band).toEqual([lo, hi]);
+    for (let i = 0; i < upper.length && state.session; i++) {
+      while (state.session && !state.session.needsConfirm) {
+        state = choose(state, state.session.contenderId);
+      }
+      if (state.session) state = confirm(state);
+    }
+
+    const ranked = state.films.filter((f) => upper.some((u) => u.id === f.id));
+    for (const f of ranked) {
+      expect(f.score).toBeGreaterThanOrEqual(lo);
+      expect(f.score).toBeLessThanOrEqual(hi);
+    }
+    // And still clear of the middle pile beneath them.
+    const middleTop = Math.max(...state.films.filter((f) => !upper.some((u) => u.id === f.id)).map((f) => f.score));
+    expect(Math.min(...ranked.map((f) => f.score))).toBeGreaterThan(middleTop);
+  });
+
+  it("uses the whole tier when the pile has no spread to preserve", () => {
+    const flat = tierFilms(); // every film still on the seed score
+    const state = startRun(flat, 4, { only: flat.slice(0, 3).map((f) => f.id) });
+    expect(state.session?.band).toBeUndefined();
+  });
+
+  it("leaves a whole-tier run alone", () => {
+    const state = startRun(cut(), 4);
+    expect(state.session?.band).toBeUndefined();
   });
 });

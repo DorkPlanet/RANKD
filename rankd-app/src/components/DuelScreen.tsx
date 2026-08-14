@@ -37,6 +37,7 @@ import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
+import { bandsOf, BUCKETS } from "@/lib/roughCut";
 import { RunStatus } from "./RunStatus";
 import {
   BackRow,
@@ -781,6 +782,17 @@ export default function DuelScreen({
             closeSetup();
             setCuratedOpen(true);
           }}
+          onRankPile={(ids) => {
+            // Same handoff the Rough Cut summary uses, from a library that is
+            // already saved — no pass to apply first.
+            setShuffleRun(null);
+            closeSetup();
+            try {
+              commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
+            } catch {
+              /* fewer than two films left in the pile */
+            }
+          }}
           onRoughCut={(t) => {
             setShuffleRun(null);
             setRoughCutTier(t);
@@ -967,6 +979,7 @@ function ModePanel({
   onFastShuffle,
   onCurated,
   onRoughCut,
+  onRankPile,
   onPickTier,
 }: {
   films: Film[];
@@ -985,6 +998,7 @@ function ModePanel({
   onFastShuffle: (opts: ShuffleOptions) => void;
   onCurated: () => void;
   onRoughCut: (tier: Rating) => void;
+  onRankPile: (ids: string[]) => void;
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
@@ -1095,6 +1109,39 @@ function ModePanel({
             Needs at least 3 films to split into three piles.
           </p>
         )}
+
+        {/* The piles from a previous cut, still there. They are not stored
+            anywhere — a film's score IS which third it sits in, so this survives
+            closing the app and, now that a pile run stays inside its own band,
+            survives ranking one of them too. Ranking a pile used to be a
+            one-shot: leave the summary screen and the only way back was to cut
+            the whole tier again. */}
+        {(() => {
+          const bands = bandsOf(films, tier);
+          const split = BUCKETS.filter((b) => bands[b].length > 0).length > 1;
+          if (!split) return null;
+          return (
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
+                Already split — rank a pile
+              </p>
+              <div className="flex gap-2">
+                {BUCKETS.map((b) => (
+                  <button
+                    key={b}
+                    disabled={bands[b].length < 2}
+                    onClick={() => onRankPile(bands[b].map((f) => f.id))}
+                    className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
+                  >
+                    {b === "top" ? "Upper" : b === "middle" ? "Middle" : "Lower"}
+                    <span className="ml-1.5 text-dim tabular-nums">{bands[b].length}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <BackRow onClick={() => setChosen(null)} />
       </Sheet>
     );

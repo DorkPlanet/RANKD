@@ -100,6 +100,31 @@ export function applyRoughCut(
  * ARE included: those are the model's guesses, and the user's rough opinion
  * outranks them.
  */
+/**
+ * Which third of its tier each film currently sits in.
+ *
+ * The piles a cut made are not stored anywhere and do not need to be: a film's
+ * score IS which pile it is in. So "go back to the split I did yesterday" is a
+ * question about the library as it stands, not about remembered state — and it
+ * survives closing the app, restoring a backup, or ranking one of the piles.
+ *
+ * A tier nobody has cut reads as all-middle, because that is where the seed
+ * score sits. True, and harmless: the counts make it obvious there is nothing
+ * to go back to.
+ */
+export function bandsOf(films: readonly Film[], tier: Rating): Record<Bucket, Film[]> {
+  const lo = tierMin(tier);
+  const third = (tierMax(tier) - lo) / 3;
+  const out: Record<Bucket, Film[]> = { top: [], middle: [], bottom: [] };
+  for (const f of films) {
+    if (f.rating !== tier || f.lock === "hard") continue;
+    const b: Bucket = f.score > lo + 2 * third ? "top" : f.score > lo + third ? "middle" : "bottom";
+    out[b].push(f);
+  }
+  for (const b of BUCKETS) out[b].sort((a, c) => c.score - a.score);
+  return out;
+}
+
 export function roughCutPool(films: readonly Film[], tier: Rating): Film[] {
   return films
     .filter((f) => f.rating === tier && f.lock !== "hard")
