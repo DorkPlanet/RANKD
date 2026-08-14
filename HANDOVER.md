@@ -11,20 +11,21 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State (14 Aug 2026):** Session G is in the working tree — **uncommitted, unpushed and
-UNDEPLOYED.** Everything up to `0b615a9` is pushed AND deployed AND verified against the
-live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately unmerged
-and undeployed** (see Pinned). **321 tests (307 + 14 from Session G), typecheck clean,
-`next build` clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell`
+**State (14 Aug 2026, `b062f4f` + working tree):** Session G. Everything through the
+Rough Cut list fix is pushed AND deployed AND verified against the live bundle; **RunStart
+is committed-pending in the working tree.** **Accounts live on the `accounts` branch
+(`8c2e3f8`), deliberately unmerged and undeployed** (see Pinned). **352 tests, typecheck
+clean, `next build` clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell`
 set-state-in-effect errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not
 "fix" them, and do not add a fourth.** The `accounts` branch adds 24 tests of its own on
 top.
 
-**One thing in the tree is written, tested and wired to nothing.** Finish it or delete
-it; do not leave a second:
-- `leastRanked` in `progress.ts` — no callers. Left over from a tier map that was built
-  twice and rejected twice. It is the ingredient a resume selector would want.
+**Nothing in the tree is now written-and-wired-to-nothing.** Keep it that way.
 - ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
+- ~~`leastRanked`~~ — **this entry was WRONG for two sessions.** The function had already
+  been deleted in `cf1444a` (its own commit message says so); the handover kept listing it
+  as present. It is back in `progress.ts` now, with tests, and `RunStart` is its caller.
+  **Check a claim like this against the code before acting on it.**
 
 ## How to get oriented in five minutes
 
@@ -91,8 +92,10 @@ constraint that stops ranking a pile from destroying the cut that made it.
 
 `RunBars` is now `RunStatus` — one bar, not bars.
 
-**Session G — opening and returning (roadmap #2, all three parts).** The recap, the
-splash, and the profile as the landing screen. Motion first, landing second, as agreed.
+**Session G — the opening.** Roadmap #2 in full (recap, splash, profile as the landing
+screen), then roadmap #1 (onboarding coach marks, one pass per screen), then two bugs from
+real use: a Rough Cut was invisible in the list, and the app opened inside a game nobody
+had chosen. Read the decision blocks below.
 
 ## Decisions taken — do not relitigate
 
@@ -153,6 +156,38 @@ splash, and the profile as the landing screen. Motion first, landing second, as 
   in, so `bandsOf` derives them from the library as it stands. That is why "go back to
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
+
+### RunStart: the app no longer opens in a game (Session G)
+
+The user: "it feels awkward sometimes to just load into an already selected game. It
+shouldn't be video game menu like but it should be like a quick resume or maybe even a
+this is what you have left kinda idea."
+
+- **`AppShell` no longer knows how to start a run.** It used to open with
+  `startRun(films, pickOpeningTier(films))`, so the first thing anyone saw was a climb
+  already in progress. The problem was never which tier got picked; it was that a
+  judgement was being asked for before anything had been offered. The shell now opens with
+  `session: null` and `DuelScreen` renders `RunStart`. Importing a CSV lands there too.
+- **It draws no chart, deliberately.** A tier map was built for this app twice and
+  rejected twice as "chunky". The counts ARE the readout: `13 of 14 still to rank`.
+- **The standing line is allowed to be static**, unlike the library bars `RunStatus` had
+  to drop. Nothing is happening on this screen — it is a position, not a progress bar.
+- **`lastTier` derives the resume from the newest row in the LOG,** not from stored state,
+  for the same reason `bandsOf` derives Rough Cut's piles. It survives a restore, a second
+  device and a reset, and it falls back to the `b` side when the contender has since been
+  removed (removal never touches the log).
+- **`RunStart` takes the whole surface via an early return, like Rough Cut.** Rendering it
+  inside the duel chrome drew two headers, the outer one reading "0 TO RANK" above a
+  screen whose entire job is to say what there is to rank.
+- **`endedTier` fixes a pre-existing bug found on the way.** `endRun` nulls the session,
+  and `TierComplete` then read `session?.tier ?? DEFAULT_TIER` — at exactly the moment
+  session was null. **Finishing a half-star climb showed FOUR-STAR's films, count and
+  duels under "Session done".** The transition is now caught in `commit`, which sees both
+  ways a run ends (Done, and `confirm` emptying the pile), so the natural completion
+  cannot be the path that forgets. Cross-tier runs are excluded: `RunSummary` owns those.
+- **Known, not fixed:** `TierComplete`'s "duels" stat sums the per-film counter, so it
+  double-counts exactly like the profile's DUELS stat. Same root cause, same reason for
+  leaving it alone.
 
 ### The list's unplaced block sorts by SCORE, not A-Z (Session G)
 
@@ -339,7 +374,9 @@ lock-at-the-bottom family. Reasoning at
 `C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Parts Two–Four); the older plan
 at `distributed-conjuring-oasis.md` still holds for item 3 below.
 
-1. **Onboarding.** A new user is told nothing and infers everything. The user supplied
+1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
+   per screen, revisitable from Settings. See the decision block above. The original entry
+   read: A new user is told nothing and infers everything. The user supplied
    reference screenshots, all of one kind: **coach marks over the live UI**, dismissible,
    with a step counter — not a carousel of pictures. First run, skippable, and
    **revisitable from Settings** (that half was asked for explicitly and is what stops it

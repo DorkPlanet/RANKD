@@ -39,6 +39,8 @@ import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
 import { bandsOf, BUCKETS } from "@/lib/roughCut";
 import { RunStatus } from "./RunStatus";
+import RunStart from "./RunStart";
+import { lastTier } from "@/lib/progress";
 import {
   BackRow,
   RangeSlider,
@@ -112,6 +114,10 @@ export default function DuelScreen({
   onPerson?: (person: Person) => void;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
+  // The tier of the run that just ended, held so `TierComplete` can be about it.
+  // `endRun` nulls the session, so without this the summary has no idea which
+  // tier it is summarising. Cleared on the way back to `RunStart`.
+  const [endedTier, setEndedTier] = useState<Rating | null>(null);
   const [tierOpen, setTierOpen] = useState(false);
   const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
   // A tier chosen for the NEXT run but not started. Without it the only way to
@@ -314,6 +320,21 @@ export default function DuelScreen({
   // instant it is answered, whatever happens to the run afterwards.
   const commit = (next: RankState, persist = true) => {
     if (persist) saveFilms(next.films);
+    // ── Catching the end of a run wherever it happens ────────────────────────
+    //
+    // A run ends two ways: you press Done, or `confirm` empties the pile and
+    // returns a null session on its own. Both drop the tier on the floor, and
+    // `TierComplete` needs it to be about anything. Noticing the transition here
+    // rather than at each call site means the natural completion — the case that
+    // most deserves a summary — cannot be the one that forgets.
+    //
+    // Cross-tier runs are excluded: they have `RunSummary`, which holds an order
+    // that exists nowhere else and must not be pre-empted by a tier report.
+    if (state.session && !next.session && !state.session.crossTier) {
+      setEndedTier(state.session.tier);
+    }
+    // A new run supersedes any summary still standing.
+    if (next.session) setEndedTier(null);
     if (next.journal.length === 0) {
       // Nothing was judged, so this is a confirm, a flick, or a new run — and
       // the step held from the last judgement now points into a game that no
@@ -475,7 +496,7 @@ export default function DuelScreen({
       commit(abandonSpotlight(state));
       return;
     }
-    commit({ ...state, session: null }, false);
+    commit({ ...state, session: null }, false); // `commit` records the tier
   };
 
   // Keep the result, or throw the session away and leave the film where it was.
@@ -568,6 +589,48 @@ export default function DuelScreen({
         }}
         onSettings={onSettings}
         onTrophies={onTrophies}
+      />
+    );
+  }
+
+  // A run that has just ended still owns the surface: `TierComplete` is the
+  // acknowledgement that a sitting amounted to something, and skipping straight
+  // past it to "what's left" is the app changing the subject.
+  //
+  // `endedTier` exists because `endRun` nulls the session, taking the tier with
+  // it. This screen used to read `session?.tier ?? DEFAULT_TIER` at exactly the
+  // moment session was null, so finishing a half-star climb showed FOUR-STAR's
+  // films, count and duels under "Session done". Remembering the tier is what
+  // makes the summary about the run you actually just played.
+  if (endedTier !== null) {
+    return (
+      <TierComplete
+        films={state.films}
+        tier={endedTier}
+        onPickTier={() => setEndedTier(null)} // back to RunStart, which is the picker now
+        onList={onList}
+      />
+    );
+  }
+
+  // No run, and no finished cross-tier order still waiting to be read. Takes the
+  // whole surface for the same reason Rough Cut does: it has no pile and no
+  // duel, so the header, the status bar and every branch below are about a run
+  // that does not exist. Rendering it inside that chrome drew two headers, one
+  // of them reading "0 TO RANK" over a screen whose entire job is to say what
+  // there is to rank.
+  if (!session && !runResult) {
+    return (
+      <RunStart
+        films={state.films}
+        resumeTier={lastTier(state.films, log)}
+        onStart={(t) => beginRun(t)}
+        onModes={() => setModeOpen(true)}
+        onSettings={onSettings}
+        onTrophies={onTrophies}
+        onList={onList}
+        onProfile={onProfile}
+        onAddFilm={onAddFilm}
       />
     );
   }
@@ -725,6 +788,9 @@ export default function DuelScreen({
           inPlay={searchWindow(state)}
         />
       ) : (
+        // A run that exists but has no pair left: the tier ran out, or Done was
+        // pressed. `session` is non-null here — the no-run case took the whole
+        // surface above, before this tree was built.
         <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} onList={onList} />
       )}
 

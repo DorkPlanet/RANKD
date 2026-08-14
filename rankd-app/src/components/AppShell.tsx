@@ -10,7 +10,10 @@
 // are persisted this becomes the one place to swap in real routing.
 
 import { useEffect, useState } from "react";
-import DuelScreen, { pickOpeningTier } from "./DuelScreen";
+// No `startRun` or `pickOpeningTier` here any more. This component does not
+// know how to begin a run and no longer needs to: choosing one is `RunStart`'s
+// job, and the shell's is to hand it a library and get out of the way.
+import DuelScreen from "./DuelScreen";
 import { FilmInfo } from "./FilmInfo";
 import { Settings } from "./Settings";
 import ListScreen from "./ListScreen";
@@ -19,7 +22,6 @@ import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { isPlaced } from "@/lib/lock";
-import { startRun } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
@@ -121,13 +123,18 @@ export default function AppShell() {
 
   useEffect(() => {
     const films = loadFilms();
-    // Open on the biggest tier that can actually be played — with a real library
-    // the default 4★ might be empty, and an empty screen is a poor first look.
-    try {
-      setState(startRun(films, pickOpeningTier(films)));
-    } catch {
-      setState({ films, session: null, journal: [] });
-    }
+    // ── Nothing is running when the app opens ────────────────────────────────
+    //
+    // This used to be `startRun(films, pickOpeningTier(films))`, so the first
+    // thing anybody ever saw was a King of the Hill climb already in progress on
+    // a tier the app had chosen. The user: "it feels awkward sometimes to just
+    // load into an already selected game."
+    //
+    // The problem was never which tier got picked. It was that a judgement was
+    // being asked for before anything had been offered. `DuelScreen` renders
+    // `RunStart` when there is no session, which is where the choosing happens
+    // now, so opening with none is the whole fix.
+    setState({ films, session: null, journal: [] });
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //
@@ -272,14 +279,14 @@ export default function AppShell() {
     saveBrightness(t);
   };
 
-  // Swap the whole library for an imported one and restart on it.
+  // Swap the whole library for an imported one.
+  //
+  // Lands on `RunStart` rather than a climb, for the same reason opening does:
+  // somebody who has just imported 861 films has not yet been shown what they
+  // have, and starting a duel is a poor answer to "what did that just do".
   const loadLibrary = (films: Film[]) => {
     saveFilms(films);
-    try {
-      setState(startRun(films, pickOpeningTier(films)));
-    } catch {
-      setState({ films, session: null, journal: [] });
-    }
+    setState({ films, session: null, journal: [] });
     setScreen("duel");
   };
 
