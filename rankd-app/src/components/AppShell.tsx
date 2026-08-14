@@ -404,10 +404,21 @@ export default function AppShell() {
     return newLibrary || replaying ? id : null;
   };
 
-  // The landing screen needs no deferral: the splash has held it for the better
-  // part of a second, so it committed long ago. Every later screen goes through
-  // `go`, which defers.
-  const activeTour = screen === null ? tourFor(current) : tourDue;
+  // ── Every tour is queued, never derived ────────────────────────────────────
+  //
+  // This used to fall back to `tourFor(current)` while nobody had navigated yet,
+  // on the reasoning that the splash had held the landing screen long enough for
+  // it to have committed. That was true of the screen and false of its contents.
+  // The duel tour's targets appear when a RUN starts, not when the screen does,
+  // so the fallback re-evaluated to "duel" in the very commit that started the
+  // run and mounted `Coach` alongside the posters rather than after them — which
+  // is precisely the race `tourDue` exists to avoid. It resolved to one step.
+  //
+  // So there is one path in and it is always deferred: `go` for the list,
+  // `onRunBegan` for the duel. Nothing is owed on landing, because the landing
+  // screen is either the profile, which has no tour, or `RunStart`, which has
+  // nothing to point at yet.
+  const activeTour = tourDue;
   const showCoach = splashGone && activeTour !== null;
 
   const finishTour = () => {
@@ -447,9 +458,14 @@ export default function AppShell() {
     if (current !== "duel") setVeil((v) => v + 1);
     setScreen("duel");
     setTourDue(null);
+    // Only if a duel is actually on screen. With no run in progress the RNK
+    // screen is `RunStart`, which has none of the tour's targets — so the replay
+    // waits for `onRunBegan` exactly like a first run does. `replaying` stays on
+    // for the session, so it will fire the moment they start something.
+    //
     // Named rather than derived from `tourFor`, which would still be reading the
     // pre-reset `seen` and `replaying` from this render's closure.
-    setTimeout(() => setTourDue("duel"), VEIL_MS + 20);
+    if (state.session) setTimeout(() => setTourDue("duel"), VEIL_MS + 20);
   };
 
   return (
