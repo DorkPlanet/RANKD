@@ -154,6 +154,33 @@ splash, and the profile as the landing screen. Motion first, landing second, as 
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
 
+### The list's unplaced block sorts by SCORE, not A-Z (Session G)
+
+Reported by the user: a Rough Cut played correctly, and the list afterwards was "all out
+of order from what I picked".
+
+- **The cause was a collision between two correct decisions.** `applyRoughCut` writes
+  `score` and deliberately writes NO `lock`, so every film it touches stays unplaced. And
+  `buildList` sorted the unplaced block **alphabetically**, on the stated grounds that an
+  unranked film's score is a by-product of `writeScores` re-spreading somebody else's
+  climb. Both were right when written. Rough Cut broke the second one's premise: it made
+  an unplaced film's score a decision the user actually made, and A-Z threw it away.
+- **The scores were correct the whole time.** Nothing was lost, and no data needed
+  repairing. The list was discarding the judgement at render.
+- **The fix is `b.score - a.score || a.title.localeCompare(b.title)`.** The tiebreak is
+  what makes it safe rather than merely better: `seedScore` is `tierMid`, so every film in
+  a tier nobody has touched holds an identical score and falls through to A-Z exactly as
+  before. **Order only appears once something has actually happened.**
+- Confirmed against the real 861-film library, where 3★ had 176 of 185 films still on the
+  seed score. The four upper-pile picks now open the tier in the order they were dealt,
+  the untouched 176 sit alphabetically in the middle, and the lower pile closes it.
+- `test/list.test.ts` is new. `buildList` had **no tests at all** before this.
+- **The remaining honest limitation:** a tier that has been climbed but not cut now shows
+  its unplaced films in live pile order rather than A-Z, because `writeScores` gives them
+  distinct scores. That order is the engine's working state, not a judgement. If it ever
+  reads as noise, the fix is provenance (a flag set by `applyRoughCut` and cleared by
+  `writeScores`), not a return to A-Z, which loses real decisions.
+
 ### Onboarding (Session G)
 
 - **The tour is not playable, and that is the point.** The scrim swallows every tap,
