@@ -578,3 +578,22 @@ button * {
   .coach-hole { transition: none; }
   .coach-card { animation: none; }
 }
+
+/* The RNK title card's scrim.
+   `banner-fade` is tuned for a TMDb backdrop, which arrives already dim and
+   wide. A poster is the opposite: saturated, high contrast, and printed with
+   type of its own. Reusing the banner's gradient left it blazing directly under
+   the header, where it fought the wordmark, and washed out the serif line
+   sitting on its lower third.
+   So: heavier at the top so the header stays the loudest thing on the screen,
+   open through the middle where the artwork earns its place, and solid at the
+   foot so the offer can be read at a glance. */
+.poster-fade {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg) 62%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 22%, transparent) 34%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 76%,
+    var(--bg) 100%
+  );
+}

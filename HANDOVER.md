@@ -168,6 +168,29 @@ this is what you have left kinda idea."
   already in progress. The problem was never which tier got picked; it was that a
   judgement was being asked for before anything had been offered. The shell now opens with
   `session: null` and `DuelScreen` renders `RunStart`. Importing a CSV lands there too.
+- **The FIRST version of this screen was rejected, and how.** It was a dashboard: a
+  `WHERE YOU STAND` eyebrow over a count, a bordered box, and a list of tiers with `0/185`
+  right-aligned down the side. Every number on it was correct and the whole thing read as
+  a settings panel. Two faults, both named by the user:
+  - **No presence.** This is the door into a game about films, so a film should be on it.
+    The artwork says what the app is before a word is read; a bigger heading could not.
+  - **Labels instead of sentences.** `WHERE YOU STAND / 1 of 861` is a readout. "You've
+    ranked 1 of your 861 films" is the app talking to the person whose library it is,
+    which is the voice the rest of it already uses.
+  Rebuilt as a title card: poster behind, serif prose over the fade, the standing demoted
+  to one quiet line beneath the offer, the tier list reduced to a single row of type.
+- **A poster here, even though `ProfileScreen` deliberately refuses one.** That refusal —
+  "posters are the library's currency and one more of them at the top of your own profile
+  goes stale" — is reasoning about the PROFILE, which is about you. This screen is about
+  the films, and it is the threshold of the game where posters are the pieces you are
+  about to move, so the currency belongs. It also costs no request; the profile has to
+  fetch a still.
+- **4:5, and `.poster-fade` rather than `.banner-fade`.** A poster is 2:3, so the profile's
+  16:9 window throws away nearly half of it and takes the printed title with it; 4:5 loses
+  about a sixth, evenly off the top and bottom. And a poster arrives saturated where a TMDb
+  backdrop arrives dim, so the banner's gradient left it blazing directly under the header,
+  fighting the wordmark. The new scrim is heavy at the top, open through the middle where
+  the artwork earns its place, and solid at the foot so the offer reads at a glance.
 - **It draws no chart, deliberately.** A tier map was built for this app twice and
   rejected twice as "chunky". The counts ARE the readout: `13 of 14 still to rank`.
 - **The standing line is allowed to be static**, unlike the library bars `RunStatus` had
