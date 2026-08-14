@@ -41,6 +41,8 @@ import { bandsOf, BUCKETS } from "@/lib/roughCut";
 import { RunStatus } from "./RunStatus";
 import RunStart from "./RunStart";
 import { lastTier } from "@/lib/progress";
+import { buildGoals } from "@/lib/goals";
+import { loadLists } from "@/lib/lists";
 import {
   BackRow,
   RangeSlider,
@@ -157,6 +159,18 @@ export default function DuelScreen({
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
+
+  // Saved rankings, read once. They decide which of `RunStart`'s personal goals
+  // are already done, and a run that finishes and saves one lands back here
+  // through a remount, so re-reading on every render would buy nothing.
+  const [savedLists] = useState(loadLists);
+  // Everything worth doing, derived from the library as it stands. Cheap enough
+  // to recompute when the library changes and nowhere near the duel path, but
+  // memoised because it walks every film several times over.
+  const goals = useMemo(
+    () => buildGoals(state?.films ?? [], savedLists),
+    [state?.films, savedLists],
+  );
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
@@ -624,18 +638,110 @@ export default function DuelScreen({
   // of them reading "0 TO RANK" over a screen whose entire job is to say what
   // there is to rank.
   if (!session && !runResult) {
+    const resume = lastTier(state.films, log);
+    const resumeSlice = resume !== undefined ? goals.library.find((g) => g.subject.kind === "tier" && g.subject.rating === resume) : undefined;
     return (
-      <RunStart
-        films={state.films}
-        resumeTier={lastTier(state.films, log)}
-        onStart={(t) => beginRun(t)}
-        onModes={() => setModeOpen(true)}
-        onSettings={onSettings}
-        onTrophies={onTrophies}
-        onList={onList}
-        onProfile={onProfile}
-        onAddFilm={onAddFilm}
-      />
+      // A FRAGMENT, not a bare `RunStart`. The mode sheet is mounted at the
+      // bottom of the main tree, past this early return, so `Something else`
+      // set `modeOpen` and nothing on screen ever read it: the button did
+      // literally nothing. Every sheet this screen can raise has to be reachable
+      // from here too, or it is dead from whichever branch returns first.
+      <>
+        <RunStart
+          films={state.films}
+          goals={goals}
+          resumeTier={resumeSlice && !resumeSlice.complete ? resume : undefined}
+          onStart={(t) => {
+            beginRun(t);
+          }}
+          onRoughCut={(t) => setRoughCutTier(t)}
+          // Straight to the filmography rather than into a climb. That sheet
+          // already shows the whole body of work, already offers to borrow the
+          // films you have never seen, and already knows how to start the run.
+          onPerson={(name, role, count) => onPerson?.({ name, role, count })}
+          onGenre={beginGenre}
+          onModes={() => setModeOpen(true)}
+          onSettings={onSettings}
+          onTrophies={onTrophies}
+          onList={onList}
+          onProfile={onProfile}
+          onAddFilm={onAddFilm}
+        />
+        {modeOpen && (
+          <ModePanel
+            films={state.films}
+            tier={setupTier}
+            chosen={chosenMode}
+            onChoose={setChosenMode}
+            shuffle={shuffle}
+            onShuffle={setShuffle}
+            below={below}
+            above={above}
+            onBelow={setBelow}
+            onAbove={setAbove}
+            onClose={closeSetup}
+            onKoth={(t) => {
+              if (beginRun(t)) closeSetup();
+            }}
+            onSpotlight={(t) => {
+              setSpotlightFor(t);
+              closeSetup();
+            }}
+            onFastShuffle={(opts) => {
+              setShuffleRun(opts);
+              closeSetup();
+            }}
+            onCurated={() => {
+              closeSetup();
+              setCuratedOpen(true);
+            }}
+            onRankPile={(ids) => {
+              closeSetup();
+              try {
+                commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
+              } catch {
+                /* fewer than two films left in the pile */
+              }
+            }}
+            onRoughCut={(t) => {
+              setRoughCutTier(t);
+              closeSetup();
+            }}
+            onPickTier={() => {
+              setModeOpen(false);
+              setTierOpen(true);
+            }}
+          />
+        )}
+        {tierOpen && (
+          <TierPicker
+            films={state.films}
+            current={setupTier}
+            onClose={() => {
+              setTierOpen(false);
+              setModeOpen(true);
+            }}
+            onPick={(t) => {
+              setPickedTier(t);
+              setBelow(0);
+              setAbove(0);
+              setTierOpen(false);
+              setModeOpen(true);
+            }}
+          />
+        )}
+        {curatedOpen && (
+          <CuratedPicker
+            films={state.films}
+            onClose={() => setCuratedOpen(false)}
+            onPerson={(p) => {
+              setCuratedOpen(false);
+              onPerson?.(p);
+            }}
+            onGenre={beginGenre}
+          />
+        )}
+      </>
     );
   }
 

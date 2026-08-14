@@ -157,6 +157,50 @@ had chosen. Read the decision blocks below.
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
 
+### RunStart is a goals screen, after four attempts (Session G)
+
+Each version was rejected, and the reasons are worth keeping because they rhyme.
+
+- **v1, a dashboard.** `WHERE YOU STAND` over a count, a bordered box, ten tiers with
+  `0/185` right-aligned. Every number correct; read like a settings panel.
+- **v2, a title card.** Poster behind, serif prose over the fade. "More in the way than
+  anything."
+- **v3, a goals list.** Two sections, ten tier rows, a sentence under each. "Much too
+  long", and the ABOUT YOU heading was "silly for one".
+- **v4, what shipped.** The through-line in the first three: they were made of TEXT ROWS.
+  Information as value-and-label CARDS at the top, all ten tiers as ONE horizontal STRIP,
+  the personal rankings as a single quiet line. **The strip is why the list stopped being
+  too long: ten choices cost 44px instead of 400.**
+
+- **`lib/goals.ts` stores nothing.** A goal is derived from the library, the saved lists
+  and the people `profile.ts` already works out, on every render. No goals key, no
+  completion table, nothing to migrate. A goal is a `RankSubject`, so it borrows
+  `subjectKey` — which is also what lets completion be a lookup against saved lists.
+- **The Rough Cut suggestion is a VERB, not a sentence.** As a note under each row it
+  repeated on seven of ten tiers and became wallpaper. It is now which of `Split it` /
+  `Rank it` comes first.
+- **"Cut" is a SHARE, not a presence** (`CUT_ENOUGH`). Testing `bands.top.length > 0` was
+  wrong on the real library: nine dealt films out of 185 stopped the app suggesting the
+  very thing the user had started, while every untouched tier shouted it. **The two tiers
+  with a cut in progress were the only two not offered one.**
+- **Curated goals are capped at 25** (`CURATED_CAP`). Uncapped it proposed ranking 320
+  horror films by hand, which is the quadratic problem Rough Cut exists to avoid wearing a
+  different hat. A goal has to be finishable.
+- **No subgenre goal.** `topPeople` finds one and the profile shows it, but a keyword is
+  not a `RankSubject` and nothing can start a run over one. Offering a goal you cannot
+  begin is worse than not offering it. Subgenre runs are in the backlog; that is where it
+  would land.
+- **Reference images were for tone, explicitly NOT to copy.** No photography, no gradients,
+  no coloured surfaces, no shadow: hairline borders and type.
+
+### "Something else" did nothing, and why that class of bug recurs (Session G)
+
+`RunStart` returns early, and `{modeOpen && <ModePanel/>}` was mounted ~200 lines below
+that return. The button set state nothing rendered. **Every sheet this screen can raise has
+to be reachable from whichever branch returns first** — the early-return path now renders a
+fragment carrying `ModePanel`, `TierPicker` and `CuratedPicker` itself. Adding a new
+full-surface early return means auditing the sheets again.
+
 ### RunStart: the app no longer opens in a game (Session G)
 
 The user: "it feels awkward sometimes to just load into an already selected game. It

@@ -597,3 +597,15 @@ button * {
     var(--bg) 100%
   );
 }
+
+/* Horizontal pickers hide their scrollbar. WebKit needs the pseudo-element;
+   `scrollbar-width: none` covers the rest. On the RNK screen's tier strip the
+   bar rendered as a grey rule drawn under the chips, which read as a divider
+   somebody had meant to put there. What says the strip scrolls is the last chip
+   being visibly cut off at the edge, not a bar. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}

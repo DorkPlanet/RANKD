@@ -2,76 +2,55 @@
 
 // Arriving at RNK, before anything is running.
 //
-// ── What was wrong with landing straight in a duel ─────────────────────────
+// ── Four versions. What each got wrong, so nobody rebuilds one ─────────────
 //
-// The app opened a King of the Hill run on a tier `pickOpeningTier` chose, so
-// the first thing you ever saw was two films you had not asked to compare, in a
-// game already in progress. The user's words: "it feels awkward sometimes to
-// just load into an already selected game."
+// The app used to open a King of the Hill run on a tier `pickOpeningTier` chose,
+// so the first thing anybody saw was two films they had not asked to compare, in
+// a game already in progress. The user: "it feels awkward sometimes to just load
+// into an already selected game."
 //
-// The awkwardness is not that a tier was chosen badly. It is that a judgement
-// was being asked for before anything had been offered.
+// v1, a dashboard: `WHERE YOU STAND` over a count, a bordered box, tiers with
+//     `0/185` right-aligned. Every number correct; read like a settings panel.
+// v2, a title card: poster behind, serif prose over the fade. The artwork was
+//     "more in the way than anything".
+// v3, a goals list: two sections, ten tier rows, a sentence under each. Too
+//     long, and the "About you" heading was "silly for one".
 //
-// ── The first attempt at this screen was wrong, and how ────────────────────
+// The through-line in all three: they were made of TEXT ROWS, and the reference
+// the user supplied twice is made of CARDS AND STRIPS. So:
 //
-// It was a dashboard: a WHERE YOU STAND eyebrow over a count, a bordered box,
-// and a list of tiers with `0/185` right-aligned down the side. Every number on
-// it was correct and the whole thing read like a settings panel. Two things were
-// wrong and the user named both.
+//   · The information takes the top and the centre, as value-and-label cards.
+//     That is the shoe app's Price / Colour / Size row, which is three facts in
+//     the space this app was spending on one sentence.
+//   · All ten tiers are ONE horizontal strip, not ten rows. That is the project
+//     app's date row. It is the whole reason the list stopped being too long:
+//     ten choices now cost 44px instead of 400.
+//   · The personal rankings are one quiet line, not a section with a heading.
 //
-// **It had no presence.** This is the door into the game, and the game is about
-// films, so the screen should have one on it. The artwork does the work that a
-// bigger heading could not: it says what this app is before a word is read.
+// ── What is still Rankd's and not the reference's ──────────────────────────
 //
-// **It spoke in labels instead of sentences.** `WHERE YOU STAND / 1 of 861` is a
-// readout. "You've ranked 1 of your 861 films" is the app talking to the person
-// whose library it is, which is the voice the rest of it uses.
-//
-// ── Why a poster here, when the profile refuses one ────────────────────────
-//
-// `ProfileScreen` deliberately uses a frame from a scene rather than a poster,
-// because "posters are the library's currency and one more of them at the top of
-// your own profile goes stale". That reasoning is about the profile, which is
-// about YOU. This screen is about the films, and it is the threshold of the game
-// where posters are the pieces you are about to move. The currency belongs here.
-//
-// It costs no request either: the poster is already on the film. `ProfileScreen`
-// has to fetch a still.
-//
-// ── Still no chart ─────────────────────────────────────────────────────────
-//
-// A tier map was built for this app twice and rejected twice as "chunky". The
-// counts are the readout, and they are now a quiet line of type rather than a
-// column of right-aligned figures.
+// No photography, no gradients, no coloured surfaces, no shadow. The cards are
+// hairline borders and type. A tier map was built for this app twice and
+// rejected twice as "chunky": the strip is not that map, because it is a control
+// you pick from rather than a chart drawn at you, and it says its numbers in
+// words underneath rather than in bar lengths.
+
+import { useState } from "react";
 
 import { Header, BottomNav } from "./DuelScreen";
-import { leastRanked, tierProgress } from "@/lib/progress";
+import { byUrgency, type Goal, type Goals } from "@/lib/goals";
 import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
-/** How many other tiers get named in the quiet line. */
-const SHOWN = 3;
-
-/**
- * The face of the pile you are being offered.
- *
- * The best-scoring film in it that actually has artwork, so the screen leads
- * with something you rated highly rather than whatever happens to sit first in
- * the array. Undefined until the credits sweep has been past, which is why the
- * layout below has to hold together without it.
- */
-function faceOf(films: readonly Film[], tier: Rating | undefined): Film | undefined {
-  if (tier === undefined) return undefined;
-  return films
-    .filter((f) => f.rating === tier && f.poster && !f.guest)
-    .sort((a, b) => b.score - a.score)[0];
-}
-
 export default function RunStart({
   films,
+  goals,
   /** The tier you were last judging in, read off the log. Absent on a fresh library. */
   resumeTier,
   onStart,
+  onRoughCut,
+  onPerson,
+  onGenre,
   onModes,
   onSettings,
   onTrophies,
@@ -80,8 +59,12 @@ export default function RunStart({
   onAddFilm,
 }: {
   films: Film[];
+  goals: Goals;
   resumeTier?: Rating;
   onStart: (tier: Rating) => void;
+  onRoughCut: (tier: Rating) => void;
+  onPerson: (name: string, role: "director" | "actor", count: number) => void;
+  onGenre: (name: string, limit: number) => void;
   onModes: () => void;
   onSettings: () => void;
   onTrophies: () => void;
@@ -89,122 +72,163 @@ export default function RunStart({
   onProfile: () => void;
   onAddFilm: (film: Film) => void;
 }) {
-  const slices = tierProgress(films);
-  const withWork = slices.filter((s) => s.total > 0 && s.ranked < s.total);
-  const total = slices.reduce((n, s) => n + s.total, 0);
-  const ranked = slices.reduce((n, s) => n + s.ranked, 0);
+  // Low to high, like a scale you read left to right. `ORDERED_TIERS` runs the
+  // other way because every LIST in this app is best-first; a strip is not a
+  // list, and a rating axis that starts at five reads backwards.
+  const strip = [...goals.library].reverse();
 
-  const least = leastRanked(slices);
-  const resume = resumeTier !== undefined ? withWork.find((s) => s.rating === resumeTier) : undefined;
-  const lead = resume ?? least;
-  const face = faceOf(films, lead?.rating);
+  const [picked, setPicked] = useState<Rating | null>(null);
 
-  const rest = withWork
-    .filter((s) => s.rating !== lead?.rating)
-    .sort((a, b) => a.ranked / a.total - b.ranked / b.total || b.total - a.total)
-    .slice(0, SHOWN);
+  // Derived, never an effect. `resumeTier` arrives late because the log loads
+  // asynchronously, so a value captured at mount would be stale forever, and
+  // correcting it in an effect is the cascading render the linter objects to.
+  const fallback = strip.find((g) => !g.complete)?.subject;
+  const selectedRating: Rating | undefined =
+    picked ??
+    resumeTier ??
+    (fallback?.kind === "tier" ? fallback.rating : undefined);
 
-  // Sentences, not labels. Every one of these is the app talking to the person
-  // whose library it is, which is the difference the user asked for.
-  const standing =
-    total === 0
-      ? "Nothing in your library yet."
-      : ranked === 0
-        ? `${total.toLocaleString()} films, and none of them ranked yet.`
-        : `You've ranked ${ranked.toLocaleString()} of your ${total.toLocaleString()} films.`;
+  const selected = strip.find(
+    (g) => g.subject.kind === "tier" && g.subject.rating === selectedRating,
+  );
+
+  const total = goals.library.reduce((n, g) => n + g.total, 0);
+  const placed = goals.library.reduce((n, g) => n + g.done, 0);
+  const settled = goals.library.filter((g) => g.complete).length;
+
+  const personal = byUrgency(goals.personal);
+
+  const startPersonal = (g: Goal) => {
+    const s = g.subject;
+    if (s.kind === "genre") return onGenre(s.name, g.total);
+    if (s.kind === "director" || s.kind === "actor") return onPerson(s.name, s.kind, g.total);
+  };
 
   return (
     <main className="relative flex h-dvh flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {lead ? (
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-4 pt-7">
+        <h1 className="flex-shrink-0 font-display text-[30px] leading-none tracking-wide text-text-hi">
+          {total === 0
+            ? "Nothing to rank yet"
+            : placed === 0
+              ? "Ready when you are"
+              : "Pick up the thread"}
+        </h1>
+
+        {/* The three facts, given the room the old version gave one sentence. */}
+        <div className="mt-5 flex flex-shrink-0 gap-2.5">
+          <Stat value={total.toLocaleString()} label="Films" />
+          <Stat value={placed.toLocaleString()} label="Placed" lead />
+          <Stat value={`${settled}/${goals.library.length}`} label="Tiers" />
+        </div>
+
+        {/* Flows from the top. Centring this in the leftover space was tried and
+            was worse: it opened a void above the picker AND below it, so the
+            screen read as two islands. One gap, at the foot, above a footer
+            that is meant to sit there anyway. */}
+        <div className="pt-2">
+        {strip.length > 0 && (
           <>
-            {/* The title card. Artwork behind, the offer written over the fade,
-                exactly the shape `ProfileScreen`'s banner uses so the two
-                screens read as one app. Tapping it starts the run: the whole
-                panel is the button, because the whole panel is the offer. */}
-            <button onClick={() => onStart(lead.rating)} className="relative w-full text-left active:scale-[0.99]">
-              {/* 4:5, not the 16:9 the profile's banner uses. A poster is 2:3,
-                  so a landscape window throws away nearly half of it and takes
-                  the printed title with it. At 4:5 only about a sixth is lost,
-                  off the top and bottom evenly, which is the part a poster can
-                  afford. It also fills vertical space this screen had spare. */}
-              <span className="relative block w-full overflow-hidden" style={{ aspectRatio: "4 / 5" }}>
-                {face?.poster ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={face.poster}
-                    alt=""
-                    aria-hidden
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <span className="block h-full w-full" style={{ background: "var(--surface)" }} />
-                )}
-                <span className="poster-fade absolute inset-0" />
-              </span>
-
-              {/* Sits ON the fade, bottom-left, like a title over a frame. */}
-              <span className="absolute inset-x-0 bottom-0 block px-7 pb-5">
-                <span className="block font-serif text-[19px] leading-snug text-text-hi">
-                  {resume ? "You were last ranking" : "A good place to start:"}{" "}
-                  <span className="text-gold">{starsFor(lead.rating)}</span>
-                </span>
-                <span className="mt-1 block font-serif text-[14px] italic leading-snug text-dim">
-                  {lead.total - lead.ranked} of {lead.total} still to place.
-                </span>
-              </span>
-            </button>
-
-            <div className="px-7 pt-6">
-              <button
-                onClick={() => onStart(lead.rating)}
-                className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
-              >
-                {resume ? "Continue" : "Start"}
-              </button>
-
-              {/* The standing, demoted to a line of prose under the offer. It
-                  was the headline in the first version, which put a statistic
-                  above the only thing on the screen anyone came here to do. */}
-              <p className="mt-5 text-center font-serif text-[13px] leading-relaxed text-dim">{standing}</p>
-
-              {rest.length > 0 && (
-                <p className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-center">
-                  {rest.map((s) => (
-                    <button
-                      key={s.rating}
-                      onClick={() => onStart(s.rating)}
-                      className="text-[12px] text-dim active:scale-95"
-                    >
-                      <span className="text-gold">{starsFor(s.rating)}</span>{" "}
-                      <span className="tabular-nums">{s.total - s.ranked} left</span>
-                    </button>
-                  ))}
-                </p>
-              )}
+            <div className="mt-8 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim">
+              Pick a tier
             </div>
+
+            {/* Ten choices, one row. `-mx-6 px-6` lets it bleed to both edges so
+                the last chip is visibly cut rather than sitting in a margin,
+                which is what tells you it scrolls. */}
+            {/* The scrollbar is hidden (see `.no-scrollbar`): it rendered as a
+                grey rule under the chips and read as a divider. The last chip
+                being cut off at the edge is what says the strip scrolls. */}
+            <div className="no-scrollbar -mx-6 mt-2.5 flex gap-2 overflow-x-auto px-6">
+              {strip.map((g) => {
+                const rating = (g.subject as { kind: "tier"; rating: Rating }).rating;
+                const on = rating === selectedRating;
+                return (
+                  <button
+                    key={g.key}
+                    onClick={() => setPicked(rating)}
+                    className={`flex-shrink-0 rounded-xl px-3 py-2 text-[12px] tabular-nums transition-colors active:scale-95 ${
+                      on
+                        ? "bg-gold font-bold text-[#1c1405]"
+                        : g.complete
+                          ? "border border-border text-dim opacity-50"
+                          : "border border-border text-gold"
+                    }`}
+                  >
+                    {starsFor(rating)}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selected && (
+              <>
+                <p className="mt-3 text-[12px] text-dim">
+                  <span className="text-text-hi">{selected.note}</span>
+                  {selected.roughCutFirst && " · too big to duel cold"}
+                </p>
+
+                {/* Two verbs. Which one leads is the advice: on a big uncut tier
+                    the cheap pass goes first, because climbing it cold is
+                    several thousand comparisons. No sentence needed. */}
+                <div className="mt-3.5 flex gap-2.5">
+                  {selected.complete ? (
+                    <p className="py-3 text-[12px] italic text-dim">
+                      Every film in here has found its place.
+                    </p>
+                  ) : selected.roughCutFirst ? (
+                    <>
+                      <Action label="Split it" primary onClick={() => onRoughCut(selectedRating!)} />
+                      <Action label="Rank it" onClick={() => onStart(selectedRating!)} />
+                    </>
+                  ) : (
+                    <>
+                      <Action label="Rank it" primary onClick={() => onStart(selectedRating!)} />
+                      <Action label="Split it" onClick={() => onRoughCut(selectedRating!)} />
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </>
-        ) : (
-          <div className="px-7 pt-16">
-            <p className="font-serif text-[19px] leading-relaxed text-text-hi">
-              {total === 0
-                ? "There is nothing in your library yet. Import a ratings file from Settings and this becomes a game."
-                : "Every film you own is ranked. There is nothing left to place, which is the whole point of the exercise."}
-            </p>
-          </div>
         )}
 
-        {/* Quiet on purpose: the offer above is the answer almost every time,
-            and a second prominent control would turn this back into the menu
-            it is explicitly not. */}
-        <button
-          onClick={onModes}
-          className="mt-auto w-full flex-shrink-0 pt-10 pb-3 text-center text-[11px] text-dim underline underline-offset-4 active:scale-95"
-        >
-          Something else
-        </button>
+        {personal.length > 0 && (
+          <p className="mt-7 flex flex-wrap items-baseline gap-x-2 gap-y-1.5 text-[12px] text-dim">
+            <span className="italic">Also worth ranking:</span>
+            {personal.map((g, i) => (
+              <button
+                key={g.key}
+                onClick={() => startPersonal(g)}
+                className={`active:scale-95 ${g.complete ? "text-dim line-through opacity-60" : "text-gold"}`}
+              >
+                {g.title}
+                {i < personal.length - 1 && <span className="text-dim"> ·</span>}
+              </button>
+            ))}
+          </p>
+        )}
+        </div>
+
+        <div className="mt-auto flex-shrink-0 pt-6">
+          {resumeTier !== undefined && (
+            <button
+              onClick={() => onStart(resumeTier)}
+              className="flex w-full items-baseline justify-center gap-2 py-2 text-[12px] text-dim active:scale-95"
+            >
+              Continue <span className="text-gold">{starsFor(resumeTier)}</span>
+              <span className="text-dim">&rarr;</span>
+            </button>
+          )}
+          <button
+            onClick={onModes}
+            className="mt-1 w-full py-2 text-center text-[11px] text-dim underline underline-offset-4 active:scale-95"
+          >
+            Something else
+          </button>
+        </div>
       </div>
 
       <BottomNav
@@ -217,5 +241,53 @@ export default function RunStart({
         onAddFilm={onAddFilm}
       />
     </main>
+  );
+}
+
+/**
+ * One fact, given room. Value large, label small underneath, and a dot at the
+ * top so the three read as a set rather than as three loose numbers.
+ *
+ * `lead` fills one of them, which is what stops a row of equals looking like a
+ * table. It goes on Placed because that is the only one of the three that moves.
+ */
+function Stat({ value, label, lead }: { value: string; label: string; lead?: boolean }) {
+  return (
+    // Given real height. These are what the user asked to hold the top and the
+    // centre, and at 90px tall they were a caption strip under the heading.
+    <div
+      className={`flex-1 rounded-2xl px-4 py-5 ${lead ? "" : "border border-border"}`}
+      style={lead ? { background: "var(--surface)" } : undefined}
+    >
+      <span
+        className="block h-1.5 w-1.5 rounded-full"
+        style={{ background: lead ? "var(--gold)" : "var(--border)" }}
+      />
+      <span className="mt-6 block font-serif text-[26px] font-bold leading-none text-text-hi tabular-nums">
+        {value}
+      </span>
+      <span className="mt-1.5 block text-[10px] text-dim">{label}</span>
+    </div>
+  );
+}
+
+function Action({
+  label,
+  primary,
+  onClick,
+}: {
+  label: string;
+  primary?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 rounded-full py-3 text-center text-[12px] font-bold active:scale-[0.98] ${
+        primary ? "bg-gold text-[#1c1405]" : "border border-border text-text-hi"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
