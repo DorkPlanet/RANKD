@@ -18,10 +18,14 @@ import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
+import { isPlaced } from "@/lib/lock";
 import { startRun } from "@/lib/ladder";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
+import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
+import { loadLog } from "@/lib/log";
+import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
 import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
@@ -33,9 +37,40 @@ const SWEEP_GAP_MS = 400;
 // How many films land before the library is written to disk. See the sweep.
 const SWEEP_BATCH = 10;
 
+type Screen = "duel" | "list" | "profile";
+
+/**
+ * Where the app opens.
+ *
+ * The profile, once there is a profile worth opening on. It is the screen that
+ * says what your library amounts to rather than enumerating it — and with the
+ * recap on it, it is now the one screen whose contents differ from the last time
+ * you looked, which is what earns it the landing.
+ *
+ * But only once something has been placed. A library nobody has ranked has no
+ * number one, therefore no hero, therefore no COLLECTIONS row at all — and no
+ * recap either, since a first visit has nothing to compare against. A new user
+ * would land on a page of empty sections instead of a playable duel.
+ * `pickOpeningTier` already refuses to open on an empty tier because "an empty
+ * screen is a poor first look"; this is that same rule one level up.
+ *
+ * Derived rather than stored, so it answers to the library as it stands. Nothing
+ * needs migrating, and someone who clears their ranking goes back to landing on
+ * the duel — which is where they now have work to do.
+ */
+function openingScreen(films: readonly Film[]): Screen {
+  return films.some(isPlaced) ? "profile" : "duel";
+}
+
 export default function AppShell() {
   const [state, setState] = useState<RankState | null>(null);
-  const [screen, setScreen] = useState<"duel" | "list" | "profile">("duel");
+  // `null` means nobody has navigated yet, so the opening rule below still
+  // applies. Deliberately not seeded with a screen name: the rule needs the
+  // library, the library is not loaded on the first render (that is what keeps
+  // this component's first paint identical on the server and the client), and a
+  // screen chosen before then would have to be corrected afterwards — which the
+  // user would watch happen.
+  const [screen, setScreen] = useState<Screen | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
   // A film the review card has handed over to be re-placed. It lives here rather
@@ -55,6 +90,17 @@ export default function AppShell() {
   // Their face, fetched by the sheet and carried through to the share card. A
   // plain value rather than another request, so it starts no effect of its own.
   const [personPortrait, setPersonPortrait] = useState<string | undefined>(undefined);
+  // What the last sitting amounted to. Read once, here, for the reason below.
+  const [recap, setRecap] = useState<VisitDelta | null>(null);
+  // ── The splash, in two flags ───────────────────────────────────────────────
+  //
+  // `held` is the deliberate part elapsing; `splashGone` is the fade having
+  // finished, which is what actually unmounts it. Two flags rather than one
+  // because the exit has to be a CLASS on a mounted element — unmounting at the
+  // end of the hold would remove the splash between two frames, and the whole
+  // reason to spend the time is that the arrival should not feel abrupt.
+  const [held, setHeld] = useState(false);
+  const [splashGone, setSplashGone] = useState(false);
 
   useEffect(() => {
     const films = loadFilms();
@@ -65,6 +111,27 @@ export default function AppShell() {
     } catch {
       setState({ films, session: null, journal: [] });
     }
+
+    // ── Why the visit marker advances HERE and not on the profile ────────────
+    //
+    // `openVisit` rolls the last snapshot into `prev` and takes a new one. That
+    // has to happen when the APP opens, once, before any duel of this sitting
+    // has been fought — otherwise the "current" snapshot would already include
+    // work the recap is meant to be describing next time.
+    //
+    // Doing it on `ProfileScreen` mount instead would look equivalent and is
+    // not: once the profile becomes the landing screen (roadmap #2) the feature
+    // would advance its own marker on arrival and erase its own subject. It is
+    // also a no-op after the first call in a tab, so this stays true however
+    // many times you come back to the screen.
+    //
+    // The counts are taken from the library as loaded. The credits sweep can
+    // still earn a badge a few seconds later, which lands in the NEXT recap —
+    // correct, since that badge was earned during this sitting.
+    void loadLog().then((log) => {
+      const record = openVisit(snapshotOf(films, log.length));
+      setRecap(record ? deltaOf(record) : null);
+    });
   }, []);
 
   // ── The credits sweep ──────────────────────────────────────────────────────
@@ -148,11 +215,34 @@ export default function AppShell() {
   }, [!!state]);
 
   useEffect(() => {
+    const t = setTimeout(() => setHeld(true), SPLASH_HOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
     const b = loadBrightness();
     setBrightness(b);
     applyBrightness(b);
     setProfile(loadProfile());
   }, []);
+
+  // ── Arriving at the duel ───────────────────────────────────────────────────
+  //
+  // The splash's language, a third of the length: the screen you were on is
+  // replaced by a wash of the page background which then falls away, so the duel
+  // is revealed rather than cut to. Both screens sit on `--bg`, so this reads as
+  // a dip through the page and not a flash of anything new.
+  //
+  // Only in this direction, and only from somewhere else. Going back to the list
+  // or the profile is returning to a page you were reading; arriving at the duel
+  // is starting to play, and it is the only switch that changes what the app is
+  // asking of you.
+  //
+  // A counter rather than a boolean, so a second arrival re-triggers the
+  // animation: React reuses the element, and a CSS animation that has already
+  // finished does not restart just because the component re-rendered. The
+  // counter is the `key`, which is what makes it a new element each time.
+  const [veil, setVeil] = useState(0);
 
   const changeProfile = (p: Profile) => {
     setProfile(p);
@@ -237,7 +327,23 @@ export default function AppShell() {
       return { ...s, films, session: inPlay ? null : s.session };
     });
 
-  if (!state) return null;
+  // The hold is a floor, not a duration: the splash leaves when the deliberate
+  // time is up AND there is an app behind it to reveal. On any real device the
+  // library (<92ms) is long since in hand and the hold is the only thing being
+  // waited on — which is the point. A splash whose length depends on the speed
+  // of the phone is not a decision, it is a symptom.
+  const splashLeaving = held && !!state;
+
+  useEffect(() => {
+    if (!splashLeaving) return;
+    const t = setTimeout(() => setSplashGone(true), SPLASH_FADE_MS);
+    return () => clearTimeout(t);
+  }, [splashLeaving]);
+
+  const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
+
+  // Still nothing to show behind it — the splash IS the screen for now.
+  if (!state) return splash;
 
   // What the user actually owns. A person run merges borrowed films into
   // `state.films` so the engine can duel them, and the duel screen is the only
@@ -247,9 +353,19 @@ export default function AppShell() {
     ? state.films.filter((f) => !f.guest)
     : state.films;
 
+  // The screen you navigated to, or the one the opening rule chose. Guests are
+  // excluded — a borrowed film is not something you placed, so it must not be
+  // what decides you have a profile worth landing on.
+  const current = screen ?? openingScreen(library);
+
+  const goDuel = () => {
+    if (current !== "duel") setVeil((v) => v + 1);
+    setScreen("duel");
+  };
+
   return (
     <>
-      {screen === "duel" ? (
+      {current === "duel" ? (
         <DuelScreen
           state={state}
           setState={setState}
@@ -271,19 +387,19 @@ export default function AppShell() {
             setPersonPortrait(undefined);
           }}
         />
-      ) : screen === "list" ? (
+      ) : current === "list" ? (
         <ListScreen
           films={library}
           profile={profile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onDuel={() => setScreen("duel")}
+          onDuel={goDuel}
           onProfile={() => setScreen("profile")}
           onPoster={setMeta}
           onSpotlight={(film) => {
             setSpotlightFilm(film);
-            setScreen("duel");
+            goDuel();
           }}
           onAddFilm={addFilm}
         />
@@ -291,11 +407,12 @@ export default function AppShell() {
         <ProfileScreen
           films={library}
           profile={profile}
+          recap={recap}
           onProfile={changeProfile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onDuel={() => setScreen("duel")}
+          onDuel={goDuel}
           onList={() => setScreen("list")}
           onAddFilm={addFilm}
         />
@@ -339,7 +456,7 @@ export default function AppShell() {
             // "nothing new to do".
             setPersonRun({ ...p });
             setPersonGuests(guests);
-            setScreen("duel");
+            goDuel();
           }}
         />
       )}
@@ -353,6 +470,24 @@ export default function AppShell() {
           onImport={loadLibrary}
         />
       )}
+
+      {/* `key={veil}` is the whole mechanism: a new element every arrival, so
+          the animation plays from the start instead of being already spent.
+          It removes itself the moment the fade ends rather than lingering at
+          zero opacity over the duel. */}
+      {veil > 0 && (
+        <div
+          key={veil}
+          aria-hidden
+          className="veil-out fixed inset-0 z-50"
+          style={{ background: "var(--bg)" }}
+          onAnimationEnd={() => setVeil(0)}
+        />
+      )}
+
+      {/* Last, so it is over everything — including any sheet that a restored
+          screen might already have open. */}
+      {splash}
     </>
   );
 }

@@ -11,19 +11,20 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State (14 Aug 2026, `0b615a9`):** everything on master is pushed AND deployed AND
-verified against the live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`),
-deliberately unmerged and undeployed** (see Pinned). **307 tests on master, typecheck
-clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect
-errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do
-not add a fourth.** The `accounts` branch adds 24 tests of its own on top.
+**State (14 Aug 2026):** Session G is in the working tree — **uncommitted, unpushed and
+UNDEPLOYED.** Everything up to `0b615a9` is pushed AND deployed AND verified against the
+live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately unmerged
+and undeployed** (see Pinned). **321 tests (307 + 14 from Session G), typecheck clean,
+`next build` clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell`
+set-state-in-effect errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not
+"fix" them, and do not add a fourth.** The `accounts` branch adds 24 tests of its own on
+top.
 
-**Two things in the tree are written, tested and wired to nothing.** Finish them or
-delete them; do not leave a third:
+**One thing in the tree is written, tested and wired to nothing.** Finish it or delete
+it; do not leave a second:
 - `leastRanked` in `progress.ts` — no callers. Left over from a tier map that was built
-  twice and rejected twice. It is the ingredient an opening/resume selector would want.
-- `lib/visit.ts` + `test/visit.test.ts` — the "what happened last session" recap. Written
-  and passing, imported by nothing. See **Opening** below.
+  twice and rejected twice. It is the ingredient a resume selector would want.
+- ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
 
 ## How to get oriented in five minutes
 
@@ -90,6 +91,9 @@ constraint that stops ranking a pile from destroying the cut that made it.
 
 `RunBars` is now `RunStatus` — one bar, not bars.
 
+**Session G — opening and returning (roadmap #2, all three parts).** The recap, the
+splash, and the profile as the landing screen. Motion first, landing second, as agreed.
+
 ## Decisions taken — do not relitigate
 
 - **Curated lists are INDEPENDENT of the master scoring system.** Director, actor and
@@ -150,6 +154,37 @@ constraint that stops ranking a pile from destroying the cut that made it.
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
 
+### Opening and returning (Session G)
+
+- **The recap counts duels from the LOG, not from `fingerprint().duels`.** `settle`
+  increments the per-film `duels` counter on BOTH sides of every duel, so summing it
+  double-counts. The number the recap reports has to be the one the player watched go up
+  — `RunStatus` says "24 duels this sitting" from log rows, so the recap says "last time —
+  24 duels" from the same place. **`ProfileScreen`'s DUELS stat still shows the doubled
+  figure** (861-film library: it read 20 against 10 real duels). Left alone deliberately —
+  it is a displayed number the user has been looking at, so changing it is their call, not
+  a silent fix. `Settings` already shows the true count.
+- **`openVisit` is called from `AppShell`'s mount effect, never from `ProfileScreen`.**
+  The marker must advance when the APP opens, once, before any duel of this sitting. On
+  the profile it would look equivalent and would instead erase its own subject on arrival,
+  now that the profile IS the landing screen.
+- **The splash is not a loading screen and must never be built as one.** The library loads
+  in under 92ms. `SPLASH_HOLD_MS` is a FLOOR — the splash leaves when the hold has elapsed
+  AND the library is in hand — so its length never depends on how fast the phone is. A
+  splash whose duration is a symptom rather than a decision is a bug.
+  - Measured: the wordmark settles by ~360ms, the last of the five bars lands at 540ms,
+    the hold ends at 620ms, the fade takes 280ms. **Anything added to the intro has to fit
+    under 620ms or the mark is still arriving as it starts to leave.**
+- **Landing on the profile is conditional on something being placed** (`openingScreen` in
+  `AppShell`). With no locks there is no hero, therefore no COLLECTIONS row, and no recap
+  either — a new user would land on empty sections instead of a playable duel. Same rule
+  as `pickOpeningTier` refusing an empty tier, one level up. Derived, never stored, so
+  clearing the ranking sends you back to the duel where the work is.
+- **The veil fires only on arriving AT the duel, and only from elsewhere.** Going back to
+  the list or the profile is returning to a page you were reading; the duel is the only
+  switch that changes what the app asks of you. `key={veil}` is load-bearing — a finished
+  CSS animation does not replay because the component re-rendered.
+
 ### Motion (Session F)
 
 - **Nothing that floats may share a beat.** There were four fixed float classes, and a
@@ -208,11 +243,12 @@ constraint that stops ranking a pile from destroying the cut that made it.
 
 ## Next, in order
 
-**Renumbered 14 Aug 2026.** Everything that was 1–7 landed — progress bars, review card,
+**Renumbered again 14 Aug 2026 (Session G),** after opening-and-returning landed and left
+a hole at 2. Before that, everything that was 1–7 landed — progress bars, review card,
 reset, shuffle animation, badges, and Rough Cut, which absorbed the whole
 lock-at-the-bottom family. Reasoning at
 `C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Parts Two–Four); the older plan
-at `distributed-conjuring-oasis.md` still holds for items 2 and 4 below.
+at `distributed-conjuring-oasis.md` still holds for item 3 below.
 
 1. **Onboarding.** A new user is told nothing and infers everything. The user supplied
    reference screenshots, all of one kind: **coach marks over the live UI**, dismissible,
@@ -226,24 +262,11 @@ at `distributed-conjuring-oasis.md` still holds for items 2 and 4 below.
    - **Do this after the mechanics settle.** A tutorial written against a screen that is
      about to change gets written twice.
 
-2. **Opening and returning to the app.** Three separate asks, and `visit.ts` is already
-   built for the first:
-   - **A recap** — "last time: 24 duels, 6 settled". Wire `visit.ts` to `ProfileScreen`.
-     Note the honest limit: nothing changes while the app is closed, so this can only
-     report your LAST SESSION until accounts bring other people's activity.
-   - **A RANKD splash on open.** Approved at ~600ms deliberately held. It is not free —
-     the blank while the library loads is under 92ms, far too fast to see, so a splash is
-     time you choose to spend.
-   - **Profile as the landing screen**, and a smaller transition when switching TO the
-     duel screen from elsewhere. **Agreed sequence: motion first, landing second** — a
-     profile that shows the same numbers every time is flatter than a duel, so make it
-     worth landing on before landing on it.
-
-3. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
+2. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
    **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a row's
    height, and nothing new goes inside the list scroller** — drag handles and lock toggles
    want to violate both. That constraint IS this item.
-4. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
+3. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
    `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
    writes scores and a second cross-tier order would contradict it. **This is also the
    Profile Card's "Top 10" slot** (#11), described from the other direction. Do the prop
@@ -251,7 +274,7 @@ at `distributed-conjuring-oasis.md` still holds for items 2 and 4 below.
    already two effects reaching for `state.session`, and resume would make it three. They
    cannot race today because only one is ever set at a time, but that is a property nobody
    is enforcing.
-5. **Profile card slots + persistence + JPG re-export.** Empty slots for Top 10, favourite
+4. **Profile card slots + persistence + JPG re-export.** Empty slots for Top 10, favourite
     actor, favourite director and so on, filled by making a list, persisted, viewable
     socially later, and re-exportable as the JPG. Absorbs the old #2 (profile library +
     auto-save): needs `SavedEntry` to gain `rating`/`genres`/`director` (**without `rating`
@@ -262,18 +285,18 @@ at `distributed-conjuring-oasis.md` still holds for items 2 and 4 below.
       Adding `rankd-lists-v1` to `KEYS` naively means **restoring an older backup deletes
       every saved ranking**. Needs a per-format key set. `rankd-review-dismissed-v1` is
       also missing from the manifest.
-6. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
+5. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
     and #11's structures first.
-7. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
+6. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
     stores NO images — a banner is a film id and a still URL, so the whole profile costs a
     few hundred bytes. Real uploads need server storage, which needs the pinned accounts
     work. **An unblocked version exists now:** choose an avatar from artwork already in the
     library, exactly as `bannerStill` already works.
-8. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+7. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
     session and **`guests: Film[]` in full** — ids alone lose every unseen film.
     `adoptRun(films, session)` belongs in `ladder.ts` with its own tests. Stays device-local
     forever; it is deliberately excluded from the synced payload.
-9. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+8. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
 
 ## Pinned — built but not shipped
 
@@ -362,5 +385,9 @@ at `distributed-conjuring-oasis.md` still holds for items 2 and 4 below.
   `rankd-sitting-v1` and `rankd-visit-sitting-v1` are sessionStorage and correctly excluded.
   But `rankd-lists-v1` (saved rankings) and `rankd-review-dismissed-v1` are localStorage and
   **are not in any backup** — a restore silently loses both. Fixing it needs the per-format
-  key set described in roadmap item 5, because the restore loop `removeItem`s any key absent
+  key set described in roadmap item 4, because the restore loop `removeItem`s any key absent
   from the file.
+  - `rankd-visit-v1` joined them in Session G — it is written for the first time now that
+    the recap exists. **Leave it out of the manifest deliberately**: it describes sittings
+    on THIS device, and its worst case is one missing recap that heals itself on the next
+    open. Do not let it get swept into the fix for the other two, which lose real work.

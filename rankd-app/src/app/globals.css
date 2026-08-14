@@ -482,3 +482,67 @@ button * {
 @media (prefers-reduced-motion: reduce) {
   .float-poster, .float-title { animation: none; }
 }
+
+/* ── The splash ────────────────────────────────────────────────────────────
+   The library loads in under 92ms, so this is not hiding a wait — it is time
+   deliberately spent, and it has to buy something to be worth it. What it buys
+   is the only moment the brand mark is ever the whole screen: the wordmark
+   settles out of wide tracking, then the five bars draw outward from the centre
+   in sequence. The mark assembles itself rather than being shown to you.
+
+   Type and the brand rules, which are the only two things this app draws. No
+   logo, no graphic, nothing that has to be redrawn if the palette moves.
+
+   The bars scale from their centre rather than animating `width`, so all five
+   are one compositor job and nothing below them reflows five times. */
+@keyframes splash-mark {
+  from { opacity: 0; transform: translateY(5px); letter-spacing: 0.26em; }
+  to { opacity: 1; transform: none; letter-spacing: 0.06em; }
+}
+@keyframes splash-bar {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes splash-out {
+  to { opacity: 0; }
+}
+.splash-mark { animation: splash-mark 0.36s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.splash-bar {
+  transform-origin: center;
+  animation: splash-bar 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+/* `forwards`, not `both`: once it has faded it must STAY faded. The element is
+   still mounted for the length of this animation and a splash that snapped back
+   to full opacity for one frame before unmounting is a flash of the whole
+   brand over the app. */
+.splash-out {
+  pointer-events: none;
+  animation: splash-out 0.28s ease forwards;
+}
+/* Reduced motion keeps the splash — it is a held moment, not an effect — and
+   drops only the movement. The fade stays: an opaque full-screen panel
+   disappearing between two frames is harsher than the thing being softened. */
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark, .splash-bar { animation: none; }
+}
+
+/* The smaller transition, for arriving at the duel from another screen.
+   Same language as the splash and a third of the length: the outgoing screen is
+   replaced by a full-bleed wash of the page background, which then falls away to
+   reveal the duel. Because both screens sit on `--bg` this reads as a dip
+   through the page rather than a flash — nothing new appears, one thing leaves
+   before the other arrives.
+
+   It is `--bg` and not black for exactly that reason, and `forwards` so the
+   spent veil cannot flicker back to opaque for a frame before it unmounts. */
+@keyframes veil-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.veil-out {
+  pointer-events: none;
+  animation: veil-out 0.2s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .veil-out { animation-duration: 0.12s; }
+}

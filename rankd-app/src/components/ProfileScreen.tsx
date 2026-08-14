@@ -23,6 +23,7 @@ import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
 import { autoCollections, fingerprint, superlatives, topPeople, type Profile } from "@/lib/profile";
 import { achievements } from "@/lib/achievements";
+import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import type { Film } from "@/lib/types";
 
 interface Collection {
@@ -35,6 +36,7 @@ interface Collection {
 export default function ProfileScreen({
   films,
   profile,
+  recap,
   onProfile,
   onInfo,
   onSettings,
@@ -45,6 +47,8 @@ export default function ProfileScreen({
 }: {
   films: Film[];
   profile: Profile;
+  /** What the previous sitting amounted to, or null when there is nothing to say. */
+  recap?: VisitDelta | null;
   onProfile: (p: Profile) => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
@@ -166,6 +170,21 @@ export default function ProfileScreen({
             <Stat n={print.duels} label="Duels" onClick={onDuel} />
             <Stat n={earned} label="Badges" onClick={onTrophies} />
           </div>
+
+          {/* What the last sitting amounted to.
+
+              The four stats above are cumulative and therefore never move
+              visibly — 861 films and 1,204 duels look identical the day after
+              a good session. This is the one line on the screen that is about
+              a particular afternoon, so it sits directly under them, in the
+              same label/value/note grammar `Your taste` uses. No new furniture:
+              the app was told once already that a number in an existing control
+              beats a chart. */}
+          {recap && (
+            <div className="mt-4">
+              <Line label="Last time" value={recapLine(recap)} note={agoLabel(recap.since)} />
+            </div>
+          )}
 
           <div className="card-rule mt-5" />
 
