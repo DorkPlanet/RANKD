@@ -546,3 +546,35 @@ button * {
 @media (prefers-reduced-motion: reduce) {
   .veil-out { animation-duration: 0.12s; }
 }
+
+/* The coach marks. The spotlight moves between steps rather than cutting, so
+   the reader's eye is carried to the next control instead of hunting for it —
+   which is the one thing a tutorial overlay can do that a caption cannot.
+
+   `box-shadow` is the transition property because the shadow IS the scrim: the
+   hole is a transparent box and everything dark around it is spread. Position
+   and size animate alongside it. */
+.coach-hole {
+  transition:
+    top 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    left 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    width 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    height 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    border-radius 0.32s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes coach-card-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+/* The card re-runs this on every step because React keys it by index. Note the
+   `translate(-50%, …)`: the element is centred by a transform, so an animation
+   touching `transform` has to carry that -50% in every frame or the caption
+   jumps to the right-hand half of the screen for the length of the animation. */
+.coach-card {
+  animation: coach-card-in 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-hole { transition: none; }
+  .coach-card { animation: none; }
+}

@@ -279,6 +279,10 @@ export function PosterCard({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
+      // Where the tour's first three steps point. Both cards carry it and the
+      // tour takes the first — this surface is one control with three gestures,
+      // so which of the pair is framed does not matter.
+      data-tour="card"
       style={{ touchAction: "none" }}
       className="group relative flex h-full w-[46%] max-w-[180px] min-h-0 flex-col items-center transition-transform active:scale-95"
     >

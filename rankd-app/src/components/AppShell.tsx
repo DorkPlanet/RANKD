@@ -24,6 +24,8 @@ import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightnes
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
+import Coach from "./Coach";
+import { forgetTours, markTourSeen, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
 import type { Person } from "@/lib/people";
@@ -38,6 +40,9 @@ const SWEEP_GAP_MS = 400;
 const SWEEP_BATCH = 10;
 
 type Screen = "duel" | "list" | "profile";
+
+/** Matches `.veil-out` in globals.css. Kept here only to sequence the tour behind it. */
+const VEIL_MS = 200;
 
 /**
  * Where the app opens.
@@ -101,6 +106,18 @@ export default function AppShell() {
   // reason to spend the time is that the arrival should not feel abrupt.
   const [held, setHeld] = useState(false);
   const [splashGone, setSplashGone] = useState(false);
+  // Which tour is on screen. Set one tick AFTER a navigation, never during it:
+  // `Coach` resolves its targets as it renders, so mounting it in the same
+  // commit as a screen change measures the screen the user is leaving.
+  const [tourDue, setTourDue] = useState<TourId | null>(null);
+  // Which tours this browser has finished. Read once, at mount, and never
+  // re-read: `markTourSeen` writes storage the moment a tour ends, and reading
+  // storage during render would pull the overlay out from under the reader on
+  // the very tap that finished it.
+  const [seen, setSeen] = useState<Set<TourId>>(seenTours);
+  // Settings asked for the whole thing again, which has to bypass the
+  // new-library gate below. Deliberately not persisted: it dies with the reload.
+  const [replaying, setReplaying] = useState(false);
 
   useEffect(() => {
     const films = loadFilms();
@@ -358,9 +375,67 @@ export default function AppShell() {
   // what decides you have a profile worth landing on.
   const current = screen ?? openingScreen(library);
 
-  const goDuel = () => {
+  // ── When a tour runs by itself ─────────────────────────────────────────────
+  //
+  // Only for a library nobody has ranked, which is the same predicate as the
+  // landing rule and for a matching reason. Someone with 861 films and a year of
+  // duels behind them does not need to be told what a tap does, and ambushing
+  // them with a tutorial on open would be the app talking over their own work.
+  // Settings is where they ask for it.
+  const newLibrary = !library.some(isPlaced);
+
+  const tourFor = (s: Screen): TourId | null => {
+    const id: TourId | null = s === "duel" ? "duel" : s === "list" ? "list" : null;
+    if (!id || seen.has(id)) return null;
+    return newLibrary || replaying ? id : null;
+  };
+
+  // The landing screen needs no deferral: the splash has held it for the better
+  // part of a second, so it committed long ago. Every later screen goes through
+  // `go`, which defers.
+  const activeTour = screen === null ? tourFor(current) : tourDue;
+  const showCoach = splashGone && activeTour !== null;
+
+  const finishTour = () => {
+    if (!activeTour) return;
+    markTourSeen(activeTour, seen);
+    setSeen(new Set(seen).add(activeTour));
+    setTourDue(null);
+  };
+
+  /**
+   * Change screens, and queue that screen's tour if one is owed.
+   *
+   * Every navigation goes through here so the deferral cannot be forgotten at
+   * one call site. The delay is the only thing standing between `Coach` and
+   * measuring the outgoing screen.
+   */
+  const go = (s: Screen) => {
+    const arriving = s === "duel" && current !== "duel";
+    if (arriving) setVeil((v) => v + 1);
+    setScreen(s);
+    setTourDue(null);
+    const due = tourFor(s);
+    if (due) setTimeout(() => setTourDue(due), arriving ? VEIL_MS + 20 : 20);
+  };
+
+  const goDuel = () => go("duel");
+
+  // Asked for from Settings: forget both tours and start again from the duel.
+  // `replaying` is what lets them run at all on a ranked library, and it stays
+  // on for the rest of the session so the list tour still fires when the user
+  // wanders over to it.
+  const startTour = () => {
+    setSettingsOpen(false);
+    forgetTours();
+    setSeen(new Set());
+    setReplaying(true);
     if (current !== "duel") setVeil((v) => v + 1);
     setScreen("duel");
+    setTourDue(null);
+    // Named rather than derived from `tourFor`, which would still be reading the
+    // pre-reset `seen` and `replaying` from this render's closure.
+    setTimeout(() => setTourDue("duel"), VEIL_MS + 20);
   };
 
   return (
@@ -374,8 +449,8 @@ export default function AppShell() {
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onList={() => setScreen("list")}
-          onProfile={() => setScreen("profile")}
+          onList={() => go("list")}
+          onProfile={() => go("profile")}
           onAddFilm={addFilm}
           personRun={personRun}
           personGuests={personGuests}
@@ -395,13 +470,15 @@ export default function AppShell() {
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
           onDuel={goDuel}
-          onProfile={() => setScreen("profile")}
+          onProfile={() => go("profile")}
           onPoster={setMeta}
           onSpotlight={(film) => {
             setSpotlightFilm(film);
             goDuel();
           }}
           onAddFilm={addFilm}
+          // A tutorial is a held moment. Nothing behind it may move.
+          frozen={showCoach}
         />
       ) : (
         <ProfileScreen
@@ -413,7 +490,7 @@ export default function AppShell() {
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
           onDuel={goDuel}
-          onList={() => setScreen("list")}
+          onList={() => go("list")}
           onAddFilm={addFilm}
         />
       )}
@@ -468,7 +545,15 @@ export default function AppShell() {
           onClose={() => setSettingsOpen(false)}
           films={library}
           onImport={loadLibrary}
+          onTour={startTour}
         />
+      )}
+
+      {/* Over the screens and the veil, under the splash. */}
+      {showCoach && (
+        // Keyed by tour, so moving from the duel's to the list's remounts and
+        // re-resolves rather than carrying the old steps and step index across.
+        <Coach key={activeTour} steps={TOURS[activeTour]} onDone={finishTour} />
       )}
 
       {/* `key={veil}` is the whole mechanism: a new element every arrival, so

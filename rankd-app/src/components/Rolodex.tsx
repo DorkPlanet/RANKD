@@ -140,6 +140,7 @@ export function Rolodex({
         }}
         aria-label={open ? "Hide the film strip" : "Show the film strip"}
         aria-expanded={open}
+        data-tour="strip"
         className="mx-auto flex h-7 w-20 items-center justify-center"
         style={{ touchAction: "none" }}
       >

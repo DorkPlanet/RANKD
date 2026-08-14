@@ -22,12 +22,15 @@ export function Settings({
   onClose,
   films,
   onImport,
+  onTour,
 }: {
   brightness: number;
   onChange: (t: number) => void;
   onClose: () => void;
   films: Film[];
   onImport: (films: Film[]) => void;
+  /** Replay the coach marks. Optional so the sheet still renders without one. */
+  onTour?: () => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
   // How much evidence is behind the list, and what it costs to keep. A storage
@@ -72,6 +75,25 @@ export function Settings({
           <span>Deep</span>
           <span>Bright</span>
         </div>
+
+        {/* The half of onboarding that stops it being a one-shot. A tutorial you
+            can only ever see on the day you install the app is one nobody can
+            re-read, and the gestures here are the kind you half-remember. */}
+        {onTour && (
+          <div className="mt-7 border-t border-border pt-5">
+            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">HOW IT WORKS</span>
+            <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+              A quick pass over the gestures: tapping, flicking, holding, and where Rough Cut
+              lives. Runs on the duel screen, then again on your list.
+            </p>
+            <button
+              onClick={onTour}
+              className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+            >
+              Show me around
+            </button>
+          </div>
+        )}
 
         <div className="mt-7 border-t border-border pt-5">
           <div className="mb-1 flex items-center justify-between">

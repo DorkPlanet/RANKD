@@ -59,9 +59,23 @@ export default function ListScreen({
   onTrophies,
   onSpotlight,
   onAddFilm,
+  frozen,
 }: {
   films: Film[];
   profile: Profile;
+  /**
+   * Hold the list absolutely still.
+   *
+   * Set while the coach marks are up. The drift is 20px/s after 2.5s of quiet,
+   * and a tutorial holds the reader far longer than that — so the list crept
+   * downward under the overlay and the spotlight, which re-measures its target,
+   * faithfully followed the row it was pointing at off the screen. The mark was
+   * doing its job; the page underneath was not supposed to be moving.
+   *
+   * The drift's own input listeners are on the scroller, which sits BEHIND the
+   * overlay, so nothing the reader does can bump it back to idle either.
+   */
+  frozen?: boolean;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -122,7 +136,7 @@ export default function ListScreen({
   const searching = q.trim().length > 0;
 
   useVisiblePosters(scroller, films, onPoster);
-  useDriftScroll(scroller, !searching && !jumpOpen);
+  useDriftScroll(scroller, !searching && !jumpOpen && !frozen);
 
   const counts = tierCounts(films);
   // How much of each tier has a position, for the Jump menu.
@@ -208,6 +222,7 @@ export default function ListScreen({
           <div className="relative flex-shrink-0">
             <button
               onClick={() => setJumpOpen((v) => !v)}
+              data-tour="list-jump"
               className="rounded-lg border border-border px-2.5 py-2 text-[11px] text-dim active:scale-95"
             >
               Jump ▾
@@ -275,7 +290,11 @@ export default function ListScreen({
                   <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} />
                 ))}
                 {s.unplaced.length > 0 && (
-                  <div className="flex items-center gap-2.5" style={{ height: DIVIDER_H }}>
+                  <div
+                    className="flex items-center gap-2.5"
+                    data-tour="list-unrnkd"
+                    style={{ height: DIVIDER_H }}
+                  >
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
                     <span className="text-[9px] font-extrabold tracking-[0.18em] text-dim">UN-RNKD</span>
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
@@ -396,6 +415,8 @@ function Row({
   return (
     <button
       data-film-id={film.id}
+      // Every row carries it; the tour points at whichever is first on screen.
+      data-tour="list-row"
       onClick={() => onInfo(film)}
       // A fixed height is load-bearing: the section spacers are computed from it,
       // so a row that measured differently would drift the scroll positions.

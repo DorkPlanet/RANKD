@@ -154,6 +154,68 @@ splash, and the profile as the landing screen. Motion first, landing second, as 
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
 
+### Onboarding (Session G)
+
+- **The tour is not playable, and that is the point.** The scrim swallows every tap,
+  including on the control it is highlighting. `settle` cannot tell a demonstration duel
+  from a real one, and every belief, badge and score rests on the log being literally
+  true — so a tutorial that let you "try it" would write judgements nobody made. Verified:
+  a full five-step run left the log at exactly the row count it started with.
+- **One tour per screen: `TOURS.duel` (5 steps) and `TOURS.list` (3).** The duel carries
+  most of the teaching because that is where the game is; the list gets its own because it
+  holds the one genuinely unguessable idea in the app — **a rating is not a position**,
+  which is what the UN-RNKD divider means and what nothing on screen says. The profile has
+  none: it is labels next to numbers, which is the one kind of screen that explains itself.
+- **It auto-runs only when nothing is placed** — the same predicate as the landing rule.
+  Somebody with a ranked library is never ambushed; Settings → **Show me around** is their
+  route in, and that half was explicitly asked for. Settings forgets BOTH tours and sets a
+  session-only `replaying` flag, which is what lets them run on a ranked library at all.
+- **Every screen change goes through `go()` in `AppShell`, which defers the tour by a
+  tick.** `Coach` resolves its targets as it RENDERS, so mounting it in the same commit as
+  a screen change measures the screen the user is leaving and resolves to almost nothing.
+  The landing screen is the one exception and needs no deferral, because the splash has
+  held it for the better part of a second. **Do not add a new `setScreen` call site.**
+- **A tutorial is a held moment: nothing behind it may move.** `ListScreen` takes a
+  `frozen` prop that switches `useDriftScroll` off while the marks are up. The list drifts
+  at 20px/s after 2.5s of quiet and a tutorial holds the reader far longer, so the page
+  crept downward and the spotlight — which re-measures its target — faithfully followed
+  the row off the screen. **The mark was doing its job; the page was not supposed to be
+  moving.** The drift's own input listeners sit on the scroller, BEHIND the overlay, so
+  nothing the reader does can bump it back to idle either. Any future overlay that holds
+  someone still on the list has to do the same. Verified both ways: frozen for 5.4s with
+  zero pixels of movement, and drifting again within 4.5s of the tour closing.
+- **A step whose target is absent is dropped, and that is load-bearing, not defensive.**
+  The strip is not in every mode, and the UN-RNKD divider does not exist once a tier is
+  finished. `resolveSteps` filters and the counter adjusts.
+- **The mark's position is written to the DOM, not held in state.** Coordinates come from
+  `getBoundingClientRect` on a live element — a reading of the DOM, not a fact React owns.
+  State would mean measure → setState → re-render on every step, resize and scroll.
+- **The caption's height is measured, never estimated.** A constant was close enough to
+  look right and wrong enough to matter: the copy sets the height, the longest step ran
+  ~12px past the guess, and the gap under the bottom-nav step collapsed from 16px to 4.
+- **The spotlight is clamped to the viewport.** The nav sits flush to the bottom edge, so
+  its padded box ran 8px off-screen and the gold ring came out as a three-sided bracket.
+- **Arming is a timestamp, not a flag.** Ghost clicks are real here — a full-screen layer
+  mounting under a finger that has just tapped is exactly the shape that cost a session
+  before. An `armed` boolean needed clearing each step, which is a setState inside an
+  effect; elapsed time answers the question at the moment it is asked. **A synthetic click
+  cannot catch a regression here** — test it by tapping within 400ms of a step appearing.
+- **Copy rule: the app records a PREFERENCE, not a verdict.** The first step said "Tap the
+  better film" and the user corrected it: "which is better" asserts a fact about the
+  films, while the library is an account of what one person would rather watch. There is a
+  test guarding it. Do not reintroduce comparative-quality language anywhere user-facing.
+- **Copy rule: no em dashes in user-facing text.** The user's words: "it's clean but
+  obviously AI". Tested across every step of both tours. **The rest of the app's existing
+  copy still uses them freely and was NOT swept** — that is a bigger, separate edit to
+  text the user has lived with, and it needs asking first.
+- **`rankd-tour-v1` holds a JSON list of finished tours,** not a flag, because the two are
+  reached at different moments and a boolean would have swallowed the second. A bare `"1"`
+  is the original single-tour value and still reads as `["duel"]`.
+- **It IS in `backup.ts`'s `KEYS`,** knowing the restore loop `removeItem`s absent keys. Restoring a pre-Session-G backup therefore offers the tour again — which is
+  what happened on every backup before the line existed, so nothing regressed. It must not
+  become the reason the per-format key set gets rushed: its worst case is one tutorial
+  shown twice, while `rankd-lists-v1`'s is a ranking somebody cannot get back.
+
 ### Opening and returning (Session G)
 
 - **The recap counts duels from the LOG, not from `fingerprint().duels`.** `settle`

@@ -17,6 +17,17 @@ const KEYS = [
   "rankd-profile-v1", // name, bio, banner
   "rankd-brightness",
   "rankd-strip-open",
+  // Whether the tour has run. Added knowing the restore loop below `removeItem`s
+  // any key absent from the file — so restoring a backup taken BEFORE this line
+  // existed clears the flag and offers the tour again.
+  //
+  // Added anyway, because that is exactly what happened without it, on every
+  // backup rather than only the old ones. Nothing regresses and everything saved
+  // from now on carries it. The proper fix is the per-format key set in roadmap
+  // item 4; this key must not be the reason that work gets rushed, because its
+  // worst case is one tutorial offered twice while `rankd-lists-v1`'s is a
+  // ranking somebody made and cannot get back.
+  "rankd-tour-v1",
 ] as const;
 
 const FORMAT = 1;

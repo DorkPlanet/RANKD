@@ -928,7 +928,7 @@ export function BottomNav({
       {logging && onAddFilm && (
         <LogFilm films={films ?? []} onAdd={onAddFilm} onClose={() => setLogging(false)} />
       )}
-      <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} />
+      <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
       <NavItem label="Activity" icon={<ActivityIcon />} />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
@@ -943,11 +943,25 @@ export function BottomNav({
 }
 
 // Icon-only: labels cost vertical space the duel needs more than the nav does.
-function NavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void }) {
+function NavItem({
+  label,
+  icon,
+  active,
+  onClick,
+  tour,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+  /** `data-tour` hook, so the coach marks can point at this cell. */
+  tour?: string;
+}) {
   return (
     <button
       onClick={onClick}
       aria-label={label}
+      data-tour={tour}
       className="flex flex-1 items-center justify-center py-4 transition-colors active:scale-95"
       style={{ color: active ? "var(--gold)" : "var(--dim)" }}
     >
