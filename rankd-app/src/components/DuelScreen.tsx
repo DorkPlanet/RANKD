@@ -36,7 +36,11 @@ import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
-import { RunBars } from "./RunBars";
+import RoughCut from "./RoughCut";
+import { bandsOf, BUCKETS } from "@/lib/roughCut";
+import { RunStatus } from "./RunStatus";
+import ResumeOverlay from "./ResumeOverlay";
+import { clearRun, saveRun } from "@/lib/runs";
 import {
   BackRow,
   RangeSlider,
@@ -67,7 +71,7 @@ import type { Film, RankState } from "@/lib/types";
 const DEFAULT_TIER = 4 as const;
 
 // Which game the setup panel is configuring; null while it is still asking.
-type ChosenMode = "koth" | "shuffle" | null;
+type ChosenMode = "koth" | "shuffle" | "roughcut" | null;
 
 // The library and the app-wide chrome now live in AppShell — this screen owns
 // only the duel. Everything it still holds is setup state for the next run.
@@ -86,7 +90,9 @@ export default function DuelScreen({
   personGuests = [],
   personPortrait,
   onPersonRunHandled,
+  onRunBegan,
   onPerson,
+  greet = 0,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -99,6 +105,8 @@ export default function DuelScreen({
   onProfile: () => void;
   onTrophies: () => void;
   onAddFilm: (film: Film) => void;
+  /** A run just started, so the duel's posters and strip are about to exist. */
+  onRunBegan?: () => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
@@ -108,8 +116,19 @@ export default function DuelScreen({
   onPersonRunHandled?: () => void;
   /** Open a filmography from the spotlight picker. */
   onPerson?: (person: Person) => void;
+  /**
+   * Bumped every time the user ARRIVES at this screen from another tab.
+   *
+   * A counter rather than a boolean, because arriving twice has to greet you
+   * twice and a boolean already true is indistinguishable from one nobody reset.
+   */
+  greet?: number;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
+  // The tier of the run that just ended, held so `TierComplete` can be about it.
+  // `endRun` nulls the session, so without this the summary has no idea which
+  // tier it is summarising. Cleared on the way back to `RunStart`.
+  const [endedTier, setEndedTier] = useState<Rating | null>(null);
   const [tierOpen, setTierOpen] = useState(false);
   const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
   // A tier chosen for the NEXT run but not started. Without it the only way to
@@ -147,6 +166,23 @@ export default function DuelScreen({
     void loadLog().then(setLog);
   }, []);
 
+  // ── The greeting ───────────────────────────────────────────────────────────
+  //
+  // `greet` counts arrivals at this screen from elsewhere; AppShell bumps it.
+  // Comparing it against the last one dismissed is a DERIVED flag rather than an
+  // effect that mirrors a prop into state, which would be the cascading render
+  // the linter objects to — and would also fight the counter every time.
+  // Starts at 0, and AppShell passes 0 while the splash is still up, so the two
+  // layers can never stack. A greeting under an opening animation is a dialog
+  // nobody asked for arriving before the app has finished saying hello.
+  const [dismissedGreet, setDismissedGreet] = useState(0);
+  const greeting = greet > dismissedGreet;
+  const dismissGreeting = () => setDismissedGreet(greet);
+  // Where the tier picker was opened from, which decides what picking one means.
+  // A ref rather than state: nothing renders differently because of it, and it
+  // is read inside the handler that consumes it rather than during a render.
+  const fromOverlay = useRef(false);
+
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
   //
@@ -179,6 +215,9 @@ export default function DuelScreen({
   // `beginGenre` clears the person request on its way in.
   const [genreSubject, setGenreSubject] = useState<RankSubject | null>(null);
   const [curatedOpen, setCuratedOpen] = useState(false);
+  // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
+  // it has no pile, no climb and no confirm, so none of the duel branches apply.
+  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
 
   const runSubject: RankSubject | null = personRun
     ? subjectFromPerson(personRun, personPortrait)
@@ -309,6 +348,34 @@ export default function DuelScreen({
   // instant it is answered, whatever happens to the run afterwards.
   const commit = (next: RankState, persist = true) => {
     if (persist) saveFilms(next.films);
+    // ── Catching the end of a run wherever it happens ────────────────────────
+    //
+    // A run ends two ways: you press Done, or `confirm` empties the pile and
+    // returns a null session on its own. Both drop the tier on the floor, and
+    // `TierComplete` needs it to be about anything. Noticing the transition here
+    // rather than at each call site means the natural completion — the case that
+    // most deserves a summary — cannot be the one that forgets.
+    //
+    // Cross-tier runs are excluded: they have `RunSummary`, which holds an order
+    // that exists nowhere else and must not be pre-empted by a tier report.
+    if (state.session && !next.session && !state.session.crossTier) {
+      setEndedTier(state.session.tier);
+    }
+    // A new run supersedes any summary still standing, and answers the greeting:
+    // starting something IS the choice it was asking for, whichever sheet it was
+    // started from. Doing it here rather than at each entry point means a mode
+    // added later cannot leave the overlay hanging over its own run.
+    if (next.session) {
+      setEndedTier(null);
+      setDismissedGreet(greet);
+    }
+
+    // Keep the climb across closing the app. One call, on the single path every
+    // change to a session goes through, so no future transition can forget to
+    // save one — and `saveRun` CLEARS for anything it cannot resume, so ending a
+    // run or starting a curated one cannot leave a stale climb behind to be
+    // offered later. See lib/runs.ts for why tier climbs only.
+    saveRun(next.session);
     if (next.journal.length === 0) {
       // Nothing was judged, so this is a confirm, a flick, or a new run — and
       // the step held from the last judgement now points into a game that no
@@ -419,6 +486,7 @@ export default function DuelScreen({
     // drained to the log are carried across by hand rather than dropped.
     try {
       commit({ ...startRun(films, tier, { shuffle, below, above }), journal: state.journal }, false);
+      onRunBegan?.();
       return true;
     } catch {
       commit({ films, session: null, journal: state.journal }, false);
@@ -470,7 +538,7 @@ export default function DuelScreen({
       commit(abandonSpotlight(state));
       return;
     }
-    commit({ ...state, session: null }, false);
+    commit({ ...state, session: null }, false); // `commit` records the tier
   };
 
   // Keep the result, or throw the session away and leave the film where it was.
@@ -532,6 +600,284 @@ export default function DuelScreen({
   const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
   const assertPromotion = () => commit(promoteDirect(state));
 
+  // Rough Cut takes the whole surface, like Fast Shuffle: it has no pile, no
+  // climb and no confirm, so none of the branches below apply to it. Placed
+  // after every hook so the early return cannot change the hook order.
+  if (roughCutTier !== null) {
+    return (
+      <RoughCut
+        films={state.films}
+        tier={roughCutTier}
+        onFilms={(films) => {
+          saveFilms(films);
+          setState((s) => (s ? { ...s, films } : s));
+        }}
+        onExit={() => setRoughCutTier(null)}
+        // Climb just the pile that was cut, not the whole tier again. `only`
+        // takes an arbitrary set of ids and is independent of `crossTier`, so
+        // this is an ordinary run that writes scores and locks — it simply has a
+        // smaller pool. The films come in from Rough Cut rather than being read
+        // from `state`, because its own write has not landed yet.
+        onRankPile={(films, ids) => {
+          saveFilms(films);
+          setRoughCutTier(null);
+          try {
+            commit({ ...startRun(films, roughCutTier, { only: ids }), journal: state.journal }, false);
+          } catch {
+            // Fewer than two films left in the pile — nothing to climb. The cut
+            // itself is already saved, so this is a no-op rather than a loss.
+            setState((s) => (s ? { ...s, films } : s));
+          }
+        }}
+        onSettings={onSettings}
+        onTrophies={onTrophies}
+      />
+    );
+  }
+
+  // A run that has just ended still owns the surface: `TierComplete` is the
+  // acknowledgement that a sitting amounted to something, and skipping straight
+  // past it to "what's left" is the app changing the subject.
+  //
+  // `endedTier` exists because `endRun` nulls the session, taking the tier with
+  // it. This screen used to read `session?.tier ?? DEFAULT_TIER` at exactly the
+  // moment session was null, so finishing a half-star climb showed FOUR-STAR's
+  // films, count and duels under "Session done". Remembering the tier is what
+  // makes the summary about the run you actually just played.
+  // Defined once and rendered by EVERY branch. Mounted only at the foot of the
+  // main return, any early return above silently killed them — "Something else"
+  // set `modeOpen` and nothing read it. A new full-surface branch must render
+  // `sheets` or its buttons do nothing.
+  const sheets = (
+    <>
+      {modeOpen && (
+        <ModePanel
+          films={state.films}
+          tier={setupTier}
+          chosen={chosenMode}
+          onChoose={setChosenMode}
+          shuffle={shuffle}
+          onShuffle={setShuffle}
+          below={below}
+          above={above}
+          onBelow={setBelow}
+          onAbove={setAbove}
+          onClose={closeSetup}
+          onKoth={(t) => {
+            setShuffleRun(null);
+            if (beginRun(t)) closeSetup();
+          }}
+          onSpotlight={(t) => {
+            setShuffleRun(null);
+            setSpotlightFor(t);
+            closeSetup();
+          }}
+          onFastShuffle={(opts) => {
+            setShuffleRun(opts);
+            closeSetup();
+          }}
+          onCurated={() => {
+            setShuffleRun(null);
+            closeSetup();
+            setCuratedOpen(true);
+          }}
+          onRankPile={(ids) => {
+            setShuffleRun(null);
+            closeSetup();
+            try {
+              commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
+            } catch {
+              /* fewer than two films left in the pile */
+            }
+          }}
+          onRoughCut={(t) => {
+            setShuffleRun(null);
+            setRoughCutTier(t);
+            closeSetup();
+          }}
+          onPickTier={() => {
+            setModeOpen(false);
+            setTierOpen(true);
+          }}
+        />
+      )}
+      {tierOpen && (
+        <TierPicker
+          films={state.films}
+          current={setupTier}
+          // Closing hands you back to whatever OPENED it. From the Play sheet
+          // that is Play; from the overlay or the empty screen it is nothing at
+          // all, because they are still underneath. Reopening Play regardless
+          // meant dismissing the picker raised a second sheet you had to dismiss
+          // as well.
+          onClose={() => {
+            setTierOpen(false);
+            if (fromOverlay.current) fromOverlay.current = false;
+            else setModeOpen(true);
+          }}
+          onPick={(t) => {
+            // From the overlay a tier is a START, not a setting: you asked to
+            // rank that tier, so ranking it is the answer. Reached from inside
+            // the Play sheet it stays a setting and hands you back to the panel.
+            if (fromOverlay.current) {
+              fromOverlay.current = false;
+              setTierOpen(false);
+              dismissGreeting();
+              beginRun(t);
+              return;
+            }
+            setPickedTier(t);
+            setBelow(0);
+            setAbove(0);
+            setTierOpen(false);
+            setModeOpen(true);
+          }}
+        />
+      )}
+      {curatedOpen && (
+        <CuratedPicker
+          films={state.films}
+          onClose={() => setCuratedOpen(false)}
+          onPerson={(p) => {
+            setCuratedOpen(false);
+            onPerson?.(p);
+          }}
+          onGenre={beginGenre}
+        />
+      )}
+    </>
+  );
+
+  // The greeting, when there is a climb waiting behind it. Rendered by both the
+  // running branch and the empty one, so arriving always gets the same layer.
+  const inTier = session ? state.films.filter((f) => f.rating === session.tier) : [];
+  const resumable = session && !session.crossTier && session.mode === "koth" ? session : null;
+  // Never over Fast Shuffle: `activeRun` gives ShuffleDuel the whole surface,
+  // and that mode has no pile to come back to anyway.
+  const overlay =
+    greeting && resumable && !activeRun ? (
+      <ResumeOverlay
+        run={{
+          tier: resumable.tier,
+          placed: inTier.filter(isPlaced).length,
+          total: inTier.length,
+        }}
+        onContinue={dismissGreeting}
+        // The greeting is NOT dismissed here. The overlay sits below the sheets,
+        // so it stays put while the picker opens over it and is still there when
+        // the picker closes — nothing flashes, and closing lands you back where
+        // you were rather than dropping you into the game.
+        onTier={() => {
+          fromOverlay.current = true;
+          setTierOpen(true);
+        }}
+        // No `fromOverlay` here: that flag only governs what picking a TIER
+        // means, and inside Play a tier is a setting. Closing Play simply
+        // reveals this layer again, because it was never dismissed.
+        onModes={() => setModeOpen(true)}
+        onAbandon={() => {
+          dismissGreeting();
+          clearRun();
+          commit({ ...state, session: null }, false);
+          // Abandoning is not finishing. `commit` records the tier so a run that
+          // ENDS gets its summary, but throwing one away should land on the
+          // empty screen — a report congratulating you on work you just
+          // discarded is the app not listening. Batched after, so this wins.
+          setEndedTier(null);
+        }}
+      />
+    ) : null;
+
+  // A finished run's summary. Skipped while greeting: arriving at RNK fresh and
+  // being shown the report of a session you ended yesterday is not where you
+  // are, it is where you were.
+  if (endedTier !== null && !greeting) {
+    return (
+      <>
+        <TierComplete
+          films={state.films}
+          tier={endedTier}
+          onPickTier={() => {
+            setEndedTier(null);
+            setModeOpen(true);
+          }}
+          onList={onList}
+        />
+        {sheets}
+      </>
+    );
+  }
+
+  // No run, and no finished cross-tier order still waiting to be read. Takes the
+  // whole surface for the same reason Rough Cut does: it has no pile and no
+  // duel, so the header, the status bar and every branch below are about a run
+  // that does not exist. Rendering it inside that chrome drew two headers, one
+  // of them reading "0 TO RANK" over a screen whose entire job is to say what
+  // there is to rank.
+  // Nothing running: chrome and a dark middle, because the choosing lives on a
+  // LAYER over the game rather than in a page that replaces it. `overlay` is
+  // what you actually see here.
+  if (!session && !runResult) {
+    const placedNow = state.films.filter(isPlaced).length;
+    return (
+      <>
+        <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+          <Header onSettings={onSettings} onTrophies={onTrophies} />
+          {/* A real screen rather than a frosted card, because there is no game
+              to frost: keeping the header and the nav means you can still see
+              where you are and leave. The line sits in the middle and the
+              choices sit low, within a thumb. */}
+          <div className="flex min-h-0 flex-1 flex-col px-7">
+            <div className="flex flex-1 items-center justify-center text-center">
+              <div>
+                <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
+                  Nothing on the table
+                </p>
+                <p className="mt-2 text-[12px] text-dim tabular-nums">
+                  {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed
+                </p>
+              </div>
+            </div>
+            <div className="flex-shrink-0 pb-5">
+              <button
+                onClick={() => {
+                  fromOverlay.current = true;
+                  setTierOpen(true);
+                }}
+                className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
+              >
+                Pick a tier
+              </button>
+              <button
+                onClick={() => setModeOpen(true)}
+                className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
+              >
+                Something else
+              </button>
+              <button
+                onClick={onProfile}
+                className="mt-3 w-full py-2 text-center text-[12px] text-dim active:scale-95"
+              >
+                Your profile
+              </button>
+            </div>
+          </div>
+          <BottomNav
+            screen="duel"
+            onSettings={onSettings}
+            onModes={() => setModeOpen(true)}
+            onList={onList}
+            onProfile={onProfile}
+            films={state.films}
+            onAddFilm={onAddFilm}
+          />
+        </main>
+        {sheets}
+      </>
+    );
+  }
+
+
   const pair = getPair(state);
   const champion = pendingConfirm(state);
 
@@ -547,7 +893,7 @@ export default function DuelScreen({
           tier bar sitting above a filmography run — the exact thing the comment
           above was written to prevent, reintroduced by adding a second way in. */}
       {!activeRun && !runResult && (
-        <RunBars
+        <RunStatus
           // Borrowed films must not count toward what you have settled — a Nolan
           // run was reporting "0 of 42" for a library of ten.
           films={state.films.some((f) => f.guest) ? state.films.filter((f) => !f.guest) : state.films}
@@ -685,6 +1031,9 @@ export default function DuelScreen({
           inPlay={searchWindow(state)}
         />
       ) : (
+        // A run that exists but has no pair left: the tier ran out, or Done was
+        // pressed. `session` is non-null here — the no-run case took the whole
+        // surface above, before this tree was built.
         <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} onList={onList} />
       )}
 
@@ -700,77 +1049,21 @@ export default function DuelScreen({
 
       {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
 
-      {modeOpen && (
-        <ModePanel
-          films={state.films}
-          tier={setupTier}
-          chosen={chosenMode}
-          onChoose={setChosenMode}
-          shuffle={shuffle}
-          onShuffle={setShuffle}
-          below={below}
-          above={above}
-          onBelow={setBelow}
-          onAbove={setAbove}
-          onClose={closeSetup}
-          onKoth={(t) => {
-            if (beginRun(t)) closeSetup(); // a run that couldn't start leaves you in setup
-          }}
-          onSpotlight={(t) => {
-            setSpotlightFor(t);
-            closeSetup();
-          }}
-          onFastShuffle={(opts) => {
-            setShuffleRun(opts);
-            closeSetup();
-          }}
-          onCurated={() => {
-            closeSetup();
-            setCuratedOpen(true);
-          }}
-          onPickTier={() => {
-            setModeOpen(false);
-            setTierOpen(true);
-          }}
-        />
-      )}
-
-      {tierOpen && (
-        <TierPicker
-          films={state.films}
-          current={setupTier}
-          onClose={() => {
-            setTierOpen(false);
-            setModeOpen(true); // back where you came from, nothing started
-          }}
-          onPick={(t) => {
-            // Choosing a tier is a setting, not a start. It hands you back to the
-            // panel with the range still there to adjust; only Start plays.
-            setPickedTier(t);
-            setBelow(0);
-            setAbove(0); // a new tier's reach is its own question
-            setTierOpen(false);
-            setModeOpen(true);
-          }}
-        />
-      )}
-
-      {curatedOpen && (
-        <CuratedPicker
-          films={state.films}
-          onClose={() => setCuratedOpen(false)}
-          onPerson={(p) => {
-            setCuratedOpen(false);
-            onPerson?.(p);
-          }}
-          onGenre={beginGenre}
-        />
-      )}
+      {/* Every mode stands the Fast Shuffle run down first: `activeRun` decides
+          whether ShuffleDuel owns the surface, and leaving it set started the
+          climb underneath while the shuffle stayed drawn on top. Fast Shuffle
+          loses nothing by it — it writes every judgement and score as it goes. */}
+      {sheets}
 
       {spotlightFor !== null && (
         <SpotlightPicker
           films={state.films}
           onClose={() => setSpotlightFor(null)}
+          // The setting was always threaded into `startSpotlight`; only the
+          // control was missing, so a spotlight silently inherited whatever the
+          // King of the Hill panel had been left on.
+          shuffle={shuffle}
+          onShuffle={setShuffle}
           onPick={(id) => {
             beginSpotlight(id);
             setSpotlightFor(null);
@@ -782,6 +1075,8 @@ export default function DuelScreen({
         />
       )}
 
+      {/* Last, so the greeting sits over the game it is describing. */}
+      {overlay}
     </main>
   );
 }
@@ -853,7 +1148,7 @@ export function BottomNav({
       {logging && onAddFilm && (
         <LogFilm films={films ?? []} onAdd={onAddFilm} onClose={() => setLogging(false)} />
       )}
-      <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} />
+      <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
       <NavItem label="Activity" icon={<ActivityIcon />} />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
@@ -868,11 +1163,25 @@ export function BottomNav({
 }
 
 // Icon-only: labels cost vertical space the duel needs more than the nav does.
-function NavItem({ label, icon, active, onClick }: { label: string; icon: React.ReactNode; active?: boolean; onClick?: () => void }) {
+function NavItem({
+  label,
+  icon,
+  active,
+  onClick,
+  tour,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  active?: boolean;
+  onClick?: () => void;
+  /** `data-tour` hook, so the coach marks can point at this cell. */
+  tour?: string;
+}) {
   return (
     <button
       onClick={onClick}
       aria-label={label}
+      data-tour={tour}
       className="flex flex-1 items-center justify-center py-4 transition-colors active:scale-95"
       style={{ color: active ? "var(--gold)" : "var(--dim)" }}
     >
@@ -903,6 +1212,8 @@ function ModePanel({
   onSpotlight,
   onFastShuffle,
   onCurated,
+  onRoughCut,
+  onRankPile,
   onPickTier,
 }: {
   films: Film[];
@@ -920,6 +1231,8 @@ function ModePanel({
   onSpotlight: (t: Rating) => void;
   onFastShuffle: (opts: ShuffleOptions) => void;
   onCurated: () => void;
+  onRoughCut: (tier: Rating) => void;
+  onRankPile: (ids: string[]) => void;
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
@@ -952,8 +1265,14 @@ function ModePanel({
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
-        {/* The one mode with no pile and no confirm. It asks whichever question
-            it can least predict the answer to, and stops when you do. */}
+        {/* Offered before Fast Shuffle on purpose: on a tier of any size this is
+            the thing that should happen first, and burying it under the mode
+            people are already unsure about would hide the cheapest win. */}
+        <ModeRow
+          title="Rough Cut"
+          blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
+          onClick={() => setChosen("roughcut")}
+        />
         <ModeRow
           title="Fast Shuffle"
           blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."
@@ -986,6 +1305,79 @@ function ModePanel({
         onBack={() => setChosen(null)}
         onStart={onFastShuffle}
       />
+    );
+  }
+
+  // Rough Cut needs a tier and nothing else — no range, no shuffle, because it
+  // asks about one tier's own contents and asks it in the order they already
+  // sit. It shipped without this step, taking whatever `setupTier` happened to
+  // be, which on a fresh session is DEFAULT_TIER — so it always opened on 4★ and
+  // there was no way to say otherwise.
+  if (chosen === "roughcut") {
+    const inTier = films.filter((f) => f.rating === tier && f.lock !== "hard").length;
+    return (
+      <Sheet title="Rough Cut" onClose={onClose}>
+        <p className="mb-3 text-[11px] leading-snug text-dim">
+          One pass, one decision per film. Nothing is settled — it just gives the tier a rough
+          order so ranking it properly afterwards is a fraction of the work.
+        </p>
+        <button
+          onClick={onPickTier}
+          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
+        >
+          <span className="text-[11px] font-extrabold tracking-[0.12em] text-dim">TIER</span>
+          <span className="flex items-baseline gap-2">
+            <span className="text-base text-gold">{starsFor(tier)}</span>
+            <span className="text-[11px] text-dim">
+              {inTier} film{inTier === 1 ? "" : "s"} ›
+            </span>
+          </span>
+        </button>
+        <StartButton
+          label={`Start · ${inTier} film${inTier === 1 ? "" : "s"}`}
+          onClick={() => onRoughCut(tier)}
+          disabled={inTier < 3}
+        />
+        {inTier < 3 && (
+          <p className="mt-2 text-center text-[11px] text-gold">
+            Needs at least 3 films to split into three piles.
+          </p>
+        )}
+
+        {/* The piles from a previous cut, still there. They are not stored
+            anywhere — a film's score IS which third it sits in, so this survives
+            closing the app and, now that a pile run stays inside its own band,
+            survives ranking one of them too. Ranking a pile used to be a
+            one-shot: leave the summary screen and the only way back was to cut
+            the whole tier again. */}
+        {(() => {
+          const bands = bandsOf(films, tier);
+          const split = BUCKETS.filter((b) => bands[b].length > 0).length > 1;
+          if (!split) return null;
+          return (
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
+                Already split — rank a pile
+              </p>
+              <div className="flex gap-2">
+                {BUCKETS.map((b) => (
+                  <button
+                    key={b}
+                    disabled={bands[b].length < 2}
+                    onClick={() => onRankPile(bands[b].map((f) => f.id))}
+                    className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
+                  >
+                    {b === "top" ? "Upper" : b === "middle" ? "Middle" : "Lower"}
+                    <span className="ml-1.5 text-dim tabular-nums">{bands[b].length}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
+        <BackRow onClick={() => setChosen(null)} />
+      </Sheet>
     );
   }
 
@@ -1384,7 +1776,7 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
 // the centre label off true; if the text doesn't fit, the edge nearest the
 // middle is feathered away and the text drifts across to reveal the rest.
 // The tier + progress strip, sitting on the body just under the header feather.
-// TierProgress lived here. Replaced by RunBars, which every mode now shares.
+// TierProgress lived here. Replaced by RunStatus, which every mode now shares.
 
 // ── The climb: contender vs the film above, both UN-RNKD ───────────────────
 function Duel({
@@ -1601,8 +1993,8 @@ function Duel({
           className="relative flex items-stretch justify-center gap-3"
           style={{ height: 356, flexShrink: 1, minHeight: 0, marginBottom: 16 }}
         >
-        <PosterCard film={contender} badge="CLIMBING" pick onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
-        <PosterCard film={challenger} badge="UN-RNKD" onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={contender} badge="CLIMBING" pick pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        <PosterCard film={challenger} badge="UN-RNKD" pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
         </div>
         {/* Stays in the layout flow so it can never overlap anything at any
             screen height. It only needs to look right with the strip folded

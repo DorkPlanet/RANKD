@@ -10,7 +10,7 @@
 // are persisted this becomes the one place to swap in real routing.
 
 import { useEffect, useState } from "react";
-import DuelScreen, { pickOpeningTier } from "./DuelScreen";
+import DuelScreen from "./DuelScreen";
 import { FilmInfo } from "./FilmInfo";
 import { Settings } from "./Settings";
 import ListScreen from "./ListScreen";
@@ -18,10 +18,16 @@ import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { startRun } from "@/lib/ladder";
+import { loadRun } from "@/lib/runs";
+import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
+import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
+import Coach from "./Coach";
+import { forgetTours, markTourSeen, seenTours, TOURS, type TourId } from "@/lib/tour";
+import { loadLog } from "@/lib/log";
+import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
 import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
@@ -33,9 +39,43 @@ const SWEEP_GAP_MS = 400;
 // How many films land before the library is written to disk. See the sweep.
 const SWEEP_BATCH = 10;
 
+type Screen = "duel" | "list" | "profile";
+
+/** Matches `.veil-out` in globals.css. Kept here only to sequence the tour behind it. */
+const VEIL_MS = 200;
+
+/**
+ * Where the app opens.
+ *
+ * The profile, once there is a profile worth opening on. It is the screen that
+ * says what your library amounts to rather than enumerating it — and with the
+ * recap on it, it is now the one screen whose contents differ from the last time
+ * you looked, which is what earns it the landing.
+ *
+ * But only once something has been placed. A library nobody has ranked has no
+ * number one, therefore no hero, therefore no COLLECTIONS row at all — and no
+ * recap either, since a first visit has nothing to compare against. A new user
+ * would land on a page of empty sections instead of a playable duel.
+ * `pickOpeningTier` already refuses to open on an empty tier because "an empty
+ * screen is a poor first look"; this is that same rule one level up.
+ *
+ * Derived rather than stored, so it answers to the library as it stands. Nothing
+ * needs migrating, and someone who clears their ranking goes back to landing on
+ * the duel — which is where they now have work to do.
+ */
+function openingScreen(films: readonly Film[]): Screen {
+  return films.some(isPlaced) ? "profile" : "duel";
+}
+
 export default function AppShell() {
   const [state, setState] = useState<RankState | null>(null);
-  const [screen, setScreen] = useState<"duel" | "list" | "profile">("duel");
+  // `null` means nobody has navigated yet, so the opening rule below still
+  // applies. Deliberately not seeded with a screen name: the rule needs the
+  // library, the library is not loaded on the first render (that is what keeps
+  // this component's first paint identical on the server and the client), and a
+  // screen chosen before then would have to be corrected afterwards — which the
+  // user would watch happen.
+  const [screen, setScreen] = useState<Screen | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
   // A film the review card has handed over to be re-placed. It lives here rather
@@ -55,16 +95,58 @@ export default function AppShell() {
   // Their face, fetched by the sheet and carried through to the share card. A
   // plain value rather than another request, so it starts no effect of its own.
   const [personPortrait, setPersonPortrait] = useState<string | undefined>(undefined);
+  // What the last sitting amounted to. Read once, here, for the reason below.
+  const [recap, setRecap] = useState<VisitDelta | null>(null);
+  // ── The splash, in two flags ───────────────────────────────────────────────
+  //
+  // `held` is the deliberate part elapsing; `splashGone` is the fade having
+  // finished, which is what actually unmounts it. Two flags rather than one
+  // because the exit has to be a CLASS on a mounted element — unmounting at the
+  // end of the hold would remove the splash between two frames, and the whole
+  // reason to spend the time is that the arrival should not feel abrupt.
+  const [held, setHeld] = useState(false);
+  const [splashGone, setSplashGone] = useState(false);
+  // Which tour is on screen. Set one tick AFTER a navigation, never during it:
+  // `Coach` resolves its targets as it renders, so mounting it in the same
+  // commit as a screen change measures the screen the user is leaving.
+  const [tourDue, setTourDue] = useState<TourId | null>(null);
+  // Which tours this browser has finished. Read once, at mount, and never
+  // re-read: `markTourSeen` writes storage the moment a tour ends, and reading
+  // storage during render would pull the overlay out from under the reader on
+  // the very tap that finished it.
+  const [seen, setSeen] = useState<Set<TourId>>(seenTours);
+  // Settings asked for the whole thing again, which has to bypass the
+  // new-library gate below. Deliberately not persisted: it dies with the reload.
+  const [replaying, setReplaying] = useState(false);
 
   useEffect(() => {
     const films = loadFilms();
-    // Open on the biggest tier that can actually be played — with a real library
-    // the default 4★ might be empty, and an empty screen is a poor first look.
-    try {
-      setState(startRun(films, pickOpeningTier(films)));
-    } catch {
-      setState({ films, session: null, journal: [] });
-    }
+    // Restored, not invented. This used to start a brand new run on a tier the
+    // app chose, which is why finding a game in progress felt arbitrary: it was.
+    // `loadRun` returns null for anything stale, unreadable, or naming a film
+    // this library no longer holds.
+    setState({ films, session: loadRun(films), journal: [] });
+
+    // ── Why the visit marker advances HERE and not on the profile ────────────
+    //
+    // `openVisit` rolls the last snapshot into `prev` and takes a new one. That
+    // has to happen when the APP opens, once, before any duel of this sitting
+    // has been fought — otherwise the "current" snapshot would already include
+    // work the recap is meant to be describing next time.
+    //
+    // Doing it on `ProfileScreen` mount instead would look equivalent and is
+    // not: once the profile becomes the landing screen (roadmap #2) the feature
+    // would advance its own marker on arrival and erase its own subject. It is
+    // also a no-op after the first call in a tab, so this stays true however
+    // many times you come back to the screen.
+    //
+    // The counts are taken from the library as loaded. The credits sweep can
+    // still earn a badge a few seconds later, which lands in the NEXT recap —
+    // correct, since that badge was earned during this sitting.
+    void loadLog().then((log) => {
+      const record = openVisit(snapshotOf(films, log.length));
+      setRecap(record ? deltaOf(record) : null);
+    });
   }, []);
 
   // ── The credits sweep ──────────────────────────────────────────────────────
@@ -148,11 +230,44 @@ export default function AppShell() {
   }, [!!state]);
 
   useEffect(() => {
+    const t = setTimeout(() => setHeld(true), SPLASH_HOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
     const b = loadBrightness();
     setBrightness(b);
     applyBrightness(b);
     setProfile(loadProfile());
   }, []);
+
+  // ── Arriving at the duel ───────────────────────────────────────────────────
+  //
+  // The splash's language, a third of the length: the screen you were on is
+  // replaced by a wash of the page background which then falls away, so the duel
+  // is revealed rather than cut to. Both screens sit on `--bg`, so this reads as
+  // a dip through the page and not a flash of anything new.
+  //
+  // Only in this direction, and only from somewhere else. Going back to the list
+  // or the profile is returning to a page you were reading; arriving at the duel
+  // is starting to play, and it is the only switch that changes what the app is
+  // asking of you.
+  //
+  // A counter rather than a boolean, so a second arrival re-triggers the
+  // animation: React reuses the element, and a CSS animation that has already
+  // finished does not restart just because the component re-rendered. The
+  // counter is the `key`, which is what makes it a new element each time.
+  const [veil, setVeil] = useState(0);
+  // ── Arrivals at RNK ────────────────────────────────────────────────────────
+  //
+  // Bumped every time the user comes to the duel from somewhere else, and it
+  // starts at 1 so opening the app counts as the first arrival. `DuelScreen`
+  // compares it against the last one dismissed, which is what lets the overlay
+  // greet you on every arrival without ever reappearing while you sit there.
+  //
+  // A counter, not a boolean: arriving twice has to greet twice, and a flag left
+  // true is indistinguishable from one nobody reset.
+  const [greet, setGreet] = useState(1);
 
   const changeProfile = (p: Profile) => {
     setProfile(p);
@@ -165,14 +280,13 @@ export default function AppShell() {
     saveBrightness(t);
   };
 
-  // Swap the whole library for an imported one and restart on it.
+  // Swap the whole library for an imported one.
+  //
+  // No run afterwards: somebody who has just imported 861 films has not been
+  // shown what they have, and a duel is a poor answer to "what did that just do".
   const loadLibrary = (films: Film[]) => {
     saveFilms(films);
-    try {
-      setState(startRun(films, pickOpeningTier(films)));
-    } catch {
-      setState({ films, session: null, journal: [] });
-    }
+    setState({ films, session: null, journal: [] });
     setScreen("duel");
   };
 
@@ -237,7 +351,23 @@ export default function AppShell() {
       return { ...s, films, session: inPlay ? null : s.session };
     });
 
-  if (!state) return null;
+  // The hold is a floor, not a duration: the splash leaves when the deliberate
+  // time is up AND there is an app behind it to reveal. On any real device the
+  // library (<92ms) is long since in hand and the hold is the only thing being
+  // waited on — which is the point. A splash whose length depends on the speed
+  // of the phone is not a decision, it is a symptom.
+  const splashLeaving = held && !!state;
+
+  useEffect(() => {
+    if (!splashLeaving) return;
+    const t = setTimeout(() => setSplashGone(true), SPLASH_FADE_MS);
+    return () => clearTimeout(t);
+  }, [splashLeaving]);
+
+  const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
+
+  // Still nothing to show behind it — the splash IS the screen for now.
+  if (!state) return splash;
 
   // What the user actually owns. A person run merges borrowed films into
   // `state.films` so the engine can duel them, and the duel screen is the only
@@ -247,9 +377,103 @@ export default function AppShell() {
     ? state.films.filter((f) => !f.guest)
     : state.films;
 
+  // The screen you navigated to, or the one the opening rule chose. Guests are
+  // excluded — a borrowed film is not something you placed, so it must not be
+  // what decides you have a profile worth landing on.
+  const current = screen ?? openingScreen(library);
+
+  // ── When a tour runs by itself ─────────────────────────────────────────────
+  //
+  // Only for a library nobody has ranked, which is the same predicate as the
+  // landing rule and for a matching reason. Someone with 861 films and a year of
+  // duels behind them does not need to be told what a tap does, and ambushing
+  // them with a tutorial on open would be the app talking over their own work.
+  // Settings is where they ask for it.
+  const newLibrary = !library.some(isPlaced);
+
+  const tourFor = (s: Screen): TourId | null => {
+    const id: TourId | null = s === "duel" ? "duel" : s === "list" ? "list" : null;
+    if (!id || seen.has(id)) return null;
+    // The duel tour points at two posters and the film strip, and none of them
+    // exist until a run is actually running. Since the RNK screen now opens on
+    // `RunStart`, firing on arrival resolved the whole tour down to its one
+    // Rough Cut step and then marked it seen — so the first user to need it was
+    // the one guaranteed not to get it. `onRunBegan` fires it at the moment the
+    // duel appears instead, which is also when the marks make most sense.
+    if (id === "duel" && !state?.session) return null;
+    return newLibrary || replaying ? id : null;
+  };
+
+  // ── Every tour is queued, never derived ────────────────────────────────────
+  //
+  // This used to fall back to `tourFor(current)` while nobody had navigated yet,
+  // on the reasoning that the splash had held the landing screen long enough for
+  // it to have committed. That was true of the screen and false of its contents.
+  // The duel tour's targets appear when a RUN starts, not when the screen does,
+  // so the fallback re-evaluated to "duel" in the very commit that started the
+  // run and mounted `Coach` alongside the posters rather than after them — which
+  // is precisely the race `tourDue` exists to avoid. It resolved to one step.
+  //
+  // So there is one path in and it is always deferred: `go` for the list,
+  // `onRunBegan` for the duel. Nothing is owed on landing, because the landing
+  // screen is either the profile, which has no tour, or `RunStart`, which has
+  // nothing to point at yet.
+  const activeTour = tourDue;
+  const showCoach = splashGone && activeTour !== null;
+
+  const finishTour = () => {
+    if (!activeTour) return;
+    markTourSeen(activeTour, seen);
+    setSeen(new Set(seen).add(activeTour));
+    setTourDue(null);
+  };
+
+  /**
+   * Change screens, and queue that screen's tour if one is owed.
+   *
+   * Every navigation goes through here so the deferral cannot be forgotten at
+   * one call site. The delay is the only thing standing between `Coach` and
+   * measuring the outgoing screen.
+   */
+  const go = (s: Screen) => {
+    const arriving = s === "duel" && current !== "duel";
+    if (arriving) {
+      setVeil((v) => v + 1);
+      setGreet((g) => g + 1); // coming back to the game earns the overlay again
+    }
+    setScreen(s);
+    setTourDue(null);
+    const due = tourFor(s);
+    if (due) setTimeout(() => setTourDue(due), arriving ? VEIL_MS + 20 : 20);
+  };
+
+  const goDuel = () => go("duel");
+
+  // Asked for from Settings: forget both tours and start again from the duel.
+  // `replaying` is what lets them run at all on a ranked library, and it stays
+  // on for the rest of the session so the list tour still fires when the user
+  // wanders over to it.
+  const startTour = () => {
+    setSettingsOpen(false);
+    forgetTours();
+    setSeen(new Set());
+    setReplaying(true);
+    if (current !== "duel") setVeil((v) => v + 1);
+    setScreen("duel");
+    setTourDue(null);
+    // Only if a duel is actually on screen. With no run in progress the RNK
+    // screen is `RunStart`, which has none of the tour's targets — so the replay
+    // waits for `onRunBegan` exactly like a first run does. `replaying` stays on
+    // for the session, so it will fire the moment they start something.
+    //
+    // Named rather than derived from `tourFor`, which would still be reading the
+    // pre-reset `seen` and `replaying` from this render's closure.
+    if (state.session) setTimeout(() => setTourDue("duel"), VEIL_MS + 20);
+  };
+
   return (
     <>
-      {screen === "duel" ? (
+      {current === "duel" ? (
         <DuelScreen
           state={state}
           setState={setState}
@@ -258,9 +482,20 @@ export default function AppShell() {
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onList={() => setScreen("list")}
-          onProfile={() => setScreen("profile")}
+          onList={() => go("list")}
+          onProfile={() => go("profile")}
           onAddFilm={addFilm}
+          // A run just started, so the duel's targets exist now. Deferred a tick
+          // for the same reason every other tour start is: `Coach` measures as
+          // it renders, and the posters have not committed yet.
+          // 0 until the splash has gone, so the greeting cannot arrive on top of
+          // the opening animation. Derived rather than an effect that flips a
+          // flag, which would be a cascading render to express one comparison.
+          greet={splashGone ? greet : 0}
+          onRunBegan={() => {
+            if (seen.has("duel") || !(newLibrary || replaying)) return;
+            setTimeout(() => setTourDue("duel"), 20);
+          }}
           personRun={personRun}
           personGuests={personGuests}
           personPortrait={personPortrait}
@@ -271,32 +506,35 @@ export default function AppShell() {
             setPersonPortrait(undefined);
           }}
         />
-      ) : screen === "list" ? (
+      ) : current === "list" ? (
         <ListScreen
           films={library}
           profile={profile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onDuel={() => setScreen("duel")}
-          onProfile={() => setScreen("profile")}
+          onDuel={goDuel}
+          onProfile={() => go("profile")}
           onPoster={setMeta}
           onSpotlight={(film) => {
             setSpotlightFilm(film);
-            setScreen("duel");
+            goDuel();
           }}
           onAddFilm={addFilm}
+          // A tutorial is a held moment. Nothing behind it may move.
+          frozen={showCoach}
         />
       ) : (
         <ProfileScreen
           films={library}
           profile={profile}
+          recap={recap}
           onProfile={changeProfile}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
-          onDuel={() => setScreen("duel")}
-          onList={() => setScreen("list")}
+          onDuel={goDuel}
+          onList={() => go("list")}
           onAddFilm={addFilm}
         />
       )}
@@ -339,7 +577,7 @@ export default function AppShell() {
             // "nothing new to do".
             setPersonRun({ ...p });
             setPersonGuests(guests);
-            setScreen("duel");
+            goDuel();
           }}
         />
       )}
@@ -351,8 +589,34 @@ export default function AppShell() {
           onClose={() => setSettingsOpen(false)}
           films={library}
           onImport={loadLibrary}
+          onTour={startTour}
         />
       )}
+
+      {/* Over the screens and the veil, under the splash. */}
+      {showCoach && (
+        // Keyed by tour, so moving from the duel's to the list's remounts and
+        // re-resolves rather than carrying the old steps and step index across.
+        <Coach key={activeTour} steps={TOURS[activeTour]} onDone={finishTour} />
+      )}
+
+      {/* `key={veil}` is the whole mechanism: a new element every arrival, so
+          the animation plays from the start instead of being already spent.
+          It removes itself the moment the fade ends rather than lingering at
+          zero opacity over the duel. */}
+      {veil > 0 && (
+        <div
+          key={veil}
+          aria-hidden
+          className="veil-out fixed inset-0 z-50"
+          style={{ background: "var(--bg)" }}
+          onAnimationEnd={() => setVeil(0)}
+        />
+      )}
+
+      {/* Last, so it is over everything — including any sheet that a restored
+          screen might already have open. */}
+      {splash}
     </>
   );
 }

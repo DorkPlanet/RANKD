@@ -7,29 +7,60 @@
 // this module touches neither the DOM nor the network: `backup.ts` owns the file
 // and `sync.ts` owns the wire, and both defer to this.
 
-// Everything the app owns that belongs to the person rather than the device.
-export const KEYS = [
+// ── Two key sets, because the file and the wire carry different things ─────
+//
+// The FILE is everything that is yours. The WIRE is the library blob only,
+// because saved rankings sync as their own rows (see `savedList` in the schema):
+// a list is the thing another person could one day follow, so it needs a stable
+// row to point at rather than being sealed inside an opaque blob.
+//
+// Keeping these apart is load-bearing rather than tidy. `applyBackup` clears any
+// key in the set it is given that the payload does not carry — so if the wire
+// used the file's set, **every pull would delete your saved rankings**, since
+// the blob deliberately does not contain them.
+
+/** What goes on the wire, and the only thing the server's library blob holds. */
+export const SYNC_KEYS = [
   "rankd-app-v1", // the library — films, scores, placements, duels
   "rankd-log-v1", // the evidence — every duel ever settled
-  "rankd-profile-v1", // name, bio, banner
+  "rankd-profile-v1", // name, bio, banner, pinned rankings
   "rankd-brightness",
   "rankd-strip-open",
 ] as const;
 
-// Deliberately absent, and each for its own reason:
+// ── Which keys each FILE format owns ───────────────────────────────────────
 //
-//  · `rankd-lists-v1` — saved rankings sync as their own rows (see the schema),
-//    because a list is the thing another person could one day follow. It is also
-//    missing from the FILE backup, which is a real pre-existing gap; fixing that
-//    needs the per-format key set described in HANDOVER.md and belongs with the
-//    profile-library work, not here.
-//  · `rankd-runs-v1` — an in-progress run is ephemeral device state. Nobody
-//    wants a half-finished duel following them onto another phone.
-//  · `rankd-synced-at` — sync bookkeeping about THIS browser. Carrying one
-//    device's marker to another would make the second device believe it had
-//    already pushed work it has never seen.
+// A restore clears any key it owns that the file does not carry, because a
+// restore replaces state wholesale. That turns destructive the moment a key is
+// added: a backup written earlier cannot mention it, and its absence would read
+// as "delete this" — for `rankd-lists-v1`, every saved ranking, gone silently on
+// a restore somebody asked for to be SAFE.
+//
+// So ownership is recorded per format. A restore clears only what its own format
+// knew about; anything introduced later is none of that file's business.
+const FILE_1 = SYNC_KEYS;
 
-export const FORMAT = 1;
+const FILE_2 = [
+  ...SYNC_KEYS,
+  "rankd-lists-v1", // saved rankings — real work, and the reason this exists
+  "rankd-tour-v1", // whether the coach marks have run
+  "rankd-review-dismissed-v1", // review cards already answered
+] as const;
+
+export const FILE_KEYS_BY_FORMAT: Record<number, readonly string[]> = { 1: FILE_1, 2: FILE_2 };
+
+export const FORMAT = 2;
+/** What a file written today carries. */
+export const FILE_KEYS = FILE_2;
+
+// Deliberately in NEITHER set:
+//
+//  · `rankd-run-v1` — an in-progress climb is ephemeral device state, and a
+//    backup carries what you decided rather than what you had not decided yet.
+//    Nobody wants a half-finished duel following them onto another phone.
+//  · `rankd-synced-at` — sync bookkeeping about THIS browser. Carrying one
+//    device's marker to another would make the second believe it had already
+//    pushed work it has never seen.
 
 export interface Backup {
   format: number;
@@ -62,9 +93,11 @@ export function validateBackup(parsed: unknown): { backup: Backup; summary: Back
   if (!backup || typeof backup !== "object" || !backup.keys || typeof backup.keys !== "object") {
     throw new BackupError("That doesn't look like a Rankd backup.");
   }
-  if (backup.format !== FORMAT) {
+  // Every format this build understands, not only the one it writes. Refusing
+  // older files would strand every backup anybody has already saved.
+  if (!FILE_KEYS_BY_FORMAT[backup.format as number]) {
     throw new BackupError(
-      `That backup is format ${backup.format ?? "unknown"}; this version reads ${FORMAT}.`,
+      `That backup is format ${backup.format ?? "unknown"}; this version reads 1 and ${FORMAT}.`,
     );
   }
 

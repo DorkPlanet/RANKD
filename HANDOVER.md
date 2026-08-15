@@ -11,12 +11,18 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State:** everything on master is pushed AND deployed — check with `git log --oneline -1`
-against the live bundle rather than assuming. **Accounts live on the `accounts` branch,
-deliberately unmerged and undeployed** (see Pinned). **305 tests on master, typecheck
-clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect
-errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do
-not add a fourth.** The `accounts` branch adds 24 tests of its own on top.
+**State (15 Aug 2026):** Session G. Everything is pushed AND deployed AND verified against
+the live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately
+unmerged and undeployed** (see Pinned). **353 tests, typecheck clean, `next build` clean,
+lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1
+unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a
+fourth.** The `accounts` branch adds 24 tests of its own on top.
+
+**Nothing in the tree is now written-and-wired-to-nothing.** Keep it that way.
+- ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
+- ~~`leastRanked`~~ — deleted in `cf1444a`, briefly restored for a screen that was then
+  cut, and deleted again. **This entry claimed it was in the tree for two sessions while it
+  was not: check a claim like this against the code before acting on it.**
 
 ## How to get oriented in five minutes
 
@@ -72,9 +78,21 @@ single session seam, `lib/sync.ts` the mirror, `lib/reconcile.ts` the conflict d
 Sign-in, push, pull and the conflict chooser are **unrun** — they need a database.
 Full plan: `C:\Users\jarra\.claude\plans\foamy-painting-hammock.md`.
 
-**Session F (this one) — the duel screen's top zone, and the review card.** See the
-first two entries under "Next, in order", both now landed, and the two decision blocks
-below.
+**Session F (`1221e4b` … `0b615a9`) — the big one. Read the decision blocks below.**
+Eleven pieces of feedback from real use, worked through in order, then Rough Cut, then
+five more bugs found by using the app while building it.
+
+Landed: the duel screen's top zone rewritten · the review card's frequency fixed · reset
+with granularity · 11 → 34 badges · antiphase float · **Rough Cut** (a new mode) · a
+ghost-click bug that had been silently closing the setup panel · and the `band`
+constraint that stops ranking a pile from destroying the cut that made it.
+
+`RunBars` is now `RunStatus` — one bar, not bars.
+
+**Session G — the opening.** Roadmap #2 in full (recap, splash, profile as the landing
+screen), then roadmap #1 (onboarding coach marks, one pass per screen), then two bugs from
+real use: a Rough Cut was invisible in the list, and the app opened inside a game nobody
+had chosen. Read the decision blocks below.
 
 ## Decisions taken — do not relitigate
 
@@ -109,6 +127,300 @@ below.
 - **Removal never touches the evidence log.**
 - The TMDb key is in public history (`ab25cf58`). **User has declined rotation five times —
   note it if relevant, never argue it.**
+
+### Rough Cut, and the sorting problem it answers (Session F)
+
+- **`ladder.ts` costs n(n-1)/2 duels to rank a tier, and 3★ holds 185 films.** Several
+  thousand comparisons. Every gesture proposed to make that bearable — lock-at-the-bottom,
+  a reverse climb, armed taps on the film strip, batch-the-tail — was a constant-factor
+  patch on a quadratic sort. **They were all dropped.** If someone asks for another
+  shortcut through a big tier, the answer is almost certainly bucketing, not a gesture.
+- **Rough Cut is bucketing:** one pass, one decision per film, upper/middle/lower third.
+  No comparisons. It **writes scores and nothing else** — no log rows (no pair was
+  compared, and every belief and badge rests on the log being literally true) and no
+  locks (coarse is not a commitment).
+- **It needed no new engine because `poolFor` sorts the pile BY SCORE.** The climb is
+  expensive precisely because that order starts arbitrary. Better scores ⇒ a nearly
+  sorted pile ⇒ insertion sort close to linear.
+- **`writeScores` now honours `session.band`, and this is load-bearing.** It spreads a
+  run's films across the whole tier band, which is right when the run IS the tier and
+  destructive when it is a slice: confirming one film of a four-film pile used to
+  re-spread those four from `tierMin` to `tierMax`, scattering them back through the two
+  piles they had just been separated from. `startRun` sets `band` from the pile's own
+  current scores for an `only` run that is not cross-tier. **Do not remove this without
+  re-reading `test/roughCut.test.ts` — a whole feature silently undoes itself.**
+- **The piles are not stored and must never be.** A film's score IS which third it sits
+  in, so `bandsOf` derives them from the library as it stands. That is why "go back to
+  the split I did yesterday" survives closing the app, restoring a backup, and ranking one
+  of the piles.
+
+### Saved rankings are readable at last (Session G)
+
+`saveList` had written `rankd-lists-v1` since the share cards landed and **`loadLists` and
+`hydrate` had no callers anywhere**: you could make a ranking, save it, and never see it
+again. The user found this, not a test.
+
+- **`SavedEntry` carries `rating`, `genres` and `director` now.** Without `rating`,
+  `statsFor` and `pickInsight` have nothing to work from and a saved list **cannot redraw
+  its own card** — which is exactly why re-export was never possible.
+- **Storage is `{v:2, lists}`, migrated in memory from the bare v1 array** and rewritten on
+  the next save. A v1 entry has no rating until its film is found in the library.
+- **`filmsOf` never invents a rating.** A v1 entry whose film has ALSO left the library
+  cannot be reconstructed, so it is dropped from the card and the count is shown to the
+  user rather than the card quietly coming up short.
+- **Pinned rankings are ids on the profile, capped at `MAX_PINNED` = 3.** A pin naming a
+  deleted list simply matches nothing when rendering, so `deleteList` never has to tidy up.
+
+### backup.ts owns keys PER FORMAT now (Session G)
+
+The restore loop clears any key it owns that the file does not carry, which is right — a
+restore replaces state wholesale. It turns destructive the moment a key is added, because a
+backup written earlier cannot mention it and its absence reads as "delete this".
+
+**`rankd-lists-v1` was in no backup at all, so a restore would have destroyed every saved
+ranking.** Ownership is now recorded per format: a restore clears only what its OWN format
+knew about, and anything introduced later is left alone. Format 2 adds `rankd-lists-v1`,
+`rankd-tour-v1` and `rankd-review-dismissed-v1`; format 1 files still restore.
+
+**`test/backup.test.ts` is new and guards the destructive case directly.** `backup.ts` had
+no tests before. `rankd-run-v1` is deliberately excluded: a backup carries what you
+decided, and an unfinished climb is what you had not decided yet.
+
+### The RNK entry is an OVERLAY, not a screen (Session G)
+
+Four screens were built for this and all four were rejected. The premise was wrong, not
+the layouts. The user diagnosed it: *"I dont like just going to the tab and seeing an
+inprogress game without a prompt or reminder of where I am and what I was doing... maybe
+thats okay if a frosted transparent overlay sits over the top asking to continue or select
+something else."*
+
+- **The game in progress was never yours.** Sessions lived in memory and died with the tab,
+  so the app started a BRAND NEW run on `pickOpeningTier` every open. It felt arbitrary
+  because it was. `lib/runs.ts` persists the climb, so Continue now genuinely resumes:
+  verified across a full reload, same pair back on the table.
+- **Tier climbs only, and a server would not change that.** A curated run borrows guest
+  films that exist nowhere else, so it needs whole `Film` objects; Fast Shuffle has no pile
+  to resume. The key is device-local forever and excluded from sync — an unfinished pile is
+  working state, not a judgement, and `reconcile.ts` refuses to merge.
+- **It is a LAYER so the game shows through.** A screen could describe your run; this shows
+  it to you, which is the reacclimation. **The backdrop must never dim to opaque** — at 82%
+  the duel was invisible and it read as a dialog over a void. 58% + blur is the setting.
+- **A junction, not a control panel.** Tiers and modes are not rebuilt: `TierPicker` and
+  `ModePanel` already do that. Picking a tier FROM the overlay starts it (`fromOverlay`);
+  from inside Play it stays a setting.
+- **Not dismissible by tapping away**, by request: a decision point, not a notification.
+- **`greet` is a counter, bumped on every arrival at RNK**, compared against the last
+  dismissed. AppShell passes 0 while the splash is up so the two layers never stack.
+
+### Sheets must be rendered by every branch (Session G)
+
+`ModePanel`, `TierPicker` and `CuratedPicker` are built once into `sheets` and rendered by
+every return path. They used to hang off the main return only, so any early return above
+silently killed them and "Something else" did nothing. **A new full-surface early return
+must render `sheets` or its buttons are dead.**
+
+### "Something else" did nothing, and why that class of bug recurs (Session G)
+
+`RunStart` returns early, and `{modeOpen && <ModePanel/>}` was mounted ~200 lines below
+that return. The button set state nothing rendered. **Every sheet this screen can raise has
+to be reachable from whichever branch returns first** — the early-return path now renders a
+fragment carrying `ModePanel`, `TierPicker` and `CuratedPicker` itself. Adding a new
+full-surface early return means auditing the sheets again.
+
+### RunStart: the app no longer opens in a game (Session G)
+
+The user: "it feels awkward sometimes to just load into an already selected game. It
+shouldn't be video game menu like but it should be like a quick resume or maybe even a
+this is what you have left kinda idea."
+
+- **`AppShell` no longer knows how to start a run.** It used to open with
+  `startRun(films, pickOpeningTier(films))`, so the first thing anyone saw was a climb
+  already in progress. The problem was never which tier got picked; it was that a
+  judgement was being asked for before anything had been offered. The shell now opens with
+  `session: null` and `DuelScreen` renders `RunStart`. Importing a CSV lands there too.
+- **The FIRST version of this screen was rejected, and how.** It was a dashboard: a
+  `WHERE YOU STAND` eyebrow over a count, a bordered box, and a list of tiers with `0/185`
+  right-aligned down the side. Every number on it was correct and the whole thing read as
+  a settings panel. Two faults, both named by the user:
+  - **No presence.** This is the door into a game about films, so a film should be on it.
+    The artwork says what the app is before a word is read; a bigger heading could not.
+  - **Labels instead of sentences.** `WHERE YOU STAND / 1 of 861` is a readout. "You've
+    ranked 1 of your 861 films" is the app talking to the person whose library it is,
+    which is the voice the rest of it already uses.
+  Rebuilt as a title card: poster behind, serif prose over the fade, the standing demoted
+  to one quiet line beneath the offer, the tier list reduced to a single row of type.
+- **A poster here, even though `ProfileScreen` deliberately refuses one.** That refusal —
+  "posters are the library's currency and one more of them at the top of your own profile
+  goes stale" — is reasoning about the PROFILE, which is about you. This screen is about
+  the films, and it is the threshold of the game where posters are the pieces you are
+  about to move, so the currency belongs. It also costs no request; the profile has to
+  fetch a still.
+- **4:5, and `.poster-fade` rather than `.banner-fade`.** A poster is 2:3, so the profile's
+  16:9 window throws away nearly half of it and takes the printed title with it; 4:5 loses
+  about a sixth, evenly off the top and bottom. And a poster arrives saturated where a TMDb
+  backdrop arrives dim, so the banner's gradient left it blazing directly under the header,
+  fighting the wordmark. The new scrim is heavy at the top, open through the middle where
+  the artwork earns its place, and solid at the foot so the offer reads at a glance.
+- **It draws no chart, deliberately.** A tier map was built for this app twice and
+  rejected twice as "chunky". The counts ARE the readout: `13 of 14 still to rank`.
+- **The standing line is allowed to be static**, unlike the library bars `RunStatus` had
+  to drop. Nothing is happening on this screen — it is a position, not a progress bar.
+- **`lastTier` derives the resume from the newest row in the LOG,** not from stored state,
+  for the same reason `bandsOf` derives Rough Cut's piles. It survives a restore, a second
+  device and a reset, and it falls back to the `b` side when the contender has since been
+  removed (removal never touches the log).
+- **`RunStart` takes the whole surface via an early return, like Rough Cut.** Rendering it
+  inside the duel chrome drew two headers, the outer one reading "0 TO RANK" above a
+  screen whose entire job is to say what there is to rank.
+- **`endedTier` fixes a pre-existing bug found on the way.** `endRun` nulls the session,
+  and `TierComplete` then read `session?.tier ?? DEFAULT_TIER` — at exactly the moment
+  session was null. **Finishing a half-star climb showed FOUR-STAR's films, count and
+  duels under "Session done".** The transition is now caught in `commit`, which sees both
+  ways a run ends (Done, and `confirm` emptying the pile), so the natural completion
+  cannot be the path that forgets. Cross-tier runs are excluded: `RunSummary` owns those.
+- **The duel tour fires on `onRunBegan`, not on arriving at the screen.** Caught only by
+  looking at the deployed first-run: RNK now opens on `RunStart`, where none of the tour's
+  targets exist, so the tour resolved down to its single Rough Cut step and marked itself
+  seen. **The one user who needed it was the one guaranteed not to get it.** Two features
+  shipped the same day, each correct alone. If you add a screen in front of another, check
+  what the tour resolves to on it.
+- **Known, not fixed:** `TierComplete`'s "duels" stat sums the per-film counter, so it
+  double-counts exactly like the profile's DUELS stat. Same root cause, same reason for
+  leaving it alone.
+
+### The list's unplaced block sorts by SCORE, not A-Z (Session G)
+
+Reported by the user: a Rough Cut played correctly, and the list afterwards was "all out
+of order from what I picked".
+
+- **The cause was a collision between two correct decisions.** `applyRoughCut` writes
+  `score` and deliberately writes NO `lock`, so every film it touches stays unplaced. And
+  `buildList` sorted the unplaced block **alphabetically**, on the stated grounds that an
+  unranked film's score is a by-product of `writeScores` re-spreading somebody else's
+  climb. Both were right when written. Rough Cut broke the second one's premise: it made
+  an unplaced film's score a decision the user actually made, and A-Z threw it away.
+- **The scores were correct the whole time.** Nothing was lost, and no data needed
+  repairing. The list was discarding the judgement at render.
+- **The fix is `b.score - a.score || a.title.localeCompare(b.title)`.** The tiebreak is
+  what makes it safe rather than merely better: `seedScore` is `tierMid`, so every film in
+  a tier nobody has touched holds an identical score and falls through to A-Z exactly as
+  before. **Order only appears once something has actually happened.**
+- Confirmed against the real 861-film library, where 3★ had 176 of 185 films still on the
+  seed score. The four upper-pile picks now open the tier in the order they were dealt,
+  the untouched 176 sit alphabetically in the middle, and the lower pile closes it.
+- `test/list.test.ts` is new. `buildList` had **no tests at all** before this.
+- **The remaining honest limitation:** a tier that has been climbed but not cut now shows
+  its unplaced films in live pile order rather than A-Z, because `writeScores` gives them
+  distinct scores. That order is the engine's working state, not a judgement. If it ever
+  reads as noise, the fix is provenance (a flag set by `applyRoughCut` and cleared by
+  `writeScores`), not a return to A-Z, which loses real decisions.
+
+### Onboarding (Session G)
+
+- **The tour is not playable, and that is the point.** The scrim swallows every tap,
+  including on the control it is highlighting. `settle` cannot tell a demonstration duel
+  from a real one, and every belief, badge and score rests on the log being literally
+  true — so a tutorial that let you "try it" would write judgements nobody made. Verified:
+  a full five-step run left the log at exactly the row count it started with.
+- **One tour per screen: `TOURS.duel` (5 steps) and `TOURS.list` (3).** The duel carries
+  most of the teaching because that is where the game is; the list gets its own because it
+  holds the one genuinely unguessable idea in the app — **a rating is not a position**,
+  which is what the UN-RNKD divider means and what nothing on screen says. The profile has
+  none: it is labels next to numbers, which is the one kind of screen that explains itself.
+- **It auto-runs only when nothing is placed** — the same predicate as the landing rule.
+  Somebody with a ranked library is never ambushed; Settings → **Show me around** is their
+  route in, and that half was explicitly asked for. Settings forgets BOTH tours and sets a
+  session-only `replaying` flag, which is what lets them run on a ranked library at all.
+- **Every screen change goes through `go()` in `AppShell`, which defers the tour by a
+  tick.** `Coach` resolves its targets as it RENDERS, so mounting it in the same commit as
+  a screen change measures the screen the user is leaving and resolves to almost nothing.
+  The landing screen is the one exception and needs no deferral, because the splash has
+  held it for the better part of a second. **Do not add a new `setScreen` call site.**
+- **A tutorial is a held moment: nothing behind it may move.** `ListScreen` takes a
+  `frozen` prop that switches `useDriftScroll` off while the marks are up. The list drifts
+  at 20px/s after 2.5s of quiet and a tutorial holds the reader far longer, so the page
+  crept downward and the spotlight — which re-measures its target — faithfully followed
+  the row off the screen. **The mark was doing its job; the page was not supposed to be
+  moving.** The drift's own input listeners sit on the scroller, BEHIND the overlay, so
+  nothing the reader does can bump it back to idle either. Any future overlay that holds
+  someone still on the list has to do the same. Verified both ways: frozen for 5.4s with
+  zero pixels of movement, and drifting again within 4.5s of the tour closing.
+- **A step whose target is absent is dropped, and that is load-bearing, not defensive.**
+  The strip is not in every mode, and the UN-RNKD divider does not exist once a tier is
+  finished. `resolveSteps` filters and the counter adjusts.
+- **The mark's position is written to the DOM, not held in state.** Coordinates come from
+  `getBoundingClientRect` on a live element — a reading of the DOM, not a fact React owns.
+  State would mean measure → setState → re-render on every step, resize and scroll.
+- **The caption's height is measured, never estimated.** A constant was close enough to
+  look right and wrong enough to matter: the copy sets the height, the longest step ran
+  ~12px past the guess, and the gap under the bottom-nav step collapsed from 16px to 4.
+- **The spotlight is clamped to the viewport.** The nav sits flush to the bottom edge, so
+  its padded box ran 8px off-screen and the gold ring came out as a three-sided bracket.
+- **Arming is a timestamp, not a flag.** Ghost clicks are real here — a full-screen layer
+  mounting under a finger that has just tapped is exactly the shape that cost a session
+  before. An `armed` boolean needed clearing each step, which is a setState inside an
+  effect; elapsed time answers the question at the moment it is asked. **A synthetic click
+  cannot catch a regression here** — test it by tapping within 400ms of a step appearing.
+- **Copy rule: the app records a PREFERENCE, not a verdict.** The first step said "Tap the
+  better film" and the user corrected it: "which is better" asserts a fact about the
+  films, while the library is an account of what one person would rather watch. There is a
+  test guarding it. Do not reintroduce comparative-quality language anywhere user-facing.
+- **Copy rule: no em dashes in user-facing text.** The user's words: "it's clean but
+  obviously AI". Tested across every step of both tours. **The rest of the app's existing
+  copy still uses them freely and was NOT swept** — that is a bigger, separate edit to
+  text the user has lived with, and it needs asking first.
+- **`rankd-tour-v1` holds a JSON list of finished tours,** not a flag, because the two are
+  reached at different moments and a boolean would have swallowed the second. A bare `"1"`
+  is the original single-tour value and still reads as `["duel"]`.
+- **It IS in `backup.ts`'s `KEYS`,** knowing the restore loop `removeItem`s absent keys. Restoring a pre-Session-G backup therefore offers the tour again — which is
+  what happened on every backup before the line existed, so nothing regressed. It must not
+  become the reason the per-format key set gets rushed: its worst case is one tutorial
+  shown twice, while `rankd-lists-v1`'s is a ranking somebody cannot get back.
+
+### Opening and returning (Session G)
+
+- **The recap counts duels from the LOG, not from `fingerprint().duels`.** `settle`
+  increments the per-film `duels` counter on BOTH sides of every duel, so summing it
+  double-counts. The number the recap reports has to be the one the player watched go up
+  — `RunStatus` says "24 duels this sitting" from log rows, so the recap says "last time —
+  24 duels" from the same place. **`ProfileScreen`'s DUELS stat still shows the doubled
+  figure** (861-film library: it read 20 against 10 real duels). Left alone deliberately —
+  it is a displayed number the user has been looking at, so changing it is their call, not
+  a silent fix. `Settings` already shows the true count.
+- **`openVisit` is called from `AppShell`'s mount effect, never from `ProfileScreen`.**
+  The marker must advance when the APP opens, once, before any duel of this sitting. On
+  the profile it would look equivalent and would instead erase its own subject on arrival,
+  now that the profile IS the landing screen.
+- **The splash is not a loading screen and must never be built as one.** The library loads
+  in under 92ms. `SPLASH_HOLD_MS` is a FLOOR — the splash leaves when the hold has elapsed
+  AND the library is in hand — so its length never depends on how fast the phone is. A
+  splash whose duration is a symptom rather than a decision is a bug.
+  - Measured: the wordmark settles by ~360ms, the last of the five bars lands at 540ms,
+    the hold ends at 620ms, the fade takes 280ms. **Anything added to the intro has to fit
+    under 620ms or the mark is still arriving as it starts to leave.**
+- **Landing on the profile is conditional on something being placed** (`openingScreen` in
+  `AppShell`). With no locks there is no hero, therefore no COLLECTIONS row, and no recap
+  either — a new user would land on empty sections instead of a playable duel. Same rule
+  as `pickOpeningTier` refusing an empty tier, one level up. Derived, never stored, so
+  clearing the ranking sends you back to the duel where the work is.
+- **The veil fires only on arriving AT the duel, and only from elsewhere.** Going back to
+  the list or the profile is returning to a page you were reading; the duel is the only
+  switch that changes what the app asks of you. `key={veil}` is load-bearing — a finished
+  CSS animation does not replay because the component re-rendered.
+
+### Motion (Session F)
+
+- **Nothing that floats may share a beat.** There were four fixed float classes, and a
+  poster and its own title shared a `0s` delay while Fast Shuffle's two cards — neither
+  of which is a `pick` — fell through to the *same* class and bobbed in perfect lockstep.
+  Phase is now per-element, hashed from the film id (`floatPhase` in `PosterCard`), with
+  the duration jittered so anything that starts together drifts apart. **Never go back to
+  a shared delay.**
+- **Use `Math.imul` for hashing, not `*`.** A 32-bit multiply overflows to a float and
+  drops the low bits, which washed the seed out — the first attempt handed a poster and
+  its title 0.336 and 0.331 and they bobbed together anyway.
+- **`side` is not `pick`.** Lean belongs to the PAIR, gold belongs to the STATE. Fast
+  Shuffle has no pick, so before this both cards leaned the same way.
 
 ### The duel screen's top zone (Session F)
 
@@ -154,48 +466,32 @@ below.
 
 ## Next, in order
 
-**Reordered 13 Aug 2026** against eleven pieces of feedback from real use. Reasoning and
-the code findings behind the order are at
-`C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Part Two); the older plan at
-`distributed-conjuring-oasis.md` still holds for items 6 and 9.
+**Renumbered again 14 Aug 2026 (Session G),** after opening-and-returning landed and left
+a hole at 2. Before that, everything that was 1–7 landed — progress bars, review card,
+reset, shuffle animation, badges, and Rough Cut, which absorbed the whole
+lock-at-the-bottom family. Reasoning at
+`C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Parts Two–Four); the older plan
+at `distributed-conjuring-oasis.md` still holds for item 3 below.
 
-**Items 1–6 are all small, and three of them are things the user described as not
-feeling right.** That is trust decay, it is cheap to reverse, and it gets cleared before
-anything new is built.
+1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
+   per screen, revisitable from Settings. See the decision block above. The original entry
+   read: A new user is told nothing and infers everything. The user supplied
+   reference screenshots, all of one kind: **coach marks over the live UI**, dismissible,
+   with a step counter — not a carousel of pictures. First run, skippable, and
+   **revisitable from Settings** (that half was asked for explicitly and is what stops it
+   being a one-shot nobody can re-read). Cover the core loop first — tap to pick, flick
+   up/down, hold for detail, the strip — then Rough Cut, which is now the thing a new user
+   should reach for on a big tier.
+   - Its "seen" flag must ride in `backupFormat.ts`'s key set, or restoring a backup
+     re-runs the tutorial at someone who finished it months ago.
+   - **Do this after the mechanics settle.** A tutorial written against a screen that is
+     about to change gets written twice.
 
-1. ~~The progress bars~~ **LANDED.** They were misnamed, not miscounted: `SHUFFLED` counted
-   films that had fought ≥1 duel while `UN-RNKD` meant no position at all, so the bar hit
-   100% over a list of UN-RNKD pills. Now COMPARED / RANKED, one vocabulary with the list
-   and the pills. The two library-wide bars then left the duel screen entirely — at 861
-   films one duel moved them 0.24px, so they could not respond to anything. `RunBars` is
-   one unlabelled track plus a session line, and is due a rename (one bar, not bars).
-2. ~~The review card~~ **LANDED.** Two bugs compounding: "Not now" called a permanent
-   dismiss, and because only `review[0]` renders, waving one away promoted the next
-   instantly. Now a 14-day snooze, a separate quieter "Never", and a 20-hour cooldown
-   after any answer — checked BEFORE the belief fit, so the quiet period costs nothing.
-   v1's bare id array migrates to mutes.
-3. **Reset, with granularity.** Explicitly asked for: start again but KEEP the imported
-   films and star ratings. Separate control over **soft** locks (`withdrawSoftLocks()` in
-   `shuffle.ts` is built and tested and simply has no UI — that IS #24) and **hard** locks.
-   Offer the backup export first.
-4. **Fast Shuffle has no fly-across animation.** `flyPosterAcross` / `fadeLoserOut` are
-   exported already; `ShuffleDuel` just never used them.
-5. **King of the Hill in shuffled order.** Once in a tier, offer the pile shuffled but with
-   **no duel skipped** — repetition, not sampling. A run-setup option; no new mechanics.
-6. **Many more badges.** `achievements.ts` is a flat array of 11, all DERIVED, so anything
-   added applies retroactively. The evidence log and `fingerprint`/`topPeople` are entirely
-   untapped as sources.
-7. **Lock films in at the BOTTOM, and a reverse climb.** Deciding what you like least is
-   easier than what you like most, so working upward from the worst is a real mode.
-   `flickToBottom` already exists and is wired to swipe-down (`DuelScreen.tsx`) — what is
-   missing is that sinking PLACES without COMMITTING, and there is no run that climbs from
-   the bottom. Design alongside #8; the user's instinct to review the gestures together is
-   right.
-8. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
+2. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
    **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a row's
    height, and nothing new goes inside the list scroller** — drag handles and lock toggles
    want to violate both. That constraint IS this item.
-9. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
+3. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
    `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
    writes scores and a second cross-tier order would contradict it. **This is also the
    Profile Card's "Top 10" slot** (#11), described from the other direction. Do the prop
@@ -203,10 +499,10 @@ anything new is built.
    already two effects reaching for `state.session`, and resume would make it three. They
    cannot race today because only one is ever set at a time, but that is a property nobody
    is enforcing.
-10. **Opening and returning to the app.** EXPLORATION, not implementation — the user can
-    feel something missing and cannot yet name it. Sequenced BEFORE the profile redesign
-    deliberately: the answer may change what the profile is for.
-11. **Profile card slots + persistence + JPG re-export.** Empty slots for Top 10, favourite
+4. ~~**Profile card slots + persistence + JPG re-export**~~ — **LANDED in Session G**: the
+    shelf, the viewer, re-export, pinning, the `{v:2}` payload and the per-format backup key
+    set are all in. What remains of the original item is the auto-save floor and named
+    slots (Top 10, favourite actor) as *empty* prompts. Original entry: Empty slots for Top 10, favourite
     actor, favourite director and so on, filled by making a list, persisted, viewable
     socially later, and re-exportable as the JPG. Absorbs the old #2 (profile library +
     auto-save): needs `SavedEntry` to gain `rating`/`genres`/`director` (**without `rating`
@@ -217,18 +513,18 @@ anything new is built.
       Adding `rankd-lists-v1` to `KEYS` naively means **restoring an older backup deletes
       every saved ranking**. Needs a per-format key set. `rankd-review-dismissed-v1` is
       also missing from the manifest.
-12. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
+5. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
     and #11's structures first.
-13. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
+6. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
     stores NO images — a banner is a film id and a still URL, so the whole profile costs a
     few hundred bytes. Real uploads need server storage, which needs the pinned accounts
     work. **An unblocked version exists now:** choose an avatar from artwork already in the
     library, exactly as `bannerStill` already works.
-14. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
+7. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
     session and **`guests: Film[]` in full** — ids alone lose every unseen film.
     `adoptRun(films, session)` belongs in `ladder.ts` with its own tests. Stays device-local
     forever; it is deliberately excluded from the synced payload.
-15. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+8. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
 
 ## Pinned — built but not shipped
 
@@ -270,6 +566,19 @@ anything new is built.
 - **A synthetic `.click()` does not drive `PosterCard`.** It listens for pointer events, so
   scripted tests must dispatch `pointerdown`/`pointerup`. Without that the duel looks frozen
   and you will hunt a bug that isn't there.
+- **GHOST CLICKS. A browser fires a synthesised `click` ~300ms after a finger lifts, at the
+  coordinates it lifted from.** Choosing a tier appeared to select it and then dismiss the
+  whole setup panel: the picker closed, the panel reopened, and the delayed click landed on
+  the panel's newly-mounted BACKDROP, whose handler is `close`. The logic was correct
+  throughout. `Sheet` now arms its backdrop 400ms after mount. **This class of bug is
+  invisible to synthetic clicks, which fire once and immediately** — every test of that flow
+  passed. If a touch interaction "doesn't take", check what `elementFromPoint` returns at the
+  tap position two frames later.
+- **`writeScores` spreads a run across the WHOLE tier band unless `session.band` says
+  otherwise.** Correct when the run is the tier; destructive when it is a slice of one. This
+  silently undid Rough Cut: ranking a four-film pile re-spread it from `tierMin` to `tierMax`
+  and scattered it back through the piles it had just been separated from. Any future feature
+  that climbs part of a tier must set `band`.
 - **The dev console retains stale errors.** A `BARS is not defined` from a hot-reload kept
   reappearing long after the header rendered correctly on screen. Confirm against rendered
   output and `tsc`, never the console.
@@ -297,3 +606,16 @@ anything new is built.
   quotes.
 - The preview pane does not composite: animations never *finish* there.
 - `test/fixtures/ratings.csv` is gitignored; `import.test.ts` skips loudly without it.
+- **To drive the app against the real 861 films**, parse that fixture with
+  `parseLetterboxdCsv`, write the result somewhere the preview can fetch, and **delete it
+  afterwards — it is the user's real ratings and `public/` deploys.**
+- **The app now owns ten storage keys and `backupFormat.ts` backs up five.**
+  `rankd-sitting-v1` and `rankd-visit-sitting-v1` are sessionStorage and correctly excluded.
+  But `rankd-lists-v1` (saved rankings) and `rankd-review-dismissed-v1` are localStorage and
+  **are not in any backup** — a restore silently loses both. Fixing it needs the per-format
+  key set described in roadmap item 4, because the restore loop `removeItem`s any key absent
+  from the file.
+  - `rankd-visit-v1` joined them in Session G — it is written for the first time now that
+    the recap exists. **Leave it out of the manifest deliberately**: it describes sittings
+    on THIS device, and its worst case is one missing recap that heals itself on the next
+    open. Do not let it get swept into the fix for the other two, which lose real work.

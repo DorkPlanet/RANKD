@@ -37,6 +37,57 @@ function posterClone(el: HTMLElement, poster: string, ring: string): HTMLElement
   return clone;
 }
 
+// A stable phase in 0..1 for one film, so its float never keeps time with
+// anything else on screen.
+//
+// Derived from the id rather than randomised, because the poster remounts as
+// artwork arrives and a fresh random number each time would make the card jump
+// mid-bob. Same film, same phase, every render.
+//
+// `seed` lets one film ask for two unrelated phases — its poster and its title
+// must not rise together, which is exactly what the old fixed classes did.
+// `Math.imul`, not `*`: a 32-bit multiply overflows to a float and silently
+// drops the low bits, which washed the seed out — the first version handed a
+// poster and its title 0.336 and 0.331 and they bobbed together anyway. The
+// final avalanche is what stops two nearby inputs landing on nearby phases.
+function floatPhase(id: string, seed: number): number {
+  let h = 2166136261 ^ Math.imul(seed, 0x9e3779b9);
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0x5bd1e995);
+  h ^= h >>> 15;
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+/**
+ * Inline float timing for one element.
+ *
+ * ── Why the two cards are ANTIPHASE rather than merely different ───────────
+ *
+ * The first version gave each element an independent phase and a jittered
+ * duration. That is "usually different", not "never the same": two films whose
+ * ids happen to hash close together still bob almost in step, and it comes up
+ * often enough to notice because the pair changes every duel.
+ *
+ * So the period is shared and the right-hand card is offset half a cycle. One
+ * rises exactly as the other falls, every time, for every pair.
+ *
+ * The phase is hashed from the PAIR's id, not each card's own — that is the part
+ * that took two goes. Adding half a cycle to a DIFFERENT film's hash does not
+ * produce antiphase, it produces another arbitrary phase; measured on screen the
+ * two cards came out 0.9s and 0.4s apart on a 6.5s period, which is nearly in
+ * step. Both cards have to start from one number for the offset to mean
+ * anything. Which point of the cycle the pair sits at still varies per duel, so
+ * it never looks mechanical.
+ *
+ * The delay is NEGATIVE on purpose: it starts the animation part-way through
+ * rather than making the card sit still and wait for its turn.
+ */
+function floatStyle(pairId: string, seed: number, base: number, right: boolean): React.CSSProperties {
+  const phase = (floatPhase(pairId, seed) + (right ? 0.5 : 0)) % 1;
+  return { animationDelay: `${-phase * base}s`, animationDuration: `${base}s` };
+}
+
 // Centre point of an element, which rotation about the centre leaves unmoved.
 function centreOf(el: HTMLElement) {
   const r = el.getBoundingClientRect();
@@ -74,18 +125,28 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
 
 // The beaten challenger sinks and fades, revealing its replacement underneath,
 // rather than the two cutting straight from one film to the next.
-export function fadeLoserOut(el: HTMLElement, poster: string) {
+// `tilt` because a clone that does not match its card's lean lands crooked
+// against it. Defaults to the challenger's lean, which is every caller but the
+// left-hand card in Fast Shuffle.
+export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TILT) {
   const clone = posterClone(el, poster, "0 8px 26px rgba(0,0,0,0.55)");
   clone
     .animate(
       [
-        { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, opacity: 1 },
-        { transform: `translate(0,18px) rotate(${TILT}deg) scale(0.94)`, opacity: 0 },
+        { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1 },
+        { transform: `translate(0,18px) rotate(${tilt}deg) scale(0.94)`, opacity: 0 },
       ],
       { duration: 320, easing: "cubic-bezier(.4,0,1,1)" },
     )
     .addEventListener("finish", () => clone.remove());
 }
+
+// A `liftWinner` lived here — the chosen card swelling and fading in place, to
+// answer the fact that in Fast Shuffle only the LOSER animates. It was rejected
+// on sight: a card that performs where it stands reads as a notification, not as
+// a choice landing. Deleted rather than left dead. If the asymmetry is worth
+// solving, the candidate is the surviving card settling into the freed space,
+// not the winner putting on a show.
 
 // The challenger sits on the right, but winning makes it the climbing film on
 // the left. Without this it simply appears over there the instant state updates
@@ -115,6 +176,8 @@ export function PosterCard({
   film,
   badge,
   pick,
+  side,
+  pairId,
   onPick,
   onFlick,
   onSink,
@@ -122,12 +185,32 @@ export function PosterCard({
 }: {
   film: Film;
   badge: string;
+  /** The climbing film: gold ring, and it leans left unless `side` says otherwise. */
   pick?: boolean;
+  /**
+   * Which way the card leans, independently of whether it is the pick.
+   *
+   * The two were the same thing until Fast Shuffle needed them apart. There
+   * neither film is a pick — they are peers, and neither wears the gold — so
+   * both cards fell through to the same lean and the pair sat parallel instead
+   * of mirrored, which is the one thing that made that mode look unlike the
+   * climb. Leaning is about the PAIR; the gold is about the state.
+   */
+  side?: "left" | "right";
+  /**
+   * Identifies the PAIR, so both cards can float from one shared phase and sit
+   * exactly half a cycle apart. Pass the same value to both — the left film's id
+   * is the obvious choice. Falls back to this card's own film, which is correct
+   * for anything rendering a single poster.
+   */
+  pairId?: string;
   onPick: (id: string) => void;
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
   onInfo: (film: Film) => void;
 }) {
+  const pair = pairId ?? film.id;
+  const tilt = side ? (side === "left" ? -TILT : TILT) : pick ? -TILT : TILT;
   const start = useRef<{ x: number; y: number } | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const held = useRef(false);
@@ -176,7 +259,7 @@ export function PosterCard({
     if (Math.abs(dy) > 45 && Math.abs(dy) > Math.abs(dx)) {
       // vertical throw → up sends it to the top of the pile, down to the bottom
       const img = e.currentTarget.querySelector("img");
-      if (img) flyPosterAway(img, film.poster ?? "", dx, dy, pick ? -TILT : TILT);
+      if (img) flyPosterAway(img, film.poster ?? "", dx, dy, tilt);
       const land = dy < 0 ? onFlick : onSink;
       setTimeout(() => land(film.id), 170);
     } else {
@@ -196,6 +279,10 @@ export function PosterCard({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
+      // Where the tour's first three steps point. Both cards carry it and the
+      // tour takes the first — this surface is one control with three gestures,
+      // so which of the pair is framed does not matter.
+      data-tour="card"
       style={{ touchAction: "none" }}
       className="group relative flex h-full w-[46%] max-w-[180px] min-h-0 flex-col items-center transition-transform active:scale-95"
     >
@@ -204,8 +291,11 @@ export function PosterCard({
           poster lower than its opponent's — the two cards always share a top and
           a bottom edge, and so do their badges. */}
       <span
-        className={`mb-3 flex w-full flex-shrink-0 items-end justify-center text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 ${pick ? "float-c" : "float-d"}`}
+        className="mb-3 flex w-full flex-shrink-0 items-end justify-center text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi line-clamp-2 float-title"
         style={{
+          // Seed 2, so a title never shares a phase with its own poster — which
+          // is precisely what the old float-a/float-c pairing did.
+          ...floatStyle(pair, 2, 5, tilt > 0),
           // Long titles step down instead of being silently cut off at two
           // lines — the whole name is the point, it's what you're choosing between.
           fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
@@ -225,8 +315,8 @@ export function PosterCard({
           than demanding width × 1.5, so a short screen shrinks the artwork
           instead of driving the column past the bottom of the viewport. */}
       <div
-        className={`relative flex min-h-0 w-full flex-1 justify-center ${pick ? "float-a" : "float-b"}`}
-        style={{ rotate: `${pick ? -TILT : TILT}deg` }}
+        className="relative flex min-h-0 w-full flex-1 justify-center float-poster"
+        style={{ rotate: `${tilt}deg`, ...floatStyle(pair, 1, 6.5, tilt > 0) }}
       >
         <div
           className="h-full overflow-hidden rounded-xl"
@@ -240,16 +330,22 @@ export function PosterCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
         </div>
-        <span
-          className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
-          style={
-            pick
-              ? { color: "#1c1405", background: "var(--gold)" }
-              : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
-          }
-        >
-          {badge}
-        </span>
+        {/* No badge, no pill. Fast Shuffle passes "" — its films are peers with
+            nothing to label — and this drew the capsule anyway, so both posters
+            carried an empty bar straddling their bottom edge. An empty container
+            is not a neutral default; it is a visible object that says nothing. */}
+        {badge && (
+          <span
+            className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
+            style={
+              pick
+                ? { color: "#1c1405", background: "var(--gold)" }
+                : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
+            }
+          >
+            {badge}
+          </span>
+        )}
       </div>
     </button>
   );

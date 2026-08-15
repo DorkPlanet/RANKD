@@ -174,6 +174,31 @@ export async function retractJudgements(ids: readonly string[]): Promise<void> {
   }
 }
 
+/**
+ * Throw the whole log away.
+ *
+ * The second and last exception to append-only, and narrower than it looks: it
+ * exists for ONE caller — "start the ranking again" in Settings — and it is not
+ * a tidy-up, a trim or a migration. Everything else in this app treats a fought
+ * duel as permanent, and that must stay true.
+ *
+ * It has to exist because the alternative is worse. Beliefs are fitted from
+ * these rows, so a reset that spared them would re-place every film from the
+ * same evidence within a session: the user would ask to start over, watch the
+ * list empty, and watch it fill back in with the order they were trying to
+ * leave. A reset that does not reset is a bug with a friendly label.
+ */
+export function clearLog(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // Storage disabled. Nothing to fall back to, and the caller has already
+    // cleared the placements — the library is consistent, just better-informed
+    // than the user asked for.
+  }
+}
+
 /** Every row naming this film, either side. Pure — hand it a log you already hold. */
 export function logFor(log: readonly Judgement[], filmId: string): Judgement[] {
   return log.filter((j) => j.a === filmId || j.b === filmId);

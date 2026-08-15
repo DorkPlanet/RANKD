@@ -63,6 +63,18 @@ img {
   user-select: none;
 }
 
+/* The same protection for TEXT inside anything tappable. The rule above only
+   covered images, so holding a poster suppressed the image callout and then the
+   browser selected the film's TITLE instead — a blue highlight and a selection
+   handle over the card you were trying to open. `select-none` on the screen root
+   is not enough on its own: a long press on a text node still starts a selection
+   in Android Chrome unless the element itself declines it. */
+button,
+button * {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
 /* Checkboxes. A native one paints a pure-white square when unchecked — the only
    white anything in an app of navy and gold, and `accent-color` does nothing
    until it is ticked, so the DEFAULT state was the broken-looking one. Drawn
@@ -445,8 +457,18 @@ img {
 }
 
 /* Floating posters + titles — ported from rankd.html (cpPosterFloat/cpTitleFloat):
-   a gentle vertical bob, with the B side delayed so the pair never syncs. Uses
-   the `translate` property so it composes with each poster's static `rotate`. */
+   a gentle vertical bob. Uses the `translate` property so it composes with each
+   poster's static `rotate`.
+
+   There used to be four fixed classes here — two poster phases and two title
+   phases — and the whole screen breathed as one animal. A poster and its own
+   title shared a 0s delay, so they rose and fell together, and the same two
+   phases came back on every film you were ever shown.
+
+   Phase is now per-element and set inline from the film's id (see `floatPhase`
+   in PosterCard). The duration is jittered with it, so two things that happen to
+   start together drift apart instead of staying locked. Nothing here should ever
+   go back to a shared delay: things that float in nature do not keep time. */
 @keyframes float-poster {
   0%, 100% { translate: 0 0; }
   50% { translate: 0 -9px; }
@@ -455,10 +477,150 @@ img {
   0%, 100% { translate: 0 0; }
   50% { translate: 0 -6px; }
 }
-.float-a { animation: float-poster 6.5s ease-in-out 0s infinite; }
-.float-b { animation: float-poster 6.5s ease-in-out 3.8s infinite; }
-.float-c { animation: float-title 5s ease-in-out 0s infinite; }
-.float-d { animation: float-title 5s ease-in-out 2.5s infinite; }
+.float-poster { animation: float-poster 6.5s ease-in-out infinite; }
+.float-title { animation: float-title 5s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .float-a, .float-b, .float-c, .float-d { animation: none; }
+  .float-poster, .float-title { animation: none; }
+}
+
+/* ── The splash ────────────────────────────────────────────────────────────
+   The library loads in under 92ms, so this is not hiding a wait — it is time
+   deliberately spent, and it has to buy something to be worth it. What it buys
+   is the only moment the brand mark is ever the whole screen: the wordmark
+   settles out of wide tracking, then the five bars draw outward from the centre
+   in sequence. The mark assembles itself rather than being shown to you.
+
+   Type and the brand rules, which are the only two things this app draws. No
+   logo, no graphic, nothing that has to be redrawn if the palette moves.
+
+   The bars scale from their centre rather than animating `width`, so all five
+   are one compositor job and nothing below them reflows five times. */
+@keyframes splash-mark {
+  from { opacity: 0; transform: translateY(5px); letter-spacing: 0.26em; }
+  to { opacity: 1; transform: none; letter-spacing: 0.06em; }
+}
+@keyframes splash-bar {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes splash-out {
+  to { opacity: 0; }
+}
+.splash-mark { animation: splash-mark 0.36s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.splash-bar {
+  transform-origin: center;
+  animation: splash-bar 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+/* `forwards`, not `both`: once it has faded it must STAY faded. The element is
+   still mounted for the length of this animation and a splash that snapped back
+   to full opacity for one frame before unmounting is a flash of the whole
+   brand over the app. */
+.splash-out {
+  pointer-events: none;
+  animation: splash-out 0.28s ease forwards;
+}
+/* Reduced motion keeps the splash — it is a held moment, not an effect — and
+   drops only the movement. The fade stays: an opaque full-screen panel
+   disappearing between two frames is harsher than the thing being softened. */
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark, .splash-bar { animation: none; }
+}
+
+/* The smaller transition, for arriving at the duel from another screen.
+   Same language as the splash and a third of the length: the outgoing screen is
+   replaced by a full-bleed wash of the page background, which then falls away to
+   reveal the duel. Because both screens sit on `--bg` this reads as a dip
+   through the page rather than a flash — nothing new appears, one thing leaves
+   before the other arrives.
+
+   It is `--bg` and not black for exactly that reason, and `forwards` so the
+   spent veil cannot flicker back to opaque for a frame before it unmounts. */
+@keyframes veil-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.veil-out {
+  pointer-events: none;
+  animation: veil-out 0.2s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .veil-out { animation-duration: 0.12s; }
+}
+
+/* The coach marks. The spotlight moves between steps rather than cutting, so
+   the reader's eye is carried to the next control instead of hunting for it —
+   which is the one thing a tutorial overlay can do that a caption cannot.
+
+   `box-shadow` is the transition property because the shadow IS the scrim: the
+   hole is a transparent box and everything dark around it is spread. Position
+   and size animate alongside it. */
+.coach-hole {
+  transition:
+    top 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    left 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    width 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    height 0.32s cubic-bezier(0.2, 0.8, 0.3, 1),
+    border-radius 0.32s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes coach-card-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+/* The card re-runs this on every step because React keys it by index. Note the
+   `translate(-50%, …)`: the element is centred by a transform, so an animation
+   touching `transform` has to carry that -50% in every frame or the caption
+   jumps to the right-hand half of the screen for the length of the animation. */
+.coach-card {
+  animation: coach-card-in 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-hole { transition: none; }
+  .coach-card { animation: none; }
+}
+
+/* The RNK title card's scrim.
+   `banner-fade` is tuned for a TMDb backdrop, which arrives already dim and
+   wide. A poster is the opposite: saturated, high contrast, and printed with
+   type of its own. Reusing the banner's gradient left it blazing directly under
+   the header, where it fought the wordmark, and washed out the serif line
+   sitting on its lower third.
+   So: heavier at the top so the header stays the loudest thing on the screen,
+   open through the middle where the artwork earns its place, and solid at the
+   foot so the offer can be read at a glance. */
+.poster-fade {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--bg) 62%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 22%, transparent) 34%,
+    color-mix(in srgb, var(--bg) 72%, transparent) 76%,
+    var(--bg) 100%
+  );
+}
+
+/* Horizontal pickers hide their scrollbar. WebKit needs the pseudo-element;
+   `scrollbar-width: none` covers the rest. On the RNK screen's tier strip the
+   bar rendered as a grey rule drawn under the chips, which read as a divider
+   somebody had meant to put there. What says the strip scrolls is the last chip
+   being visibly cut off at the edge, not a bar. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* The resume card. Rises a little as it settles, so the layer reads as arriving
+   over the game rather than as the game having been replaced. Short, because it
+   stands between the user and playing. */
+@keyframes resume-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.resume-card {
+  animation: resume-card-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .resume-card { animation: none; }
 }

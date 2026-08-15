@@ -10,7 +10,9 @@ import { useEffect, useState } from "react";
 
 import { exportBackup, importBackup } from "@/lib/backup";
 import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
-import { loadLog, logSize } from "@/lib/log";
+import { clearLog, loadLog, logSize } from "@/lib/log";
+import { resetRanking } from "@/lib/reset";
+import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
@@ -21,12 +23,15 @@ export function Settings({
   onClose,
   films,
   onImport,
+  onTour,
 }: {
   brightness: number;
   onChange: (t: number) => void;
   onClose: () => void;
   films: Film[];
   onImport: (films: Film[]) => void;
+  /** Replay the coach marks. Optional so the sheet still renders without one. */
+  onTour?: () => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
   // How much evidence is behind the list, and what it costs to keep. A storage
@@ -71,6 +76,25 @@ export function Settings({
           <span>Deep</span>
           <span>Bright</span>
         </div>
+
+        {/* The half of onboarding that stops it being a one-shot. A tutorial you
+            can only ever see on the day you install the app is one nobody can
+            re-read, and the gestures here are the kind you half-remember. */}
+        {onTour && (
+          <div className="mt-7 border-t border-border pt-5">
+            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">HOW IT WORKS</span>
+            <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+              A quick pass over the gestures: tapping, flicking, holding, and where Rough Cut
+              lives. Runs on the duel screen, then again on your list.
+            </p>
+            <button
+              onClick={onTour}
+              className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+            >
+              Show me around
+            </button>
+          </div>
+        )}
 
         <div className="mt-7 border-t border-border pt-5">
           <div className="mb-1 flex items-center justify-between">
@@ -132,6 +156,10 @@ export function Settings({
           </div>
         </div>
 
+        {/* Deliberately BELOW the backup block, so the export is the thing you
+            read first and the destruction is the thing you scroll to. */}
+        <StartAgain films={films} onReset={onImport} />
+
         {/* Required by TMDB's API terms, and the right thing regardless — every
             poster, still and credit in this app is their data. */}
         <p className="mt-7 border-t border-border pt-5 text-[10px] leading-snug text-dim">
@@ -140,6 +168,94 @@ export function Settings({
         </p>
       </div>
     </Sheet>
+  );
+}
+
+// ── Starting over ──────────────────────────────────────────────────────────
+//
+// Two acts, and they are not degrees of the same thing.
+//
+// WITHDRAW turns off the model's opinions and keeps yours. Cheap, undoable in
+// practice — the evidence is untouched, so the placements come back as you keep
+// playing. No confirm, because nothing is lost.
+//
+// START AGAIN empties the ranking and burns the evidence with it. That second
+// half is not optional: beliefs are fitted from the log, so a reset that spared
+// it would refill the list with the order you were trying to leave (see
+// lib/reset.ts). It is the only irreversible button in the app, so it asks
+// twice, names the number it is about to destroy, and points at the export.
+//
+// Neither touches the films or the star ratings. Those came from the import.
+function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]) => void }) {
+  const [arming, setArming] = useState(false);
+  const [duels, setDuels] = useState(0);
+  useEffect(() => {
+    void loadLog().then((l) => setDuels(l.length));
+  }, []);
+
+  const placed = films.filter((f) => f.lock).length;
+  const soft = films.filter((f) => f.lock === "soft").length;
+
+  return (
+    <div className="mt-7 border-t border-border pt-5">
+      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">START AGAIN</span>
+      <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+        Your films and star ratings are always kept — only the ranking goes.
+      </p>
+
+      {soft > 0 && (
+        <button
+          onClick={() => {
+            onReset(withdrawSoftLocks(films));
+            setArming(false);
+          }}
+          className="mb-2 w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+        >
+          Drop the {soft.toLocaleString()} the model placed
+        </button>
+      )}
+
+      {!arming ? (
+        <button
+          onClick={() => setArming(true)}
+          disabled={placed === 0 && duels === 0}
+          className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-dim active:scale-[0.98] disabled:opacity-35"
+        >
+          Clear the whole ranking
+        </button>
+      ) : (
+        <>
+          {/* Says the number, not "are you sure?". A count you recognise is the
+              only warning that works — it is the thing you would miss. */}
+          <p className="mb-2 text-[11px] leading-snug text-gold">
+            This erases {placed.toLocaleString()} placement{placed === 1 ? "" : "s"} and{" "}
+            {duels.toLocaleString()} recorded duel{duels === 1 ? "" : "s"}. It cannot be undone —
+            save a backup first if you might want this back.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setArming(false)}
+              className="flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+            >
+              Keep it
+            </button>
+            <button
+              onClick={() => {
+                // Log first: if the write below fails, the evidence is already
+                // gone and a retry finishes the job. The other order can leave a
+                // library with no placements and a log that re-places it.
+                clearLog();
+                onReset(resetRanking(films));
+                setArming(false);
+              }}
+              className="flex-1 rounded-xl border border-gold/50 py-2.5 text-center text-xs font-bold text-gold active:scale-[0.98]"
+            >
+              Erase it
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

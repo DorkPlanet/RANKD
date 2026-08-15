@@ -64,13 +64,36 @@ export function buildList(films: Film[]): ListModel {
       .filter((f) => ranks.has(f.id))
       .map((f) => ({ film: f, rank: ranks.get(f.id)! }))
       .sort((a, b) => a.rank - b.rank);
-    // Alphabetical, deliberately. These films have provisional scores that look
-    // like an order but aren't one — sorting by them would assert a ranking the
-    // duels never established. A-Z claims nothing and makes a film findable in a
-    // block of a hundred.
+    // By score, with A-Z breaking ties.
+    //
+    // ── Why this used to be alphabetical, and why it can't stay that way ─────
+    //
+    // The original rule was A-Z, on the grounds that an unplaced film's score is
+    // provisional: `writeScores` spreads [confirmed, unconfirmed] across the
+    // tier band on every confirm, so an unranked film's number is a by-product
+    // of somebody else's climb rather than a judgement about it. Sorting by that
+    // asserts an order the duels never established. All true, and it was the
+    // right call for the app that existed when it was written.
+    //
+    // Rough Cut broke the premise. It writes score and DELIBERATELY writes no
+    // lock, because putting a film in the top third is not committing to a
+    // position. So every film it touches stays unplaced, lands here, and had its
+    // one real decision sorted away: a user who carefully dealt a tier into
+    // upper, middle and lower opened their list and found it alphabetical. The
+    // scores were correct the whole time. This block was throwing them out.
+    //
+    // Between the two failures, discarding a decision the user actually made is
+    // the worse one. Nothing here claims a ranking anyway — this block sits under
+    // an UN-RNKD divider and shows no numbers, which is exactly what distinguishes
+    // it from `placed` above.
+    //
+    // The tiebreak is what makes this safe rather than merely better: `seedScore`
+    // is `tierMid`, so every film in a tier nobody has touched holds an identical
+    // score and falls through to A-Z. An untouched library reads exactly as it
+    // did before. Order only appears once something has actually happened.
     const unplaced = inTier
       .filter((f) => !ranks.has(f.id))
-      .sort((a, b) => a.title.localeCompare(b.title));
+      .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
     sections.push({ tier, placed, unplaced, total: inTier.length });
   }
 

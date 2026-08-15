@@ -21,8 +21,11 @@ import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
-import { autoCollections, fingerprint, superlatives, topPeople, type Profile } from "@/lib/profile";
+import { autoCollections, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
+import { loadLists, type SavedList } from "@/lib/lists";
+import SavedListSheet from "./SavedListSheet";
 import { achievements } from "@/lib/achievements";
+import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import type { Film } from "@/lib/types";
 
 interface Collection {
@@ -35,6 +38,7 @@ interface Collection {
 export default function ProfileScreen({
   films,
   profile,
+  recap,
   onProfile,
   onInfo,
   onSettings,
@@ -45,6 +49,8 @@ export default function ProfileScreen({
 }: {
   films: Film[];
   profile: Profile;
+  /** What the previous sitting amounted to, or null when there is nothing to say. */
+  recap?: VisitDelta | null;
   onProfile: (p: Profile) => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
@@ -57,6 +63,29 @@ export default function ProfileScreen({
   const [editing, setEditing] = useState(false);
   const [pickingFilm, setPickingFilm] = useState(false);
   const [stillsFor, setStillsFor] = useState<Film | null>(null);
+  const [openList, setOpenList] = useState<SavedList | null>(null);
+  // Read once per mount and re-read whenever one is saved, pinned or deleted.
+  // A counter rather than storing the lists themselves, so the source of truth
+  // stays localStorage and nothing here can drift from it.
+  const [listsRead, setListsRead] = useState(0);
+  const savedLists = useMemo(() => loadLists(), [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Memoised so the `?? []` fallback is not a fresh array every render, which
+  // would make the shelf below recompute on every keystroke in the bio field.
+  const pinnedIds = useMemo(() => profile.pinnedListIds ?? [], [profile.pinnedListIds]);
+  // Pinned first, then the rest, each with its number one for the artwork. A
+  // pin naming a list that has since been deleted simply does not match
+  // anything here, which is why deleting never has to tidy up after itself.
+  const shelf = useMemo(() => {
+    const byId = new Map(films.map((f) => [f.id, f]));
+    const decorate = (list: SavedList) => ({
+      list,
+      pinned: pinnedIds.includes(list.id),
+      top: list.entries[0] ? byId.get(list.entries[0].id) : undefined,
+    });
+    const all = savedLists.map(decorate);
+    return [...all.filter((x) => x.pinned), ...all.filter((x) => !x.pinned)];
+  }, [savedLists, films, pinnedIds]);
 
   const ranked = useMemo(() => rankedFilms(films), [films]);
   const model = useMemo(() => buildList(films), [films]);
@@ -166,6 +195,21 @@ export default function ProfileScreen({
             <Stat n={print.duels} label="Duels" onClick={onDuel} />
             <Stat n={earned} label="Badges" onClick={onTrophies} />
           </div>
+
+          {/* What the last sitting amounted to.
+
+              The four stats above are cumulative and therefore never move
+              visibly — 861 films and 1,204 duels look identical the day after
+              a good session. This is the one line on the screen that is about
+              a particular afternoon, so it sits directly under them, in the
+              same label/value/note grammar `Your taste` uses. No new furniture:
+              the app was told once already that a number in an existing control
+              beats a chart. */}
+          {recap && (
+            <div className="mt-4">
+              <Line label="Last time" value={recapLine(recap)} note={agoLabel(recap.since)} />
+            </div>
+          )}
 
           <div className="card-rule mt-5" />
 
@@ -293,6 +337,32 @@ export default function ProfileScreen({
           </section>
         )}
 
+        {/* Rankings you made and kept.
+            `saveList` has written these since the share cards landed and nothing
+            ever read them back, so a ranking you sat through the duels for could
+            be saved and never seen again. Pinned ones lead — that is what
+            pinning is — and the rest follow, so this is both the shelf and the
+            way to see everything at once. */}
+        {savedLists.length > 0 && (
+          <section className="mt-7">
+            <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
+              YOUR RANKINGS
+            </div>
+            <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-6 pb-1">
+              {shelf.map(({ list, top, pinned }) => (
+                <MiniCard
+                  key={list.id}
+                  film={top}
+                  eyebrow={pinned ? "PINNED" : (list.source ?? "RANKING").toUpperCase()}
+                  title={list.name}
+                  sub={`${list.entries.length} films`}
+                  onClick={() => setOpenList(list)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* One chart doing two jobs. The bar's length is how many films are in
             the tier — the shape of your taste — and the solid part is how many
             you've settled. Two separate charts of the same ten tiers was one
@@ -333,6 +403,29 @@ export default function ProfileScreen({
       <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} films={films} onAddFilm={onAddFilm} />
 
       {open && <CollectionSheet c={open} onInfo={onInfo} onClose={() => setOpen(null)} />}
+
+      {openList && (
+        <SavedListSheet
+          list={openList}
+          films={films}
+          pinned={pinnedIds.includes(openList.id)}
+          canPin={pinnedIds.length < MAX_PINNED}
+          onPin={(pin) => {
+            // Newest pin last, and the cap is enforced here rather than trusted
+            // to the button being disabled — the profile is what the rule is
+            // about, so the rule lives where the profile is written.
+            const next = pin
+              ? [...pinnedIds.filter((id) => id !== openList.id), openList.id].slice(-MAX_PINNED)
+              : pinnedIds.filter((id) => id !== openList.id);
+            onProfile({ ...profile, pinnedListIds: next });
+          }}
+          onClose={() => setOpenList(null)}
+          onDeleted={() => {
+            setOpenList(null);
+            setListsRead((n) => n + 1);
+          }}
+        />
+      )}
       {editing && <EditIdentity profile={profile} onSave={onProfile} onClose={() => setEditing(false)} />}
 
 

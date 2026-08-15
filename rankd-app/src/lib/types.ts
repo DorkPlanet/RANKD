@@ -99,6 +99,15 @@ export interface PlacementSession {
   // 4★ here without a band being broken anywhere in the library. Set by a
   // person run; see the header of lib/people.ts for why that has to be true.
   crossTier?: boolean;
+  /**
+   * Confine this run's written scores to a slice of its tier, best-first.
+   *
+   * Set only for an `only` run inside one tier — "rank the upper pile of a Rough
+   * Cut", where the films already occupy a sub-band and must stay in it. Without
+   * it the first confirm re-spreads them across the whole tier and scatters the
+   * pile back through the ones it was separated from. See `writeScores`.
+   */
+  band?: [number, number];
 }
 
 export interface RankState {

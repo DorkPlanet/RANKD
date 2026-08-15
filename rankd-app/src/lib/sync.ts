@@ -22,7 +22,7 @@
 // push that fails is retried on the next tick and nothing is lost meanwhile.
 
 import { collectBackup, applyBackup } from "./backup";
-import { validateBackup, type Backup, type BackupSummary } from "./backupFormat";
+import { SYNC_KEYS, validateBackup, type Backup, type BackupSummary } from "./backupFormat";
 import { loadLists, replaceLists, type SavedList } from "./lists";
 import { reconcile, type Reconciliation } from "./reconcile";
 import {
@@ -57,7 +57,7 @@ async function push(): Promise<void> {
     const res = await fetch("/api/library", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ payload: collectBackup(), deviceId: deviceId() }),
+      body: JSON.stringify({ payload: collectBackup(SYNC_KEYS), deviceId: deviceId() }),
     });
     if (!res.ok) return; // retried on the next tick
     const { updatedAt } = (await res.json()) as { updatedAt: string };
@@ -135,7 +135,10 @@ export async function pull(): Promise<void> {
   const server = await fetchServer();
   if (!server?.payload || !server.updatedAt) return;
   const { backup } = validateBackup(server.payload);
-  applyBackup(backup);
+  // SYNC_KEYS, never the file set: the blob does not carry saved rankings
+  // (they sync as their own rows), so clearing anything outside this set would
+  // delete them on every pull.
+  applyBackup(backup, SYNC_KEYS);
   await pullLists();
   markSynced(server.updatedAt);
   window.location.reload();
@@ -199,7 +202,7 @@ export async function reconcileWithAccount(): Promise<SyncOutcome> {
     case "conflict": {
       // Both summaries come from the same validator the routes use, so the two
       // numbers the user is shown are counted the same way on both sides.
-      const local = validateBackup(collectBackup()).summary;
+      const local = validateBackup(collectBackup(SYNC_KEYS)).summary;
       const remote = validateBackup(server.payload).summary;
       return {
         kind: "conflict",

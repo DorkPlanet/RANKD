@@ -116,6 +116,20 @@ function refresh(s: PlacementSession): void {
 // one tier's band would hand a 3.5★ film a 4★ score — silently corrupting the
 // master order for every film the run touched. Each rating keeps its own band;
 // the run only decides the order within it.
+// ── Why a run can be confined to part of its tier ──────────────────────────
+//
+// This spreads a run's films across the whole tier band, which is right when the
+// run IS the tier. It is destructive when the run is a slice of one.
+//
+// Rough Cut deals a tier into thirds by writing scores inside three sub-bands,
+// and "rank a pile" then climbs one of them. Without a confinement the first
+// confirm re-spread those four films from tierMin to tierMax — so the pile the
+// user had just separated scattered straight back through the other two, and the
+// cut they had done by hand was gone. `band` is what keeps a pile inside the
+// space it already occupied.
+//
+// Only set for an `only` run that is not cross-tier; a cross-tier run writes no
+// scores at all, and a whole-tier run should have the whole tier.
 function writeScores(films: Film[], s: PlacementSession): void {
   const order = [...s.confirmed, ...s.unconfirmed]; // best → worst overall
   const byRating = new Map<number, string[]>();
@@ -125,8 +139,7 @@ function writeScores(films: Film[], s: PlacementSession): void {
     byRating.set(f.rating, [...(byRating.get(f.rating) ?? []), id]);
   }
   for (const [rating, ids] of byRating) {
-    const mn = tierMin(rating);
-    const mx = tierMax(rating);
+    const [mn, mx] = s.band ?? [tierMin(rating), tierMax(rating)];
     const n = ids.length;
     ids.forEach((id, i) => {
       const f = films.find((ff) => ff.id === id);
@@ -172,12 +185,27 @@ export function startRun(
   if (pool.length < 2) throw new Error("Need at least 2 films in range to start ranking");
   const ids = pool.map((p) => p.id);
   const unconfirmed = shuffle ? shuffled(ids) : ids;
+
+  // A slice of a tier keeps the space it already holds. Taken from the pile's
+  // own scores rather than from the caller, so it needs no coordination: if
+  // Rough Cut put these four between 734 and 933, that is where they stay.
+  //
+  // A pile with no spread — every film still on the tier's seed score, which is
+  // what a tier looks like before anything has happened to it — has nothing
+  // worth confining, so it falls through to the whole band.
+  const scores = pool.map((p) => p.score);
+  const lo = Math.min(...scores);
+  const hi = Math.max(...scores);
+  const band: [number, number] | undefined =
+    only && !crossTier && hi > lo ? [lo, hi] : undefined;
+
   const s: PlacementSession = {
     tier,
     spanBelow: below,
     spanAbove: above,
     mode: "koth",
     ...(crossTier ? { crossTier: true } : {}),
+    ...(band ? { band } : {}),
     confirmed: [],
     unconfirmed,
     contenderId: unconfirmed[unconfirmed.length - 1], // bottom
