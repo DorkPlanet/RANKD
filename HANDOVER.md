@@ -40,6 +40,17 @@ fourth.** The `accounts` branch adds 24 tests of its own on top.
 - **Read `CLAUDE.md`.** Form a theory, get evidence, then fix. This project has repeatedly
   punished guess-and-patch — see the gotchas at the bottom, most of which are cases where
   something *looked* fixed and was not.
+- **Comments here are dense on purpose, and that is not licence to write history.**
+  `roughCut.ts` is 56% comment and `ladder.ts` 31%; this handover leans on those headers by
+  name. Keep writing the WHY — the traps, the invariants, the reason a thing must not be
+  changed back. **Do not write the changelog**: rejected versions, quoted feedback and
+  "v1 did X, v2 did Y" belong in git and in this file, not in three source files as well.
+  A comment pass in Session G removed exactly that and left the reasoning intact.
+- **Two copy rules, both the user's, both tested.** The app records a PREFERENCE, never a
+  verdict — "which you'd rather watch", not "which is better". And **no em dashes in
+  user-facing text**; the user's words were "it's clean but obviously AI". The rest of the
+  app's older copy still uses them and was deliberately NOT swept — that is a separate edit
+  to text the user has lived with, and it needs asking first.
 
 ---
 
@@ -229,6 +240,28 @@ on purpose.
 **Testing sync costs libraries.** The 861-film library was recovered from a snapshot taken
 minutes earlier, twice over. Snapshot before touching these paths, every time.
 
+### A goals screen was built and deleted. Do not rebuild it (Session G)
+
+`lib/goals.ts` derived a generated to-do list — every tier, plus personal ones (favourite
+director, best genre) — with completion read off saved lists. It worked, had 17 tests, and
+was **cut**, because the premise was wrong rather than the execution.
+
+Kept here because the idea will occur to somebody again, and because two of its findings
+survive the deletion:
+
+- **The Rough Cut suggestion cannot be a sentence.** As a note under each row it repeated
+  on seven of ten tiers and became wallpaper.
+- **"Has this tier been cut" must be a SHARE, not a presence.** Testing `bands.top.length >
+  0` meant nine dealt films out of 185 counted as cut, so the app stopped suggesting the
+  very thing the user had started — while every untouched tier shouted it.
+- **A curated goal has to be finishable.** Uncapped, "your best Horror" proposed ranking 320
+  films by hand: the quadratic problem Rough Cut exists to avoid, wearing a hat.
+
+Why it was cut: the user's actual complaint was never "which tier?" but *"I dont like just
+going to the tab and seeing an inprogress game without a prompt or reminder of where I am"*.
+Four separate screens were built to answer that and all four were rejected. The answer was a
+LAYER over the game, not a page in front of it. See below.
+
 ### The RNK entry is an OVERLAY, not a screen (Session G)
 
 Four screens were built for this and all four were rejected. The premise was wrong, not
@@ -248,6 +281,22 @@ something else."*
 - **It is a LAYER so the game shows through.** A screen could describe your run; this shows
   it to you, which is the reacclimation. **The backdrop must never dim to opaque** — at 82%
   the duel was invisible and it read as a dialog over a void. 58% + blur is the setting.
+- **The overlay sits at z-25, BELOW the sheets, and that is load-bearing.** Above them it
+  had to unmount to open the tier picker, which showed the bare duel for a frame — the app
+  visibly jumping between screens. Underneath, the frost simply stays put while a sheet
+  opens over it and is still there when the sheet closes, so there is nothing to flash and
+  nowhere to land in between. **`onTier` and `onModes` therefore do NOT dismiss the
+  greeting.**
+- **`TierPicker` returns to whoever opened it** (`fromOverlay`). It always handed back to
+  the Play sheet on close, which is right from Play and wrong from the overlay — dismissing
+  the picker raised a second sheet you had to dismiss as well. Picking a tier FROM the
+  overlay STARTS it; from inside Play it stays a setting.
+- **Tapping the backdrop resumes.** It was a hard gate first, on the grounds that falling
+  into a duel by mis-tapping is what this prevents — but the game is visible behind the
+  glass, so reaching past it reads as "yes, that one" rather than as a slip.
+- **Abandon goes to the empty screen, not a session report.** `commit` records the ended
+  tier so a run that FINISHES gets its summary; throwing one away must not be met with a
+  congratulation for work just discarded.
 - **A junction, not a control panel.** Tiers and modes are not rebuilt: `TierPicker` and
   `ModePanel` already do that. Picking a tier FROM the overlay starts it (`fromOverlay`);
   from inside Play it stays a setting.
@@ -585,6 +634,45 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
   1,204 duels" — but noisier than it should be on the most common path. Fix if wanted:
   treat a library still exactly equal to `SEED_FILMS` as absent.
 
+## Waiting on the user — nothing else blocks this
+
+- **Publish the OAuth consent screen.** Google Cloud console → **Google Auth Platform** →
+  **Audience** → *Publish app*. While it says *Testing*, only accounts on the test-user list
+  can sign in and everyone else gets a flat `access_denied`. Rankd asks only for name and
+  email — non-sensitive scopes — so publishing needs **no verification review** and takes
+  effect immediately. **Until this is done the app cannot be handed to anybody.**
+
+## Operational facts for accounts (Session H)
+
+All of this exists and works. Written down so nobody rediscovers it the hard way.
+
+- **Google Cloud project `rankd-505604`**, owned by the user's personal Google account.
+  Client type **Web application**. Redirect URIs, which must match character for character:
+  `http://localhost:3000/api/auth/callback/google` and
+  `https://rankd-app-eight.vercel.app/api/auth/callback/google`.
+  **Authorised JavaScript origins are deliberately EMPTY** — Auth.js signs in through the
+  server, so origins are only for browser-side flows like One Tap. Pasting the redirect URIs
+  into that box instead is the easy mistake; it rejects anything containing a path.
+- **The consent screen's support address is a Google Group**, not a personal address, on
+  purpose. A group has no password and **cannot be signed in as** — sign in with a real
+  Google account.
+- **Neon**, region `ap-southeast-2` (Sydney), free tier. **Use the POOLED host**: the same
+  address with `-pooler` inserted before the region. The direct endpoint hands every
+  serverless invocation its own connection and runs out. Region cannot be changed after the
+  project is created.
+- **The connection string must keep its tail**, `/neondb?sslmode=require`. Losing it makes
+  the driver fall back to the username as the database name and fail with
+  `database "neondb_owner" does not exist` — which reads like a credentials problem and is
+  not. This happened once already while hand-editing the host.
+- **Env vars live in two places and must agree**: `rankd-app/.env.local` (gitignored) and
+  Vercel → Settings → Environment Variables. Both need `AUTH_SECRET`, `AUTH_GOOGLE_ID`,
+  `AUTH_GOOGLE_SECRET`, `DATABASE_URL`, `TMDB_API_KEY`. **Vercel's are marked Sensitive, so
+  their values cannot be read back by anyone, the CLI included** — to correct one, overwrite
+  it rather than trying to inspect it. Env changes need a fresh deploy to take effect.
+- **Local dev needs no Docker.** `docker-compose.yml` exists for a local Postgres, but this
+  machine has none installed, so `.env.local` points straight at Neon. Works fine; it is a
+  network round trip instead of localhost.
+
 ## Backlog — captured, not scheduled
 
 - **A switch to turn Fast Shuffle off entirely.** The user is cooling on it and wants to opt
@@ -592,6 +680,22 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
 - **Subgenre runs** — "zombie films" rather than "horror". A keyword is narrow enough to
   have a real edge, so unlike a genre it could borrow unseen films the way a director run
   does. `topPeople` in `profile.ts` already derives subgenres from `f.keywords`.
+- **Custom profile pictures.** The user's words: "custom pfp is the point also." Google
+  sign-in already hands over the account photo and `provisionUser` stores it, so avatars
+  EXIST — this is the upload-your-own case. It needs FILE storage, which a database is not:
+  **Vercel Blob** (already on Vercel, free tier, no new account) returns a URL, and
+  `profile.ts` already stores image URLs — `bannerStill` works exactly this way. Shrink
+  client-side to ~256px first, so a 4MB phone photo becomes ~20KB. **Do it behind sign-in**:
+  an upload endpoint with no auth is open to the internet. Note this was previously called
+  "blocked on accounts", which is not quite right — it is blocked on STORAGE, and auth is
+  what makes the endpoint safe rather than what makes it possible.
+- **PWA — lose the URL bar.** Asked directly: does this have to stay a web app? A manifest
+  plus icons gives Add to Home Screen — own icon, fullscreen, no address bar, no app store,
+  no fee. Rankd is already client-rendered, phone-sized, and has its own splash and nav, so
+  this is close to an afternoon. The app-store route (Capacitor) costs $99/yr for Apple and
+  $25 once for Google and needs extra native OAuth clients; not worth it for a few testers.
+  One honest catch: Google sign-in from a fullscreen PWA can bounce out to the browser and
+  back on iOS, which breaks the illusion briefly.
 
 ## Pinned — decide later, don't act yet
 
