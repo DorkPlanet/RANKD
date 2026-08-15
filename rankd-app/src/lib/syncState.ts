@@ -18,10 +18,23 @@ interface SyncBookkeeping {
   lastSeenServerAt: string | null;
   /** ISO time of the first local write since that sync, or null if clean. */
   dirtyAt: string | null;
+  /**
+   * Content hash of the payload this browser last successfully pushed.
+   *
+   * The dirty flag answers "has anything been WRITTEN since the last sync",
+   * which is not the same question as "is what we hold different from what the
+   * server holds". Plenty of writes are re-writes: the credits sweep saves the
+   * library once per batch whether or not a batch changed anything, and every
+   * screen that touches `saveFilms` marks the browser dirty regardless. Each of
+   * those was costing a fresh upload of the entire library.
+   *
+   * Null means "no idea", which is the safe answer — it forces a real push.
+   */
+  lastPushedHash: string | null;
 }
 
 function blank(): SyncBookkeeping {
-  return { deviceId: newDeviceId(), lastSeenServerAt: null, dirtyAt: null };
+  return { deviceId: newDeviceId(), lastSeenServerAt: null, dirtyAt: null, lastPushedHash: null };
 }
 
 function newDeviceId(): string {
@@ -82,10 +95,17 @@ export function markDirty(): void {
   notify();
 }
 
-/** Called after a successful push or pull: clean, and up to date with `serverAt`. */
-export function markSynced(serverAt: string): void {
+/**
+ * Called after a successful push or pull: clean, and up to date with `serverAt`.
+ *
+ * `pushedHash` is what the server now holds, and is passed only by the push
+ * path. A PULL must clear it — the server's copy has just replaced ours, and
+ * claiming to have pushed content we merely received would let a later genuine
+ * change be skipped as "already sent". Omitting the argument is that clear.
+ */
+export function markSynced(serverAt: string, pushedHash: string | null = null): void {
   const s = readSyncState();
-  write({ ...s, lastSeenServerAt: serverAt, dirtyAt: null });
+  write({ ...s, lastSeenServerAt: serverAt, dirtyAt: null, lastPushedHash: pushedHash });
   notify();
 }
 

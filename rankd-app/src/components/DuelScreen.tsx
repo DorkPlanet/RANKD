@@ -31,7 +31,7 @@ import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
-import { bandsOf, BUCKETS } from "@/lib/roughCut";
+import { bandsOf, BUCKETS, type Bucket } from "@/lib/roughCut";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
 import { clearRun, saveRun } from "@/lib/runs";
@@ -606,6 +606,18 @@ export default function DuelScreen({
         }}
         onSettings={onSettings}
         onTrophies={onTrophies}
+        onAddFilm={onAddFilm}
+        // Rough Cut now draws the nav, so its cells have to actually go
+        // somewhere. Clearing the tier first drops this branch, which puts the
+        // next render back on a tree that renders `sheets` — so opening Play
+        // from here raises the panel over the screen you land on rather than
+        // setting a flag nothing reads. See the warning above `sheets`.
+        onNavigate={(to) => {
+          setRoughCutTier(null);
+          if (to === "list") onList();
+          else if (to === "profile") onProfile();
+          else setModeOpen(true);
+        }}
       />
     );
   }
@@ -795,7 +807,7 @@ export default function DuelScreen({
     const placedNow = state.films.filter(isPlaced).length;
     return (
       <>
-        <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+        <main className="relative flex h-app flex-col overflow-hidden select-none">
           <Header onSettings={onSettings} onTrophies={onTrophies} />
           {/* A real screen rather than a frosted card, because there is no game
               to frost: keeping the header and the nav means you can still see
@@ -856,7 +868,7 @@ export default function DuelScreen({
   const champion = pendingConfirm(state);
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+    <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
       {/* Hidden during Fast Shuffle: it reports a tier, a placed count and a
           to-go count, and that run has none of those. Left visible it read as
@@ -1396,8 +1408,21 @@ function ModePanel({
             the whole tier again. */}
         {(() => {
           const bands = bandsOf(films, tier);
+          // What each pile still has left to rank. `bandsOf` counts hard locks
+          // so a ranked pile does not read as an empty band — but a settled film
+          // must not be dragged back into a new climb, so the run itself is
+          // built from the unlocked ones only.
+          const open: Record<Bucket, Film[]> = {
+            top: bands.top.filter((f) => f.lock !== "hard"),
+            middle: bands.middle.filter((f) => f.lock !== "hard"),
+            bottom: bands.bottom.filter((f) => f.lock !== "hard"),
+          };
           const split = BUCKETS.filter((b) => bands[b].length > 0).length > 1;
-          if (!split) return null;
+          // Nothing left to rank anywhere means every pile is done — or the
+          // spread came from an ordinary climb rather than a cut. Either way
+          // three dead buttons say nothing.
+          const anyRankable = BUCKETS.some((b) => open[b].length >= 2);
+          if (!split || !anyRankable) return null;
           return (
             <div className="mt-5 border-t border-border pt-4">
               <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
@@ -1407,12 +1432,12 @@ function ModePanel({
                 {BUCKETS.map((b) => (
                   <button
                     key={b}
-                    disabled={bands[b].length < 2}
-                    onClick={() => onRankPile(bands[b].map((f) => f.id))}
+                    disabled={open[b].length < 2}
+                    onClick={() => onRankPile(open[b].map((f) => f.id))}
                     className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
                   >
                     {b === "top" ? "Upper" : b === "middle" ? "Middle" : "Lower"}
-                    <span className="ml-1.5 text-dim tabular-nums">{bands[b].length}</span>
+                    <span className="ml-1.5 text-dim tabular-nums">{open[b].length}</span>
                   </button>
                 ))}
               </div>

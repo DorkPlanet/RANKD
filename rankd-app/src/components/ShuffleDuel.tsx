@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Countdown } from "./Countdown";
 import { PosterCard, TILT, fadeLoserOut } from "./PosterCard";
 import { SessionEnd } from "./SessionEnd";
 import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beliefs";
@@ -369,13 +370,33 @@ export default function ShuffleDuel({
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
         run={{ done: session.compared, total: session.total }}
+        // The countdown below already says how many are left, so the default
+        // opening line would print the same figure twice. This says what to do
+        // instead, which is the more useful thing on a screen you have just
+        // arrived at.
+        idleLine="Pick the one you rate higher"
       />
 
-      {/* A definite height that yields under pressure, matching the arena in the
-          ordinary duel. Left as `flex-1` the cards grew to fill whatever was
-          going spare and the posters stretched out of their 2:3 shape on a tall
-          screen. */}
-      <div style={{ flexGrow: 1 }} />
+      {/* The band the climb fills with its rank face, and this mode left empty.
+          That hole is most of why this screen read as the older one: the duel
+          has a live figure above the posters that changes on every answer, and
+          here there was nothing between the progress bar and the artwork.
+
+          What belongs there is the one number this mode can honestly report.
+          It has no pile, no position and no end, so there is no rank to show —
+          but there IS a shrinking set of films in scope that have never been
+          compared, and every answer takes up to two off it. Same measurements
+          as the climb's band, so the two screens share a skeleton rather than
+          merely resembling each other. */}
+      <div
+        className="flex min-h-0 flex-shrink-[12] items-center justify-center overflow-hidden"
+        style={{ height: 110, minHeight: 56 }}
+      >
+        <Countdown
+          n={Math.max(0, session.total - session.compared)}
+          label={session.total - session.compared === 1 ? "film to go" : "films to go"}
+        />
+      </div>
       <div
         ref={arenaRef}
         className="relative flex items-stretch justify-center gap-3 px-4"
@@ -427,6 +448,7 @@ export default function ShuffleDuel({
 
 const noop = () => {};
 
+// The countdown moved to Countdown.tsx when Rough Cut needed the same thing.
 // The run readout lives in RunStatus.tsx, shared with the climb.
 
 function Centre({ children }: { children: React.ReactNode }) {

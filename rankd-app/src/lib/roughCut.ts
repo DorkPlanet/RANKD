@@ -111,13 +111,21 @@ export function applyRoughCut(
  * A tier nobody has cut reads as all-middle, because that is where the seed
  * score sits. True, and harmless: the counts make it obvious there is nothing
  * to go back to.
+ *
+ * Hard locks are INCLUDED, unlike in `roughCutPool`. Ranking a pile hard-locks
+ * every film in it, so excluding them made a ranked pile read as empty — and
+ * once two of the three piles had been ranked, only one band was left holding
+ * anything, the "already split" test saw a tier that was not split, and the
+ * third pile vanished along with the section. A hard lock says the user has
+ * settled that film's position; it does not move the film out of its third.
+ * Callers that intend to re-rank a band must filter the locks themselves.
  */
 export function bandsOf(films: readonly Film[], tier: Rating): Record<Bucket, Film[]> {
   const lo = tierMin(tier);
   const third = (tierMax(tier) - lo) / 3;
   const out: Record<Bucket, Film[]> = { top: [], middle: [], bottom: [] };
   for (const f of films) {
-    if (f.rating !== tier || f.lock === "hard") continue;
+    if (f.rating !== tier) continue;
     const b: Bucket = f.score > lo + 2 * third ? "top" : f.score > lo + third ? "middle" : "bottom";
     out[b].push(f);
   }

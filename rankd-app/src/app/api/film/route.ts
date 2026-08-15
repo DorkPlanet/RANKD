@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { refuse } from "../guard";
+import { bestMatch } from "@/lib/tmdbMatch";
 
 // Server-side TMDb proxy. The key is read from the environment here and never
 // reaches the browser — the client only ever sees the normalised shape below.
@@ -50,11 +51,15 @@ export async function GET(request: Request) {
     search.searchParams.set("api_key", key);
     search.searchParams.set("query", title);
     search.searchParams.set("include_adult", "false");
-    if (year) search.searchParams.set("year", year);
+    // The year is NOT sent to TMDb any more, and that is deliberate. As a query
+    // parameter it is a hard filter, so a film whose TMDb release year is one
+    // off the one we hold — a festival run, a different territory — came back
+    // empty and then got matched against the whole catalogue on a retry. It is
+    // far more useful as a tie-breaker, which is where `bestMatch` uses it.
 
     const found = await fetch(search, { next: { revalidate: DAY } });
     if (!found.ok) return NextResponse.json({ error: "TMDb search failed" }, { status: 502 });
-    const hit = (await found.json())?.results?.[0];
+    const hit = bestMatch((await found.json())?.results ?? [], title, year);
     if (!hit) return NextResponse.json({}, { status: 200 }); // no match — card just shows less
 
     const detail = new URL(`${BASE}/movie/${hit.id}`);

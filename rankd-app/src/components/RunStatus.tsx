@@ -76,12 +76,23 @@ export function RunStatus({
   lead,
   /** Centre label: the mode's name. */
   title,
+  idleLine,
 }: {
   films: Film[];
   log: readonly Judgement[];
   run: { done: number; total: number };
   lead?: React.ReactNode;
   title: string;
+  /**
+   * What to say before the first duel of a sitting, in place of "N to rank".
+   *
+   * Fast Shuffle needs it because its countdown band states that exact figure
+   * 40px below — and two readings of one number is precisely the trap the note
+   * at the top of this file was written about. The climb passes nothing and
+   * keeps the default, since its rank face reports a position rather than a
+   * remainder and the two do not collide.
+   */
+  idleLine?: string;
 }) {
   const hardNow = films.filter(isHard).length;
   const [sitting] = useState(() => openSitting(hardNow));
@@ -92,7 +103,7 @@ export function RunStatus({
   // line says what there is to do instead of what has not been done.
   const line =
     stats.duels === 0
-      ? `${Math.max(0, run.total - run.done)} to rank`
+      ? (idleLine ?? `${Math.max(0, run.total - run.done)} to rank`)
       : stats.settled === 0
         ? `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} this sitting`
         : `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} · ${stats.settled} settled`;

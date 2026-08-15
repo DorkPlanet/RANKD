@@ -138,7 +138,7 @@ export default function ListScreen({
   };
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+    <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
       <div className="flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--header-bg)" }}>

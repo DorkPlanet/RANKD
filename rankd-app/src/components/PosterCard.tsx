@@ -15,6 +15,7 @@
 import { useRef } from "react";
 
 import type { Film } from "@/lib/types";
+import { PosterArt } from "./PosterArt";
 
 // Degrees each card leans. The climbing card tilts one way, the challenger the
 // other; clones have to match or they land crooked against the real poster.
@@ -83,7 +84,7 @@ function floatPhase(id: string, seed: number): number {
  * The delay is NEGATIVE on purpose: it starts the animation part-way through
  * rather than making the card sit still and wait for its turn.
  */
-function floatStyle(pairId: string, seed: number, base: number, right: boolean): React.CSSProperties {
+export function floatStyle(pairId: string, seed: number, base: number, right: boolean): React.CSSProperties {
   const phase = (floatPhase(pairId, seed) + (right ? 0.5 : 0)) % 1;
   return { animationDelay: `${-phase * base}s`, animationDuration: `${base}s` };
 }
@@ -330,7 +331,8 @@ export function PosterCard({
         style={{
           // Seed 2, so a title never shares a phase with its own poster — which
           // is precisely what the old float-a/float-c pairing did.
-          ...floatStyle(pair, 2, 5, tilt > 0),
+          // 4.1s matches `.float-title` in globals.css — see the note there.
+          ...floatStyle(pair, 2, 4.1, tilt > 0),
           // Long titles step down instead of being silently cut off at two
           // lines — the whole name is the point, it's what you're choosing between.
           fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
@@ -351,19 +353,25 @@ export function PosterCard({
           instead of driving the column past the bottom of the viewport. */}
       <div
         className="relative flex min-h-0 w-full flex-1 justify-center float-poster"
-        style={{ rotate: `${tilt}deg`, ...floatStyle(pair, 1, 6.5, tilt > 0) }}
+        // 5.2s matches `.float-poster` in globals.css — see the note there.
+        style={{ rotate: `${tilt}deg`, ...floatStyle(pair, 1, 5.2, tilt > 0) }}
       >
+        {/* `containerType: inline-size` is what lets the placeholder size its
+            own type off the card rather than off the viewport — these are 46%
+            of the screen each in a duel and nearly full width in Rough Cut, and
+            one fixed font size cannot serve both. */}
         <div
           className="h-full overflow-hidden rounded-xl"
           style={{
             aspectRatio: "2 / 3",
+            containerType: "inline-size",
+            background: "var(--surface)",
             boxShadow: pick
               ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
               : "0 8px 26px rgba(0,0,0,0.55)",
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
+          <PosterArt film={film} />
         </div>
         {/* No badge, no pill. Fast Shuffle passes "" — its films are peers with
             nothing to label — and this drew the capsule anyway, so both posters

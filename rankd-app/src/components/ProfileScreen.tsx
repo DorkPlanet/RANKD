@@ -149,7 +149,7 @@ export default function ProfileScreen({
   const widest = Math.max(1, ...tiers.map((t) => t.total));
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+    <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-6">
@@ -181,30 +181,53 @@ export default function ProfileScreen({
             sits beside the name rather than straddling the banner: that overlap
             is every social network's signature, and it was also what made the
             circle look clipped. */}
-        <div className="mt-5 px-6">
-          <div className="flex items-center gap-3">
-            <AvatarSlot
-              profile={profile}
-              accountImage={accountImage}
-              signedIn={signedIn}
-              onUploaded={(url) => onProfile({ ...profile, avatarUrl: url })}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="flex items-start gap-1.5">
-                <span className="min-w-0 flex-1 truncate font-display text-[26px] leading-none tracking-wide text-gold">
-                  {profile.name}
-                </span>
-                <button
-                  onClick={() => setEditing(true)}
-                  aria-label="Edit your name and bio"
-                  className="mt-[1px] flex-shrink-0 text-dim active:scale-90"
-                >
-                  <PencilIcon />
-                </button>
+        <div className="px-6">
+          {/* Centred, with the name and the line under it.
+              Beside the name it was a bullet point: the eye went to the 26px
+              gold type and the picture was something to its left. Stacked on
+              the axis the whole screen already uses — the banner above it, the
+              stat band below — it is the first thing you see, which is right
+              for the one element on this screen that is actually YOU.
+
+              ── The overlap ──────────────────────────────────────────────────
+              This file used to argue against a circle straddling the cover, on
+              the grounds that it is every social network's signature. Overruled
+              deliberately, and the distinction that makes it work is HOW FAR:
+              the classic version sits half in and half out, which is the shape
+              being avoided. A quarter is a different thing — the picture reads
+              as tucked under the banner's lower edge rather than pinned to it.
+
+              The other half of the old objection was that the circle looked
+              clipped. That was a missing ring, not the overlap: the double ring
+              below cuts it out of the page, so its own edge is what ends the
+              banner rather than the banner ending mid-circle. */}
+          <div className="flex flex-col items-center text-center">
+            <span className="relative z-10 -mt-[26px]">
+              <AvatarSlot
+                profile={profile}
+                accountImage={accountImage}
+                signedIn={signedIn}
+                onUploaded={(url) => onProfile({ ...profile, avatarUrl: url })}
+              />
+            </span>
+            {/* The pencil sits after the name rather than pinned to the right
+                edge. Centred text with a control anchored to one side reads as
+                lopsided — and pushed the name itself off the true centre, which
+                is the one thing this layout exists to fix. */}
+            <span className="mt-3 flex max-w-full items-start gap-1.5">
+              <span className="min-w-0 truncate font-display text-[26px] leading-none tracking-wide text-gold">
+                {profile.name}
               </span>
-              <span className="mt-1 block font-serif text-[12px] italic leading-snug text-dim">
-                {profile.bio || "Add a line about your taste"}
-              </span>
+              <button
+                onClick={() => setEditing(true)}
+                aria-label="Edit your name and bio"
+                className="mt-[1px] flex-shrink-0 text-dim active:scale-90"
+              >
+                <PencilIcon />
+              </button>
+            </span>
+            <span className="mt-1.5 block max-w-[280px] font-serif text-[12px] italic leading-snug text-dim">
+              {profile.bio || "Add a line about your taste"}
             </span>
           </div>
 
@@ -535,12 +558,27 @@ function AvatarSlot({
   // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
   const [pending, setPending] = useState<File | null>(null);
   const avatar = avatarOf(profile, accountImage);
-  const SIZE = 58;
+  // Big enough to be the face of the card rather than a bullet point beside the
+  // name. Everything else here is derived from it so the badge and the fallback
+  // initial keep their proportions. Stays under AVATAR_SIZE at 3× density, so
+  // the uploaded 256px crop still has pixels to spare.
+  const SIZE = 76;
 
   const face = (
     <span
-      className="relative flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-[26px] text-gold"
-      style={{ width: SIZE, height: SIZE, background: "var(--surface)", boxShadow: "0 0 0 1.5px var(--border)" }}
+      className="relative flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-gold"
+      style={{
+        width: SIZE,
+        height: SIZE,
+        fontSize: Math.round(SIZE * 0.45),
+        background: "var(--surface)",
+        // A double ring, not the old hairline. The circle now overlaps the
+        // banner, and 1.5px against a photograph is not an edge — the artwork
+        // reads straight through it and the picture looks clipped out of the
+        // cover. The inner band is the page's own colour, so the circle is cut
+        // OUT of the banner rather than laid on top of it.
+        boxShadow: "0 0 0 3px var(--bg), 0 0 0 4.5px var(--border)",
+      }}
     >
       {avatar.kind === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -560,9 +598,9 @@ function AvatarSlot({
         <span
           aria-hidden
           className="absolute bottom-0 right-0 flex items-center justify-center rounded-full"
-          style={{ width: 20, height: 20, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
+          style={{ width: 23, height: 23, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 20h9" />
             <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
           </svg>
@@ -584,7 +622,7 @@ function AvatarSlot({
 
       {/* Errors and the busy state belong to the cropper now: it is the thing
           on screen when either happens, and reporting an upload failure next to
-          a 58px circle the user is no longer looking at helped nobody. */}
+          a small circle the user is no longer looking at helped nobody. */}
       {pending && (
         <AvatarCropper
           file={pending}

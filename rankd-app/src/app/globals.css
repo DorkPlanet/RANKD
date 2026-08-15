@@ -365,6 +365,75 @@ button * {
     animation: none;
   }
 }
+/* ── The height every screen is cut to ──────────────────────────────────────
+   Every `main` in the app is this tall, holds a nav pinned at its foot, and
+   clips its overflow. That combination means the height has to be an
+   UNDER-estimate of the viewport or the nav is the thing that goes: one pixel
+   too tall and the bar is pushed past the clip and off the bottom of the
+   screen, which is exactly what happened in fullscreen.
+
+   `dvh` is the dynamic viewport — it tracks browser chrome sliding in and out,
+   and in a fullscreen PWA it can report the space the system gesture bar is
+   sitting in as though the page could draw there. `svh` is the SMALLEST the
+   viewport ever gets, so it is never an over-estimate. The layout has slack
+   below the posters and none below the nav, so erring small costs a few pixels
+   of gap and erring large costs the whole bar.
+
+   Declared three times on purpose: each line overrides the last only where the
+   unit is understood, so an old browser lands on `vh` rather than on nothing. */
+.h-app {
+  height: 100vh;
+  height: 100dvh;
+  height: 100svh;
+}
+
+/* ── Fast Shuffle's countdown ───────────────────────────────────────────────
+   The climb's rank face lifts because a place was TAKEN. This one rolls because
+   a number went down, which is a different claim and deserves a different
+   motion — the old figure leaves upward and the new one arrives from below,
+   the way a counter decrements.
+
+   Both halves are on the clock together: the outgoing digit is only in the DOM
+   for the length of the roll (see `ToGo`), so anything slower than this here
+   would be cut off mid-flight rather than easing out. */
+@keyframes sd-roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(85%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sd-roll-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-85%);
+  }
+}
+.sd-roll-in {
+  animation: sd-roll-in 0.38s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.sd-roll-out {
+  animation: sd-roll-out 0.38s cubic-bezier(0.4, 0, 1, 1) both;
+}
+/* The whole point of this element is the travel, so reduced motion leaves the
+   current number sitting still rather than cross-fading two of them. */
+@media (prefers-reduced-motion: reduce) {
+  .sd-roll-in {
+    animation: none;
+  }
+  .sd-roll-out {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Demoting a result to the second row shrinks and dims it rather than cutting */
 .result-line {
   transition: font-size 0.3s var(--ease), opacity 0.3s var(--ease);
@@ -426,16 +495,32 @@ button * {
    in PosterCard). The duration is jittered with it, so two things that happen to
    start together drift apart instead of staying locked. Nothing here should ever
    go back to a shared delay: things that float in nature do not keep time. */
+/* Travel and period were 9px over 6.5s and 6px over 5s. Correct in principle
+   and invisible in practice: 9px of easing spread across six and a half seconds
+   is under 3px/s at the fastest point of the cycle, which at arm's length on a
+   phone is indistinguishable from a still image. The motion was real and nobody
+   could see it, which is the same as not having it.
+
+   Nearly doubled and sped up. Still slow enough to read as drift rather than
+   bounce — the cards hang, they do not bob — but now above the threshold where
+   a glance catches it. The two rates stay deliberately non-harmonic (5.2 and
+   4.1 share no small common multiple) so a poster and a title never fall into
+   step and stay there for a whole duel.
+
+   Both durations are also passed inline from `floatStyle` in PosterCard, which
+   is what phases the pair. These values must match the `base` arguments there —
+   the inline duration wins, so a mismatch would leave this looking right and
+   behaving differently. */
 @keyframes float-poster {
   0%, 100% { translate: 0 0; }
-  50% { translate: 0 -9px; }
+  50% { translate: 0 -16px; }
 }
 @keyframes float-title {
   0%, 100% { translate: 0 0; }
-  50% { translate: 0 -6px; }
+  50% { translate: 0 -11px; }
 }
-.float-poster { animation: float-poster 6.5s ease-in-out infinite; }
-.float-title { animation: float-title 5s ease-in-out infinite; }
+.float-poster { animation: float-poster 5.2s ease-in-out infinite; }
+.float-title { animation: float-title 4.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .float-poster, .float-title { animation: none; }
 }

@@ -29,10 +29,13 @@
 import { useEffect, useRef, useState } from "react";
 
 import { applyRoughCut, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
+import { clearRoughCut, loadRoughCut, saveRoughCut } from "@/lib/roughCutRun";
 import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
-import { Header } from "./DuelScreen";
-import { flyPosterTo } from "./PosterCard";
+import { Countdown } from "./Countdown";
+import { BottomNav, Header } from "./DuelScreen";
+import { PosterArt } from "./PosterArt";
+import { floatStyle, flyPosterTo } from "./PosterCard";
 
 /** How far a pointer must travel before it counts as a flick rather than a tap. */
 const FLICK_PX = 44;
@@ -60,6 +63,8 @@ export default function RoughCut({
   onRankPile,
   onSettings,
   onTrophies,
+  onNavigate,
+  onAddFilm,
 }: {
   films: Film[];
   tier: Rating;
@@ -69,18 +74,30 @@ export default function RoughCut({
   onRankPile: (films: Film[], ids: string[]) => void;
   onSettings: () => void;
   onTrophies: () => void;
+  /**
+   * Leave for another screen. The pass is applied on the way out — see `leaveTo`
+   * — so the caller only has to do the navigating.
+   */
+  onNavigate: (to: "modes" | "list" | "profile") => void;
+  onAddFilm: (film: Film) => void;
 }) {
   // The pile is fixed for the duration of a pass. Re-deriving it as scores
   // change would reorder the queue under the user mid-pass — they would see
   // films they had already placed come back around. `refine` replaces it
   // wholesale to start a second pass over one pile.
-  const [pass, setPass] = useState<{ films: Film[]; n: number }>(() => ({
-    films: roughCutPool(films, tier),
-    n: 1,
-  }));
+  // ── Resuming ──────────────────────────────────────────────────────────────
+  //
+  // Read ONCE, in the initialisers, so the screen never renders the first film
+  // of a fresh pass and then jumps to where you actually were. `loadRoughCut`
+  // refuses anything it cannot rebuild exactly, so `resumed` is either a pass
+  // that still matches this library or null.
+  const [resumed] = useState(() => loadRoughCut(films, tier));
+  const [pass, setPass] = useState<{ films: Film[]; n: number }>(() =>
+    resumed ? { films: resumed.films, n: resumed.n } : { films: roughCutPool(films, tier), n: 1 },
+  );
   const pool = pass.films;
-  const [at, setAt] = useState(0);
-  const [choices, setChoices] = useState<Map<string, Bucket>>(new Map());
+  const [at, setAt] = useState(resumed?.at ?? 0);
+  const [choices, setChoices] = useState<Map<string, Bucket>>(resumed?.choices ?? new Map());
   const [next, setNext] = useState<"rank" | "split">("rank");
   const start = useRef<{ x: number; y: number } | null>(null);
 
@@ -101,10 +118,34 @@ export default function RoughCut({
   const film = pool[at];
   const done = at >= pool.length;
 
+  // Written after every render that moves the queue, rather than inside
+  // `place`. A placement is three separate state updates and `undo` is another
+  // two — persisting from inside each of them would mean five call sites that
+  // all have to agree, and the one that eventually forgets is the bug. Here
+  // there is one rule: whatever is on screen is what gets stored.
+  //
+  // `saveRoughCut` clears the record for a pass that has not started or has
+  // finished, so leaving is handled by the same line as arriving.
+  useEffect(() => {
+    saveRoughCut({ tier, films: pool, at, choices, n: pass.n });
+  }, [tier, pool, at, choices, pass.n]);
+
+  // How the deal is going, counted from `choices` rather than tracked
+  // separately — three tallies kept in state would be three more things that
+  // can disagree with the map they describe, and `undo` would have to remember
+  // to decrement the right one.
+  const filed: Record<Bucket, number> = { top: 0, middle: 0, bottom: 0 };
+  for (const b of choices.values()) filed[b]++;
+
   // Applied against the CURRENT library rather than the one captured at mount,
   // so anything the credits sweep filled in while you were placing survives.
   const commit = (picked: Map<string, Bucket>) => {
     onFilms(applyRoughCut(films, tier, picked));
+    // Done and Throw it away both END the pass, so neither may leave a resume
+    // behind — the first has already written its answers into the library and
+    // the second means you did not want them. Cleared explicitly rather than
+    // left to the effect above, which will not run again after this unmounts.
+    clearRoughCut();
     onExit();
   };
 
@@ -149,6 +190,7 @@ export default function RoughCut({
   const rankPile = (bucket: Bucket) => {
     const applied = applyRoughCut(films, tier, choices);
     const ids = [...choices.entries()].filter(([, b]) => b === bucket).map(([id]) => id);
+    clearRoughCut();
     onRankPile(applied, ids);
   };
 
@@ -171,6 +213,35 @@ export default function RoughCut({
     setAt(0);
   };
 
+  /**
+   * Leave by the nav rather than by Done.
+   *
+   * This screen took the whole surface and drew no nav, so a pass was a trap:
+   * the only ways out were Done and Throw it away, and every other screen in
+   * the app was two taps further than it looks. Adding the bar means the same
+   * five cells go the same five places from here.
+   *
+   * It applies the pass first, for the same reason Done does — a pass abandoned
+   * two-thirds through is still two-thirds of a sorted tier, and losing that
+   * because you tapped the list would be a worse trap than the one being fixed.
+   */
+  const leaveTo = (to: "modes" | "list" | "profile") => {
+    onFilms(applyRoughCut(films, tier, choices));
+    onNavigate(to);
+  };
+
+  const nav = (
+    <BottomNav
+      screen="duel"
+      onSettings={onSettings}
+      onModes={() => leaveTo("modes")}
+      onList={() => leaveTo("list")}
+      onProfile={() => leaveTo("profile")}
+      films={films}
+      onAddFilm={onAddFilm}
+    />
+  );
+
   const undo = () => {
     if (at === 0) return;
     const back = at - 1;
@@ -186,7 +257,7 @@ export default function RoughCut({
       n: [...choices.values()].filter((v) => v === b).length,
     }));
     return (
-      <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+      <main className="relative flex h-app flex-col overflow-hidden select-none">
         <Header onSettings={onSettings} onTrophies={onTrophies} />
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           {/* The number counts up rather than appearing. It is the one figure
@@ -254,15 +325,21 @@ export default function RoughCut({
             Throw it away
           </button>
         </div>
+        {nav}
       </main>
     );
   }
 
   return (
-    <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+    <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
-      <div className="mx-auto mt-11 w-full max-w-[330px] flex-shrink-0 px-5">
+      {/* `mt-7`, down from `mt-11`. The 44px was sized to clear the header's
+          feather on the duel screen, where a progress bar sits immediately
+          under it. Here the first thing below is a row of stars with its own
+          line box, so 28px clears the fade just as well and hands the
+          difference to the artwork. */}
+      <div className="mx-auto mt-7 w-full max-w-[330px] flex-shrink-0 px-5">
         <div className="mb-2.5 flex items-baseline justify-between">
           <span className="text-base text-gold">{starsFor(tier)}</span>
           <span className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-dim">
@@ -280,12 +357,42 @@ export default function RoughCut({
             style={{ width: `${(at / pool.length) * 100}%`, background: "var(--accent)" }}
           />
         </span>
-        <p className="mt-2.5 text-center text-[9px] font-extrabold uppercase tracking-[0.22em] text-dim tabular-nums">
-          {at + 1} of {pool.length}
-        </p>
+
+        {/* The count, big, directly under the bar.
+            It was "1 of 12" in 9px small caps — a figure that goes UP while the
+            work goes down, in the one size on this screen guaranteed not to be
+            read at speed. You answer here roughly once a second, and what you
+            want to know between answers is how much is LEFT. Shared with Fast
+            Shuffle: same component, same roll.
+
+            Inside the header block rather than floating under it. As its own
+            top-level row it was a `flex-shrink-0` band sitting between two
+            spacers, and when the column ran out of height the spacers went to
+            zero and the card's title landed straight across "FILMS LEFT". One
+            block cannot collide with itself. */}
+        {/* Sized DOWN from 40, and the label pulled up against it.
+            At 40 with rules either side and a 10px gap the block cost ~76px,
+            and on a 730px phone every one of those came out of the poster —
+            which dropped from ~350 to 223. The countdown is a readout; the
+            artwork is the thing being judged. So the readout yields: 26px
+            digits, no hairlines, label tucked under. ~30px back to the poster,
+            and it still reads at a glance because nothing else up here is
+            gold. */}
+        <div className="mt-2.5 flex justify-center">
+          <Countdown
+            n={pool.length - at}
+            label={pool.length - at === 1 ? "film left" : "films left"}
+            size={26}
+            tight
+          />
+        </div>
       </div>
 
-      <div style={{ flexGrow: 1 }} />
+      {/* The spacer that used to sit here is gone. It held the card off the
+          header block, which looked considered on a tall screen and cost the
+          poster ~28px on a 730px phone — and the header block already ends in
+          the countdown's own label, which is space enough. The card starts
+          right under it and takes everything that is left. */}
 
       {/* One film, centred. `key` on the id so a new film cannot inherit the
           previous one's transition mid-flight — and so `rc-card` replays its
@@ -293,7 +400,13 @@ export default function RoughCut({
       <div
         ref={cardRef}
         key={film.id}
-        className="rc-card flex shrink flex-col items-center px-8"
+        // `pt-3` is the float's headroom, not padding for looks. The title
+        // drifts up to 11px above its resting line, so with the card flush
+        // against the header block it rose into "FILMS LEFT" at the top of
+        // every cycle — measured at 8px of overlap. Clearance has to exceed the
+        // travel or the collision is intermittent, which is worse than
+        // constant.
+        className="rc-card flex min-h-0 flex-col items-center px-8 pt-4"
         onPointerDown={(e) => {
           start.current = { x: e.clientX, y: e.clientY };
           // Capture, so a drag that leaves the card still reports its release
@@ -337,11 +450,30 @@ export default function RoughCut({
           setDrag(null);
           setAimed(null);
         }}
-        style={{ minHeight: 0, touchAction: "pan-x" }}
+        // `flexGrow: 8` against the spacers' 1 / 0.94 / 0.46. Plain `flex-1` put
+        // the card on equal terms with three empty boxes and the artwork came
+        // out 80px tall — now that the poster yields to pressure, it has to be
+        // told it is the thing that matters. The spacers keep enough of the
+        // remainder to hold the targets where they were measured.
+        style={{ flexGrow: 8, flexBasis: 0, minHeight: 0, touchAction: "pan-x" }}
       >
+        {/* The float, which this screen never had. The duel's cards hang and
+            drift; here the title and the poster sat dead still, and that — more
+            than any of the motion added around them — is what kept this looking
+            like a different app. Same classes and same phasing as PosterCard,
+            which is deliberate: this is one card rather than a pair, so it
+            passes its own id and takes the left-hand phase.
+
+            Paused while a drag is live. The float moves `translate` and the drag
+            moves `transform`, so they compose rather than fight — but a card
+            that keeps bobbing under the thumb reads as lag, not as life. */}
         <span
-          className="mb-3 line-clamp-2 text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi"
-          style={{ fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32 }}
+          className="float-title mb-3 line-clamp-2 text-center font-display font-normal leading-[1.15] tracking-[0.02em] text-text-hi"
+          style={{
+            ...floatStyle(film.id, 2, 4.1, false),
+            animationPlayState: drag === null ? "running" : "paused",
+            fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
+          }}
         >
           {film.title}
         </span>
@@ -350,25 +482,74 @@ export default function RoughCut({
             tips it forward. The transition is dropped while dragging so the
             poster tracks the thumb exactly, and restored on release so it
             springs back instead of snapping. */}
+        {/* ── Why the poster is sized this way and not by a maxHeight ────────
+            It had `aspectRatio: 2/3` and a maxHeight, in a card that was merely
+            `shrink`. An aspect-ratio box takes the height its width demands and
+            a maxHeight only caps it — neither yields to a flex parent. So when
+            the countdown and the pile counts were added, the column needed more
+            height than the screen had, the spacers collapsed to nothing, and
+            the overflow came out as things drawn on top of each other: the
+            title across "FILMS LEFT", the year across the middle pile's count.
+
+            Same fix PosterCard already uses. The wrapper is `flex-1 min-h-0`,
+            so it takes whatever is left and is allowed to be smaller than its
+            content; the poster is `h-full` with the aspect ratio, so it derives
+            its WIDTH from the height it was given. The artwork now gives way
+            first and nothing can ever collide again — which also means the
+            screen looks right at any height rather than at 812px only. */}
         <div
-          className="overflow-hidden rounded-xl bg-surface"
+          className="float-poster flex min-h-0 w-full flex-1 justify-center"
           style={{
-            aspectRatio: "2 / 3",
-            maxHeight: 300,
-            boxShadow: "0 8px 26px rgba(0,0,0,0.55)",
+            ...floatStyle(film.id, 1, 5.2, false),
+            animationPlayState: drag === null ? "running" : "paused",
             transform: drag ? `translateY(${drag}px) rotate(${drag * 0.045}deg)` : undefined,
             transition: drag === null ? "transform 0.28s cubic-bezier(.2,.8,.3,1)" : "none",
           }}
         >
-          {film.poster && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={film.poster} alt={film.title} className="h-full w-full object-cover" draggable={false} />
-          )}
+          <div
+            className="h-full overflow-hidden rounded-xl bg-surface"
+            style={{
+              aspectRatio: "2 / 3",
+              containerType: "inline-size",
+              boxShadow: "0 8px 26px rgba(0,0,0,0.55)",
+            }}
+          >
+            {/* Was `film.poster && <img>`, so a film with no artwork got an
+                empty grey rectangle and you were asked to place a blank. This
+                screen shows one film at a time, which makes it the one most
+                exposed to it. */}
+            <PosterArt film={film} />
+          </div>
         </div>
-        {film.year && <span className="mt-2 text-[11px] text-dim">{film.year}</span>}
+        {/* The year was here and is gone. It is the same fact the info card
+            already carries, it is not what you are judging, and it was the
+            second thing colliding with the pile counts. Nothing replaces it:
+            this screen asks one question a second, and a line of trivia under
+            the artwork is one more thing to skip past on every single film. */}
       </div>
 
-      <div style={{ flexGrow: 1.4 }} />
+      {/* ── Where the three targets sit ────────────────────────────────────
+          All the slack under the poster used to be here, which pushed the
+          targets to the foot of the screen: measured, they sat 76% of the way
+          from the poster's bottom edge to the nav, all but touching Undo.
+
+          The slack is split instead, so they land a little below the midpoint
+          of that gap — close enough to the artwork to read as belonging to it,
+          far enough off the bottom that the thumb is not choosing between them
+          and the controls. 0.94 : 0.46 is that ratio, and it is expressed as
+          WEIGHTS rather than pixels so the proportion holds on any screen
+          height. The two still sum to the 1.4 the single spacer had, so the
+          card above does not move. */}
+      {/* Measured: 49px above the poster and 54px below it — near enough equal
+          on paper, and plainly lopsided on screen. The number that matters is
+          EMPTY space, and above the poster all but 12px of that 49 is taken up
+          by the title. Below it, all 54 were empty.
+
+          So this gives its share back to the artwork and keeps only what the
+          pile counts need to sit clear of the poster's shadow. `flexGrow` is
+          near zero rather than zero so it still yields last rather than first
+          on a very short screen, and the floor is what actually sets the gap. */}
+      <div style={{ flexGrow: 0.12, minHeight: 14 }} />
 
       {/* Lowest on the left, rising to the right — the same direction the scale
           runs everywhere else. It read the other way round at first, which put
@@ -379,6 +560,24 @@ export default function RoughCut({
           so the gesture's outcome is legible BEFORE you commit to it. Nothing
           moves at all when `aimed` is null, which is every moment you are not
           mid-drag — the row is furniture the rest of the time. */}
+      {/* How full each pile is, above the button that fills it.
+          Rough Cut's whole claim is that you are DEALING a tier into three, and
+          until now the only way to know how the deal was going was to finish
+          and read the summary. A count over each target makes the split visible
+          while it is being made — and it is the cheapest possible readout,
+          since the numbers are already in `choices`. */}
+      <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-end px-5">
+        {(["bottom", "middle", "top"] as const).map((b) => (
+          <span
+            key={b}
+            className="flex-1 text-center text-[10px] font-extrabold tabular-nums"
+            style={{ color: filed[b] > 0 ? "var(--gold)" : "var(--dim)", opacity: filed[b] > 0 ? 0.85 : 0.4 }}
+          >
+            {filed[b]}
+          </span>
+        ))}
+      </div>
+
       <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-center px-5">
         {(
           [
@@ -400,7 +599,16 @@ export default function RoughCut({
         ))}
       </div>
 
-      <div className="flex flex-shrink-0 items-center justify-center gap-1 pb-6">
+      {/* The other half of the split above. `minHeight` is the floor: on a short
+          screen the weights have almost nothing to divide, and without it the
+          targets would slide back down onto Undo — which is the exact collision
+          this was moved to avoid. */}
+      <div style={{ flexGrow: 0.46, minHeight: 18 }} />
+
+      {/* `pb-2`, not `pb-6`: the nav underneath now owns the bottom edge and
+          carries the safe-area padding, so the old clearance would be counted
+          twice and squeeze the poster. */}
+      <div className="flex flex-shrink-0 items-center justify-center gap-1 pb-2">
         <button
           onClick={undo}
           disabled={at === 0}
@@ -418,6 +626,8 @@ export default function RoughCut({
           Done
         </button>
       </div>
+
+      {nav}
     </main>
   );
 }

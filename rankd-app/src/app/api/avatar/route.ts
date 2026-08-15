@@ -78,7 +78,24 @@ export async function POST(req: Request) {
       cacheControlMaxAge: 60,
       allowOverwrite: true,
     });
-    return Response.json({ url });
+    // ── Why the URL carries a version ──────────────────────────────────────
+    //
+    // The key above is FIXED and overwritten, which keeps the store from
+    // filling up — and means every upload returns the identical URL. The
+    // browser and the CDN edge both already hold the previous picture under
+    // that exact URL, so the new one does not appear until the old entry
+    // expires. `cacheControlMaxAge: 60` was meant to bound that wait and does
+    // not: it bounds the EDGE, while the phone that just did the upload is
+    // reading its own memory cache and answering from the old bytes. Measured
+    // from the user's side as "I set a new picture and it hadn't changed
+    // thirty seconds later".
+    //
+    // A version parameter is the whole fix. Blob storage ignores the query
+    // string, every cache between here and the screen treats it as a different
+    // resource, and the stored profile URL changes with each upload — so the
+    // new face is fetched immediately rather than waited for. It also fixes the
+    // FIRST upload, where the same URL had already been cached as a 404.
+    return Response.json({ url: `${url}?v=${Date.now().toString(36)}` });
   } catch (e) {
     // Configured is not the same as reachable: OIDC is enabled PER ENVIRONMENT,
     // so a project whose Preview and Production work can still refuse

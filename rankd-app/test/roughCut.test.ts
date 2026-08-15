@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { choose, confirm, startRun } from "@/lib/ladder";
-import { applyRoughCut, roughCutPool, type Bucket } from "@/lib/roughCut";
+import { applyRoughCut, bandsOf, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
 import { tierMax, tierMin } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
@@ -180,5 +180,56 @@ describe("ranking one pile of a cut", () => {
   it("leaves a whole-tier run alone", () => {
     const state = startRun(cut(), 4);
     expect(state.session?.band).toBeUndefined();
+  });
+});
+
+// The bug: rank two of the three piles and the third one vanished from the
+// setup sheet. Ranking a pile hard-locks every film in it, `bandsOf` used to
+// skip hard locks, so two ranked piles read as two empty bands — the sheet's
+// "is this tier split" test then saw one occupied band, decided the tier had
+// never been cut, and hid the section that held the last pile's button.
+describe("bandsOf after piles have been ranked", () => {
+  const six = () =>
+    applyRoughCut(
+      ["a", "b", "c", "d", "e", "f"].map((id) => film(id, 7500)),
+      4,
+      assign([
+        ["a", "top"], ["b", "top"],
+        ["c", "middle"], ["d", "middle"],
+        ["e", "bottom"], ["f", "bottom"],
+      ]),
+    );
+
+  /** Climb a pile to the end, so every film in it comes out hard-locked. */
+  const rankPile = (films: Film[], ids: string[]): Film[] => {
+    let state = startRun(films, 4, { only: ids });
+    for (let guard = 0; state.session && guard < 200; guard++) {
+      state = state.session.needsConfirm ? confirm(state) : choose(state, state.session.contenderId);
+    }
+    return state.films;
+  };
+
+  it("still shows all three piles once two of them are ranked", () => {
+    const cutFilms = six();
+    expect(BUCKETS.map((b) => bandsOf(cutFilms, 4)[b].length)).toEqual([2, 2, 2]);
+
+    let after = rankPile(cutFilms, bandsOf(cutFilms, 4).top.map((f) => f.id));
+    after = rankPile(after, bandsOf(after, 4).middle.map((f) => f.id));
+
+    const bands = bandsOf(after, 4);
+    expect(BUCKETS.map((b) => bands[b].length)).toEqual([2, 2, 2]);
+    // Which is what the sheet's "already split" test reads.
+    expect(BUCKETS.filter((b) => bands[b].length > 0).length).toBeGreaterThan(1);
+  });
+
+  it("leaves the ranked piles' films locked, so only the last pile is rankable", () => {
+    let after = rankPile(six(), bandsOf(six(), 4).top.map((f) => f.id));
+    after = rankPile(after, bandsOf(after, 4).middle.map((f) => f.id));
+
+    const bands = bandsOf(after, 4);
+    const open = (b: Bucket) => bands[b].filter((f) => f.lock !== "hard");
+    expect(open("top")).toHaveLength(0);
+    expect(open("middle")).toHaveLength(0);
+    expect(open("bottom").map((f) => f.id).sort()).toEqual(["e", "f"]);
   });
 });
