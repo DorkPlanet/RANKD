@@ -85,11 +85,9 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
   };
 
   return (
-    <div className="mt-7 border-t border-border pt-5">
-      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">GET IN TOUCH</span>
-      <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-        Something broken, something confusing, or something you want. It comes straight to us.
-      </p>
+    // Header and rule come from the Settings row this sits in.
+    <div>
+      <p className="mb-2 text-[11px] text-dim">Broken? Confusing? Missing something? Tell us.</p>
 
       {status === "sent" ? (
         // The form is replaced rather than cleared, so there is no doubt about
@@ -122,8 +120,7 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
           </button>
           {error && <p className="mt-2 text-[11px] leading-snug text-gold">{error}</p>}
           <p className="mt-2 text-[10px] leading-snug text-dim">
-            Your library size and browser go with it, so we can make sense of the report. No film
-            titles or ratings are ever sent.
+            Sends your library size and browser. Never film titles or ratings.
           </p>
         </>
       )}

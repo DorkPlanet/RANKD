@@ -1,15 +1,16 @@
 "use client";
 
-// Settings — brightness, importing a library, and the only backup that exists.
+// Settings — one tappable row per thing, all shut by default.
 //
-// The move/back-up section is load-bearing rather than housekeeping: localStorage
-// is per-origin, so this file is the only bridge between a laptop and a phone,
-// and clearing browser data without it destroys every duel ever fought.
+// It used to be nine stacked blocks, every one with a paragraph explaining
+// itself, so opening it read as homework. Everything still here; you just have
+// to ask for it.
+//
+// The backup row is the load-bearing one: localStorage is per-origin, so that
+// file is the only bridge between a laptop and a phone, and clearing browser
+// data without it destroys every duel ever fought.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-
-// Stable reference for `useSyncExternalStore`; nothing here changes after load.
-const noSubscribe = () => () => {};
 
 import { exportBackup, importBackup } from "@/lib/backup";
 import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
@@ -21,6 +22,59 @@ import type { Film } from "@/lib/types";
 import { Account } from "./Account";
 import { Feedback } from "./Feedback";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
+
+/** Stable reference for `useSyncExternalStore`. */
+const noSubscribe = () => () => {};
+
+const BTN =
+  "flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]";
+
+/** One collapsed row. `note` is the only thing shown while shut. */
+function Row({
+  title,
+  note,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  note?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-border">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between py-3.5 text-left active:scale-[0.99]"
+      >
+        <span className="text-[14px] text-text-hi">{title}</span>
+        <span className="flex items-center gap-2">
+          {note && <span className="text-[11px] text-dim">{note}</span>}
+          <span
+            className="text-[10px] text-dim"
+            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s var(--ease)" }}
+          >
+            ▾
+          </span>
+        </span>
+      </button>
+      {/* 1fr/0fr so the row opens at the same rate everything else in the app
+          animates, rather than snapping. */}
+      <div
+        className="grid"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr", transition: "grid-template-rows 0.25s var(--ease)" }}
+      >
+        <div className="overflow-hidden">
+          <div className="pb-4">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type RowId = "library" | "account" | "install" | "help" | "say" | "reset";
 
 export function Settings({
   brightness,
@@ -35,12 +89,14 @@ export function Settings({
   onClose: () => void;
   films: Film[];
   onImport: (films: Film[]) => void;
-  /** Replay the coach marks. Optional so the sheet still renders without one. */
   onTour?: () => void;
 }) {
+  // One at a time. Two open rows is the wall of text this replaced.
+  const [open, setOpen] = useState<RowId | null>(null);
+  const toggle = (id: RowId) => setOpen((o) => (o === id ? null : id));
+
+  const [conflict, setConflict] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  // How much evidence is behind the list, and what it costs to keep. A storage
-  // ceiling you can't see is a cliff; one you can see is a number going up.
   const [evidence, setEvidence] = useState<{ rows: number; bytes: number } | null>(null);
   useEffect(() => {
     void loadLog().then((log) => setEvidence(logSize(log)));
@@ -49,153 +105,110 @@ export function Settings({
   const takeFile = async (file: File, merge: boolean) => {
     const { films: parsed, skipped } = parseLetterboxdCsv(await file.text());
     if (parsed.length === 0) {
-      setNote("No rated films found — is that a Letterboxd ratings.csv?");
+      setNote("No rated films in that file.");
       return;
     }
-    const next = merge ? mergeFilms(films, parsed) : parsed;
-    onImport(next);
-    setNote(
-      `${merge ? "Merged" : "Imported"} ${parsed.length} films` +
-        (skipped ? ` · skipped ${skipped} unrated` : "") +
-        ". Posters are loading in the background.",
-    );
+    onImport(merge ? mergeFilms(films, parsed) : parsed);
+    setNote(`${merge ? "Merged" : "Imported"} ${parsed.length} films${skipped ? `, skipped ${skipped}` : ""}.`);
   };
 
   return (
     <Sheet title="Settings" onClose={onClose}>
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-extrabold tracking-[0.12em] text-dim">BRIGHTNESS</span>
-          <span className="text-[11px] text-dim">{Math.round(brightness * 100)}%</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={Math.round(brightness * 100)}
-          onChange={(e) => onChange(parseInt(e.target.value, 10) / 100)}
-          className="w-full"
-          style={{ accentColor: "var(--accent)" }}
-        />
-        <div className="mt-1.5 flex justify-between text-[11px] text-dim">
-          <span>Deep</span>
-          <span>Bright</span>
-        </div>
-
-        {/* The half of onboarding that stops it being a one-shot. A tutorial you
-            can only ever see on the day you install the app is one nobody can
-            re-read, and the gestures here are the kind you half-remember. */}
-        {onTour && (
-          <div className="mt-7 border-t border-border pt-5">
-            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">HOW IT WORKS</span>
-            <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-              A quick pass over the gestures: tapping, flicking, holding, and where Rough Cut
-              lives. Runs on the duel screen, then again on your list.
-            </p>
-            <button
-              onClick={onTour}
-              className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
-            >
-              Show me around
-            </button>
-          </div>
-        )}
-
-        <div className="mt-7 border-t border-border pt-5">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs font-extrabold tracking-[0.12em] text-dim">YOUR FILMS</span>
-            <span className="text-[11px] text-dim">{films.length} in the library</span>
-          </div>
-          <p className="mb-3 text-[11px] leading-snug text-dim">
-            Import a Letterboxd <span className="text-text">ratings.csv</span>. Merge keeps anything
-            you&apos;ve already placed; replace starts over.
-          </p>
-          <div className="flex gap-2">
-            <ImportButton label="Merge" merge onFile={takeFile} />
-            <ImportButton label="Replace" onFile={takeFile} />
-          </div>
-          {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
-        </div>
-
-        <Account />
-
-        {/* Signing in mirrors all of this to an account, but the file stays
-            first-class: it is the path that works with no account, no network
-            and no trust in anyone else's uptime, and it is how you leave. */}
-        <div className="mt-7 border-t border-border pt-5">
-          <span className="text-xs font-extrabold tracking-[0.12em] text-dim">MOVE OR BACK UP</span>
-          <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-            One file holds everything — films, placements, duels and your profile. Save it, then
-            restore it wherever you want to carry on.
-          </p>
-          {evidence && evidence.rows > 0 && (
-            <p className="mb-3 text-[11px] leading-snug text-dim">
-              <span className="text-text-hi">{evidence.rows.toLocaleString()}</span> duels recorded
-              · {Math.max(1, Math.round(evidence.bytes / 1024)).toLocaleString()} KB
-            </p>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                exportBackup();
-                setNote("Saved. Send it to your other device and restore it there.");
-              }}
-              className="flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
-            >
-              Save a backup
-            </button>
-            <RestoreButton
-              onFile={async (file) => {
-                try {
-                  const r = importBackup(await file.text());
-                  const evidence = r.judgements ? `, ${r.judgements.toLocaleString()} duels` : "";
-                  setNote(
-                    `Restored ${r.films} films${evidence}${r.hadProfile ? " and your profile" : ""}. Reloading…`,
-                  );
-                  setTimeout(() => location.reload(), 900);
-                } catch (e) {
-                  setNote(e instanceof Error ? e.message : "That file couldn't be read.");
-                }
-              }}
-            />
-          </div>
-        </div>
-
-        <InstallSection />
-
-        {/* Above START AGAIN, because someone scrolling this far in frustration
-            should meet the way to TELL us before they meet the way to wipe
-            everything. The evidence count is already loaded here, so the report
-            can carry it without a second read. */}
-        <Feedback films={films} duels={evidence?.rows ?? 0} />
-
-        {/* Deliberately BELOW the backup block, so the export is the thing you
-            read first and the destruction is the thing you scroll to. */}
-        <StartAgain films={films} onReset={onImport} />
-
-        {/* Required by TMDB's API terms, and the right thing regardless — every
-            poster, still and credit in this app is their data. */}
-        <p className="mt-7 border-t border-border pt-5 text-[10px] leading-snug text-dim">
-          Artwork and film details from TMDB. This product uses the TMDB API but is not endorsed or
-          certified by TMDB.
-        </p>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-[14px] text-text-hi">Brightness</span>
+        <span className="text-[11px] text-dim">{Math.round(brightness * 100)}%</span>
       </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={Math.round(brightness * 100)}
+        onChange={(e) => onChange(parseInt(e.target.value, 10) / 100)}
+        className="mb-4 w-full"
+        style={{ accentColor: "var(--accent)" }}
+      />
+
+      <Row
+        title="Your films"
+        note={`${films.length}`}
+        open={open === "library"}
+        onToggle={() => toggle("library")}
+      >
+        <p className="mb-2 text-[11px] text-dim">Add a Letterboxd export.</p>
+        <div className="mb-4 flex gap-2">
+          <ImportButton label="Merge" merge onFile={takeFile} />
+          <ImportButton label="Replace" onFile={takeFile} />
+        </div>
+
+        <p className="mb-2 text-[11px] text-dim">
+          Back up everything to one file, or move it to another device.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              exportBackup();
+              setNote("Saved.");
+            }}
+            className={BTN}
+          >
+            Save
+          </button>
+          <RestoreButton
+            onFile={async (file) => {
+              try {
+                const r = importBackup(await file.text());
+                setNote(`Restored ${r.films} films. Reloading…`);
+                setTimeout(() => location.reload(), 900);
+              } catch (e) {
+                setNote(e instanceof Error ? e.message : "That file couldn't be read.");
+              }
+            }}
+          />
+        </div>
+        {note && <p className="mt-3 text-[11px] text-gold">{note}</p>}
+      </Row>
+
+      {/* Forced open on a conflict. Two devices disagreeing needs an answer, and
+          the chooser is the one panel in the app allowed to be demanding — it
+          must not sit behind a shut row. */}
+      <Row
+        title="Account"
+        note={conflict ? "needs you" : undefined}
+        open={open === "account" || conflict}
+        onToggle={() => toggle("account")}
+      >
+        <Account onConflict={setConflict} />
+      </Row>
+
+      <InstallRow open={open === "install"} onToggle={() => toggle("install")} />
+
+      {onTour && (
+        <Row title="How to play" open={open === "help"} onToggle={() => toggle("help")}>
+          <button onClick={onTour} className={`${BTN} w-full`}>
+            Show me around
+          </button>
+        </Row>
+      )}
+
+      <Row title="Tell us something" open={open === "say"} onToggle={() => toggle("say")}>
+        <Feedback films={films} duels={evidence?.rows ?? 0} />
+      </Row>
+
+      <Row title="Start again" open={open === "reset"} onToggle={() => toggle("reset")}>
+        <StartAgain films={films} onReset={onImport} />
+      </Row>
+
+      {/* Required by TMDB's API terms. */}
+      <p className="mt-5 text-[10px] leading-snug text-dim">
+        Film data from TMDB. Not endorsed or certified by TMDB.
+      </p>
     </Sheet>
   );
 }
 
-/**
- * Where the one-time nudge goes to be found again.
- *
- * The banner is dismissible and stays dismissed, which is right for an
- * invitation and wrong for the only place a feature is explained. This says the
- * same thing permanently, and reports plainly when the app is already installed
- * rather than offering an action that would do nothing.
- */
-function InstallSection() {
-  // Read through `useSyncExternalStore` for the reason given in
-  // `InstallPrompt`: it depends on `navigator`, so a `useState` initialiser
-  // would break hydration and an effect would cost a render cascade.
+function InstallRow({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  // `useSyncExternalStore` because this reads `navigator`: a `useState`
+  // initialiser breaks hydration and an effect costs a render cascade.
   const route = useSyncExternalStore(
     noSubscribe,
     () => installRoute(readEnv()),
@@ -203,54 +216,42 @@ function InstallSection() {
   );
 
   return (
-    <div className="mt-7 border-t border-border pt-5">
-      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">ON YOUR HOME SCREEN</span>
+    <Row
+      title="Add to home screen"
+      note={route === "installed" ? "done" : undefined}
+      open={open}
+      onToggle={onToggle}
+    >
       {route === "installed" ? (
-        <p className="mt-1 text-[11px] leading-snug text-gold">
-          Installed. This is running as an app, which is why there is no address bar.
-        </p>
+        <p className="text-[11px] text-gold">Installed. That&rsquo;s why there&rsquo;s no address bar.</p>
       ) : (
-        <p className="mt-1 text-[11px] leading-snug text-dim">
+        <p className="text-[11px] leading-snug text-dim">
           {route === "ios" ? (
             <>
               Tap <span className="text-text">Share</span>, then{" "}
-              <span className="text-text">Add to Home Screen</span>. Rankd then opens with its own
-              icon and no address bar. A browser tab always shows its URL, so this is the only way
-              to lose it.
+              <span className="text-text">Add to Home Screen</span>.
             </>
           ) : (
             <>
-              {/* The `{" "}` after the span is load-bearing: a bare space there
-                  is swallowed when the text that follows wraps onto the next
-                  line, which shipped as "Home screenin your browser's menu".
-                  Only visible in the rendered DOM, never in the source. */}
-              Use <span className="text-text">Install</span> or{" "}
-              <span className="text-text">Add to Home screen</span>{" "}
-              in your browser&rsquo;s menu. Rankd then opens with its own icon and no address bar.
-              A browser tab always shows its URL, so this is the only way to lose it.
+              Use <span className="text-text">Install</span> from your browser menu.
             </>
-          )}
+          )}{" "}
+          Opens with its own icon and no address bar.
         </p>
       )}
-    </div>
+    </Row>
   );
 }
 
-// ── Starting over ──────────────────────────────────────────────────────────
+// WITHDRAW keeps your calls and drops the model's. Cheap, and it comes back as
+// you play, so no confirm.
 //
-// Two acts, and they are not degrees of the same thing.
+// START AGAIN also burns the evidence log, and that half is not optional:
+// beliefs are fitted from the log, so a reset that spared it would refill the
+// list with the order you were leaving (see lib/reset.ts). Only irreversible
+// button in the app — it asks twice and names the number.
 //
-// WITHDRAW turns off the model's opinions and keeps yours. Cheap, undoable in
-// practice — the evidence is untouched, so the placements come back as you keep
-// playing. No confirm, because nothing is lost.
-//
-// START AGAIN empties the ranking and burns the evidence with it. That second
-// half is not optional: beliefs are fitted from the log, so a reset that spared
-// it would refill the list with the order you were trying to leave (see
-// lib/reset.ts). It is the only irreversible button in the app, so it asks
-// twice, names the number it is about to destroy, and points at the export.
-//
-// Neither touches the films or the star ratings. Those came from the import.
+// Neither touches films or star ratings.
 function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]) => void }) {
   const [arming, setArming] = useState(false);
   const [duels, setDuels] = useState(0);
@@ -262,11 +263,8 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
   const soft = films.filter((f) => f.lock === "soft").length;
 
   return (
-    <div className="mt-7 border-t border-border pt-5">
-      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">START AGAIN</span>
-      <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-        Your films and star ratings are always kept — only the ranking goes.
-      </p>
+    <>
+      <p className="mb-3 text-[11px] text-dim">Your films and stars are kept. Only the ranking goes.</p>
 
       {soft > 0 && (
         <button
@@ -274,9 +272,9 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
             onReset(withdrawSoftLocks(films));
             setArming(false);
           }}
-          className="mb-2 w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
+          className={`${BTN} mb-2 w-full`}
         >
-          Drop the {soft.toLocaleString()} the model placed
+          Drop the {soft.toLocaleString()} the app placed
         </button>
       )}
 
@@ -284,29 +282,24 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
         <button
           onClick={() => setArming(true)}
           disabled={placed === 0 && duels === 0}
-          className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-dim active:scale-[0.98] disabled:opacity-35"
+          className={`${BTN} w-full text-dim disabled:opacity-35`}
         >
-          Clear the whole ranking
+          Clear my ranking
         </button>
       ) : (
         <>
-          {/* Says the number, not "are you sure?". A count you recognise is the
-              only warning that works — it is the thing you would miss. */}
+          {/* The number, not "are you sure?" — it is the thing you would miss. */}
           <p className="mb-2 text-[11px] leading-snug text-gold">
-            This erases {placed.toLocaleString()} placement{placed === 1 ? "" : "s"} and{" "}
-            {duels.toLocaleString()} recorded duel{duels === 1 ? "" : "s"}. It cannot be undone —
-            save a backup first if you might want this back.
+            Erases {placed.toLocaleString()} placements and {duels.toLocaleString()} duels. Cannot be
+            undone.
           </p>
           <div className="flex gap-2">
-            <button
-              onClick={() => setArming(false)}
-              className="flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]"
-            >
+            <button onClick={() => setArming(false)} className={BTN}>
               Keep it
             </button>
             <button
               onClick={() => {
-                // Log first: if the write below fails, the evidence is already
+                // Log first: if the write below fails the evidence is already
                 // gone and a retry finishes the job. The other order can leave a
                 // library with no placements and a log that re-places it.
                 clearLog();
@@ -320,9 +313,6 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }
-
-// A label wrapping a hidden file input, same trick as ImportButton — a styled
-// button can't open a file picker.

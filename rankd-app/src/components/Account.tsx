@@ -41,9 +41,13 @@ function ago(iso: string | null): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-export function Account() {
+export function Account({ onConflict }: { onConflict?: (has: boolean) => void } = {}) {
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [checked, setChecked] = useState(false);
+  // Settings collapses this panel into a shut row, and a conflict chooser nobody
+  // can see is a conflict nobody resolves — so `onConflict` tells it to force
+  // the row open. Called beside each write rather than wrapped around the
+  // setter, which would be a new function every render.
   const [conflict, setConflict] = useState<ConflictSides | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -81,6 +85,7 @@ export function Account() {
       if (cancelled) return;
       if (outcome.kind === "conflict") {
         setConflict(outcome.sides);
+        onConflict?.(true);
         return; // `resolve` starts sync once the user has decided
       }
       if (outcome.kind === "offline") {
@@ -92,7 +97,9 @@ export function Account() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  // `onConflict` is Settings' own setState, whose identity React guarantees, so
+  // naming it here cannot re-run this.
+  }, [onConflict]);
 
   const resolve = useCallback(async (keep: "device" | "cloud") => {
     setBusy(true);
@@ -101,6 +108,7 @@ export function Account() {
       if (keep === "cloud") await pull();
       else await pushOverServer();
       setConflict(null);
+      onConflict?.(false);
       // Only now, with one library agreed on, is it safe to watch for changes
       // and send them. Reached solely on the "keep this device" path, since
       // `pull` has already reloaded away on the other.
@@ -109,7 +117,7 @@ export function Account() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [onConflict]);
 
   // Nothing at all until the session answer is in. A "Sign in" button that
   // flashes for half a second on every settings open — on a screen whose whole
@@ -118,7 +126,7 @@ export function Account() {
 
   if (conflict) {
     return (
-      <div className="mt-7 border-t border-border pt-5">
+      <div>
         <span className="text-xs font-extrabold tracking-[0.12em] text-gold">TWO LIBRARIES</span>
         <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
           This browser and your account have both been used since they last agreed. Nothing is
@@ -153,11 +161,10 @@ export function Account() {
 
   if (!account) {
     return (
-      <div className="mt-7 border-t border-border pt-5">
-        <span className="text-xs font-extrabold tracking-[0.12em] text-dim">YOUR ACCOUNT</span>
-        <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
-          Sign in and your library backs itself up — films, placements, duels and your profile —
-          so clearing this browser stops being the end of it. The app works fully without one.
+      <div>
+        <p className="mb-3 text-[11px] leading-snug text-dim">
+          Backs up your library so clearing this browser isn&rsquo;t the end of it. The app works
+          fine without one.
         </p>
         <button onClick={() => void signInWithGoogle()} className={`w-full ${BUTTON}`}>
           Continue with Google
@@ -169,8 +176,7 @@ export function Account() {
 
   const state = readSyncState();
   return (
-    <div className="mt-7 border-t border-border pt-5">
-      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">YOUR ACCOUNT</span>
+    <div>
       <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
         <span className="text-text-hi">{account.email}</span>
         <br />
