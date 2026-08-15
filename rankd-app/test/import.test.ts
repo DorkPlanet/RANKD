@@ -8,7 +8,7 @@ import { mergeFilms, parseLetterboxdCsv, slugId } from "@/lib/importCsv";
 import { buildList } from "@/lib/list";
 import { newJudgement } from "@/lib/log";
 import { nextPair } from "@/lib/matchmaker";
-import { startRun, startSpotlight } from "@/lib/ladder";
+import { startRun } from "@/lib/ladder";
 import { ORDERED_TIERS, tierMax, tierMin } from "@/lib/tiers";
 
 // A REAL Letterboxd export, not a hand-written fixture.
@@ -147,9 +147,10 @@ withFixture("the whole library, end to end", () => {
     expect(state.session!.unconfirmed.length).toBe(counts.get(biggest));
   });
 
-  it("can spotlight a film out of the real library", () => {
+  it("can climb an arbitrary pile out of the real library", () => {
     const subject = parsed.films.find((f) => parsed.films.filter((o) => o.rating === f.rating).length > 5)!;
-    const state = startSpotlight(parsed.films, subject.id);
+    const peers = parsed.films.filter((f) => f.rating === subject.rating).slice(0, 6);
+    const state = startRun(parsed.films, subject.rating, { only: peers.map((f) => f.id) });
     expect(state.session!.challengerId).toBeTruthy();
   });
 

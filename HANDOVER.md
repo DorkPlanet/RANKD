@@ -11,12 +11,18 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State (15 Aug 2026):** Session G. Everything is pushed AND deployed AND verified against
-the live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately
-unmerged and undeployed** (see Pinned). **353 tests, typecheck clean, `next build` clean,
-lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1
-unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a
-fourth.** The `accounts` branch adds 24 tests of its own on top.
+**State (15 Aug 2026):** Session I. **NOT YET COMMITTED OR DEPLOYED** — the tree holds
+Session I's work and nothing has been pushed. **356 tests, typecheck clean, `next build`
+clean, lint at 3 problems in `src`** — 2 `AppShell` set-state-in-effect errors + 1 unused
+`tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
+
+Test count fell from 386 to 356 because Spotlight was removed with its suites (see
+Session I). It is not a regression; nothing that still exists lost coverage.
+
+**Two env vars are needed before two new features do anything**, and both fail loudly
+rather than silently: `RESEND_API_KEY` + `SUPPORT_EMAIL` for the feedback form, and
+`BLOB_READ_WRITE_TOKEN` for avatar uploads. See `.env.example`, which documents the
+Resend shared-sender catch.
 
 **Nothing in the tree is now written-and-wired-to-nothing.** Keep it that way.
 - ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
@@ -30,10 +36,11 @@ fourth.** The `accounts` branch adds 24 tests of its own on top.
   ORDER within and across those ratings, by head-to-head duels. `lib/ladder.ts` is the
   engine and the most guarded module here (61 behavioural tests, immutable in and out).
 - **There are two kinds of ranking, and keeping them apart is the load-bearing idea.**
-  The MASTER list — King of the Hill over a tier, Spotlight, Fast Shuffle — writes `score`
+  The MASTER list — King of the Hill over a tier, Rough Cut, Fast Shuffle — writes `score`
   and `lock` and is the app's real opinion of your library. CURATED lists — a director, an
   actor, a genre, reached through the **Curator** — write *nothing at all* and exist to be
   looked at and shared. Every decision below follows from that split.
+  (Spotlight was a fourth master mode until Session I removed it.)
 - **The user's real 861-film library is at `rankd-app/test/fixtures/ratings.csv`** and is
   gitignored. `import.test.ts` runs against it. Use it: bugs that only appear at 861 films
   (see the sweep's batching) do not appear at the 10-film seed.
@@ -104,6 +111,20 @@ constraint that stops ranking a pile from destroying the cut that made it.
 screen), then roadmap #1 (onboarding coach marks, one pass per screen), then two bugs from
 real use: a Rough Cut was invisible in the list, and the app opened inside a game nobody
 had chosen. Read the decision blocks below.
+
+**Session I — Spotlight removed, and six things around it.**
+The user's call: "I think that spotlight should be removed. Completely. I've never used it
+and seen a user use it. It's clutter." Everything below followed from working out what was
+actually attached to it.
+
+Landed: **Spotlight gone** from `ladder.ts`, `DuelScreen`, `types.ts`, `runs.ts` and the
+tests · **the review card gone with it** · **tier promotion rebuilt on King of the Hill** ·
+Done always visible and landing on the empty screen · a PWA manifest and icons · an in-app
+feedback form · avatar uploads · Rough Cut's first motion pass · the profile restructured
+into zones · **two bugs found by using it** (below).
+
+`SpotlightPicker` became `FilmPicker` — the profile always used it as a generic film
+picker, so the component outlived the mode it was named after.
 
 ## Decisions taken — do not relitigate
 
@@ -605,8 +626,18 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
       Adding `rankd-lists-v1` to `KEYS` naively means **restoring an older backup deletes
       every saved ranking**. Needs a per-format key set. `rankd-review-dismissed-v1` is
       also missing from the manifest.
-5. **Profile page redesign**, toward what the JPG export looks like. Wants #10's answer
-    and #11's structures first.
+5. **Profile page redesign** — **a first pass LANDED in Session I; the direction is open.**
+    Asked what the screen is for now (identity / taste / progress), the user said "I guess
+    all of them" — so the pass was structural rather than a new concept. The problem was
+    never the contents: eight blocks all wore the same tracked-caps label, so nothing was
+    subordinate to anything and the page read as a list of unrelated facts. There is now a
+    `Zone` heading one level above `Section` (serif, sentence case, faded rule) grouping it
+    into **What you like · What you've made · Where it stands**, plus a boxed progress band
+    under the identity block holding the stats, the recap and a way back into the game —
+    which the landing screen previously did not have at all.
+    **Still open, and the original entry's intent:** moving it toward what the JPG export
+    looks like. That is a visual language question, not a structural one, and the structure
+    is now out of its way.
 6. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
     stores NO images — a banner is a film id and a still URL, so the whole profile costs a
     few hundred bytes. Real uploads need server storage, which needs the pinned accounts
@@ -617,6 +648,15 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
     `adoptRun(films, session)` belongs in `ladder.ts` with its own tests. Stays device-local
     forever; it is deliberately excluded from the synced payload.
 8. **#14 design pass** — `SessionEnd`, `PersonSheet`, `LogFilm`, `RunBars` ship PROVISIONAL.
+    **Rough Cut came off this list in Session I.** It had shipped marked PROVISIONAL with no
+    motion at all, which next to the duel screen read as an older app. It now has the duel's
+    vocabulary at shorter durations: the card follows the thumb and banks into the throw,
+    the aimed target lifts while the other two recede, the placed poster flies into the pile
+    it was filed under (`flyPosterTo` in `PosterCard.tsx`, alongside the existing helpers),
+    the progress bar blooms, and the summary counts up. All of it honours
+    `prefers-reduced-motion`. **The point was not decoration** — you answer that screen once
+    a second for fifty films, and the only thing keeping it from feeling like data entry is
+    being able to feel each answer land without reading anything.
 
 ## Pinned — built but not shipped
 
@@ -680,25 +720,30 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 - **Subgenre runs** — "zombie films" rather than "horror". A keyword is narrow enough to
   have a real edge, so unlike a genre it could borrow unseen films the way a director run
   does. `topPeople` in `profile.ts` already derives subgenres from `f.keywords`.
-- **Custom profile pictures.** The user's words: "custom pfp is the point also." Google
-  sign-in already hands over the account photo and `provisionUser` stores it, so avatars
-  EXIST — this is the upload-your-own case. It needs FILE storage, which a database is not:
-  **Vercel Blob** (already on Vercel, free tier, no new account) returns a URL, and
-  `profile.ts` already stores image URLs — `bannerStill` works exactly this way. Shrink
-  client-side to ~256px first, so a 4MB phone photo becomes ~20KB. **Do it behind sign-in**:
-  an upload endpoint with no auth is open to the internet. Note this was previously called
-  "blocked on accounts", which is not quite right — it is blocked on STORAGE, and auth is
-  what makes the endpoint safe rather than what makes it possible.
-- **PWA — lose the URL bar.** Asked directly: does this have to stay a web app? A manifest
-  plus icons gives Add to Home Screen — own icon, fullscreen, no address bar, no app store,
-  no fee. Rankd is already client-rendered, phone-sized, and has its own splash and nav, so
-  this is close to an afternoon. The app-store route (Capacitor) costs $99/yr for Apple and
-  $25 once for Google and needs extra native OAuth clients; not worth it for a few testers.
-  One honest catch: Google sign-in from a fullscreen PWA can bounce out to the browser and
-  back on iOS, which breaks the illusion briefly.
+- ~~**Custom profile pictures.**~~ **LANDED in Session I**, exactly as scoped here:
+  `@vercel/blob`, `api/avatar/route.ts` behind `requireUser`, and `lib/avatar.ts` shrinking
+  to 256px client-side. `avatarOf` in `profile.ts` is the priority rule — upload, then the
+  Google photo, then the initial — so avatars already work signed in with no token set.
+  **Needs `BLOB_READ_WRITE_TOKEN` before an upload can succeed**, and answers 503 saying so
+  until then. **The upload path is UNRUN**: verified only that it refuses correctly without
+  a token. Run one real upload before trusting it.
+- ~~**PWA — lose the URL bar.**~~ **LANDED in Session I.** `app/manifest.ts` at
+  `display: standalone`, four generated PNGs in `public/`, and both spellings of the
+  capable meta tag. The icons are drawn by a dependency-free PNG encoder rather than an
+  image library — the mark is the five brand bars from `lib/brand.ts`, which is the one
+  part of the identity that does not need a font rasterised. **The generator is not in the
+  repo**; it was a scratch script. Re-run it only if the icons need to change.
+  One honest catch that still stands: Google sign-in from a fullscreen PWA can bounce out
+  to the browser and back on iOS, which breaks the illusion briefly. **Untested on a real
+  iPhone — the whole feature needs one pass on device before it is called done.**
 
 ## Pinned — decide later, don't act yet
 
+- **Fast Shuffle is next on the block.** Session I: "I might get rid of fast shuffle too -
+  pending." Deliberately NOT touched while removing Spotlight, because they are separate
+  questions and doing both at once would have made one revert impossible without the other.
+  **If it goes, check what depends on it first** — that is the lesson Spotlight taught, and
+  `ShuffleDuel` is reused by the person-run path.
 - **Fast Shuffle may not deserve to exist.** From watching real people use the app: they
   "hardly like the idea of something else shuffling their list for them." **Deferred to the
   very end deliberately** — it is a question about what the app is for, not a bug. The person
@@ -706,8 +751,65 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 - **"Finishing a run doesn't feel like anything."** Partly answered now that the cards exist
   — re-judge once they are on a phone.
 
+### Removing Spotlight, and what was hiding behind it (Session I)
+
+- **Two things depended on it and neither was obvious.** The review card's only action was
+  "start a Spotlight", and **tier promotion was reachable from nowhere else** —
+  `promotionTarget` began `session.mode !== "spotlight" ? undefined`. Cutting the mode
+  naively would have made star ratings permanent, set at import and never movable by play,
+  which nobody asked for and nobody would have noticed until much later.
+- **Promotion now hangs off King of the Hill**, offered on the FIRST confirm of a run when
+  the film has beaten every other film you own at its rating. That is a stronger claim than
+  the old trigger (a binary search settling at the top of a sampled window), and it fires at
+  most once per run. The predicate is a set comparison against the library, not a flag —
+  so a Rough Cut sub-pile cannot qualify without anyone having to remember to exclude it.
+- **`resumeAfter` is why it can hang off a long climb.** A promotion is offered one confirm
+  into a run that may be an hour long, so the attempt has to be something the run comes BACK
+  from. It holds the session as it stood at that confirm: a loss restores it verbatim, a win
+  restores it with the promoted film lifted out. `saveRun` stores that held session rather
+  than the attempt, so closing the tab mid-attempt loses the three duels and keeps the hour.
+- **The old "losing ends the promotion" was not true, and its test did not catch it.** The
+  code returned without handing the climb on, and `refresh` then aimed the subject straight
+  back at the film that had just beaten it — the same duel, forever, with Done the only way
+  out. The test asserted `promotionWon === false`, which an infinite rematch also satisfies.
+  **A test that only checks the failure flag cannot tell a clean exit from a livelock.**
+- **`"spotlight"` stays in `LogMode` and must not be removed.** Rows stamped `s` are already
+  in people's browsers and in their backup files. The log is append-only and never edited;
+  dropping the value would make real judgements decode as something they were not.
+- **`rankd-review-dismissed-v1` stays in `backupFormat.ts`'s FILE_2 key set** for the
+  matching reason: ownership is what gives a restore permission to CLEAR a key, so removing
+  it would strand the stale value on every device that ran the old build.
+
 ## Gotchas that have already cost time
 
+- **The landing rule re-fired mid-run, and had done since it was written (Session I).**
+  `openingScreen` was evaluated on every render for as long as nobody had navigated — and
+  its input is "has anything been placed", which PLAYING changes. So a new user who opened
+  on the duel and confirmed their first film was thrown onto the profile by that confirm.
+  Nothing had navigated, so nothing overrode it. It is now decided once, when the library
+  lands. **A derived value whose input the user's own actions change is not a default, it is
+  a rule that keeps firing.**
+- **A confirm screen showing a rating mid-promotion is showing the OLD one.**
+  `completePromotion` does not write the new rating until Lock in is pressed, so reading
+  `champion.rating` announced a promotion from ½ to ★ as "EARNED ½" above a button saying
+  "Lock in at ½". The run's own `tier` is the tier being taken on; read that instead.
+- **Next 16 does not emit `apple-mobile-web-app-capable`.** `appleWebApp.capable` emits the
+  standardised `mobile-web-app-capable` only. Older iOS reads just the prefixed spelling —
+  the exact devices the PWA work is for — so `layout.tsx` emits both via `metadata.other`.
+  **Verified against the rendered head, not assumed**; the tag was simply missing.
+- **`vercel env pull` DESTROYS `.env.local`. Back it up first, every time.**
+  It does not merge — it overwrites the whole file — and for every variable Vercel marks
+  **Sensitive** it writes the literal string `[SENSITIVE]` rather than the value, because
+  those cannot be read back by anyone, the CLI included. Rankd marks nearly everything
+  sensitive, so one pull replaced `TMDB_API_KEY`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`,
+  `AUTH_GOOGLE_SECRET` and `DATABASE_URL` with an 11-character placeholder in one go
+  (Session I). The app then fails in ways that look like five unrelated bugs: TMDB 403s,
+  `no matching decryption secret` in the auth logs, and — because Auth.js discards a cookie
+  it cannot decrypt — **every local session is silently signed out and cannot be restored
+  by putting the secret back**. You have to sign in again.
+  **Tell: any pulled value exactly 11 characters long is `[SENSITIVE]`, not a secret.**
+  If you need one variable locally, add it to `.env.local` by hand. Only pull when you
+  actually want the non-sensitive additions, and diff the result before trusting it.
 - **"Committed" is not "deployed".** Three card designs sat pushed-but-unshipped while the
   user tried to use them and got the old export. Deploy, then grep the live bundle.
 - **A synthetic `.click()` does not drive `PosterCard`.** It listens for pointer events, so
@@ -756,6 +858,10 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 - **To drive the app against the real 861 films**, parse that fixture with
   `parseLetterboxdCsv`, write the result somewhere the preview can fetch, and **delete it
   afterwards — it is the user's real ratings and `public/` deploys.**
+- **`rankd-review-dismissed-v1` is now a DEAD key that is still listed on purpose.** Nothing
+  writes it since the review card went (Session I). It stays in `backupFormat.ts`'s FILE_2
+  set because ownership is what lets a restore CLEAR a key — drop it and the stale value is
+  stranded on every device that ran the old build.
 - **The app now owns ten storage keys and `backupFormat.ts` backs up five.**
   `rankd-sitting-v1` and `rankd-visit-sitting-v1` are sessionStorage and correctly excluded.
   But `rankd-lists-v1` (saved rankings) and `rankd-review-dismissed-v1` are localStorage and

@@ -12,7 +12,6 @@ const session = (over: Partial<PlacementSession> = {}): PlacementSession => ({
   contenderId: "c",
   challengerId: "b",
   needsConfirm: false,
-  mode: "koth",
   ...over,
 });
 
@@ -31,10 +30,10 @@ describe("isResumable", () => {
     expect(isResumable(session({ crossTier: true }))).toBe(false);
   });
 
-  // A spotlight moves its subject before that film has earned anything, and
-  // abandoning restores what it moved. Half of that, days later, is not a state
-  // to come back to.
-  it("refuses a spotlight", () => {
-    expect(isResumable(session({ mode: "spotlight", subjectId: "a" }))).toBe(false);
+  // A promotion attempt is three duels against a neighbouring tier, and the
+  // climb it interrupted is held on `resumeAfter`. `saveRun` stores that climb
+  // instead, so what gets resumed is the hour of work rather than the minute.
+  it("refuses a promotion attempt", () => {
+    expect(isResumable(session({ promotionQueue: ["x", "y"] }))).toBe(false);
   });
 });

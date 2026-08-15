@@ -15,13 +15,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
-import { SpotlightPicker } from "./SpotlightPicker";
+import { FilmPicker } from "./FilmPicker";
 import { rankedFilms } from "@/lib/ladder";
 import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
-import { autoCollections, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
+import { autoCollections, avatarOf, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
+import { fetchAccount } from "@/lib/account";
+import { uploadAvatar } from "@/lib/avatar";
 import { loadLists, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
 import { achievements } from "@/lib/achievements";
@@ -70,6 +72,23 @@ export default function ProfileScreen({
   const [listsRead, setListsRead] = useState(0);
   const savedLists = useMemo(() => loadLists(), [listsRead]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The signed-in account, for its photo and to know whether uploading is even
+  // offered. Null covers signed out, offline, and a deployment with no auth
+  // configured — all three mean the same thing here: no account picture.
+  const [accountImage, setAccountImage] = useState<string | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+  useEffect(() => {
+    let dead = false;
+    void fetchAccount().then((a) => {
+      if (dead || !a) return;
+      setSignedIn(true);
+      setAccountImage(a.image ?? null);
+    });
+    return () => {
+      dead = true;
+    };
+  }, []);
+
   // Memoised so the `?? []` fallback is not a fresh array every render, which
   // would make the shelf below recompute on every keystroke in the bio field.
   const pinnedIds = useMemo(() => profile.pinnedListIds ?? [], [profile.pinnedListIds]);
@@ -98,6 +117,8 @@ export default function ProfileScreen({
   const earned = badges.filter((b) => b.got).length;
 
   const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
+  /** Films the library holds and the ranking has not settled. Drives the CTA. */
+  const toGo = model.total - model.placedCount;
   const hero = placed[0];
   const topTen = placed.slice(0, 10);
   const bannerFilm = films.find((f) => f.id === profile.bannerFilmId) ?? hero;
@@ -164,12 +185,12 @@ export default function ProfileScreen({
             circle look clipped. */}
         <div className="mt-5 px-6">
           <div className="flex items-center gap-3">
-            <span
-              className="flex flex-shrink-0 items-center justify-center rounded-full font-display text-[26px] text-gold"
-              style={{ width: 58, height: 58, background: "var(--surface)", boxShadow: "0 0 0 1.5px var(--border)" }}
-            >
-              {profile.name.trim().charAt(0).toUpperCase() || "?"}
-            </span>
+            <AvatarSlot
+              profile={profile}
+              accountImage={accountImage}
+              signedIn={signedIn}
+              onUploaded={(url) => onProfile({ ...profile, avatarUrl: url })}
+            />
             <span className="min-w-0 flex-1">
               <span className="flex items-start gap-1.5">
                 <span className="min-w-0 flex-1 truncate font-display text-[26px] leading-none tracking-wide text-gold">
@@ -189,29 +210,56 @@ export default function ProfileScreen({
             </span>
           </div>
 
-          <div className="mt-4 flex gap-7">
-            <Stat n={model.total} label="Films" onClick={onList} />
-            <Stat n={model.placedCount} label="Settled" onClick={onList} />
-            <Stat n={print.duels} label="Duels" onClick={onDuel} />
-            <Stat n={earned} label="Badges" onClick={onTrophies} />
+          {/* ── WHERE YOU ARE ───────────────────────────────────────────────
+              The stats, the recap and the way back into the game, as ONE band
+              rather than three things that happened to be adjacent.
+
+              They belong together because they answer one question — how far
+              along am I — and they were previously split by a rule that implied
+              the recap was the start of a new subject. The four counters are
+              cumulative and therefore never visibly move; the recap is the only
+              line on the screen about a particular afternoon; the button is what
+              you do about either. Read as a unit they say something. Read as
+              three they were a header, an orphan line, and no exit at all. */}
+          <div className="mt-4 rounded-2xl border border-border px-4 py-3.5">
+            <div className="flex gap-7">
+              <Stat n={model.total} label="Films" onClick={onList} />
+              <Stat n={model.placedCount} label="Settled" onClick={onList} />
+              <Stat n={print.duels} label="Duels" onClick={onDuel} />
+              <Stat n={earned} label="Badges" onClick={onTrophies} />
+            </div>
+
+            {recap && (
+              <div className="mt-3.5 border-t border-border pt-3">
+                <Line label="Last time" value={recapLine(recap)} note={agoLabel(recap.since)} />
+              </div>
+            )}
+
+            {/* The profile is the landing screen, so it is where a sitting
+                STARTS. Until now the only route back into the game from here was
+                the nav's RNK — correct, but silent: nothing on the page you land
+                on ever suggested playing. The wording follows the library rather
+                than being fixed, because "Keep ranking" is the wrong thing to
+                say to somebody who has not started. */}
+            <button
+              onClick={onDuel}
+              className="mt-3.5 w-full rounded-xl py-2.5 text-center text-[12px] font-bold active:scale-[0.99]"
+              style={{ color: "#1c1405", background: "var(--gold)" }}
+            >
+              {model.placedCount === 0
+                ? "Start ranking"
+                : toGo > 0
+                  ? `Keep ranking · ${toGo.toLocaleString()} to place`
+                  : "Rank something"}
+            </button>
           </div>
 
-          {/* What the last sitting amounted to.
-
-              The four stats above are cumulative and therefore never move
-              visibly — 861 films and 1,204 duels look identical the day after
-              a good session. This is the one line on the screen that is about
-              a particular afternoon, so it sits directly under them, in the
-              same label/value/note grammar `Your taste` uses. No new furniture:
-              the app was told once already that a number in an existing control
-              beats a chart. */}
-          {recap && (
-            <div className="mt-4">
-              <Line label="Last time" value={recapLine(recap)} note={agoLabel(recap.since)} />
-            </div>
-          )}
-
-          <div className="card-rule mt-5" />
+          {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
+              The thesis. Three blocks that were peers of everything else on the
+              screen — the fingerprint, the odds and ends, the people — now sit
+              under one heading, because they are one argument made three ways
+              and the page never said so. */}
+          <Zone title="What you like" />
 
           {/* Who you are, in four lines that the ranking can't tell you. */}
           <Section title="Your taste">
@@ -294,10 +342,22 @@ export default function ProfileScreen({
           )}
         </div>
 
+        {/* ── WHAT YOU'VE MADE ─────────────────────────────────────────────
+            Both shelves under one heading. They are the same kind of object —
+            a set of films with a name — and the only difference is whether the
+            app derived it or you sat through the duels for it. That distinction
+            is already carried by each card's eyebrow, so it does not also need
+            two unrelated-looking headers. */}
+        {(hero || savedLists.length > 0) && (
+          <div className="px-6">
+            <Zone title="What you've made" />
+          </div>
+        )}
+
         {/* Collections scroll sideways so user-made lists can join them without
             the screen growing another full-width block each time. */}
         {hero && (
-          <section className="mt-7">
+          <section className="mt-4">
             <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">COLLECTIONS</div>
             <div className="flex gap-2.5 overflow-x-auto px-6 pb-1">
               <MiniCard
@@ -344,7 +404,7 @@ export default function ProfileScreen({
             pinning is — and the rest follow, so this is both the shelf and the
             way to see everything at once. */}
         {savedLists.length > 0 && (
-          <section className="mt-7">
+          <section className="mt-5">
             <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
               YOUR RANKINGS
             </div>
@@ -363,12 +423,18 @@ export default function ProfileScreen({
           </section>
         )}
 
-        {/* One chart doing two jobs. The bar's length is how many films are in
+        {/* ── THE LEDGER ───────────────────────────────────────────────────
+            Last, and deliberately. This is the most detailed thing on the page
+            and the least likely to be why anyone opened it — so it is what you
+            arrive at by scrolling to the end, not what you wade through.
+
+            One chart doing two jobs. The bar's length is how many films are in
             the tier — the shape of your taste — and the solid part is how many
             you've settled. Two separate charts of the same ten tiers was one
             chart too many, and no other app can draw this one because no other
             app knows the difference between owning a film and placing it. */}
         <div className="px-6">
+          <Zone title="Where it stands" />
           <Section title="Your tiers">
             <div className="space-y-2">
               {tiers.map((t) => (
@@ -430,7 +496,7 @@ export default function ProfileScreen({
 
 
       {pickingFilm && (
-        <SpotlightPicker
+        <FilmPicker
           films={films}
           title="Pick a film"
           blurb="Then choose a frame from it for the top of your profile."
@@ -453,6 +519,94 @@ export default function ProfileScreen({
         />
       )}
     </main>
+  );
+}
+
+/**
+ * The picture, and the way to change it.
+ *
+ * A label wrapping a hidden file input, the same trick `ImportButton` uses — a
+ * styled button cannot open a file picker. Signed out it is not a control at
+ * all, just the initial: uploads live behind auth (see `api/avatar/route.ts`),
+ * and offering a button that can only ever answer "sign in first" would be the
+ * app asking for something it has no intention of accepting.
+ *
+ * The pencil badge is only drawn when there is something to press, so the shape
+ * itself says whether it is interactive.
+ */
+function AvatarSlot({
+  profile,
+  accountImage,
+  signedIn,
+  onUploaded,
+}: {
+  profile: Profile;
+  accountImage: string | null;
+  signedIn: boolean;
+  onUploaded: (url: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const avatar = avatarOf(profile, accountImage);
+  const SIZE = 58;
+
+  const face = (
+    <span
+      className="relative flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-[26px] text-gold"
+      style={{ width: SIZE, height: SIZE, background: "var(--surface)", boxShadow: "0 0 0 1.5px var(--border)" }}
+    >
+      {avatar.kind === "image" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={avatar.url} alt="" className="h-full w-full object-cover" style={{ opacity: busy ? 0.4 : 1 }} />
+      ) : (
+        <span style={{ opacity: busy ? 0.4 : 1 }}>{avatar.letter}</span>
+      )}
+      {busy && <span className="absolute text-[9px] font-bold tracking-wide text-gold">…</span>}
+    </span>
+  );
+
+  if (!signedIn) return face;
+
+  return (
+    <span className="relative flex-shrink-0">
+      <label className="relative block cursor-pointer active:scale-95">
+        {face}
+        <span
+          aria-hidden
+          className="absolute bottom-0 right-0 flex items-center justify-center rounded-full"
+          style={{ width: 20, height: 20, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
+        >
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </span>
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={busy}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            // Reset immediately, so choosing the same file twice fires again.
+            e.target.value = "";
+            if (!file) return;
+            setBusy(true);
+            setError(null);
+            try {
+              onUploaded(await uploadAvatar(file));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "That could not be uploaded.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      </label>
+      {error && (
+        <span className="absolute left-0 top-full mt-1 w-40 text-[10px] leading-snug text-gold">{error}</span>
+      )}
+    </span>
   );
 }
 
@@ -658,6 +812,29 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <div className="mb-2.5 text-[10px] font-extrabold tracking-[0.18em] text-dim">{title.toUpperCase()}</div>
       {children}
     </section>
+  );
+}
+
+/**
+ * A chapter heading, one level above `Section`.
+ *
+ * The screen's problem was never its contents — it was that eight blocks all
+ * wore the same 10px tracked label, so nothing was subordinate to anything and
+ * the page read as a list of unrelated facts about you. There was no way to tell
+ * that "Your taste", "Odds and ends" and "Your highest rated" are three angles
+ * on ONE claim while "Your tiers" is a different kind of thing entirely.
+ *
+ * So this is deliberately unlike a Section: the serif face the app uses for
+ * numbers and titles, sentence case rather than tracked caps, and a rule that
+ * fades out — the same `card-rule` already separating the identity block. Two
+ * levels is enough. A third would be the same mistake one rung down.
+ */
+function Zone({ title }: { title: string }) {
+  return (
+    <div className="mt-8">
+      <div className="card-rule" />
+      <h2 className="mt-4 font-serif text-[17px] font-bold leading-none text-text-hi">{title}</h2>
+    </div>
   );
 }
 

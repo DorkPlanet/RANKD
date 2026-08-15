@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  abandonSpotlight,
   choose,
   confirm,
   completePromotion,
@@ -14,13 +13,10 @@ import {
   promotionTarget,
   promotionWon,
   rankedFilms,
-  searchWindow,
   skipPair,
   skipToFilm,
-  spotlightSummary,
   startPromotionDuel,
   startRun,
-  startSpotlight,
   stepBackFromConfirm,
 } from "@/lib/ladder";
 import { tierMax, tierMid, tierMin, type Rating } from "@/lib/tiers";
@@ -187,7 +183,6 @@ describe("the evidence journal", () => {
 
   it("stamps the mode the duel was fought in", () => {
     expect(win(startRun(tier(5), 4), "contender").journal[0].m).toBe("koth");
-    expect(win(startSpotlight(tier(5), "f2"), "contender").journal[0].m).toBe("spotlight");
   });
 
   // Assertions are the user supplying an ordering directly, not answering a
@@ -199,10 +194,11 @@ describe("the evidence journal", () => {
     expect(skipToFilm(s, "f1").journal).toHaveLength(0);
   });
 
-  it("keeps the judgements when a spotlight is abandoned", () => {
-    let s = startSpotlight(tier(6), "f5");
+  it("keeps the judgements when a run is abandoned mid-climb", () => {
+    let s = startRun(tier(6), 4);
     s = win(s, "contender");
-    expect(abandonSpotlight(s).journal).toHaveLength(1);
+    // What `endRun` does: drop the session, keep everything already judged.
+    expect({ ...s, session: null }.journal).toHaveLength(1);
   });
 
   it("carries them through a confirm", () => {
@@ -212,104 +208,9 @@ describe("the evidence journal", () => {
   });
 });
 
-describe("spotlight", () => {
-  it("refuses a film with no peers to face", () => {
-    expect(() => startSpotlight([film("only", 4), film("other", 3)], "only")).toThrow();
-  });
-
-  it("opens on the middle of the tier, not its neighbour", () => {
-    const s = startSpotlight(tier(9), "f8");
-    // Nine films, subject removed leaves eight; the midpoint of 0..7 is index 3.
-    expect(challenger(s)).toBe("f3");
-  });
-
-  // The whole reason it is cheap: halving, not walking.
-  it("places a film in about log2(n) duels rather than n", () => {
-    let s = startSpotlight(tier(33), "f32");
-    let duels = 0;
-    while (getPair(s)) {
-      s = win(s, "challenger"); // it loses every time — worst case for a climb
-      duels++;
-    }
-    expect(duels).toBeLessThanOrEqual(6);
-  });
-
-  it("rules out everything below a film it beats", () => {
-    const s0 = startSpotlight(tier(9), "f8");
-    const beaten = challenger(s0);
-    const s = win(s0, "contender");
-    const window = searchWindow(s)!;
-    expect(window.has(beaten)).toBe(false);
-    expect(window.has("f0")).toBe(true); // still could be beaten by it
-  });
-
-  it("rules out everything above a film that beats it", () => {
-    const s0 = startSpotlight(tier(9), "f8");
-    const s = win(s0, "challenger");
-    const window = searchWindow(s)!;
-    expect(window.has("f0")).toBe(false);
-  });
-
-  it("settles when the window closes, and reports what decided it", () => {
-    let s = startSpotlight(tier(9), "f8");
-    while (getPair(s)) s = win(s, "challenger");
-    expect(s.session!.needsConfirm).toBe(true);
-    const summary = spotlightSummary(s)!;
-    expect(summary.film.id).toBe("f8");
-    expect(summary.lostTo.length).toBeGreaterThan(0);
-  });
-
-  it("places only the subject, then ends — it does not roll on", () => {
-    let s = startSpotlight(tier(5), "f4");
-    while (getPair(s)) s = win(s, "challenger");
-    s = confirm(s);
-    expect(s.session).toBeNull();
-    expect(s.films.filter((f) => f.lock)).toHaveLength(1);
-  });
-
-  it("restores the film exactly when abandoned — a run must cost nothing", () => {
-    const films = tier(9);
-    const before = films.find((f) => f.id === "f8")!;
-    let s = startSpotlight(films, "f8");
-    s = win(s, "contender");
-    s = win(s, "contender");
-    const after = abandonSpotlight(s).films.find((f) => f.id === "f8")!;
-    expect(after.score).toBe(before.score);
-    expect(after.rating).toBe(before.rating);
-  });
-
-  it("aims a scrub at the window's edge rather than doing nothing", () => {
-    const s0 = startSpotlight(tier(9), "f8");
-    // Beating the midpoint rules out everything below it, so f0 — the best film
-    // in the tier — is now outside the window entirely.
-    const s = win(s0, "contender");
-    expect(searchWindow(s)!.has("f0")).toBe(true);
-    const aimed = skipToFilm(s, "f8"); // the subject itself: not a valid opponent
-    expect(aimed).toBe(s);
-  });
-});
-
 describe("skip — too close to call", () => {
-  it("settles a spotlight immediately, just above the film it drew with", () => {
-    const s0 = startSpotlight(tier(9), "f8");
-    const opponent = challenger(s0);
-    const s = skipPair(s0);
-    expect(s.session!.needsConfirm).toBe(true);
-    const order = s.session!.unconfirmed;
-    expect(order.indexOf("f8")).toBe(order.indexOf(opponent) - 1);
-  });
-
   it("records a draw, never a winner", () => {
-    expect(skipPair(startSpotlight(tier(9), "f8")).journal[0].o).toBe("draw");
     expect(skipPair(startRun(tier(5), 4)).journal[0].o).toBe("draw");
-  });
-
-  it("counts as neither a win nor a loss in the spotlight summary", () => {
-    const s = skipPair(startSpotlight(tier(9), "f8"));
-    const summary = spotlightSummary(s)!;
-    expect(summary.drewWith).toHaveLength(1);
-    expect(summary.beat).toHaveLength(0);
-    expect(summary.lostTo).toHaveLength(0);
   });
 
   it("places like a loss in a climb — 'not above' is all it licenses", () => {
@@ -333,12 +234,6 @@ describe("assertions — the fatigue shortcuts", () => {
   it("sends a film to the bottom", () => {
     const s = flickToBottom(startRun(tier(5), 4), "f0");
     expect(s.session!.unconfirmed.at(-1)).toBe("f0");
-  });
-
-  it("closes a spotlight outright when the subject is flicked", () => {
-    const s = flickToTop(startSpotlight(tier(9), "f8"), "f8");
-    expect(s.session!.needsConfirm).toBe(true);
-    expect(s.session!.unconfirmed[0]).toBe("f8");
   });
 
   it("only aims a scrub — the pile holds still while you look around", () => {
@@ -373,28 +268,58 @@ describe("stepping back from a confirm", () => {
 });
 
 describe("promotion — the only way a star rating ever changes", () => {
-  const twoTiers = () => [...tier(4, 4), ...tier(3, 4.5)];
+  // Four 4★ films with three 4.5★ above them. `tier` names its films f0..fn, so
+  // both tiers reuse the same ids — the higher tier is built separately and
+  // renamed so a run can tell them apart.
+  const upper = () => tier(3, 4.5).map((f, i) => ({ ...f, id: `u${i}`, title: `U${i}` }));
+  const twoTiers = () => [...tier(4, 4), ...upper()];
 
-  it("is offered only to a film that reached the top of its tier", () => {
-    let s = startSpotlight(twoTiers(), "f3");
+  /** Climb a 4★ run until the first film tops the whole tier. */
+  const topTheTier = (films: Film[] = twoTiers()) => {
+    let s = startRun(films, 4);
     while (getPair(s)) s = win(s, "contender");
-    expect(promotionTarget(s)).toBe(4.5);
+    return s;
+  };
+
+  it("is offered to a film that has just beaten its entire tier", () => {
+    expect(promotionTarget(topTheTier())).toBe(4.5);
   });
 
-  it("is not offered to one that settled mid-pile", () => {
-    let s = startSpotlight(tier(9), "f8");
-    while (getPair(s)) s = win(s, "challenger");
+  // The heart of moving this onto King of the Hill: it must fire once, not on
+  // every confirm. #2 has beaten what was left, which is not the same claim.
+  it("is not offered again on the second confirm", () => {
+    let s = confirm(topTheTier());
+    while (getPair(s)) s = win(s, "contender");
+    expect(s.session!.needsConfirm).toBe(true);
+    expect(promotionTarget(s)).toBeUndefined();
+  });
+
+  // Topping the upper third of a Rough Cut is a real achievement and a
+  // different one. `only` is how such a pile is run.
+  it("is not offered to a film that only topped part of its tier", () => {
+    let s = startRun(twoTiers(), 4, { only: ["f0", "f1"] });
+    while (getPair(s)) s = win(s, "contender");
+    expect(s.session!.needsConfirm).toBe(true);
+    expect(promotionTarget(s)).toBeUndefined();
+  });
+
+  it("is not offered when there is no tier above to take on", () => {
+    expect(promotionTarget(topTheTier(tier(4, 4)))).toBeUndefined();
+  });
+
+  it("is not offered in a cross-tier run, which may not write a rating", () => {
+    let s = startRun(twoTiers(), 4, { only: ["f0", "f1", "f2", "f3"], crossTier: true });
+    while (getPair(s)) s = win(s, "contender");
     expect(promotionTarget(s)).toBeUndefined();
   });
 
   it("banks a won promotion between the films it beat and those it didn't", () => {
-    let s = startSpotlight(twoTiers(), "f3");
-    while (getPair(s)) s = win(s, "contender");
-    s = startPromotionDuel(s);
+    let s = startPromotionDuel(topTheTier());
+    const subjectId = s.session!.contenderId;
     while (getPair(s)) s = win(s, "contender");
     expect(promotionWon(s)).toBe(true);
     s = completePromotion(s);
-    const subject = s.films.find((f) => f.id === "f3")!;
+    const subject = s.films.find((f) => f.id === subjectId)!;
     expect(subject.rating).toBe(4.5);
     expect(subject.score).toBeGreaterThanOrEqual(tierMin(4.5));
     expect(subject.score).toBeLessThanOrEqual(tierMax(4.5));
@@ -402,8 +327,7 @@ describe("promotion — the only way a star rating ever changes", () => {
   });
 
   it("stamps promotion duels as their own kind of evidence", () => {
-    let s = startSpotlight(twoTiers(), "f3");
-    while (getPair(s)) s = win(s, "contender");
+    let s = topTheTier();
     const before = s.journal.length;
     s = startPromotionDuel(s);
     s = win(s, "contender");
@@ -411,19 +335,61 @@ describe("promotion — the only way a star rating ever changes", () => {
   });
 
   it("lets a promotion be asserted outright, entering at the foot of the new tier", () => {
-    let s = startSpotlight(twoTiers(), "f3");
-    while (getPair(s)) s = win(s, "contender");
-    s = promoteDirect(s);
-    const subject = s.films.find((f) => f.id === "f3")!;
+    const s0 = topTheTier();
+    const subjectId = s0.session!.contenderId;
+    const s = promoteDirect(s0);
+    const subject = s.films.find((f) => f.id === subjectId)!;
     expect(subject.rating).toBe(4.5);
+    expect(subject.score).toBe(tierMin(4.5));
   });
 
-  it("ends a promotion run the moment the subject loses", () => {
-    let s = startSpotlight(twoTiers(), "f3");
+  // ── The three that only matter now promotion hangs off a long climb ────────
+
+  it("hands the interrupted climb back when the promotion is won", () => {
+    let s = startPromotionDuel(topTheTier());
+    const subjectId = s.session!.contenderId;
     while (getPair(s)) s = win(s, "contender");
-    s = startPromotionDuel(s);
+    s = completePromotion(s);
+    expect(s.session).not.toBeNull();
+    expect(s.session!.tier).toBe(4);
+    // The promoted film has left the tier, so it must not still be in the pile.
+    expect(s.session!.unconfirmed).not.toContain(subjectId);
+    expect(s.session!.promotionQueue).toBeUndefined();
+  });
+
+  // The old code returned without handing the climb on and called that "ending
+  // the run". It was not: `refresh` aimed the subject straight back at the film
+  // that had just beaten it, so the same duel was served forever. The old test
+  // asserted only `promotionWon === false`, which an infinite rematch satisfies.
+  it("really ends the attempt when the subject loses, rather than re-fighting", () => {
+    const before = topTheTier();
+    const subjectId = before.session!.contenderId;
+    let s = startPromotionDuel(before);
+    const firstOpponent = s.session!.challengerId;
     s = win(s, "challenger");
+
     expect(promotionWon(s)).toBe(false);
+    expect(s.session!.promotionQueue).toBeUndefined();
+    // Back on the 4★ climb, at the confirm it had already earned.
+    expect(s.session!.tier).toBe(4);
+    expect(s.session!.needsConfirm).toBe(true);
+    expect(s.session!.contenderId).toBe(subjectId);
+    // And emphatically not still pointed at the film that beat it.
+    expect(s.session!.challengerId).not.toBe(firstOpponent);
+  });
+
+  it("keeps the rating unchanged when the attempt is lost", () => {
+    const before = topTheTier();
+    const subjectId = before.session!.contenderId;
+    const s = win(startPromotionDuel(before), "challenger");
+    expect(s.films.find((f) => f.id === subjectId)!.rating).toBe(4);
+  });
+
+  it("keeps the duels it lost — an attempt that failed still happened", () => {
+    const before = topTheTier();
+    const n = before.journal.length;
+    const s = win(startPromotionDuel(before), "challenger");
+    expect(s.journal).toHaveLength(n + 1);
   });
 });
 

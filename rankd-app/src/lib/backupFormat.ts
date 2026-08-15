@@ -44,7 +44,13 @@ const FILE_2 = [
   ...SYNC_KEYS,
   "rankd-lists-v1", // saved rankings — real work, and the reason this exists
   "rankd-tour-v1", // whether the coach marks have run
-  "rankd-review-dismissed-v1", // review cards already answered
+  // DEAD KEY, deliberately still listed. The review card was removed along with
+  // Spotlight and nothing writes this any more — but format-2 files written
+  // before that still carry it, and devices that ran the old build still hold
+  // it. Ownership is what gives a restore permission to CLEAR a key, so dropping
+  // it from this list would strand the stale value on those devices forever.
+  // Costs one string; removing it costs a leak that nothing ever tidies.
+  "rankd-review-dismissed-v1",
 ] as const;
 
 export const FILE_KEYS_BY_FORMAT: Record<number, readonly string[]> = { 1: FILE_1, 2: FILE_2 };

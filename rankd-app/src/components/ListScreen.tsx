@@ -17,17 +17,6 @@ import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
 import { starsFor, ORDERED_TIERS, type Rating } from "@/lib/tiers";
-import { beliefsWhenIdle } from "@/lib/beliefs";
-import { loadLog } from "@/lib/log";
-import {
-  loadDismissed,
-  markAnswered,
-  mute,
-  offerAllowed,
-  snooze,
-  suggestions,
-  type Suggestion,
-} from "@/lib/review";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 
@@ -57,7 +46,6 @@ export default function ListScreen({
   onProfile,
   onPoster,
   onTrophies,
-  onSpotlight,
   onAddFilm,
   frozen,
 }: {
@@ -82,52 +70,23 @@ export default function ListScreen({
   onProfile: () => void;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
-  /** Hand a film to the spotlight — how the review card's answer is given. */
-  onSpotlight: (film: Film) => void;
   onAddFilm: (film: Film) => void;
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
   const scroller = useRef<HTMLDivElement | null>(null);
 
-  // What the evidence would argue with. Computed off the interaction path — the
-  // fit is expensive and this screen must open instantly — so the list renders
-  // first and the card appears if there is anything to say.
-  const [review, setReview] = useState<Suggestion[]>([]);
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const log = await loadLog();
-      if (!alive || log.length === 0) return;
-      // Checked before the fit, not after: inside the quiet period there is
-      // nothing to show, so there is no reason to spend the expensive part.
-      if (!offerAllowed()) return;
-      const beliefs = await beliefsWhenIdle(films, log);
-      if (!alive) return;
-      setReview(suggestions(films, beliefs, loadDismissed()));
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [films]);
-
-  // Only ever the first, and once it is answered the rest wait for the next
-  // quiet period rather than stepping forward one at a time. The old version
-  // filtered the queue in place, so waving one away promoted the next
-  // immediately — dozens deep on a real library, which is what made the card
-  // feel relentless.
-  const top = review[0];
-  const closeCard = (act: (id: string) => void) => (id: string) => {
-    act(id);
-    setReview([]);
-  };
-  const notNow = closeCard(snooze);
-  const never = closeCard(mute);
-  const act = (film: Film) => {
-    markAnswered();
-    setReview([]);
-    onSpotlight(film);
-  };
+  // ── The review card lived here ─────────────────────────────────────────────
+  //
+  // It read the evidence log, fitted beliefs, and offered the one film whose
+  // position the model most disagreed with — answered by starting a Spotlight
+  // over it. It went when Spotlight did: its only action was that mode, and a
+  // prompt whose button leads nowhere is worse than no prompt.
+  //
+  // The log still records every duel, and `lib/beliefs.ts` still fits from it —
+  // nothing about the evidence changed. What is gone is the app volunteering an
+  // opinion about it. If this comes back it needs a mechanic to hand the answer
+  // to first, and that decision is the feature, not this card.
 
   // Built once per library change, never inside a scroll handler — the
   // prototype re-sorted all 828 films on every scroll tick and it showed.
@@ -198,20 +157,10 @@ export default function ListScreen({
           </span>
         </button>
 
-        {/* Both of these are deliberately in the header block and NOT in the
-            scroller below: the section spacers and the tier-jump offsets are
-            computed from row heights, so anything inserted above the sections
-            would shift every section top while `jumpTo` kept using the
-            unshifted numbers. */}
-        {top && !searching && (
-          <ReviewCard
-            suggestion={top}
-            onAct={() => act(top.film)}
-            onNotNow={() => notNow(top.film.id)}
-            onNever={() => never(top.film.id)}
-          />
-        )}
-
+        {/* Deliberately in the header block and NOT in the scroller below: the
+            section spacers and the tier-jump offsets are computed from row
+            heights, so anything inserted above the sections would shift every
+            section top while `jumpTo` kept using the unshifted numbers. */}
         <div className="flex items-center gap-2">
           <input
             value={q}
@@ -319,66 +268,6 @@ export default function ListScreen({
         onAddFilm={onAddFilm}
       />
     </main>
-  );
-}
-
-// The model's one chance to speak, and it can only ask.
-//
-// Nth, seeing the same disagreement, moves the film and then explains itself
-// afterwards. This asks first, and the answer runs through the spotlight — the
-// mechanic already trusted to decide where something goes. So the list still
-// only ever changes because you changed it.
-//
-// PROVISIONAL LOOK — the wording and the mechanic are settled; the treatment is
-// not, and this has had no design pass.
-function ReviewCard({
-  suggestion,
-  onAct,
-  onNotNow,
-  onNever,
-}: {
-  suggestion: Suggestion;
-  onAct: () => void;
-  /** A real snooze — back in a fortnight. */
-  onNotNow: () => void;
-  /** What "Not now" used to do silently. */
-  onNever: () => void;
-}) {
-  const { film, kind, drift, promoteTo } = suggestion;
-  const line =
-    kind === "underrated"
-      ? `keeps beating your ${starsFor(promoteTo!)} films.`
-      : drift > 0
-        ? `keeps beating films ranked above it.`
-        : `keeps losing to films ranked below it.`;
-
-  return (
-    <div className="mb-3 rounded-xl border px-3.5 py-3" style={{ borderColor: "var(--border)" }}>
-      <p className="text-[12px] leading-snug text-text">
-        <span className="font-semibold text-text-hi">{film.title}</span> {line}
-      </p>
-      <div className="mt-2.5 flex items-center gap-2">
-        <button
-          onClick={onAct}
-          className="rounded-full border px-3.5 py-1.5 text-[11px] font-bold active:scale-95"
-          style={{ color: "var(--gold)", borderColor: "var(--gold)" }}
-        >
-          {kind === "underrated" ? "Test it against them" : "Re-place it"}
-        </button>
-        {/* Two exits, because there were two meanings hiding behind one button.
-            "Not now" is the common one and reads first; "Never" is quieter, and
-            deliberately harder to press by accident than the reprieve is. */}
-        <button onClick={onNotNow} className="px-2 py-1.5 text-[11px] font-semibold text-dim active:scale-95">
-          Not now
-        </button>
-        <button
-          onClick={onNever}
-          className="ml-auto px-2 py-1.5 text-[10px] font-semibold text-dim/60 active:scale-95"
-        >
-          Never
-        </button>
-      </div>
-    </div>
   );
 }
 

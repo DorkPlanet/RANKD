@@ -22,7 +22,6 @@ export function Rolodex({
   onScrub,
   open,
   onToggle,
-  inPlay,
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
@@ -32,7 +31,6 @@ export function Rolodex({
   onScrub: (id: string) => void;
   open: boolean;
   onToggle: () => void;
-  inPlay?: Set<string> | null;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,22 +187,19 @@ export function Rolodex({
               <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
-            // During a spotlight, films the search has already ruled out are
-            // faded: the strip stops offering duels that can't teach the session
-            // anything, and you can see the window closing in as you play.
+            // Every film in the pile is a live opponent. `inPlay` used to fade
+            // the ones a spotlight's binary search had already ruled out; a climb
+            // rules nothing out, so there is nothing to grey.
             <div
               key={f.id}
               data-fid={f.id}
               className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]"
-              style={inPlay && !inPlay.has(f.id) ? { opacity: 0.3 } : undefined}
             >
               <div className="rol-poster w-full overflow-hidden rounded-md bg-surface" style={{ aspectRatio: "2 / 3" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="text-[9px] font-bold tracking-wide text-dim/70">
-                {inPlay && !inPlay.has(f.id) ? "SETTLED" : "UN-RNKD"}
-              </span>
+              <span className="text-[9px] font-bold tracking-wide text-dim/70">UN-RNKD</span>
             </div>
           ),
         )}

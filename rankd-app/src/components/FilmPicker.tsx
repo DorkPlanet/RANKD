@@ -6,6 +6,12 @@
 // navigable — "that Villeneuve one" is far more often how a film is remembered
 // than its exact name. Rows are built a page at a time because mounting eight
 // hundred of them at once blocked the main thread for most of a second.
+//
+// This was `SpotlightPicker` and belonged to a mode that no longer exists.
+// Picking a film out of the library was never a Spotlight idea though — the
+// profile reaches for the same searchable, windowed list to choose a banner —
+// so the component outlived the feature it was named after and is now named for
+// what it actually does. Only the words at the top change per caller.
 
 import { useRef, useState } from "react";
 
@@ -26,14 +32,14 @@ const tierCounts = (films: Film[]): Map<Rating, number> => {
   return m;
 };
 
-export function SpotlightPicker({
+export function FilmPicker({
   films,
   onClose,
   onPick,
-  title = "Spotlight",
+  title = "Pick a film",
   shuffle,
   onShuffle,
-  blurb = "Pick any film to test. It starts where it currently sits and moves as far as its results take it.",
+  blurb = "Search by title, or by who made it.",
   onPerson,
 }: {
   films: Film[];
@@ -44,12 +50,10 @@ export function SpotlightPicker({
   title?: string;
   blurb?: string;
   /**
-   * Face the pile in a random order rather than weakest first.
-   *
-   * King of the Hill has offered this since it shipped and Spotlight never did,
-   * even though `startSpotlight` has always accepted it — the setting existed,
-   * the control did not. Optional so the profile's picker, which opens a
-   * filmography rather than starting a run, can leave it out.
+   * Face the pile in a random order rather than weakest first. Optional, and
+   * currently unused — every caller picks a film to LOOK at rather than to start
+   * a run over, so none of them has an order to set. Kept because the control is
+   * wired and the next mode that picks a film before playing will want it.
    */
   shuffle?: boolean;
   onShuffle?: (v: boolean) => void;

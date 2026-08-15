@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { saveFilms } from "@/lib/store";
 import {
   startRun,
-  startSpotlight,
-  abandonSpotlight,
   getPair,
   choose,
   skipPair,
@@ -20,9 +18,6 @@ import {
   promoteDirect,
   promotionWon,
   completePromotion,
-  spotlightSummary,
-  searchWindow,
-  type SpotlightSummary,
 } from "@/lib/ladder";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
@@ -30,9 +25,8 @@ import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/
 import { poolFor } from "@/lib/matchmaker";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
-import { LOSER, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
+import { PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
-import { SpotlightPicker } from "./SpotlightPicker";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
@@ -78,8 +72,6 @@ type ChosenMode = "koth" | "shuffle" | "roughcut" | null;
 export default function DuelScreen({
   state,
   setState,
-  spotlightRequest,
-  onSpotlightHandled,
   onInfo,
   onSettings,
   onList,
@@ -96,9 +88,6 @@ export default function DuelScreen({
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
-  /** A film the review card asked to have re-placed; starts a spotlight on arrival. */
-  spotlightRequest?: Film | null;
-  onSpotlightHandled?: () => void;
   onInfo: (film: Film) => void;
   onSettings: () => void;
   onList: () => void;
@@ -114,7 +103,7 @@ export default function DuelScreen({
   /** Their photo, for the share card. Absent when TMDb had none. */
   personPortrait?: string;
   onPersonRunHandled?: () => void;
-  /** Open a filmography from the spotlight picker. */
+  /** Open a filmography from the curated picker. */
   onPerson?: (person: Person) => void;
   /**
    * Bumped every time the user ARRIVES at this screen from another tab.
@@ -130,7 +119,6 @@ export default function DuelScreen({
   // tier it is summarising. Cleared on the way back to `RunStart`.
   const [endedTier, setEndedTier] = useState<Rating | null>(null);
   const [tierOpen, setTierOpen] = useState(false);
-  const [spotlightFor, setSpotlightFor] = useState<Rating | null>(null);
   // A tier chosen for the NEXT run but not started. Without it the only way to
   // change the tier on screen was to start a game, which is exactly why picking
   // one used to drop you straight into a duel.
@@ -142,7 +130,6 @@ export default function DuelScreen({
   // nothing and confirms nothing, so giving it a PlacementSession would mean
   // teaching ladder.ts about a mode that never places a film.
   const [shuffleRun, setShuffleRun] = useState<ShuffleOptions | null>(null);
-  const [summary, setSummary] = useState<SpotlightSummary | null>(null);
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
@@ -230,24 +217,6 @@ export default function DuelScreen({
     films: Film[];
     complete: boolean;
   } | null>(null);
-
-  // The review card's answer arrives as a film to re-place. Handled here rather
-  // than by the list, because starting a spotlight means replacing the run on
-  // this screen — which is this screen's business, not the list's.
-  useEffect(() => {
-    if (!spotlightRequest) return;
-    setState((s) => {
-      if (!s) return s;
-      try {
-        return { ...startSpotlight(s.films, spotlightRequest.id, { shuffle: false }), journal: s.journal };
-      } catch {
-        return s; // nothing to place it against — leave whatever was running alone
-      }
-    });
-    onSpotlightHandled?.();
-    // Only when a new request arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spotlightRequest]);
 
   // A person's filmography, handed over to be ranked against itself — as a
   // KING OF THE HILL climb, cross-tier, over an explicit pile.
@@ -433,7 +402,7 @@ export default function DuelScreen({
   // which is the one thing an abandoned run should still leave behind.
   const decide = (winnerId: string) => commitUndoable(choose(state, winnerId));
   // Same shape as a decision, because that is what it is — a recorded answer of
-  // "neither". A spotlight settles here; a climb steps the contender in below.
+  // "neither". The climb steps the contender in below the challenger.
   const declineToCall = () => commitUndoable(skipPair(state));
   // Assertions, not judgements: they reorder the pile and record nothing, so
   // there is never a journal to drain and nothing to persist until a confirm.
@@ -482,8 +451,8 @@ export default function DuelScreen({
   // say why instead of dropping you on a "tier complete" screen that was really
   // "your range holds fewer than two films".
   const beginRun = (tier: Rating, films = state.films): boolean => {
-    // startRun/startSpotlight build a state from films alone, so any duels not yet
-    // drained to the log are carried across by hand rather than dropped.
+    // startRun builds a state from films alone, so any duels not yet drained to
+    // the log are carried across by hand rather than dropped.
     try {
       commit({ ...startRun(films, tier, { shuffle, below, above }), journal: state.journal }, false);
       onRunBegan?.();
@@ -506,16 +475,24 @@ export default function DuelScreen({
     setPickedTier(null);
   };
 
-  const beginSpotlight = (filmId: string) => {
-    try {
-      commit({ ...startSpotlight(state.films, filmId, { shuffle }), journal: state.journal }, false);
-    } catch {
-      setState(state); // no peers to place against — leave the run alone
-    }
-  };
-
-  // Ending a spotlight that fought nobody just restores the film; ending one
-  // that did show what it established before committing anything.
+  // ── Done ───────────────────────────────────────────────────────────────────
+  //
+  // Stopping a climb lands you back on the empty screen, not on a report.
+  //
+  // `TierComplete` still exists and is still the right answer when a run ENDS BY
+  // ITSELF — the pile empties, the tier is finished, and the acknowledgement is
+  // earned. It was wrong for Done. Pressing Done is not finishing a tier, it is
+  // deciding to stop, and the app answering that with a summary of what you
+  // achieved is congratulating you on the thing you just chose to walk away
+  // from. It also stood between you and the one screen you actually wanted,
+  // which is the one that lets you start something else.
+  //
+  // So the two endings are told apart HERE rather than in `commit`. `commit`
+  // still records the tier — it cannot know which kind of ending this is, and
+  // the natural completion path depends on it doing so — and this clears it
+  // immediately afterwards. Batched inside one handler, so the clear wins and
+  // the summary never renders for a frame. Same mechanism, and for the same
+  // reason, as `onAbandon` on the resume overlay.
   const endRun = () => {
     // "One climbing till I decide what's at the top" — so stopping is a real
     // ending here, not an abandonment. The pile as it stands IS the answer: the
@@ -526,29 +503,8 @@ export default function DuelScreen({
       commit(dropGuests({ ...state, session: null }), false);
       return;
     }
-    if (session?.mode === "spotlight") {
-      const fought =
-        (session.spotWins?.length ?? 0) +
-        (session.spotLosses?.length ?? 0) +
-        (session.spotDraws?.length ?? 0);
-      if (fought > 0) {
-        setSummary(spotlightSummary(state));
-        return;
-      }
-      commit(abandonSpotlight(state));
-      return;
-    }
-    commit({ ...state, session: null }, false); // `commit` records the tier
-  };
-
-  // Keep the result, or throw the session away and leave the film where it was.
-  const keepSpotlight = () => {
-    commit(confirm(state));
-    setSummary(null);
-  };
-  const discardSpotlight = () => {
-    commit(abandonSpotlight(state));
-    setSummary(null);
+    commit({ ...state, session: null }, false);
+    setEndedTier(null);
   };
 
   // Run the same pile again, starting from the order you just settled on rather
@@ -667,11 +623,6 @@ export default function DuelScreen({
             setShuffleRun(null);
             if (beginRun(t)) closeSetup();
           }}
-          onSpotlight={(t) => {
-            setShuffleRun(null);
-            setSpotlightFor(t);
-            closeSetup();
-          }}
           onFastShuffle={(opts) => {
             setShuffleRun(opts);
             closeSetup();
@@ -751,7 +702,10 @@ export default function DuelScreen({
   // The greeting, when there is a climb waiting behind it. Rendered by both the
   // running branch and the empty one, so arriving always gets the same layer.
   const inTier = session ? state.films.filter((f) => f.rating === session.tier) : [];
-  const resumable = session && !session.crossTier && session.mode === "koth" ? session : null;
+  // A promotion attempt is excluded for the same reason `runs.ts` refuses to
+  // store one: the offer to resume is about the climb, and the attempt is three
+  // duels sitting on top of it.
+  const resumable = session && !session.crossTier && !session.promotionQueue ? session : null;
   // Never over Fast Shuffle: `activeRun` gives ShuffleDuel the whole surface,
   // and that mode has no pile to come back to anyway.
   const overlay =
@@ -898,7 +852,10 @@ export default function DuelScreen({
           // run was reporting "0 of 42" for a library of ten.
           films={state.films.some((f) => f.guest) ? state.films.filter((f) => !f.guest) : state.films}
           log={log}
-          title={session?.mode === "spotlight" ? "SPOTLIGHT" : "KING OF THE HILL"}
+          // A promotion attempt is a different game against a different tier, and
+          // saying KING OF THE HILL over it would be describing the climb it
+          // interrupted rather than the three duels actually on screen.
+          title={session?.promotionQueue ? "GOING UP A TIER" : "KING OF THE HILL"}
           run={{
             done: session?.confirmed.length ?? 0,
             total: (session?.confirmed.length ?? 0) + (session?.unconfirmed.length ?? 0),
@@ -978,35 +935,29 @@ export default function DuelScreen({
           }}
           onList={onList}
         />
-      ) : /* A spotlight that has settled reports what it established rather than
-          asking for a bare number — the before/after is the whole point. */
-      champion && session?.mode === "spotlight" ? (
-        <SpotlightReport
-          summary={spotlightSummary(state)!}
-          promoteTo={promoteTo}
-          onTakeOn={takeOnTierAbove}
-          onAssertPromotion={assertPromotion}
-          onKeep={keepSpotlight}
-          onDiscard={discardSpotlight}
-          inline
-        />
       ) : champion ? (
         <ConfirmView
           champion={champion}
-          // A spotlight settles wherever it stopped climbing, so its number is
-          // its position in the tier — not the next slot on the shelf.
-          rank={
-            session?.mode === "spotlight"
-              ? session.unconfirmed.indexOf(session.contenderId) + 1
-              : (session?.confirmed.length ?? 0) + 1
-          }
+          rank={(session?.confirmed.length ?? 0) + 1}
           onConfirm={lockIn}
           onBack={(session?.unconfirmed.length ?? 0) > 1 ? backOut : undefined}
-          spotlight={session?.mode === "spotlight"}
           promoteTo={promoteTo}
           onTakeOn={takeOnTierAbove}
           onAssertPromotion={assertPromotion}
           justPromoted={promotionWon(state)}
+          // The tier just EARNED, which is not the one the film currently
+          // carries. `completePromotion` is what writes the new rating and it
+          // does not run until Lock in is pressed, so reading it off the film
+          // here showed the tier it was leaving: a promotion from ½ to ★ was
+          // announced as "EARNED ½" over a button reading "Lock in at ½".
+          // The run's own tier is the tier being taken on — `startPromotionDuel`
+          // sets it — so it is the one true thing on screen to read from.
+          earned={session?.tier}
+          // Stopping has to be reachable from here too. The confirm screen is
+          // the one place a run can sit indefinitely — it is waiting on you, not
+          // the other way round — and until now it was also the one place with
+          // no way out except answering it.
+          onDone={endRun}
         />
       ) : pair && session ? (
         <Duel
@@ -1027,8 +978,6 @@ export default function DuelScreen({
           onInfo={onInfo}
           stripOpen={stripOpen}
           onToggleStrip={toggleStrip}
-          spotlight={session.mode === "spotlight"}
-          inPlay={searchWindow(state)}
         />
       ) : (
         // A run that exists but has no pair left: the tier ran out, or Done was
@@ -1047,33 +996,12 @@ export default function DuelScreen({
         onAddFilm={onAddFilm}
       />
 
-      {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
-
       {/* Every mode stands the Fast Shuffle run down first: `activeRun` decides
           whether ShuffleDuel owns the surface, and leaving it set started the
           climb underneath while the shuffle stayed drawn on top. Fast Shuffle
           loses nothing by it — it writes every judgement and score as it goes. */}
       {sheets}
 
-      {spotlightFor !== null && (
-        <SpotlightPicker
-          films={state.films}
-          onClose={() => setSpotlightFor(null)}
-          // The setting was always threaded into `startSpotlight`; only the
-          // control was missing, so a spotlight silently inherited whatever the
-          // King of the Hill panel had been left on.
-          shuffle={shuffle}
-          onShuffle={setShuffle}
-          onPick={(id) => {
-            beginSpotlight(id);
-            setSpotlightFor(null);
-          }}
-          onPerson={(p) => {
-            setSpotlightFor(null);
-            onPerson?.(p);
-          }}
-        />
-      )}
 
       {/* Last, so the greeting sits over the game it is describing. */}
       {overlay}
@@ -1125,13 +1053,58 @@ export function BottomNav({
   // would put the same state in three places to serve one control — the nav is
   // shared chrome, so the thing it opens is shared too.
   const [logging, setLogging] = useState(false);
+  // The Activity cell has no screen behind it yet. See `teaseTimer` below.
+  const [teasing, setTeasing] = useState(false);
+  const teaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (teaseTimer.current) clearTimeout(teaseTimer.current);
+  }, []);
+  // ── A cell that answers ────────────────────────────────────────────────────
+  //
+  // Activity had no handler at all, so pressing it did nothing — not "nothing
+  // yet", just nothing, which is indistinguishable from the app having frozen.
+  // A tap that produces no response anywhere on screen is the one interaction
+  // users retry, and then stop trusting.
+  //
+  // So it says so. A pill rather than a sheet: there is nothing to read and
+  // nothing to decide, and making someone dismiss a panel to learn that a
+  // feature does not exist yet would be worse than the silence it replaces.
+  // Re-tapping restarts the timer rather than stacking a second one.
+  const tease = () => {
+    setTeasing(true);
+    if (teaseTimer.current) clearTimeout(teaseTimer.current);
+    teaseTimer.current = setTimeout(() => setTeasing(false), 1900);
+  };
   return (
     <nav
-      className="flex flex-shrink-0 items-stretch border-t"
+      className="relative flex flex-shrink-0 items-stretch border-t"
       // Pad into the home-indicator strip so the bar's black reaches the
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
+      {/* Sits above the bar rather than over it, so the cell you just pressed
+          is still visible underneath and the pill reads as an answer to it.
+          `pointer-events-none` so it can never swallow the next tap — it is a
+          notice, not a control, and it is directly over two nav cells. */}
+      <div
+        aria-live="polite"
+        className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2"
+        style={{
+          opacity: teasing ? 1 : 0,
+          transform: teasing ? "translateY(0)" : "translateY(4px)",
+          transition: "opacity 0.2s var(--ease), transform 0.2s var(--ease)",
+        }}
+      >
+        <span
+          className="rounded-full border px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-gold"
+          style={{
+            borderColor: "color-mix(in srgb, var(--gold) 35%, transparent)",
+            background: "color-mix(in srgb, var(--bg) 92%, transparent)",
+          }}
+        >
+          {teasing ? "Activity is coming soon" : ""}
+        </span>
+      </div>
       {/* Five equal cells so RNK sits dead centre — it's the core loop. */}
       <NavItem label="Your list" active={screen === "list"} onClick={onList} icon={<ListIcon />} />
       {/* Was End session, which is now Done inside the duel where it belongs —
@@ -1149,7 +1122,7 @@ export function BottomNav({
         <LogFilm films={films ?? []} onAdd={onAddFilm} onClose={() => setLogging(false)} />
       )}
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
-      <NavItem label="Activity" icon={<ActivityIcon />} />
+      <NavItem label="Activity, coming soon" onClick={tease} icon={<ActivityIcon />} />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
       <NavItem
@@ -1209,7 +1182,6 @@ function ModePanel({
   onAbove,
   onClose,
   onKoth,
-  onSpotlight,
   onFastShuffle,
   onCurated,
   onRoughCut,
@@ -1228,7 +1200,6 @@ function ModePanel({
   onAbove: (v: number) => void;
   onClose: () => void;
   onKoth: (t: Rating) => void;
-  onSpotlight: (t: Rating) => void;
   onFastShuffle: (opts: ShuffleOptions) => void;
   onCurated: () => void;
   onRoughCut: (tier: Rating) => void;
@@ -1236,8 +1207,7 @@ function ModePanel({
   onPickTier: () => void;
 }) {
   // Pick the game first, then set it up. A flat list asked you to read a tier
-  // and a range before knowing what they were for — and showed a range control
-  // to Spotlight, which is always single-tier and ignores it entirely.
+  // and a range before knowing what they were for.
   const setChosen = onChoose;
 
   const lowEdge = tier - below;
@@ -1254,14 +1224,6 @@ function ModePanel({
           title="King of the Hill"
           blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
           onClick={() => setChosen("koth")}
-        />
-        {/* Spotlight is about one film, so choosing it goes straight to the
-            film. Tier and shuffle live in the picker — they're a way to narrow
-            the list, not a setup step to complete before seeing it. */}
-        <ModeRow
-          title="Spotlight"
-          blurb="Pick one film and find where it really belongs — it can push into the tier above."
-          onClick={() => onSpotlight(tier)}
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
@@ -1618,109 +1580,6 @@ function TierPicker({
   );
 }
 
-// Choosing the film IS the mode setup for Spotlight, so this screen carries
-// everything: the whole library to scroll, a tier filter to narrow it, and
-// shuffle. A spotlight's tier comes from the film you pick, never from a
-// setting made beforehand — so the filter here only decides what you see.
-// Exported because picking a film out of the library is not a Spotlight idea —
-// the profile needs the same searchable, windowed list to choose a banner, an
-// avatar or a favourite. Only the words at the top change.
-function SpotlightReport({
-  summary,
-  onKeep,
-  onDiscard,
-  promoteTo,
-  onTakeOn,
-  onAssertPromotion,
-  inline,
-}: {
-  summary: SpotlightSummary;
-  onKeep: () => void;
-  onDiscard: () => void;
-  promoteTo?: Rating;
-  onTakeOn?: () => void;
-  onAssertPromotion?: () => void;
-  inline?: boolean;
-}) {
-  const { film, fromIndex, toIndex, total, beat, lostTo, drewWith } = summary;
-  const moved = fromIndex - toIndex; // positive = climbed
-
-  const body = (
-    <>
-      <div className="mb-4 flex items-center gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={film.poster} alt="" style={{ width: 54, aspectRatio: "2/3", objectFit: "cover", borderRadius: 6 }} />
-        <div className="min-w-0">
-          <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
-          <div className="mt-1.5 flex items-baseline gap-2 text-sm">
-            <span className="text-dim">#{fromIndex + 1}</span>
-            <span className="text-dim">→</span>
-            <span className="font-bold text-gold">#{toIndex + 1}</span>
-            <span className="text-[11px] text-dim">of {total}</span>
-          </div>
-          <div className="mt-0.5 text-[11px] text-dim">
-            {moved > 0
-              ? `Climbed ${moved} place${moved === 1 ? "" : "s"}`
-              : moved < 0
-                ? `Dropped ${-moved} place${moved === -1 ? "" : "s"}`
-                : "Held its place"}
-          </div>
-        </div>
-      </div>
-
-      {beat.length > 0 && <ReportList label="BEAT" films={beat} tone="var(--gold)" />}
-      {lostTo.length > 0 && <ReportList label="LOST TO" films={lostTo} tone={LOSER} />}
-      {drewWith.length > 0 && <ReportList label="TOO CLOSE TO CALL" films={drewWith} tone="var(--dim)" />}
-
-      {promoteTo !== undefined && (
-        <div className="mb-3 flex flex-col items-center gap-2 border-t border-border pt-3">
-          <button
-            onClick={onTakeOn}
-            className="rounded-full border px-6 py-2.5 text-xs font-bold tracking-wide active:scale-95"
-            style={{ color: "var(--accent)", borderColor: "var(--accent)" }}
-          >
-            Take on {starsFor(promoteTo)}
-          </button>
-          <button onClick={onAssertPromotion} className="text-[11px] font-semibold text-dim active:scale-95">
-            or move it up without dueling
-          </button>
-        </div>
-      )}
-
-      <StartButton label={`Keep it at #${toIndex + 1}`} onClick={onKeep} />
-      <button onClick={onDiscard} className="mt-3 w-full text-center text-xs font-semibold text-dim active:scale-95">
-        Discard — leave it where it was
-      </button>
-    </>
-  );
-
-  // Shown in place when the run settles, or as a sheet when ended by hand.
-  if (inline) {
-    return (
-      <div className="flex flex-1 flex-col justify-center overflow-y-auto px-8 py-4">
-        <div className="mx-auto w-full max-w-sm">{body}</div>
-      </div>
-    );
-  }
-
-  return (
-    <Sheet title="Spotlight" onClose={onDiscard}>
-      {body}
-    </Sheet>
-  );
-}
-
-function ReportList({ label, films, tone }: { label: string; films: Film[]; tone: string }) {
-  return (
-    <div className="mb-3">
-      <div className="mb-1 text-[10px] font-extrabold tracking-[0.12em]" style={{ color: tone }}>
-        {label}
-      </div>
-      <div className="text-[12px] leading-relaxed text-text">{films.map((f) => f.title).join(", ")}</div>
-    </div>
-  );
-}
-
 // A label wrapping a hidden file input — a styled <button> can't open a picker.
 export function Header({ onSettings, onTrophies }: { onSettings?: () => void; onTrophies?: () => void }) {
   return (
@@ -1797,8 +1656,6 @@ function Duel({
   onInfo,
   stripOpen,
   onToggleStrip,
-  spotlight,
-  inPlay,
 }: {
   contender: Film;
   challenger: Film;
@@ -1806,10 +1663,9 @@ function Duel({
   confirmed: string[]; // locked shelf, index 0 = #1
   films: Film[];
   tier: Rating;
-  spotlight?: boolean;
   onPick: (id: string) => void;
   onDraw: () => void;
-  /** End the run — the same action as the nav's End session. */
+  /** End the run and go back to the empty screen. */
   onDone: () => void;
   onUndo: () => void;
   canUndo: boolean;
@@ -1819,22 +1675,32 @@ function Duel({
   onInfo: (film: Film) => void;
   stripOpen: boolean;
   onToggleStrip: () => void;
-  inPlay?: Set<string> | null;
 }) {
   const arenaRef = useRef<HTMLDivElement>(null);
 
-  // The controls are revealed by answering, not by arriving — and once revealed
+  // Draw and Undo are revealed by answering, not by arriving — and once revealed
   // they stay for the rest of the run.
   //
   // They used to time out after 2.5s and hand the slot back to the question,
-  // which was wrong for the one control that matters most: Done is how you stop,
-  // and you reach for it exactly when you have put the phone down and looked
-  // away — the moment a timer has already taken it. A control that is present
-  // only while you are mid-flow is missing whenever you actually want it.
+  // which was wrong: you reach for these exactly when you have put the phone
+  // down and looked away, which is the moment a timer has already taken them.
   //
   // Sticky rather than always-on because arriving at a fresh duel with three
   // buttons under it puts a decision in front of you before you have made the
   // only one that matters. One tap teaches them, then they are furniture.
+  //
+  // ── Done is the exception, and is always there ────────────────────────────
+  //
+  // It was gated behind the same flag, which meant the control for LEAVING a run
+  // did not exist until you had played one. Someone who opened a climb, saw a
+  // pairing they did not want to judge and simply wanted out had no exit at all:
+  // no Done, and the confirm screen it might otherwise be reached from is two
+  // duels away. The one control that must never require you to play first is the
+  // one that stops you having to.
+  //
+  // It costs nothing to show, because the row is in the layout either way — only
+  // the opacity moves — so Draw and Undo still fade up beside it without
+  // anything shifting under the thumb.
   const [played, setPlayed] = useState(false);
 
   const declineToCall = () => {
@@ -1853,11 +1719,9 @@ function Duel({
     const climbImg = cards?.[0]?.querySelector("img");
     const challImg = cards?.[1]?.querySelector("img");
 
-    // Only in King of the Hill does a winning challenger become the climber, so
-    // only there should it fly into the climbing seat. In a spotlight the
-    // spotlit film stays put and simply stops here — showing its opponent take
-    // its place would say the opposite of what happened.
-    if (id === challenger.id && climbImg && challImg && !spotlight) {
+    // A winning challenger becomes the climber, so it flies into the climbing
+    // seat before the state swap paints.
+    if (id === challenger.id && climbImg && challImg) {
       flyPosterAcross(challImg, climbImg, challenger.poster ?? "");
       setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
       return;
@@ -2045,17 +1909,18 @@ function Duel({
               Draw would give and Done would end on. Disabled rather than absent
               once there is nothing to take back, so the row never changes width
               under your thumb. */}
-          <div
-            className="flex items-center gap-1 px-6 pb-2 pt-0"
-            style={{
-              opacity: played ? 1 : 0,
-              pointerEvents: played ? "auto" : "none",
-              transition: "opacity 0.25s var(--ease)",
-            }}
-          >
+          {/* The opacity is per-button rather than on the row, so Done can be
+              present from the first frame while the other two are still earned.
+              The row itself never changes size either way — see `played`. */}
+          <div className="flex items-center gap-1 px-6 pb-2 pt-0">
             <button
               onClick={declineToCall}
               className={CONTROL}
+              style={{
+                opacity: played ? 1 : 0,
+                pointerEvents: played ? "auto" : "none",
+                transition: "opacity 0.25s var(--ease)",
+              }}
             >
               Draw
             </button>
@@ -2063,6 +1928,11 @@ function Duel({
               onClick={onUndo}
               disabled={!canUndo}
               className={`${CONTROL} disabled:opacity-30 disabled:active:scale-100`}
+              style={{
+                opacity: played ? undefined : 0,
+                pointerEvents: played ? "auto" : "none",
+                transition: "opacity 0.25s var(--ease)",
+              }}
             >
               Undo
             </button>
@@ -2087,7 +1957,6 @@ function Duel({
         onScrub={onScrub}
         open={stripOpen}
         onToggle={onToggleStrip}
-        inPlay={inPlay}
       />
     </>
   );
@@ -2212,30 +2081,36 @@ function ConfirmView({
   rank,
   onConfirm,
   onBack,
-  spotlight,
   promoteTo,
   onTakeOn,
   onAssertPromotion,
   justPromoted,
+  earned,
+  onDone,
 }: {
   champion: Film;
   rank: number;
   onConfirm: () => void;
   onBack?: () => void;
-  spotlight?: boolean;
   promoteTo?: Rating;
   onTakeOn?: () => void;
   onAssertPromotion?: () => void;
   justPromoted?: boolean;
+  /**
+   * The rating a won promotion is about to bank.
+   *
+   * Not read off the film: the write happens on confirm, so until then it still
+   * carries the tier it is leaving. See the call site.
+   */
+  earned?: Rating;
+  /** Stop the run from here. See the call site. */
+  onDone?: () => void;
 }) {
+  const won = justPromoted ? (earned ?? champion.rating) : champion.rating;
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
       <span className="text-[11px] font-extrabold tracking-[0.14em] text-gold">
-        {justPromoted
-          ? `⭐ EARNED ${starsFor(champion.rating)}`
-          : spotlight && rank > 1
-            ? "🎯 FOUND ITS PLACE"
-            : "🏆 TOPS THE PILE"}
+        {justPromoted ? `⭐ EARNED ${starsFor(won)}` : "🏆 TOPS THE PILE"}
       </span>
       <div className="w-40 overflow-hidden rounded-xl" style={{ boxShadow: "0 0 0 3px var(--gold), 0 12px 36px color-mix(in srgb, var(--gold) 45%, transparent)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -2244,7 +2119,7 @@ function ConfirmView({
       <div>
         <div className="font-serif text-xl font-bold text-text-hi">{champion.title}</div>
         {justPromoted ? (
-          <div className="mt-1 text-base text-gold">{starsFor(champion.rating)}</div>
+          <div className="mt-1 text-base text-gold">{starsFor(won)}</div>
         ) : (
           <div className="mt-1 font-serif text-5xl font-bold text-gold">#{rank}</div>
         )}
@@ -2254,15 +2129,12 @@ function ConfirmView({
         className="rounded-full px-8 py-3 text-sm font-extrabold tracking-wide active:scale-95"
         style={{ color: "#1c1405", background: "var(--gold)", boxShadow: "0 4px 20px color-mix(in srgb, var(--gold) 40%, transparent)" }}
       >
-        {justPromoted
-          ? `Lock in at ${starsFor(champion.rating)}`
-          : spotlight
-            ? `Lock in at #${rank}`
-            : `Lock in as #${rank}`}
+        {justPromoted ? `Lock in at ${starsFor(won)}` : `Lock in as #${rank}`}
       </button>
 
-      {/* Topping a tier in Spotlight is the one moment a star rating can change:
-          earn it against the tier above, or assert it outright. */}
+      {/* Beating an entire tier is the one moment a star rating can change:
+          earn it against the tier above, or assert it outright. `promotionTarget`
+          is what decides this is that moment. */}
       {promoteTo !== undefined && !justPromoted && (
         <div className="flex flex-col items-center gap-2">
           <button
@@ -2281,6 +2153,15 @@ function ConfirmView({
       {onBack && !justPromoted && (
         <button onClick={onBack} className="-mt-1 text-xs font-semibold text-dim active:scale-95">
           Not yet — keep playing
+        </button>
+      )}
+
+      {/* Quieter than everything above it, and last. This screen is asking you a
+          question, so the answer stays the loud thing and the exit sits under it
+          in the same weight the duel's own Done carries. */}
+      {onDone && (
+        <button onClick={onDone} className="text-[11px] font-semibold text-gold/70 active:scale-95">
+          Done for now
         </button>
       )}
     </div>

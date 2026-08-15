@@ -12,21 +12,45 @@
 // and the flick gestures from the duel screen work here too for anyone already
 // holding that muscle memory.
 //
-// PROVISIONAL LOOK — the mechanic is the point; the styling has had no design
-// pass and is not meant to read as finished.
+// ── What the motion is for ─────────────────────────────────────────────────
+//
+// This shipped with none, and next to the duel screen it read as an older app:
+// there the cards float, tilt, fly into the climbing seat and get thrown off the
+// edge, while here a poster was simply replaced by the next poster.
+//
+// The fix is not decoration. You answer this screen roughly once a second for
+// fifty films, and at that rate the only thing that keeps a session from feeling
+// like data entry is being able to FEEL each answer land without reading
+// anything. So: the card follows your thumb and leans as it goes, the target you
+// are aimed at lifts while the other two recede, and the placed film flies into
+// the pile it was filed under. Every duration here is shorter than the duel's
+// equivalent, because this surface has to stay the fastest one in the app.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { applyRoughCut, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
 import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 import { Header } from "./DuelScreen";
+import { flyPosterTo } from "./PosterCard";
 
 /** How far a pointer must travel before it counts as a flick rather than a tap. */
 const FLICK_PX = 44;
+/**
+ * How long the card is left flying before the queue advances.
+ *
+ * Shorter than the flight itself (380ms), on the same reasoning as the duel's
+ * `flyPosterAcross`: the state commits UNDER the clone while it is still moving,
+ * so the next film is already settling in behind rather than waiting for the
+ * last one to finish leaving. Waiting the full duration would put a visible
+ * pause between every answer, which is the one thing this screen cannot afford.
+ */
+const FILE_MS = 150;
+/** How far a drag can pull the card, so it never leaves its own space. */
+const DRAG_CAP = 90;
 
 const TARGET =
-  "flex-1 py-3 text-[10px] font-extrabold uppercase tracking-[0.16em] transition-colors active:scale-95";
+  "rc-target flex-1 py-3 text-[10px] font-extrabold uppercase tracking-[0.16em] active:scale-95";
 
 export default function RoughCut({
   films,
@@ -60,6 +84,25 @@ export default function RoughCut({
   const [next, setNext] = useState<"rank" | "split">("rank");
   const start = useRef<{ x: number; y: number } | null>(null);
 
+  // ── Live gesture state ─────────────────────────────────────────────────────
+  //
+  // `drag` is how far the thumb has pulled the card, and `aimed` is the bucket
+  // it would land in if released now. Both are null when nothing is being
+  // dragged, so the card sits still and all three targets read equally.
+  //
+  // The flick used to report nothing until release: you pulled, the poster did
+  // not move, and then a film vanished. Following the thumb is what turns that
+  // from a shortcut you have to remember into a gesture you can see working.
+  const [drag, setDrag] = useState<number | null>(null);
+  const [aimed, setAimed] = useState<Bucket | null>(null);
+  // Bumped on every placement, purely as an animation key for the progress bar.
+  const [beat, setBeat] = useState(0);
+  const cardRef = useRef<HTMLDivElement>(null);
+  // The three targets, so a placed card can be sent to the one it was filed
+  // under. Measured at animation time rather than stored as coordinates, which
+  // would go stale the moment the layout moved.
+  const targets = useRef<Partial<Record<Bucket, HTMLButtonElement | null>>>({});
+
   const film = pool[at];
   const done = at >= pool.length;
 
@@ -70,11 +113,34 @@ export default function RoughCut({
     onExit();
   };
 
+  /**
+   * File the film on screen into one of the three piles.
+   *
+   * The state change is the same three lines it always was; everything around it
+   * is the animation. The clone is spawned BEFORE `setAt` moves the queue on,
+   * because the moment it does React swaps the poster and there is nothing left
+   * to take a picture of.
+   */
   const place = (bucket: Bucket) => {
     if (!film) return;
-    const next = new Map(choices).set(film.id, bucket);
-    setChoices(next);
-    setAt((i) => i + 1);
+
+    const poster = cardRef.current?.querySelector("img");
+    const target = targets.current[bucket];
+    if (poster && target) flyPosterTo(poster, target, film.poster ?? "");
+
+    const advance = () => {
+      setChoices((c) => new Map(c).set(film.id, bucket));
+      setAt((i) => i + 1);
+      setBeat((b) => b + 1);
+      setDrag(null);
+      setAimed(null);
+    };
+
+    // Commit under the clone while it is still moving — but only when there was
+    // a clone to hide behind. With no artwork the flight never happened, so
+    // waiting would just be a delay before nothing.
+    if (poster && target) setTimeout(advance, FILE_MS);
+    else advance();
   };
 
   /**
@@ -128,8 +194,13 @@ export default function RoughCut({
       <main className="relative flex h-dvh flex-col overflow-hidden select-none">
         <Header onSettings={onSettings} onTrophies={onTrophies} />
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
-          <p className="font-display text-3xl tracking-wide text-gold">{choices.size} placed</p>
-          <p className="mt-3 text-[12px] leading-relaxed text-dim">
+          {/* The number counts up rather than appearing. It is the one figure
+              this screen exists to report, and a count-up is the cheapest way to
+              make a total read as something that was accumulated. */}
+          <p className="rc-rise font-display text-3xl tracking-wide text-gold" style={{ "--i": 0 } as React.CSSProperties}>
+            <CountUp to={choices.size} /> placed
+          </p>
+          <p className="rc-rise mt-3 text-[12px] leading-relaxed text-dim" style={{ "--i": 1 } as React.CSSProperties}>
             {starsFor(tier)} is roughly in order now. Ranking it properly from here is a fraction of
             the work — the climb starts from what you just decided rather than from nothing.
           </p>
@@ -144,7 +215,7 @@ export default function RoughCut({
               RANK or SPLIT, chosen first, so the three piles are one row of
               buttons rather than six. Split is the answer when a pile is still
               too big to duel; rank is the answer when it isn't. */}
-          <div className="mt-7 w-full max-w-[300px]">
+          <div className="rc-rise mt-7 w-full max-w-[300px]" style={{ "--i": 2 } as React.CSSProperties}>
             <div className="mb-2 flex gap-1">
               {(["rank", "split"] as const).map((m) => (
                 <button
@@ -175,13 +246,15 @@ export default function RoughCut({
 
           <button
             onClick={() => commit(choices)}
-            className="mt-7 rounded-xl border border-gold/50 px-8 py-3 text-xs font-bold text-gold active:scale-[0.98]"
+            className="rc-rise mt-7 rounded-xl border border-gold/50 px-8 py-3 text-xs font-bold text-gold active:scale-[0.98]"
+            style={{ "--i": 3 } as React.CSSProperties}
           >
             Keep it
           </button>
           <button
             onClick={onExit}
-            className="mt-2 px-6 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95"
+            className="rc-rise mt-2 px-6 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95"
+            style={{ "--i": 4 } as React.CSSProperties}
           >
             Throw it away
           </button>
@@ -201,9 +274,14 @@ export default function RoughCut({
             Rough cut{pass.n > 1 ? ` · pass ${pass.n}` : ""}
           </span>
         </div>
+        {/* `key={beat}` re-mounts the fill on every placement, which is what
+            replays the bloom — a CSS animation that has already run does not
+            restart because a style changed. Same mechanism as the duel screen's
+            arrival veil, and for the same reason. */}
         <span className="flex h-1 w-full overflow-hidden rounded-full bg-border">
           <span
-            className="h-full transition-[width] duration-300"
+            key={beat}
+            className="rc-bar-pulse h-full transition-[width] duration-300"
             style={{ width: `${(at / pool.length) * 100}%`, background: "var(--accent)" }}
           />
         </span>
@@ -215,18 +293,54 @@ export default function RoughCut({
       <div style={{ flexGrow: 1 }} />
 
       {/* One film, centred. `key` on the id so a new film cannot inherit the
-          previous one's transition mid-flight. */}
+          previous one's transition mid-flight — and so `rc-card` replays its
+          entrance for every film rather than only the first. */}
       <div
+        ref={cardRef}
         key={film.id}
-        className="flex shrink flex-col items-center px-8"
-        onPointerDown={(e) => (start.current = { x: e.clientX, y: e.clientY })}
+        className="rc-card flex shrink flex-col items-center px-8"
+        onPointerDown={(e) => {
+          start.current = { x: e.clientX, y: e.clientY };
+          // Capture, so a drag that leaves the card still reports its release
+          // here. Same reason `PosterCard` does it: without this the gesture is
+          // lost the moment the thumb crosses the poster's edge.
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          } catch {
+            // best-effort — the gesture still works, it just cannot leave the card
+          }
+        }}
+        onPointerMove={(e) => {
+          const from = start.current;
+          if (!from) return;
+          const dy = e.clientY - from.y;
+          // Resisted rather than followed 1:1, and capped: the card is reporting
+          // the gesture, not being dragged across the screen.
+          setDrag(Math.max(-DRAG_CAP, Math.min(DRAG_CAP, dy * 0.55)));
+          setAimed(Math.abs(dy) > FLICK_PX ? (dy < 0 ? "top" : "bottom") : null);
+        }}
         onPointerUp={(e) => {
           const from = start.current;
           start.current = null;
-          if (!from) return;
+          if (!from) {
+            setDrag(null);
+            setAimed(null);
+            return;
+          }
           const dy = e.clientY - from.y;
           // The same gestures the duel screen uses: up is better, down is worse.
-          if (Math.abs(dy) > FLICK_PX) place(dy < 0 ? "top" : "bottom");
+          if (Math.abs(dy) > FLICK_PX) {
+            place(dy < 0 ? "top" : "bottom");
+            return;
+          }
+          // Short of the threshold, so it springs back rather than placing.
+          setDrag(null);
+          setAimed(null);
+        }}
+        onPointerCancel={() => {
+          start.current = null;
+          setDrag(null);
+          setAimed(null);
         }}
         style={{ minHeight: 0, touchAction: "pan-x" }}
       >
@@ -236,9 +350,20 @@ export default function RoughCut({
         >
           {film.title}
         </span>
+        {/* The lean is derived from the drag rather than fixed, so the card
+            banks INTO the direction it is being sent — up tips it back, down
+            tips it forward. The transition is dropped while dragging so the
+            poster tracks the thumb exactly, and restored on release so it
+            springs back instead of snapping. */}
         <div
           className="overflow-hidden rounded-xl bg-surface"
-          style={{ aspectRatio: "2 / 3", maxHeight: 300, boxShadow: "0 8px 26px rgba(0,0,0,0.55)" }}
+          style={{
+            aspectRatio: "2 / 3",
+            maxHeight: 300,
+            boxShadow: "0 8px 26px rgba(0,0,0,0.55)",
+            transform: drag ? `translateY(${drag}px) rotate(${drag * 0.045}deg)` : undefined,
+            transition: drag === null ? "transform 0.28s cubic-bezier(.2,.8,.3,1)" : "none",
+          }}
         >
           {film.poster && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -253,17 +378,31 @@ export default function RoughCut({
       {/* Lowest on the left, rising to the right — the same direction the scale
           runs everywhere else. It read the other way round at first, which put
           the best pile where the eye expects the worst and quietly inverted
-          every decision made in the first minute. */}
+          every decision made in the first minute.
+
+          While a drag is live the aimed target lifts and the other two recede,
+          so the gesture's outcome is legible BEFORE you commit to it. Nothing
+          moves at all when `aimed` is null, which is every moment you are not
+          mid-drag — the row is furniture the rest of the time. */}
       <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-center px-5">
-        <button onClick={() => place("bottom")} className={`${TARGET} text-dim`}>
-          Lower
-        </button>
-        <button onClick={() => place("middle")} className={`${TARGET} text-text-hi`}>
-          Middle
-        </button>
-        <button onClick={() => place("top")} className={`${TARGET} text-gold`}>
-          Upper
-        </button>
+        {(
+          [
+            { bucket: "bottom", label: "Lower", tone: "text-dim" },
+            { bucket: "middle", label: "Middle", tone: "text-text-hi" },
+            { bucket: "top", label: "Upper", tone: "text-gold" },
+          ] as const
+        ).map(({ bucket, label, tone }) => (
+          <button
+            key={bucket}
+            ref={(el) => {
+              targets.current[bucket] = el;
+            }}
+            onClick={() => place(bucket)}
+            className={`${TARGET} ${aimed === bucket ? `rc-target-armed text-gold` : aimed ? `rc-target-idle ${tone}` : tone}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-shrink-0 items-center justify-center gap-1 pb-6">
@@ -286,4 +425,55 @@ export default function RoughCut({
       </div>
     </main>
   );
+}
+
+/**
+ * A number that arrives by counting rather than by appearing.
+ *
+ * Rough Cut's summary reports one figure and it is the whole point of the
+ * screen, so it is worth the few hundred milliseconds it takes to read as an
+ * accumulation. Nothing else in the app counts up — a total that animates
+ * everywhere is a tic, and this is the only place the number IS the reward.
+ *
+ * Driven by `requestAnimationFrame` rather than a per-tick timer so it costs one
+ * frame callback and lands exactly on `to` however long a frame took. Reduced
+ * motion skips straight to the answer: a count-up is pure movement, so there is
+ * nothing left of it worth keeping once movement is declined.
+ */
+function CountUp({ to, ms = 520 }: { to: number; ms?: number }) {
+  // The decision is taken HERE, above the animating component, rather than as a
+  // branch inside its effect. An effect that has to setState on the way out to
+  // correct its own initial value is a cascading render — and the whole point of
+  // the reduced-motion case is that nothing should move, including the number
+  // jumping from 0 to its answer on the second frame. `Ticker` is mounted only
+  // when there is genuinely something to animate, so its effect has one job.
+  const still =
+    to <= 0 ||
+    (typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+
+  // `tabular-nums` so the width does not jitter as the digits change.
+  if (still) return <span className="tabular-nums">{to}</span>;
+  // Keyed by the target, so a changed total restarts the count rather than
+  // leaving the old one stranded — which is also what lets the effect below
+  // depend on nothing.
+  return <Ticker key={to} to={to} ms={ms} />;
+}
+
+function Ticker({ to, ms }: { to: number; ms: number }) {
+  const [n, setN] = useState(0);
+
+  useEffect(() => {
+    let raf = 0;
+    const started = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - started) / ms);
+      // Ease out, so it sprints and then settles rather than crawling to the end.
+      setN(Math.round(to * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, ms]);
+
+  return <span className="tabular-nums">{n}</span>;
 }

@@ -1,9 +1,10 @@
 // Who the library belongs to.
 //
-// Nothing here stores an image. A banner and an avatar are just films you've
-// picked, referenced by id — the poster art is already in the library, and the
-// whole profile costs a few hundred bytes instead of competing with 828 films
-// for the same 5MB of localStorage.
+// Nothing here stores an image — only ever a reference to one. A banner is a
+// film id and a still URL; an avatar is a URL too. The poster art is already in
+// the library, uploads live in blob storage, and the whole profile costs a few
+// hundred bytes instead of competing with 861 films for the same 5MB of
+// localStorage. Adding `avatarUrl` did not change that rule, it used it.
 
 import type { Film } from "./types";
 import { isPlaced } from "./lock";
@@ -15,6 +16,14 @@ const KEY = "rankd-profile-v1";
 export interface Profile {
   name: string;
   bio: string;
+  /**
+   * An uploaded picture, hosted in blob storage. See `lib/avatar.ts`.
+   *
+   * Wins over everything else when set, because it is the only one the user
+   * chose deliberately. Falls back to the account photo from Google, and then to
+   * the initial — see `avatarOf`.
+   */
+  avatarUrl?: string;
   avatarFilmId?: string;
   bannerFilmId?: string;
   // A frame from a scene, not a poster — posters are the library's currency and
@@ -64,6 +73,29 @@ export function saveProfile(p: Profile): void {
 
 // A film chosen by id, or a sensible fallback: the best-placed film with
 // artwork. A profile should look like something on the day it's created.
+/**
+ * Which picture to draw for someone, in priority order.
+ *
+ * Three sources, and the order is the whole point:
+ *
+ *  1. An UPLOAD. The only one the user deliberately chose, so it outranks
+ *     everything — including a Google photo that arrived later on a new sign-in.
+ *  2. The ACCOUNT photo, which `provisionUser` already stores. Free, and better
+ *     than a letter for anyone who has signed in and not thought about it.
+ *  3. The INITIAL. Always available, needs no network and no account, and is
+ *     what a signed-out user has always had.
+ *
+ * Returned as a discriminated shape rather than a URL-or-null so the caller
+ * cannot forget the letter case and render an empty circle.
+ */
+export type Avatar = { kind: "image"; url: string } | { kind: "initial"; letter: string };
+
+export function avatarOf(profile: Profile, accountImage?: string | null): Avatar {
+  if (profile.avatarUrl) return { kind: "image", url: profile.avatarUrl };
+  if (accountImage) return { kind: "image", url: accountImage };
+  return { kind: "initial", letter: profile.name.trim().charAt(0).toUpperCase() || "?" };
+}
+
 export function pickFilm(films: Film[], id: string | undefined, ranked: Film[]): Film | undefined {
   if (id) {
     const chosen = films.find((f) => f.id === id);

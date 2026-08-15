@@ -15,6 +15,7 @@ import { resetRanking } from "@/lib/reset";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
+import { Feedback } from "./Feedback";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
 
 export function Settings({
@@ -155,6 +156,12 @@ export function Settings({
             />
           </div>
         </div>
+
+        {/* Above START AGAIN, because someone scrolling this far in frustration
+            should meet the way to TELL us before they meet the way to wipe
+            everything. The evidence count is already loaded here, so the report
+            can carry it without a second read. */}
+        <Feedback films={films} duels={evidence?.rows ?? 0} />
 
         {/* Deliberately BELOW the backup block, so the export is the thing you
             read first and the destruction is the thing you scroll to. */}

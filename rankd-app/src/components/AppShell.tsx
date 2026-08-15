@@ -63,6 +63,21 @@ const VEIL_MS = 200;
  * Derived rather than stored, so it answers to the library as it stands. Nothing
  * needs migrating, and someone who clears their ranking goes back to landing on
  * the duel — which is where they now have work to do.
+ *
+ * ── It is asked ONCE, at load, and that is load-bearing ────────────────────
+ *
+ * This used to be evaluated on every render, for as long as nobody had navigated
+ * — and its input is "has anything been placed", which the act of playing
+ * CHANGES. So a new user who opened on the duel, played a climb and confirmed
+ * their first film was thrown onto the profile by that confirm: the predicate
+ * flipped mid-run and the landing rule re-fired as though the app were opening.
+ * Nothing had navigated, so nothing overrode it, and the run was left running
+ * behind a screen nobody asked for.
+ *
+ * "Where the app opens" is a question about opening. Asking it continuously
+ * turned it into a rule about where the app should BE, which is not the same
+ * thing and is not this function's business. The answer is now taken when the
+ * library lands and held.
  */
 function openingScreen(films: readonly Film[]): Screen {
   return films.some(isPlaced) ? "profile" : "duel";
@@ -70,18 +85,16 @@ function openingScreen(films: readonly Film[]): Screen {
 
 export default function AppShell() {
   const [state, setState] = useState<RankState | null>(null);
-  // `null` means nobody has navigated yet, so the opening rule below still
-  // applies. Deliberately not seeded with a screen name: the rule needs the
-  // library, the library is not loaded on the first render (that is what keeps
-  // this component's first paint identical on the server and the client), and a
-  // screen chosen before then would have to be corrected afterwards — which the
-  // user would watch happen.
+  // `null` until the library lands, because the opening rule needs it and it is
+  // not loaded on the first render — that is what keeps this component's first
+  // paint identical on the server and the client. A screen chosen before then
+  // would have to be corrected afterwards, which the user would watch happen.
+  //
+  // Set exactly once, in the load effect, and only ever changed by `go` after
+  // that. See `openingScreen` for why it must not stay derived.
   const [screen, setScreen] = useState<Screen | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
   const [infoFilm, setInfoFilm] = useState<Film | null>(null);
-  // A film the review card has handed over to be re-placed. It lives here rather
-  // than in ListScreen because answering the question means changing screens.
-  const [spotlightFilm, setSpotlightFilm] = useState<Film | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Lives here, not on the profile — the trophy sits in the shared header, so it
   // has to work from whichever screen you're looking at.
@@ -127,6 +140,10 @@ export default function AppShell() {
     // `loadRun` returns null for anything stale, unreadable, or naming a film
     // this library no longer holds.
     setState({ films, session: loadRun(films), journal: [] });
+    // Decided here, on the library as it arrived, and never re-derived. Guests
+    // cannot be in play yet — nothing has started a run — so `films` is already
+    // the guest-free library the rule wants.
+    setScreen(openingScreen(films));
 
     // Catch up with the account, if there is one. `pull` reloads the page, so on
     // a new device this render is simply replaced by one holding the real
@@ -385,9 +402,11 @@ export default function AppShell() {
     ? state.films.filter((f) => !f.guest)
     : state.films;
 
-  // The screen you navigated to, or the one the opening rule chose. Guests are
-  // excluded — a borrowed film is not something you placed, so it must not be
-  // what decides you have a profile worth landing on.
+  // The screen you navigated to, or the one the opening rule chose when the
+  // library landed. The fallback is only reachable in the single render between
+  // `state` arriving and the load effect committing its `setScreen`, so it can
+  // no longer re-fire once something has been placed — which is what used to
+  // throw a player onto the profile on their first confirm.
   const current = screen ?? openingScreen(library);
 
   // ── When a tour runs by itself ─────────────────────────────────────────────
@@ -485,8 +504,6 @@ export default function AppShell() {
         <DuelScreen
           state={state}
           setState={setState}
-          spotlightRequest={spotlightFilm}
-          onSpotlightHandled={() => setSpotlightFilm(null)}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
@@ -524,10 +541,6 @@ export default function AppShell() {
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onPoster={setMeta}
-          onSpotlight={(film) => {
-            setSpotlightFilm(film);
-            goDuel();
-          }}
           onAddFilm={addFilm}
           // A tutorial is a held moment. Nothing behind it may move.
           frozen={showCoach}

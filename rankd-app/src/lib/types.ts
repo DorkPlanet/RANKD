@@ -54,8 +54,6 @@ export interface Film {
 // `unconfirmed` list is a live, ephemeral shuffle that records nothing until a
 // film is confirmed. Films climb from the bottom of `unconfirmed`; whoever
 // reaches the top is confirmed by the user, then the climb restarts.
-export type Mode = "koth" | "spotlight";
-
 export interface PlacementSession {
   tier: Rating;
   // How far the pool reaches either side of `tier`, in stars, set independently:
@@ -68,31 +66,22 @@ export interface PlacementSession {
   challengerId: string; // the film directly above it (its opponent); "" at the top
   needsConfirm: boolean; // contender reached the top → awaiting the user's confirm
 
-  mode: Mode;
-  // Spotlight only. `subjectId` is the film being re-placed — it's the one that
-  // climbs, and the run ends when it settles rather than rolling on to the next.
-  // `origScore`/`origRating` restore it if the run is abandoned part-way, since
-  // starting a spotlight moves the film before it has earned anything.
-  subjectId?: string;
-  origScore?: number;
-  origRating?: Rating;
-  origIndex?: number; // where it stood in the tier before any of this
-  // The slice of the tier the subject could still belong to, as indices into the
-  // pile WITH THE SUBJECT REMOVED (that order never changes during a spotlight,
-  // so the indices stay valid). Every duel narrows it by half; when `spotLo`
-  // passes `spotHi` there is nowhere left it could be and the film is placed.
-  spotLo?: number;
-  spotHi?: number;
-  spotWins?: string[];
-  spotLosses?: string[];
-  // Films the subject was declared too close to call against. Kept apart from
-  // wins and losses rather than folded into either, because a draw is neither —
-  // and a session that consisted only of draws still fought, so the summary and
-  // the "did this run establish anything?" check must be able to see them.
-  spotDraws?: string[];
-  // A promotion run in progress: the subject is working through the weakest
-  // films of the tier above, weakest first. Emptying it earns the promotion.
+  // A promotion run in progress: the contender is working through the weakest
+  // films of the tier above, weakest first. Clearing them earns the promotion.
   promotionQueue?: string[];
+  /**
+   * The run a promotion attempt interrupted, to be handed back when it ends.
+   *
+   * A promotion is offered one confirm into a King of the Hill climb that may be
+   * an hour long, so it has to be something the run RETURNS from rather than
+   * something that ends it. This holds the session exactly as it stood at that
+   * confirm: losing restores it verbatim, winning restores it with the promoted
+   * film lifted out. See `startPromotionDuel`.
+   *
+   * Never more than one level deep — a run already carrying a `promotionQueue`
+   * is refused a promotion of its own, so this cannot chain.
+   */
+  resumeAfter?: PlacementSession;
   // This run's pile spans star ratings, so its order is not a claim about any
   // one tier — and `confirm` therefore writes no score and no lock. The order
   // lives in `confirmed` and nowhere else, which is what lets a 3★ sit above a

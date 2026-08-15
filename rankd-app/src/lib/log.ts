@@ -10,7 +10,8 @@
 // So: a comparison is now EVIDENCE. Append-only, never edited, never deleted.
 // The log is not the ranking and does not move it; it is the record the ranking
 // could be rebuilt from. Everything downstream of this file — confidence, the
-// matchmaker, the review card — exists only because these rows are kept.
+// matchmaker, the beliefs the list is sorted against — exists only because these
+// rows are kept.
 //
 // It stays deliberately dumb. No inference, no scores, no opinions about what a
 // row means. Just what happened, in order.
@@ -23,8 +24,15 @@ import { markDirty } from "./syncState";
 export type Outcome = "a" | "b" | "draw";
 
 // Which game the judgement was made in. Kept because the same pair judged during
-// a focused spotlight and during an idle shuffle are not quite the same claim,
-// and because it costs one character to keep and cannot be recovered later.
+// a focused climb and during an idle shuffle are not quite the same claim, and
+// because it costs one character to keep and cannot be recovered later.
+//
+// "spotlight" is a LEGACY VALUE and nothing writes it any more — the mode was
+// removed. It stays in the union because this log is append-only and never
+// edited: rows stamped `s` are already sitting in people's browsers and in their
+// backup files, and they are real judgements about real films. Dropping the
+// value would make them decode as something they were not, or fail to decode at
+// all. An evidence log that rewrites its own history is not evidence.
 export type LogMode = "koth" | "spotlight" | "shuffle" | "promotion";
 
 export interface Judgement {

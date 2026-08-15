@@ -152,6 +152,41 @@ export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TIL
 // the left. Without this it simply appears over there the instant state updates
 // — the film you just chose jumps the screen. Slide a clone across so the pick
 // visibly takes its new seat.
+/**
+ * Send a poster to a control, so a choice is seen going where it was filed.
+ *
+ * Rough Cut's version of `flyPosterAway`. The difference is the destination:
+ * a flick throws a film off the edge because there is nowhere in particular for
+ * it to go, whereas here there are exactly three places and the whole mechanic
+ * is which one you picked. Aiming at the button's measured centre — rather than
+ * a fixed left/down/right — means the animation says the same thing the layout
+ * does, and keeps saying it if the targets are ever moved or resized.
+ *
+ * It shrinks to nearly nothing rather than fading at full size: the card is
+ * joining a pile, and something that recedes reads as filed away while something
+ * that dissolves reads as discarded.
+ */
+export function flyPosterTo(fromEl: HTMLElement, toEl: HTMLElement, poster: string) {
+  const a = centreOf(fromEl);
+  const b = centreOf(toEl);
+  const clone = posterClone(fromEl, poster, "0 10px 30px rgba(0,0,0,0.55)");
+  clone
+    .animate(
+      [
+        { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
+        // Lifts slightly on the way, so the path is an arc rather than a slide.
+        {
+          transform: `translate(${(b.x - a.x) * 0.55}px,${(b.y - a.y) * 0.55 - 10}px) scale(0.62)`,
+          opacity: 0.85,
+          offset: 0.55,
+        },
+        { transform: `translate(${b.x - a.x}px,${b.y - a.y}px) scale(0.12)`, opacity: 0, offset: 1 },
+      ],
+      { duration: 380, easing: "cubic-bezier(.35,.8,.4,1)" },
+    )
+    .addEventListener("finish", () => clone.remove());
+}
+
 export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: string) {
   const a = centreOf(fromImg);
   const b = centreOf(toImg);

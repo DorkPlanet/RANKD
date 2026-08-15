@@ -624,3 +624,74 @@ button * {
 @media (prefers-reduced-motion: reduce) {
   .resume-card { animation: none; }
 }
+
+/* ── Rough Cut ─────────────────────────────────────────────────────────────
+   The mechanic shipped with no motion at all: a poster was replaced by the next
+   poster, and three static words sat underneath. Next to the duel screen — which
+   floats, tilts, flies a winner into the climbing seat and throws a flicked film
+   off the edge — it read as a different, older app.
+
+   What it needed was not decoration. Rough Cut asks one question a second for
+   fifty films, so the job is to make each answer LAND: you should be able to
+   feel that a decision was taken without reading anything. Every rule below is
+   about that, and each is deliberately shorter than the duel's equivalent
+   because this surface is meant to be the fastest one in the app.
+
+   The card arrives from below rather than fading in on the spot. Fading says
+   "the picture changed"; rising says "here is the next one", which is the honest
+   description of a queue. */
+@keyframes rc-card-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.rc-card {
+  animation: rc-card-in 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* The bucket a drag is currently aimed at. A border and a lift rather than a
+   fill: the three targets are the only controls on screen, so one of them
+   turning solid mid-gesture is a bigger change than the gesture itself. */
+.rc-target {
+  transition:
+    color 0.15s var(--ease),
+    transform 0.15s var(--ease),
+    opacity 0.15s var(--ease);
+}
+.rc-target-armed {
+  transform: translateY(-3px) scale(1.06);
+}
+/* The two the drag is NOT aimed at recede, so the armed one is legible by
+   contrast without having to shout. */
+.rc-target-idle {
+  opacity: 0.35;
+}
+
+/* Fired on the bar when a film is placed. A brief bloom along the fill, so the
+   progress reads as having been ADVANCED by the answer rather than merely being
+   wider than it was. */
+@keyframes rc-bar-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--gold) 55%, transparent); }
+  100% { box-shadow: 0 0 7px 2px transparent; }
+}
+.rc-bar-pulse {
+  animation: rc-bar-pulse 0.45s ease-out;
+}
+
+/* The summary's rows, staggered. `--i` is set inline per row. */
+@keyframes rc-rise {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+.rc-rise {
+  animation: rc-rise 0.34s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+/* Reduced motion keeps every state change and drops only the travel. The armed
+   target still reads, because its colour and opacity are doing that work. */
+@media (prefers-reduced-motion: reduce) {
+  .rc-card,
+  .rc-rise { animation: none; }
+  .rc-bar-pulse { animation: none; }
+  .rc-target-armed { transform: none; }
+}

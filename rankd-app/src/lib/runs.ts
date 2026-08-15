@@ -30,13 +30,18 @@ const KEY = "rankd-run-v1";
  * Is this a run worth keeping, and one we can rebuild from ids alone?
  *
  * `crossTier` is the flag a curated run carries, and it is the exact reason to
- * refuse: those pull in guest films. A spotlight is excluded too — it is one
- * film finding its place, it moves that film before it has earned anything, and
- * abandoning it restores what it moved. Resuming half of that from cold storage
- * would need `origScore`/`origRating` to still mean something days later.
+ * refuse: those pull in guest films.
+ *
+ * A promotion attempt is refused too. It is a few duels against a neighbouring
+ * tier, and the run it interrupted is held on `resumeAfter` — so storing it
+ * would mean either dropping that (resuming into a climb with no way back) or
+ * serialising a session inside a session for a state that lasts three duels.
+ * Clearing instead means a promotion abandoned by closing the tab is simply not
+ * offered again, and the climb underneath it is what gets restored on the next
+ * open, which is the more valuable half by a wide margin.
  */
 export const isResumable = (s: PlacementSession | null): boolean =>
-  !!s && s.mode === "koth" && !s.crossTier;
+  !!s && !s.crossTier && !s.promotionQueue;
 
 /** Every film the session names, so a resume cannot point at nothing. */
 const idsOf = (s: PlacementSession): string[] => [
@@ -53,12 +58,21 @@ const idsOf = (s: PlacementSession): string[] => [
  * this cannot resume CLEARS rather than leaves the old one behind: a stale climb
  * offered after you started a director run would be a resume into a game you had
  * already left.
+ *
+ * A promotion attempt is the one case that stores something OTHER than what it
+ * was handed. Clearing outright would be wrong for the reason above turned
+ * around: the attempt is three duels, but the climb it interrupted can be an
+ * hour of work sitting on `resumeAfter`, and closing the tab mid-attempt would
+ * take that down with it. So the interrupted run is what gets written. Losing
+ * the attempt itself costs nothing — it is offered again the moment that film
+ * tops its tier.
  */
 export function saveRun(session: PlacementSession | null): void {
   if (typeof window === "undefined") return;
   try {
-    if (!isResumable(session)) return void localStorage.removeItem(KEY);
-    localStorage.setItem(KEY, JSON.stringify(session));
+    const keep = session?.promotionQueue ? (session.resumeAfter ?? null) : session;
+    if (!isResumable(keep)) return void localStorage.removeItem(KEY);
+    localStorage.setItem(KEY, JSON.stringify(keep));
   } catch {
     // Storage full or disabled. The run is still playable in memory; it just
     // will not survive the tab, which is exactly where this started.
