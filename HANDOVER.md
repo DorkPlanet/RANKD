@@ -69,7 +69,7 @@ actor and genre. Director/actor hand to `PersonSheet`; genre is new (`lib/genres
 `CuratedPicker.tsx`), ranks the library only, and defaults to the whole genre with
 Top 50/25/10 offered when it is bigger.
 
-**Session E (branch `accounts`, NOT merged) — Google sign-in and a server mirror.**
+**Session E (branch `accounts`, MERGED in Session H) — Google sign-in and a server mirror.**
 Auth.js, Postgres via Drizzle, and a mirror of the library. **Kept off master on
 purpose:** `vercel` deploys the working directory rather than git, so merging it would
 put a "Continue with Google" button on production that errors — there is no
@@ -185,6 +185,49 @@ knew about, and anything introduced later is left alone. Format 2 adds `rankd-li
 **`test/backup.test.ts` is new and guards the destructive case directly.** `backup.ts` had
 no tests before. `rankd-run-v1` is deliberately excluded: a backup carries what you
 decided, and an unfinished climb is what you had not decided yet.
+
+### Accounts, and the two ways sync nearly destroyed a library (Session H)
+
+Sign-in, push, pull and the conflict chooser are live and verified against production. Neon
+is in Sydney on the **pooled** endpoint (`-pooler` in the host); the direct endpoint runs
+out of connections once serverless functions scale.
+
+**Both of the following were found by RUNNING it, not by reading it. Neither has a unit
+test that would have caught it, because both are about ordering rather than logic.**
+
+- **`startSync()` ran before reconciliation, and destroyed the thing the chooser was
+  asking about.** It is not passive: it watches for local changes and pushes them on a
+  debounce. A browser cleared to stand in for a second device seeded its ten starter films,
+  the credits sweep marked it dirty, and the debounced push replaced 861 films on the
+  server with 10 — while the chooser was still on screen offering the choice. Pressing
+  "keep the account" then pulled the wrong library, because a race had already settled it.
+  **Reconcile first; start the watcher only when there is nothing left to argue about.**
+  An `offline` result starts nothing either: pushing at a server you could not read is how
+  you overwrite a copy you never saw.
+- **"Has a local library" was `getItem(...) !== null`, which is always true.** A fresh
+  install shows the seed immediately and the sweep writes it within seconds, so a new phone
+  counted as holding a real library and was offered "10 films" against "861 films" — a
+  frightening question with an obvious answer, asked on the one device with nothing to
+  lose. `isUntouchedSeed` in `store.ts` answers it honestly: ids still exactly the seed's,
+  nothing placed, nothing duelled. **A library stops being disposable the moment any
+  judgement lands on it.**
+
+**`SYNC_KEYS` and `FILE_KEYS` are different sets and must stay that way.** The file backup
+carries saved rankings; the wire must not, because those sync as their own rows (a list is
+the thing another person could one day follow, so it needs a stable row rather than being
+sealed in an opaque blob). `applyBackup` CLEARS any key in the set it is handed that the
+payload lacks — so one shared set would mean **every pull deleting every saved ranking**.
+Both `collectBackup` and `applyBackup` take the set explicitly rather than defaulting.
+
+**`startupSync.ts` reconciles once per page load** so a signed-in visitor's library follows
+them without opening settings. It acts only on the unambiguous outcomes and deliberately
+does NOT start the sync watcher — opening the app should be able to fetch your library
+without volunteering to overwrite it. A conflict is left for the chooser in settings,
+because a question that destroys one of two libraries belongs on a screen somebody opened
+on purpose.
+
+**Testing sync costs libraries.** The 861-film library was recovered from a snapshot taken
+minutes earlier, twice over. Snapshot before touching these paths, every time.
 
 ### The RNK entry is an OVERLAY, not a screen (Session G)
 
