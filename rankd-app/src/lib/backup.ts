@@ -11,26 +11,47 @@
 // Everything the app owns goes in one file, so a restore is complete rather than
 // nearly complete.
 
-const KEYS = [
+// ── Which keys each format owns, and why that has to be recorded ───────────
+//
+// The restore loop clears any key it OWNS that the file does not carry, because
+// a restore replaces the app's state wholesale rather than merging into it.
+// That is right, and it is a trap the moment a new key is added: a backup
+// written before the key existed cannot mention it, so a naive `KEYS` list
+// would treat its absence as "delete this" — and for `rankd-lists-v1` that is
+// every saved ranking somebody made, gone, silently, on a restore they asked
+// for to be SAFE.
+//
+// So ownership is recorded per format. A restore only clears the keys its own
+// format knew about; anything introduced later is none of that file's business
+// and is left exactly as it is.
+const FORMAT_1 = [
   "rankd-app-v1", // the library — films, scores, placements, duels
   "rankd-log-v1", // the evidence — every duel ever settled
-  "rankd-profile-v1", // name, bio, banner
+  "rankd-profile-v1", // name, bio, banner, pinned rankings
   "rankd-brightness",
   "rankd-strip-open",
-  // Whether the tour has run. Added knowing the restore loop below `removeItem`s
-  // any key absent from the file — so restoring a backup taken BEFORE this line
-  // existed clears the flag and offers the tour again.
-  //
-  // Added anyway, because that is exactly what happened without it, on every
-  // backup rather than only the old ones. Nothing regresses and everything saved
-  // from now on carries it. The proper fix is the per-format key set in roadmap
-  // item 4; this key must not be the reason that work gets rushed, because its
-  // worst case is one tutorial offered twice while `rankd-lists-v1`'s is a
-  // ranking somebody made and cannot get back.
-  "rankd-tour-v1",
 ] as const;
 
-const FORMAT = 1;
+const FORMAT_2 = [
+  ...FORMAT_1,
+  "rankd-lists-v1", // saved rankings — real work, and the reason this exists
+  "rankd-tour-v1", // whether the coach marks have run
+  "rankd-review-dismissed-v1", // review cards you have already answered
+] as const;
+
+const KEYS_BY_FORMAT: Record<number, readonly string[]> = { 1: FORMAT_1, 2: FORMAT_2 };
+
+const FORMAT = 2;
+const KEYS = FORMAT_2;
+
+/**
+ * Deliberately NOT backed up: `rankd-run-v1`.
+ *
+ * A backup carries what you decided. An unfinished climb is what you had not
+ * decided yet, and restoring one onto a library it no longer matches is how you
+ * hand `ladder.ts` a pile with a hole in it. `loadRun` validates anyway, but the
+ * honest answer is that it does not belong in the file.
+ */
 
 interface Backup {
   format: number;
@@ -76,8 +97,11 @@ export function importBackup(text: string): RestoreResult {
   if (!backup || typeof backup !== "object" || !backup.keys || typeof backup.keys !== "object") {
     throw new Error("That doesn't look like a Rankd backup.");
   }
-  if (backup.format !== FORMAT) {
-    throw new Error(`That backup is format ${backup.format ?? "unknown"}; this version reads ${FORMAT}.`);
+  // Every format this build understands, not just the one it writes. Refusing
+  // older files would strand every backup anybody has already saved.
+  const owned = KEYS_BY_FORMAT[backup.format as number];
+  if (!owned) {
+    throw new Error(`That backup is format ${backup.format ?? "unknown"}; this version reads 1 and ${FORMAT}.`);
   }
 
   const raw = backup.keys["rankd-app-v1"];
@@ -126,10 +150,15 @@ export function importBackup(text: string): RestoreResult {
   }
 
   // Only now, with everything checked, does anything get written.
+  //
+  // Write whatever the file carries; clear only what the file's OWN format
+  // owned and did not carry. A key invented after that backup was written is
+  // left alone, which is what stops restoring an old file from wiping saved
+  // rankings that the file could not possibly have known about.
   for (const k of KEYS) {
     const v = backup.keys[k];
-    if (v === undefined) localStorage.removeItem(k);
-    else localStorage.setItem(k, v);
+    if (v !== undefined) localStorage.setItem(k, v);
+    else if (owned.includes(k)) localStorage.removeItem(k);
   }
 
   return { films: films.length, judgements, hadProfile: !!backup.keys["rankd-profile-v1"] };

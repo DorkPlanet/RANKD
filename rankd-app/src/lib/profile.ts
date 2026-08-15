@@ -24,7 +24,19 @@ export interface Profile {
   // current automatically. An array means you've pinned your own and the
   // ranking no longer decides.
   favouriteIds?: string[];
+  /**
+   * Saved rankings you chose to show, newest pin last, capped at `MAX_PINNED`.
+   *
+   * Ids rather than copies: a pinned ranking is the SAME list you can open from
+   * the shelf, so renaming or deleting it has to be felt in one place. A pin
+   * naming a list that has since been deleted is simply skipped when rendering,
+   * which is why nothing needs to clean up after `deleteList`.
+   */
+  pinnedListIds?: string[];
 }
+
+/** Three is "a couple" with room to breathe, and it keeps the row one line. */
+export const MAX_PINNED = 3;
 
 export const EMPTY_PROFILE: Profile = { name: "You", bio: "" };
 

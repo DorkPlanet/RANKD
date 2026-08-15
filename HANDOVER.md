@@ -13,7 +13,7 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 
 **State (15 Aug 2026):** Session G. Everything is pushed AND deployed AND verified against
 the live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately
-unmerged and undeployed** (see Pinned). **345 tests, typecheck clean, `next build` clean,
+unmerged and undeployed** (see Pinned). **353 tests, typecheck clean, `next build` clean,
 lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1
 unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a
 fourth.** The `accounts` branch adds 24 tests of its own on top.
@@ -153,6 +153,38 @@ had chosen. Read the decision blocks below.
   in, so `bandsOf` derives them from the library as it stands. That is why "go back to
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
+
+### Saved rankings are readable at last (Session G)
+
+`saveList` had written `rankd-lists-v1` since the share cards landed and **`loadLists` and
+`hydrate` had no callers anywhere**: you could make a ranking, save it, and never see it
+again. The user found this, not a test.
+
+- **`SavedEntry` carries `rating`, `genres` and `director` now.** Without `rating`,
+  `statsFor` and `pickInsight` have nothing to work from and a saved list **cannot redraw
+  its own card** — which is exactly why re-export was never possible.
+- **Storage is `{v:2, lists}`, migrated in memory from the bare v1 array** and rewritten on
+  the next save. A v1 entry has no rating until its film is found in the library.
+- **`filmsOf` never invents a rating.** A v1 entry whose film has ALSO left the library
+  cannot be reconstructed, so it is dropped from the card and the count is shown to the
+  user rather than the card quietly coming up short.
+- **Pinned rankings are ids on the profile, capped at `MAX_PINNED` = 3.** A pin naming a
+  deleted list simply matches nothing when rendering, so `deleteList` never has to tidy up.
+
+### backup.ts owns keys PER FORMAT now (Session G)
+
+The restore loop clears any key it owns that the file does not carry, which is right — a
+restore replaces state wholesale. It turns destructive the moment a key is added, because a
+backup written earlier cannot mention it and its absence reads as "delete this".
+
+**`rankd-lists-v1` was in no backup at all, so a restore would have destroyed every saved
+ranking.** Ownership is now recorded per format: a restore clears only what its OWN format
+knew about, and anything introduced later is left alone. Format 2 adds `rankd-lists-v1`,
+`rankd-tour-v1` and `rankd-review-dismissed-v1`; format 1 files still restore.
+
+**`test/backup.test.ts` is new and guards the destructive case directly.** `backup.ts` had
+no tests before. `rankd-run-v1` is deliberately excluded: a backup carries what you
+decided, and an unfinished climb is what you had not decided yet.
 
 ### The RNK entry is an OVERLAY, not a screen (Session G)
 
@@ -467,7 +499,10 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
    already two effects reaching for `state.session`, and resume would make it three. They
    cannot race today because only one is ever set at a time, but that is a property nobody
    is enforcing.
-4. **Profile card slots + persistence + JPG re-export.** Empty slots for Top 10, favourite
+4. ~~**Profile card slots + persistence + JPG re-export**~~ — **LANDED in Session G**: the
+    shelf, the viewer, re-export, pinning, the `{v:2}` payload and the per-format backup key
+    set are all in. What remains of the original item is the auto-save floor and named
+    slots (Top 10, favourite actor) as *empty* prompts. Original entry: Empty slots for Top 10, favourite
     actor, favourite director and so on, filled by making a list, persisted, viewable
     socially later, and re-exportable as the JPG. Absorbs the old #2 (profile library +
     auto-save): needs `SavedEntry` to gain `rating`/`genres`/`director` (**without `rating`
