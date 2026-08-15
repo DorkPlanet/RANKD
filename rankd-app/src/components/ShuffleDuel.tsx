@@ -2,9 +2,8 @@
 
 // Fast Shuffle — the mode with no pile.
 //
-// King of the Hill and Spotlight both ask "where does THIS film go?" and answer
-// it by moving one film through an ordered pile. Fast Shuffle asks nothing of
-// the kind. It picks whichever comparison the model can least predict, applies
+// King of the Hill asks "where does THIS film go?" and answers it by moving one
+// film through an ordered pile. Fast Shuffle asks nothing of the kind. It picks whichever comparison the model can least predict, applies
 // the answer, and picks again. There is no contender, no climb, no confirm and
 // no end — you leave when you're bored.
 //

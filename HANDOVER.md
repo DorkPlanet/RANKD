@@ -11,18 +11,31 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State (15 Aug 2026):** Session I. **NOT YET COMMITTED OR DEPLOYED** — the tree holds
-Session I's work and nothing has been pushed. **356 tests, typecheck clean, `next build`
-clean, lint at 3 problems in `src`** — 2 `AppShell` set-state-in-effect errors + 1 unused
-`tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a fourth.**
+`.claude/settings.local.json` allows `npx vercel --prod *`, `deploy *`, `env ls *` and
+`whoami *`, added in Session I. Deliberately NOT `npx vercel *`, which would also cover
+`env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
+Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-Test count fell from 386 to 356 because Spotlight was removed with its suites (see
-Session I). It is not a regression; nothing that still exists lost coverage.
+**State (15 Aug 2026):** Session I, closed. Everything is committed, merged to `master`,
+pushed to `origin/master`, deployed to production, and verified against the live bundle.
+There is no side branch — `master` is what is live.
 
-**Two env vars are needed before two new features do anything**, and both fail loudly
-rather than silently: `RESEND_API_KEY` + `SUPPORT_EMAIL` for the feedback form, and
-`BLOB_READ_WRITE_TOKEN` for avatar uploads. See `.env.example`, which documents the
-Resend shared-sender catch.
+**356 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+`AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
+not add a third.** They read `localStorage`, which does not exist on the server, so moving
+them into `useState` initialisers passes lint and silently tears hydration. The comment
+above the effect says so; leave it there.
+
+The old baseline was 3 — the extra was an unused `tier` in `Rolodex`, which turned out to
+be a prop threaded through two components and read by neither. Deleted in the triage.
+
+Test count fell from 386 to 356 because Spotlight was removed with its suites. Not a
+regression; nothing that still exists lost coverage.
+
+**Env vars, all set in Vercel and all failing loudly rather than silently when absent:**
+`RESEND_API_KEY` + `SUPPORT_EMAIL` (feedback form) and the Blob store's `BLOB_STORE_ID`
+(avatar uploads). See `.env.example`, which documents the Resend shared-sender catch and
+the two ways Blob authenticates.
 
 **Nothing in the tree is now written-and-wired-to-nothing.** Keep it that way.
 - ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
@@ -120,11 +133,26 @@ actually attached to it.
 Landed: **Spotlight gone** from `ladder.ts`, `DuelScreen`, `types.ts`, `runs.ts` and the
 tests · **the review card gone with it** · **tier promotion rebuilt on King of the Hill** ·
 Done always visible and landing on the empty screen · a PWA manifest and icons · an in-app
-feedback form · avatar uploads · Rough Cut's first motion pass · the profile restructured
-into zones · **two bugs found by using it** (below).
+feedback form · avatar uploads with a **cropper** · Rough Cut's first motion pass · the
+profile restructured into zones · sheets **hinged to the nav and toggled by it** · a dead
+code triage · **four bugs found by using it** (below).
 
 `SpotlightPicker` became `FilmPicker` — the profile always used it as a generic film
 picker, so the component outlived the mode it was named after.
+
+**The triage, at the end of the session.** Every export was walked and asked who
+references it. Eleven functions had no caller anywhere (`forgetBeliefs`, `jumpToTop`,
+`isRanked`, `pickFilm`, `favouriteFilms`, `resetFilms`, `resetStartupSync`, `hasPortrait`,
+`syncEnabled`, `stopSync`, `clampScore`), as did two `Profile` fields (`avatarFilmId`,
+which predates `avatarUrl`; `favouriteIds`, read only by `favouriteFilms`), a `tier` prop
+threaded through two components and read by neither, and four CSS blocks. All gone.
+- **`stopSync` is the one worth understanding.** It was `startSync`'s symmetric teardown
+  and nothing called it. Signing out submits a form to Auth.js — a full navigation — so
+  the document and every listener go with it. **There is deliberately no teardown now**;
+  the comment in `sync.ts` says why, so nobody re-adds one.
+- **Comments were trimmed to the WHY.** This session had been breaking the rule below by
+  narrating at length what code used to do. Those headers are cut to the trap and the
+  invariant. The older "don't change this back" notes are guardrails and were LEFT.
 
 ## Decisions taken — do not relitigate
 
@@ -681,6 +709,16 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
   can sign in and everyone else gets a flat `access_denied`. Rankd asks only for name and
   email — non-sensitive scopes — so publishing needs **no verification review** and takes
   effect immediately. **Until this is done the app cannot be handed to anybody.**
+- **Three things from Session I that only a human can close.**
+  - **Upload a real photograph** through the cropper on the deployed site. Off-centre is
+    the case worth trying, since that is the one the old centre-crop got wrong.
+  - **Confirm a feedback email actually ARRIVES.** Resend answered `{"ok":true}` from
+    production, which proves the endpoint and the key and says nothing about delivery. If
+    it does not land, `SUPPORT_EMAIL` must be the exact address the Resend account was
+    created with, until a domain is verified.
+  - **Add the app to an iPhone home screen** and check the address bar is gone and the
+    icon reads properly. Every tag and asset is verified in the rendered head and serving
+    200; "no address bar" is a claim about a device nobody has tested on.
 
 ## Operational facts for accounts (Session H)
 
@@ -720,13 +758,22 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 - **Subgenre runs** — "zombie films" rather than "horror". A keyword is narrow enough to
   have a real edge, so unlike a genre it could borrow unseen films the way a director run
   does. `topPeople` in `profile.ts` already derives subgenres from `f.keywords`.
-- ~~**Custom profile pictures.**~~ **LANDED in Session I**, exactly as scoped here:
-  `@vercel/blob`, `api/avatar/route.ts` behind `requireUser`, and `lib/avatar.ts` shrinking
-  to 256px client-side. `avatarOf` in `profile.ts` is the priority rule — upload, then the
-  Google photo, then the initial — so avatars already work signed in with no token set.
-  **Needs `BLOB_READ_WRITE_TOKEN` before an upload can succeed**, and answers 503 saying so
-  until then. **The upload path is UNRUN**: verified only that it refuses correctly without
-  a token. Run one real upload before trusting it.
+- ~~**Custom profile pictures.**~~ **LANDED in Session I**, and then some: `@vercel/blob`,
+  `api/avatar/route.ts` behind `requireUser`, `lib/avatar.ts` rendering a caller-chosen
+  square to 256px, and `AvatarCropper` for choosing it. `avatarOf` in `profile.ts` is the
+  priority rule — upload, then the Google photo, then the initial — so avatars work signed
+  in with no store configured at all.
+  **Blob authenticates two ways and the store here uses the newer one**: connecting it in
+  the Vercel dashboard sets `BLOB_STORE_ID` (+ an injected `VERCEL_OIDC_TOKEN`) and NO
+  `BLOB_READ_WRITE_TOKEN`. Checking only for the token refuses every upload on a working
+  deployment.
+  **OIDC is enabled per ENVIRONMENT.** Preview and Production work; Development does not,
+  so every LOCAL upload fails with a plain-English SDK error and there is no way round it
+  from a dev server. Verify on a deployment.
+  **Still unrun end to end with a real photograph** — the geometry was proven with a
+  600×300 synthetic whose marker sat in the right third (drag clamped at exactly the
+  computed minimum; output samples the marker on the right), and the route was proven to
+  503/401/502 correctly. Nobody has yet watched their own face upload.
 - ~~**PWA — lose the URL bar.**~~ **LANDED in Session I.** `app/manifest.ts` at
   `display: standalone`, four generated PNGs in `public/`, and both spellings of the
   capable meta tag. The icons are drawn by a dependency-free PNG encoder rather than an
@@ -789,6 +836,19 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
   Nothing had navigated, so nothing overrode it. It is now decided once, when the library
   lands. **A derived value whose input the user's own actions change is not a default, it is
   a rule that keeps firing.**
+- **A cropper that does not clamp uploads a transparent wedge (Session I).** The avatar
+  upload square-cropped from the CENTRE, which is a guess and wrong for most photographs.
+  `AvatarCropper` replaced it, and the invariant there is the whole feature: the image must
+  cover the viewport at every drag and zoom (`tx <= 0`, `ty <= 0`, `tx >= VIEWPORT - width`,
+  same for y). **Enforce it on every change, not at render** — by the time a gap is visible
+  the picture has been written and no clamping fixes it.
+- **The nav must stay above the sheet scrim, and `--nav-h` must stay published.** Sheets
+  stop at the top of the bar rather than covering it. Two things hold that up and both are
+  easy to break: `nav` is `relative z-40` (remove `relative` and it silently drops behind
+  the `fixed z-30` scrim, because `main` sets no z-index and creates no stacking context),
+  and `BottomNav` measures its own height into `--nav-h` because `env(safe-area-inset-*)`
+  makes it a device property. It resets to `0px` on unmount so sheets on nav-less screens
+  still reach the bottom.
 - **A confirm screen showing a rating mid-promotion is showing the OLD one.**
   `completePromotion` does not write the new rating until Lock in is pressed, so reading
   `champion.rating` announced a promotion from ½ to ★ as "EARNED ½" above a button saying

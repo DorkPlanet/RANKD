@@ -264,8 +264,8 @@ export function FilmPicker({
           the whole library is in here, not a truncated first page. */}
       <div ref={listRef} onScroll={onScroll} className="max-h-[54vh] overflow-y-auto rounded-xl">
         {visible.map((f) => {
-          // A spotlight needs someone to face: a film alone in its tier has
-          // nobody, so it's shown but inert rather than silently doing nothing.
+          // How many others share its rating. A film alone in its tier is shown
+          // but inert rather than silently doing nothing when tapped.
           const peers = (counts.get(f.rating) ?? 0) - 1;
           return (
             <button
@@ -351,6 +351,3 @@ function TierOption({
 }
 
 // A square icon button that can carry an on/off state — gold when it's on.
-// The point of a spotlight isn't the number it lands on, it's what moved and
-// what decided it — so ending one shows the before, the after, and the films
-// responsible, before anything is committed.

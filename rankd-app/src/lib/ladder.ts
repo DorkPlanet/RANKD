@@ -369,14 +369,11 @@ export function confirm(state: RankState): RankState {
 //
 // ── Why this hangs off King of the Hill and not its own mode ────────────────
 //
-// It used to be offered only at the end of a SPOTLIGHT, and when that mode was
-// removed this went with it. Reattaching it here is the better home anyway: a
-// spotlight was a binary search that could settle a film at the top after about
-// seven duels against a sampled window, whereas topping a King of the Hill pile
-// means the film actually beat every other film you own at that rating, one at
-// a time. The stronger claim is the one that should unlock the higher tier.
+// Topping a King of the Hill pile means the film beat every other film you own
+// at that rating, one at a time. That is the strongest claim the app can make
+// about a film, so it is the one that unlocks the higher tier.
 //
-// The trade is that it is rarer — at most once per run, on the first confirm —
+// The trade is that it is rare — at most once per run, on the first confirm —
 // which is correct for something that rewrites a star rating.
 
 const PROMOTION_OPPONENTS = 3;
