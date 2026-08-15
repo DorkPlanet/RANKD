@@ -26,6 +26,7 @@ import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/me
 import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
 import Coach from "./Coach";
+import { InstallPrompt } from "./InstallPrompt";
 import { forgetTours, markTourSeen, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
@@ -635,6 +636,11 @@ export default function AppShell() {
           onAnimationEnd={() => setVeil(0)}
         />
       )}
+
+      {/* Held back until the splash has gone and no tutorial is running: this is
+          an invitation, and it must not be the first thing a new user meets or
+          land on top of a coach mark explaining something else. */}
+      {splashGone && !showCoach && <InstallPrompt />}
 
       {/* Last, so it is over everything — including any sheet that a restored
           screen might already have open. */}

@@ -6,10 +6,14 @@
 // is per-origin, so this file is the only bridge between a laptop and a phone,
 // and clearing browser data without it destroys every duel ever fought.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+
+// Stable reference for `useSyncExternalStore`; nothing here changes after load.
+const noSubscribe = () => () => {};
 
 import { exportBackup, importBackup } from "@/lib/backup";
 import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
+import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import { resetRanking } from "@/lib/reset";
 import { withdrawSoftLocks } from "@/lib/shuffle";
@@ -157,6 +161,8 @@ export function Settings({
           </div>
         </div>
 
+        <InstallSection />
+
         {/* Above START AGAIN, because someone scrolling this far in frustration
             should meet the way to TELL us before they meet the way to wipe
             everything. The evidence count is already loaded here, so the report
@@ -175,6 +181,58 @@ export function Settings({
         </p>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Where the one-time nudge goes to be found again.
+ *
+ * The banner is dismissible and stays dismissed, which is right for an
+ * invitation and wrong for the only place a feature is explained. This says the
+ * same thing permanently, and reports plainly when the app is already installed
+ * rather than offering an action that would do nothing.
+ */
+function InstallSection() {
+  // Read through `useSyncExternalStore` for the reason given in
+  // `InstallPrompt`: it depends on `navigator`, so a `useState` initialiser
+  // would break hydration and an effect would cost a render cascade.
+  const route = useSyncExternalStore(
+    noSubscribe,
+    () => installRoute(readEnv()),
+    () => "installed" as const,
+  );
+
+  return (
+    <div className="mt-7 border-t border-border pt-5">
+      <span className="text-xs font-extrabold tracking-[0.12em] text-dim">ON YOUR HOME SCREEN</span>
+      {route === "installed" ? (
+        <p className="mt-1 text-[11px] leading-snug text-gold">
+          Installed. This is running as an app, which is why there is no address bar.
+        </p>
+      ) : (
+        <p className="mt-1 text-[11px] leading-snug text-dim">
+          {route === "ios" ? (
+            <>
+              Tap <span className="text-text">Share</span>, then{" "}
+              <span className="text-text">Add to Home Screen</span>. Rankd then opens with its own
+              icon and no address bar. A browser tab always shows its URL, so this is the only way
+              to lose it.
+            </>
+          ) : (
+            <>
+              {/* The `{" "}` after the span is load-bearing: a bare space there
+                  is swallowed when the text that follows wraps onto the next
+                  line, which shipped as "Home screenin your browser's menu".
+                  Only visible in the rendered DOM, never in the source. */}
+              Use <span className="text-text">Install</span> or{" "}
+              <span className="text-text">Add to Home screen</span>{" "}
+              in your browser&rsquo;s menu. Rankd then opens with its own icon and no address bar.
+              A browser tab always shows its URL, so this is the only way to lose it.
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }
 
