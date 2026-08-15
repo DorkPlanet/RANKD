@@ -23,7 +23,7 @@ import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
 import { autoCollections, avatarOf, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
 import { fetchAccount } from "@/lib/account";
-import { uploadAvatar } from "@/lib/avatar";
+import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
 import { achievements } from "@/lib/achievements";
@@ -531,8 +531,9 @@ function AvatarSlot({
   signedIn: boolean;
   onUploaded: (url: string) => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The file waiting to be cropped. Picking one no longer uploads it — see
+  // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
+  const [pending, setPending] = useState<File | null>(null);
   const avatar = avatarOf(profile, accountImage);
   const SIZE = 58;
 
@@ -543,11 +544,10 @@ function AvatarSlot({
     >
       {avatar.kind === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatar.url} alt="" className="h-full w-full object-cover" style={{ opacity: busy ? 0.4 : 1 }} />
+        <img src={avatar.url} alt="" className="h-full w-full object-cover" />
       ) : (
-        <span style={{ opacity: busy ? 0.4 : 1 }}>{avatar.letter}</span>
+        <span>{avatar.letter}</span>
       )}
-      {busy && <span className="absolute text-[9px] font-bold tracking-wide text-gold">…</span>}
     </span>
   );
 
@@ -571,26 +571,29 @@ function AvatarSlot({
           type="file"
           accept="image/*"
           className="hidden"
-          disabled={busy}
-          onChange={async (e) => {
+          onChange={(e) => {
             const file = e.target.files?.[0];
-            // Reset immediately, so choosing the same file twice fires again.
+            // Reset immediately, so choosing the same file twice fires again —
+            // which matters more now that cancelling the cropper is a real
+            // outcome and re-picking the same photo is the obvious retry.
             e.target.value = "";
-            if (!file) return;
-            setBusy(true);
-            setError(null);
-            try {
-              onUploaded(await uploadAvatar(file));
-            } catch (err) {
-              setError(err instanceof Error ? err.message : "That could not be uploaded.");
-            } finally {
-              setBusy(false);
-            }
+            if (file) setPending(file);
           }}
         />
       </label>
-      {error && (
-        <span className="absolute left-0 top-full mt-1 w-40 text-[10px] leading-snug text-gold">{error}</span>
+
+      {/* Errors and the busy state belong to the cropper now: it is the thing
+          on screen when either happens, and reporting an upload failure next to
+          a 58px circle the user is no longer looking at helped nobody. */}
+      {pending && (
+        <AvatarCropper
+          file={pending}
+          onCancel={() => setPending(null)}
+          onUploaded={(url) => {
+            setPending(null);
+            onUploaded(url);
+          }}
+        />
       )}
     </span>
   );
