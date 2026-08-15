@@ -609,3 +609,18 @@ button * {
 .no-scrollbar {
   scrollbar-width: none;
 }
+
+/* The resume card. Rises a little as it settles, so the layer reads as arriving
+   over the game rather than as the game having been replaced. Short, because it
+   stands between the user and playing. */
+@keyframes resume-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.resume-card {
+  animation: resume-card-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .resume-card { animation: none; }
+}

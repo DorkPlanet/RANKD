@@ -1,44 +1,28 @@
 // What the app never told anyone.
 //
-// ── Coach marks, not a carousel ────────────────────────────────────────────
+// Marks drawn over the REAL screen, not a slideshow: every gesture here is
+// physical and none is discoverable by looking.
 //
-// Every gesture in this app is physical: a tap picks, a flick asserts, a hold
-// explains, and none of them is discoverable by looking. A new user was left to
-// infer all of it. The reference the user supplied was all of one kind: marks
-// drawn over the REAL screen, dismissible, with a step counter. Not a slideshow
-// of pictures, because the whole idea here is that you are handling the films,
-// so the tutorial points at the actual thing.
-//
-// ── One tour per screen ────────────────────────────────────────────────────
-//
-// The duel is where the game is, so it carries most of the teaching. The list is
-// the other screen with something genuinely unguessable on it: the difference
-// between a film with a number and a film marked UN-RNKD. That distinction is
-// the app's central idea (a rating is not a position) and nothing on the screen
-// explains it, so it gets its own short pass rather than being crammed into the
-// duel's.
-//
-// The profile has no tour. Everything on it is a label next to a number, which
-// is the one kind of screen that does explain itself.
+// One tour per screen. The duel carries most of the teaching. The list gets its
+// own because it holds the one genuinely unguessable idea in the app — a rating
+// is not a position, which is what UN-RNKD means and what nothing on screen
+// says. The profile has none; it is labels next to numbers.
 //
 // ── The tour never lets you play ───────────────────────────────────────────
 //
-// The overlay blocks the surface it is describing, which looks like a limitation
-// and is the opposite. A duel fought during a tutorial is not a judgement about
-// those two films, but `settle` cannot tell the difference, and every belief,
-// badge and score in this app rests on the log being literally true. So the tour
-// describes the gesture and the user performs it afterwards, for real. Same
-// reason a person run records nothing.
+// The overlay blocks the surface it describes. `settle` cannot tell a
+// demonstration duel from a real one, and every belief, badge and score rests on
+// the log being literally true — so the gesture is described here and performed
+// afterwards, for real. Same reason a person run records nothing.
 //
-// ── Copy rules ─────────────────────────────────────────────────────────────
+// ── Copy rules, all three tested ───────────────────────────────────────────
 //
-// · Say what the gesture DOES, in the app's own vocabulary. "Flick up" without
-//   "parks it at the top" teaches a motion and not a meaning, and the meaning is
-//   the part nobody can guess.
-// · PREFERENCE, never quality. The app is a record of what one person would
-//   rather watch, not a verdict on which film is better. There is a test for it.
-// · No em dashes. They are the house tell of machine-written copy and this
-//   screen is the first thing a new user reads.
+// · Say what the gesture DOES. "Flick up" without "parks it at the top" teaches
+//   a motion and not a meaning, and the meaning is the unguessable part.
+// · PREFERENCE, never quality. This is a record of what one person would rather
+//   watch, not a verdict on which film is better.
+// · No em dashes. The house tell of machine-written copy, and this is the first
+//   thing a new user reads.
 
 const KEY = "rankd-tour-v1";
 

@@ -10,9 +10,6 @@
 // are persisted this becomes the one place to swap in real routing.
 
 import { useEffect, useState } from "react";
-// No `startRun` or `pickOpeningTier` here any more. This component does not
-// know how to begin a run and no longer needs to: choosing one is `RunStart`'s
-// job, and the shell's is to hand it a library and get out of the way.
 import DuelScreen from "./DuelScreen";
 import { FilmInfo } from "./FilmInfo";
 import { Settings } from "./Settings";
@@ -21,6 +18,7 @@ import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
+import { loadRun } from "@/lib/runs";
 import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
@@ -123,18 +121,11 @@ export default function AppShell() {
 
   useEffect(() => {
     const films = loadFilms();
-    // ── Nothing is running when the app opens ────────────────────────────────
-    //
-    // This used to be `startRun(films, pickOpeningTier(films))`, so the first
-    // thing anybody ever saw was a King of the Hill climb already in progress on
-    // a tier the app had chosen. The user: "it feels awkward sometimes to just
-    // load into an already selected game."
-    //
-    // The problem was never which tier got picked. It was that a judgement was
-    // being asked for before anything had been offered. `DuelScreen` renders
-    // `RunStart` when there is no session, which is where the choosing happens
-    // now, so opening with none is the whole fix.
-    setState({ films, session: null, journal: [] });
+    // Restored, not invented. This used to start a brand new run on a tier the
+    // app chose, which is why finding a game in progress felt arbitrary: it was.
+    // `loadRun` returns null for anything stale, unreadable, or naming a film
+    // this library no longer holds.
+    setState({ films, session: loadRun(films), journal: [] });
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //
@@ -267,6 +258,16 @@ export default function AppShell() {
   // finished does not restart just because the component re-rendered. The
   // counter is the `key`, which is what makes it a new element each time.
   const [veil, setVeil] = useState(0);
+  // ── Arrivals at RNK ────────────────────────────────────────────────────────
+  //
+  // Bumped every time the user comes to the duel from somewhere else, and it
+  // starts at 1 so opening the app counts as the first arrival. `DuelScreen`
+  // compares it against the last one dismissed, which is what lets the overlay
+  // greet you on every arrival without ever reappearing while you sit there.
+  //
+  // A counter, not a boolean: arriving twice has to greet twice, and a flag left
+  // true is indistinguishable from one nobody reset.
+  const [greet, setGreet] = useState(1);
 
   const changeProfile = (p: Profile) => {
     setProfile(p);
@@ -281,9 +282,8 @@ export default function AppShell() {
 
   // Swap the whole library for an imported one.
   //
-  // Lands on `RunStart` rather than a climb, for the same reason opening does:
-  // somebody who has just imported 861 films has not yet been shown what they
-  // have, and starting a duel is a poor answer to "what did that just do".
+  // No run afterwards: somebody who has just imported 861 films has not been
+  // shown what they have, and a duel is a poor answer to "what did that just do".
   const loadLibrary = (films: Film[]) => {
     saveFilms(films);
     setState({ films, session: null, journal: [] });
@@ -437,7 +437,10 @@ export default function AppShell() {
    */
   const go = (s: Screen) => {
     const arriving = s === "duel" && current !== "duel";
-    if (arriving) setVeil((v) => v + 1);
+    if (arriving) {
+      setVeil((v) => v + 1);
+      setGreet((g) => g + 1); // coming back to the game earns the overlay again
+    }
     setScreen(s);
     setTourDue(null);
     const due = tourFor(s);
@@ -485,6 +488,10 @@ export default function AppShell() {
           // A run just started, so the duel's targets exist now. Deferred a tick
           // for the same reason every other tour start is: `Coach` measures as
           // it renders, and the posters have not committed yet.
+          // 0 until the splash has gone, so the greeting cannot arrive on top of
+          // the opening animation. Derived rather than an effect that flips a
+          // flag, which would be a cascading render to express one comparison.
+          greet={splashGone ? greet : 0}
           onRunBegan={() => {
             if (seen.has("duel") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("duel"), 20);

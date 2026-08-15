@@ -132,51 +132,6 @@ export function tierProgress(films: readonly Film[]): TierSlice[] {
 }
 
 /**
- * The tier with the least of it ranked: where the work is.
- *
- * By FRACTION, not by count, so a 14-film tier nobody has touched can outrank a
- * 185-film tier that is half done. Ties go to the bigger tier, because between
- * two equally untouched piles the larger one is the more useful answer to "what
- * should I do next".
- *
- * Finished tiers are excluded outright: `ranked < total` is the whole point, and
- * an empty tier has nothing to offer either.
- *
- * (Written for a tier map that was built twice and rejected twice, deleted in
- * `cf1444a` for having no caller, and restored here for `RunStart`, which is the
- * opening selector it was always the ingredient for.)
- */
-export function leastRanked(slices: readonly TierSlice[]): TierSlice | undefined {
-  return slices
-    .filter((s) => s.total > 0 && s.ranked < s.total)
-    .sort((a, b) => a.ranked / a.total - b.ranked / b.total || b.total - a.total)[0];
-}
-
-/**
- * The tier you were last working in, read off the evidence.
- *
- * Derived from the newest judgement in the log rather than stored, for the same
- * reason `bandsOf` derives Rough Cut's piles: a fact that can be read from what
- * already exists must not become a second copy that can disagree with it. It
- * costs nothing to be right after a backup restore, on a second device, or after
- * a reset that emptied the log.
- *
- * A judgement names two films, and both were in the duel, so either serves. The
- * `a` side is the contender, which is the film the run was about.
- *
- * Returns undefined when the log is empty or its newest row names a film that
- * has since been removed from the library, in which case there is genuinely
- * nothing to resume and the caller should offer somewhere to start instead.
- */
-export function lastTier(films: readonly Film[], log: readonly Judgement[]): Rating | undefined {
-  let newest: Judgement | undefined;
-  for (const j of log) if (!newest || j.t > newest.t) newest = j;
-  if (!newest) return undefined;
-  const film = films.find((f) => f.id === newest.a) ?? films.find((f) => f.id === newest.b);
-  return film ? (film.rating as Rating) : undefined;
-}
-
-/**
  * What you have done in THIS SITTING.
  *
  * The library bars could not do this job. At 861 films one duel moves a 204px

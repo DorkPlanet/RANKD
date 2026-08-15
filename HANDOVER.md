@@ -11,21 +11,18 @@ succeeds, which reads like an expired login and is not. **Verify a deploy by gre
 live JS bundle for a string you just added — a 200 proves nothing**, and "committed" is not
 "deployed" (that mistake cost the user a session; see below).
 
-**State (14 Aug 2026, `b062f4f` + working tree):** Session G. Everything through the
-Rough Cut list fix is pushed AND deployed AND verified against the live bundle; **RunStart
-is committed-pending in the working tree.** **Accounts live on the `accounts` branch
-(`8c2e3f8`), deliberately unmerged and undeployed** (see Pinned). **352 tests, typecheck
-clean, `next build` clean, lint at 3 problems in `src`** — 2 pre-existing `AppShell`
-set-state-in-effect errors + 1 unused `tier` in `Rolodex`. **That is the baseline. Do not
-"fix" them, and do not add a fourth.** The `accounts` branch adds 24 tests of its own on
-top.
+**State (15 Aug 2026):** Session G. Everything is pushed AND deployed AND verified against
+the live bundle. **Accounts live on the `accounts` branch (`8c2e3f8`), deliberately
+unmerged and undeployed** (see Pinned). **345 tests, typecheck clean, `next build` clean,
+lint at 3 problems in `src`** — 2 pre-existing `AppShell` set-state-in-effect errors + 1
+unused `tier` in `Rolodex`. **That is the baseline. Do not "fix" them, and do not add a
+fourth.** The `accounts` branch adds 24 tests of its own on top.
 
 **Nothing in the tree is now written-and-wired-to-nothing.** Keep it that way.
 - ~~`lib/visit.ts`~~ — wired in Session G. The recap is on the profile.
-- ~~`leastRanked`~~ — **this entry was WRONG for two sessions.** The function had already
-  been deleted in `cf1444a` (its own commit message says so); the handover kept listing it
-  as present. It is back in `progress.ts` now, with tests, and `RunStart` is its caller.
-  **Check a claim like this against the code before acting on it.**
+- ~~`leastRanked`~~ — deleted in `cf1444a`, briefly restored for a screen that was then
+  cut, and deleted again. **This entry claimed it was in the tree for two sessions while it
+  was not: check a claim like this against the code before acting on it.**
 
 ## How to get oriented in five minutes
 
@@ -157,41 +154,38 @@ had chosen. Read the decision blocks below.
   the split I did yesterday" survives closing the app, restoring a backup, and ranking one
   of the piles.
 
-### RunStart is a goals screen, after four attempts (Session G)
+### The RNK entry is an OVERLAY, not a screen (Session G)
 
-Each version was rejected, and the reasons are worth keeping because they rhyme.
+Four screens were built for this and all four were rejected. The premise was wrong, not
+the layouts. The user diagnosed it: *"I dont like just going to the tab and seeing an
+inprogress game without a prompt or reminder of where I am and what I was doing... maybe
+thats okay if a frosted transparent overlay sits over the top asking to continue or select
+something else."*
 
-- **v1, a dashboard.** `WHERE YOU STAND` over a count, a bordered box, ten tiers with
-  `0/185` right-aligned. Every number correct; read like a settings panel.
-- **v2, a title card.** Poster behind, serif prose over the fade. "More in the way than
-  anything."
-- **v3, a goals list.** Two sections, ten tier rows, a sentence under each. "Much too
-  long", and the ABOUT YOU heading was "silly for one".
-- **v4, what shipped.** The through-line in the first three: they were made of TEXT ROWS.
-  Information as value-and-label CARDS at the top, all ten tiers as ONE horizontal STRIP,
-  the personal rankings as a single quiet line. **The strip is why the list stopped being
-  too long: ten choices cost 44px instead of 400.**
+- **The game in progress was never yours.** Sessions lived in memory and died with the tab,
+  so the app started a BRAND NEW run on `pickOpeningTier` every open. It felt arbitrary
+  because it was. `lib/runs.ts` persists the climb, so Continue now genuinely resumes:
+  verified across a full reload, same pair back on the table.
+- **Tier climbs only, and a server would not change that.** A curated run borrows guest
+  films that exist nowhere else, so it needs whole `Film` objects; Fast Shuffle has no pile
+  to resume. The key is device-local forever and excluded from sync — an unfinished pile is
+  working state, not a judgement, and `reconcile.ts` refuses to merge.
+- **It is a LAYER so the game shows through.** A screen could describe your run; this shows
+  it to you, which is the reacclimation. **The backdrop must never dim to opaque** — at 82%
+  the duel was invisible and it read as a dialog over a void. 58% + blur is the setting.
+- **A junction, not a control panel.** Tiers and modes are not rebuilt: `TierPicker` and
+  `ModePanel` already do that. Picking a tier FROM the overlay starts it (`fromOverlay`);
+  from inside Play it stays a setting.
+- **Not dismissible by tapping away**, by request: a decision point, not a notification.
+- **`greet` is a counter, bumped on every arrival at RNK**, compared against the last
+  dismissed. AppShell passes 0 while the splash is up so the two layers never stack.
 
-- **`lib/goals.ts` stores nothing.** A goal is derived from the library, the saved lists
-  and the people `profile.ts` already works out, on every render. No goals key, no
-  completion table, nothing to migrate. A goal is a `RankSubject`, so it borrows
-  `subjectKey` — which is also what lets completion be a lookup against saved lists.
-- **The Rough Cut suggestion is a VERB, not a sentence.** As a note under each row it
-  repeated on seven of ten tiers and became wallpaper. It is now which of `Split it` /
-  `Rank it` comes first.
-- **"Cut" is a SHARE, not a presence** (`CUT_ENOUGH`). Testing `bands.top.length > 0` was
-  wrong on the real library: nine dealt films out of 185 stopped the app suggesting the
-  very thing the user had started, while every untouched tier shouted it. **The two tiers
-  with a cut in progress were the only two not offered one.**
-- **Curated goals are capped at 25** (`CURATED_CAP`). Uncapped it proposed ranking 320
-  horror films by hand, which is the quadratic problem Rough Cut exists to avoid wearing a
-  different hat. A goal has to be finishable.
-- **No subgenre goal.** `topPeople` finds one and the profile shows it, but a keyword is
-  not a `RankSubject` and nothing can start a run over one. Offering a goal you cannot
-  begin is worse than not offering it. Subgenre runs are in the backlog; that is where it
-  would land.
-- **Reference images were for tone, explicitly NOT to copy.** No photography, no gradients,
-  no coloured surfaces, no shadow: hairline borders and type.
+### Sheets must be rendered by every branch (Session G)
+
+`ModePanel`, `TierPicker` and `CuratedPicker` are built once into `sheets` and rendered by
+every return path. They used to hang off the main return only, so any early return above
+silently killed them and "Something else" did nothing. **A new full-surface early return
+must render `sheets` or its buttons are dead.**
 
 ### "Something else" did nothing, and why that class of bug recurs (Session G)
 

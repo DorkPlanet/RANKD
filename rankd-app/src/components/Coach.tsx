@@ -2,43 +2,23 @@
 
 // The coach marks themselves. See lib/tour.ts for what this is and is not.
 //
-// ── How the hole is cut ────────────────────────────────────────────────────
+// The hole is ONE transparent box over the target with an enormous spread
+// `box-shadow` doing the darkening — no SVG mask, no four-rectangle jigsaw, and
+// no surprises when the target sits near an edge.
 //
-// One transparent box positioned over the target, with an enormous spread
-// `box-shadow` doing the darkening. Everything outside the box is covered by the
-// shadow and everything inside it is untouched, so the "hole" costs one element
-// and no SVG mask, no four-rectangle jigsaw, and no compositing surprises when
-// the target sits near an edge.
-//
-// ── Why the position is written, not stored ────────────────────────────────
-//
-// The mark's coordinates come from `getBoundingClientRect` on a live element, so
-// they are a reading of the DOM rather than a fact React owns. Keeping them in
-// state would mean measure → setState → re-render on every step, every resize
-// and every scroll, to move two elements that React has no other opinion about.
-// A layout effect writes the four numbers straight onto the nodes instead, which
-// is precisely the job effects exist for: pushing the latest state OUT to
-// something outside React. It also runs before paint, so the spotlight is never
-// seen at the previous step's coordinates.
-//
-// ── Why the scrim swallows everything ──────────────────────────────────────
-//
-// The tour must not be playable. `settle` cannot tell a demonstration duel from
-// a real one, and every belief, badge and score rests on the log being true — so
-// the surface being described stays covered while it is described. The user does
-// the gesture afterwards, on their own library, for real.
+// Its position is WRITTEN to the DOM, not held in state. The coordinates come
+// from `getBoundingClientRect` on a live element, so they are a reading of the
+// DOM rather than a fact React owns; state would mean measure → setState →
+// re-render on every step, resize and scroll. The layout effect also runs before
+// paint, so the spotlight is never seen at the previous step's coordinates.
 //
 // ── Ghost clicks ───────────────────────────────────────────────────────────
 //
-// A browser fires a synthesised `click` about 300ms after a finger lifts, at the
-// coordinates it left from. `Sheet` already learned this the hard way: choosing
-// a tier appeared to work and then dismissed the whole setup panel, because the
-// delayed click landed on a backdrop that had mounted underneath in the meantime.
-// A tour is exactly that shape — a full-screen layer mounting under a finger that
-// has just tapped, then advancing under a finger that has just tapped Next — so
-// the controls stay inert for a moment after each step change. Without it one tap
-// can fall through and advance two steps, and no synthetic test would show it:
-// synthetic clicks fire once, immediately.
+// A browser fires a synthesised `click` ~300ms after a finger lifts, at the
+// coordinates it left from, and this is exactly that shape: a full-screen layer
+// mounting under a finger that has just tapped. Without the arming delay one tap
+// falls through and advances two steps. **No synthetic test can catch it** —
+// scripted clicks fire once, immediately. Test by tapping inside 400ms.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 

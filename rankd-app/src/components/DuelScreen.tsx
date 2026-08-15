@@ -39,10 +39,8 @@ import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
 import { bandsOf, BUCKETS } from "@/lib/roughCut";
 import { RunStatus } from "./RunStatus";
-import RunStart from "./RunStart";
-import { lastTier } from "@/lib/progress";
-import { buildGoals } from "@/lib/goals";
-import { loadLists } from "@/lib/lists";
+import ResumeOverlay from "./ResumeOverlay";
+import { clearRun, saveRun } from "@/lib/runs";
 import {
   BackRow,
   RangeSlider,
@@ -94,6 +92,7 @@ export default function DuelScreen({
   onPersonRunHandled,
   onRunBegan,
   onPerson,
+  greet = 0,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -117,6 +116,13 @@ export default function DuelScreen({
   onPersonRunHandled?: () => void;
   /** Open a filmography from the spotlight picker. */
   onPerson?: (person: Person) => void;
+  /**
+   * Bumped every time the user ARRIVES at this screen from another tab.
+   *
+   * A counter rather than a boolean, because arriving twice has to greet you
+   * twice and a boolean already true is indistinguishable from one nobody reset.
+   */
+  greet?: number;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   // The tier of the run that just ended, held so `TierComplete` can be about it.
@@ -160,17 +166,22 @@ export default function DuelScreen({
     void loadLog().then(setLog);
   }, []);
 
-  // Saved rankings, read once. They decide which of `RunStart`'s personal goals
-  // are already done, and a run that finishes and saves one lands back here
-  // through a remount, so re-reading on every render would buy nothing.
-  const [savedLists] = useState(loadLists);
-  // Everything worth doing, derived from the library as it stands. Cheap enough
-  // to recompute when the library changes and nowhere near the duel path, but
-  // memoised because it walks every film several times over.
-  const goals = useMemo(
-    () => buildGoals(state?.films ?? [], savedLists),
-    [state?.films, savedLists],
-  );
+  // ── The greeting ───────────────────────────────────────────────────────────
+  //
+  // `greet` counts arrivals at this screen from elsewhere; AppShell bumps it.
+  // Comparing it against the last one dismissed is a DERIVED flag rather than an
+  // effect that mirrors a prop into state, which would be the cascading render
+  // the linter objects to — and would also fight the counter every time.
+  // Starts at 0, and AppShell passes 0 while the splash is still up, so the two
+  // layers can never stack. A greeting under an opening animation is a dialog
+  // nobody asked for arriving before the app has finished saying hello.
+  const [dismissedGreet, setDismissedGreet] = useState(0);
+  const greeting = greet > dismissedGreet;
+  const dismissGreeting = () => setDismissedGreet(greet);
+  // Where the tier picker was opened from, which decides what picking one means.
+  // A ref rather than state: nothing renders differently because of it, and it
+  // is read inside the handler that consumes it rather than during a render.
+  const fromOverlay = useRef(false);
 
   // The strip is a map, not a control — folding it away buys the duel ~110px
   // when you just want to play. Remembered, since it's a working preference.
@@ -352,6 +363,13 @@ export default function DuelScreen({
     }
     // A new run supersedes any summary still standing.
     if (next.session) setEndedTier(null);
+
+    // Keep the climb across closing the app. One call, on the single path every
+    // change to a session goes through, so no future transition can forget to
+    // save one — and `saveRun` CLEARS for anything it cannot resume, so ending a
+    // run or starting a curated one cannot leave a stale climb behind to be
+    // offered later. See lib/runs.ts for why tier climbs only.
+    saveRun(next.session);
     if (next.journal.length === 0) {
       // Nothing was judged, so this is a confirm, a flick, or a new run — and
       // the step held from the last judgement now points into a game that no
@@ -620,14 +638,150 @@ export default function DuelScreen({
   // moment session was null, so finishing a half-star climb showed FOUR-STAR's
   // films, count and duels under "Session done". Remembering the tier is what
   // makes the summary about the run you actually just played.
-  if (endedTier !== null) {
+  // Defined once and rendered by EVERY branch. Mounted only at the foot of the
+  // main return, any early return above silently killed them — "Something else"
+  // set `modeOpen` and nothing read it. A new full-surface branch must render
+  // `sheets` or its buttons do nothing.
+  const sheets = (
+    <>
+      {modeOpen && (
+        <ModePanel
+          films={state.films}
+          tier={setupTier}
+          chosen={chosenMode}
+          onChoose={setChosenMode}
+          shuffle={shuffle}
+          onShuffle={setShuffle}
+          below={below}
+          above={above}
+          onBelow={setBelow}
+          onAbove={setAbove}
+          onClose={closeSetup}
+          onKoth={(t) => {
+            setShuffleRun(null);
+            if (beginRun(t)) closeSetup();
+          }}
+          onSpotlight={(t) => {
+            setShuffleRun(null);
+            setSpotlightFor(t);
+            closeSetup();
+          }}
+          onFastShuffle={(opts) => {
+            setShuffleRun(opts);
+            closeSetup();
+          }}
+          onCurated={() => {
+            setShuffleRun(null);
+            closeSetup();
+            setCuratedOpen(true);
+          }}
+          onRankPile={(ids) => {
+            setShuffleRun(null);
+            closeSetup();
+            try {
+              commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
+            } catch {
+              /* fewer than two films left in the pile */
+            }
+          }}
+          onRoughCut={(t) => {
+            setShuffleRun(null);
+            setRoughCutTier(t);
+            closeSetup();
+          }}
+          onPickTier={() => {
+            setModeOpen(false);
+            setTierOpen(true);
+          }}
+        />
+      )}
+      {tierOpen && (
+        <TierPicker
+          films={state.films}
+          current={setupTier}
+          onClose={() => {
+            setTierOpen(false);
+            setModeOpen(true);
+          }}
+          onPick={(t) => {
+            // From the overlay a tier is a START, not a setting: you asked to
+            // rank that tier, so ranking it is the answer. Reached from inside
+            // the Play sheet it stays a setting and hands you back to the panel.
+            if (fromOverlay.current) {
+              fromOverlay.current = false;
+              setTierOpen(false);
+              beginRun(t);
+              return;
+            }
+            setPickedTier(t);
+            setBelow(0);
+            setAbove(0);
+            setTierOpen(false);
+            setModeOpen(true);
+          }}
+        />
+      )}
+      {curatedOpen && (
+        <CuratedPicker
+          films={state.films}
+          onClose={() => setCuratedOpen(false)}
+          onPerson={(p) => {
+            setCuratedOpen(false);
+            onPerson?.(p);
+          }}
+          onGenre={beginGenre}
+        />
+      )}
+    </>
+  );
+
+  // The greeting, when there is a climb waiting behind it. Rendered by both the
+  // running branch and the empty one, so arriving always gets the same layer.
+  const inTier = session ? state.films.filter((f) => f.rating === session.tier) : [];
+  const overlay = greeting ? (
+    <ResumeOverlay
+      run={
+        session && !session.crossTier && session.mode === "koth"
+          ? { tier: session.tier, placed: inTier.filter(isPlaced).length, total: inTier.length }
+          : null
+      }
+      films={state.films.length}
+      placed={state.films.filter(isPlaced).length}
+      onContinue={dismissGreeting}
+      onTier={() => {
+        fromOverlay.current = true;
+        dismissGreeting();
+        setTierOpen(true);
+      }}
+      onModes={() => {
+        dismissGreeting();
+        setModeOpen(true);
+      }}
+      onAbandon={() => {
+        dismissGreeting();
+        clearRun();
+        commit({ ...state, session: null }, false);
+      }}
+    />
+  ) : null;
+
+  // A finished run's summary. Skipped while greeting: arriving at RNK fresh and
+  // being shown the report of a session you ended yesterday is not where you
+  // are, it is where you were.
+  if (endedTier !== null && !greeting) {
     return (
-      <TierComplete
-        films={state.films}
-        tier={endedTier}
-        onPickTier={() => setEndedTier(null)} // back to RunStart, which is the picker now
-        onList={onList}
-      />
+      <>
+        <TierComplete
+          films={state.films}
+          tier={endedTier}
+          onPickTier={() => {
+            setEndedTier(null);
+            setModeOpen(true);
+          }}
+          onList={onList}
+        />
+        {sheets}
+      </>
     );
   }
 
@@ -637,113 +791,31 @@ export default function DuelScreen({
   // that does not exist. Rendering it inside that chrome drew two headers, one
   // of them reading "0 TO RANK" over a screen whose entire job is to say what
   // there is to rank.
+  // Nothing running: chrome and a dark middle, because the choosing lives on a
+  // LAYER over the game rather than in a page that replaces it. `overlay` is
+  // what you actually see here.
   if (!session && !runResult) {
-    const resume = lastTier(state.films, log);
-    const resumeSlice = resume !== undefined ? goals.library.find((g) => g.subject.kind === "tier" && g.subject.rating === resume) : undefined;
     return (
-      // A FRAGMENT, not a bare `RunStart`. The mode sheet is mounted at the
-      // bottom of the main tree, past this early return, so `Something else`
-      // set `modeOpen` and nothing on screen ever read it: the button did
-      // literally nothing. Every sheet this screen can raise has to be reachable
-      // from here too, or it is dead from whichever branch returns first.
       <>
-        <RunStart
-          films={state.films}
-          goals={goals}
-          resumeTier={resumeSlice && !resumeSlice.complete ? resume : undefined}
-          onStart={(t) => {
-            beginRun(t);
-          }}
-          onRoughCut={(t) => setRoughCutTier(t)}
-          // Straight to the filmography rather than into a climb. That sheet
-          // already shows the whole body of work, already offers to borrow the
-          // films you have never seen, and already knows how to start the run.
-          onPerson={(name, role, count) => onPerson?.({ name, role, count })}
-          onGenre={beginGenre}
-          onModes={() => setModeOpen(true)}
-          onSettings={onSettings}
-          onTrophies={onTrophies}
-          onList={onList}
-          onProfile={onProfile}
-          onAddFilm={onAddFilm}
-        />
-        {modeOpen && (
-          <ModePanel
+        <main className="relative flex h-dvh flex-col overflow-hidden select-none">
+          <Header onSettings={onSettings} onTrophies={onTrophies} />
+          <div className="min-h-0 flex-1" />
+          <BottomNav
+            screen="duel"
+            onSettings={onSettings}
+            onModes={() => setModeOpen(true)}
+            onList={onList}
+            onProfile={onProfile}
             films={state.films}
-            tier={setupTier}
-            chosen={chosenMode}
-            onChoose={setChosenMode}
-            shuffle={shuffle}
-            onShuffle={setShuffle}
-            below={below}
-            above={above}
-            onBelow={setBelow}
-            onAbove={setAbove}
-            onClose={closeSetup}
-            onKoth={(t) => {
-              if (beginRun(t)) closeSetup();
-            }}
-            onSpotlight={(t) => {
-              setSpotlightFor(t);
-              closeSetup();
-            }}
-            onFastShuffle={(opts) => {
-              setShuffleRun(opts);
-              closeSetup();
-            }}
-            onCurated={() => {
-              closeSetup();
-              setCuratedOpen(true);
-            }}
-            onRankPile={(ids) => {
-              closeSetup();
-              try {
-                commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
-              } catch {
-                /* fewer than two films left in the pile */
-              }
-            }}
-            onRoughCut={(t) => {
-              setRoughCutTier(t);
-              closeSetup();
-            }}
-            onPickTier={() => {
-              setModeOpen(false);
-              setTierOpen(true);
-            }}
+            onAddFilm={onAddFilm}
           />
-        )}
-        {tierOpen && (
-          <TierPicker
-            films={state.films}
-            current={setupTier}
-            onClose={() => {
-              setTierOpen(false);
-              setModeOpen(true);
-            }}
-            onPick={(t) => {
-              setPickedTier(t);
-              setBelow(0);
-              setAbove(0);
-              setTierOpen(false);
-              setModeOpen(true);
-            }}
-          />
-        )}
-        {curatedOpen && (
-          <CuratedPicker
-            films={state.films}
-            onClose={() => setCuratedOpen(false)}
-            onPerson={(p) => {
-              setCuratedOpen(false);
-              onPerson?.(p);
-            }}
-            onGenre={beginGenre}
-          />
-        )}
+        </main>
+        {sheets}
+        {overlay}
       </>
     );
   }
+
 
   const pair = getPair(state);
   const champion = pendingConfirm(state);
@@ -916,102 +988,11 @@ export default function DuelScreen({
 
       {summary && <SpotlightReport summary={summary} onKeep={keepSpotlight} onDiscard={discardSpotlight} />}
 
-      {/* Every mode below stands the Fast Shuffle run down first.
-          `activeRun` is what decides whether ShuffleDuel owns the whole surface,
-          and only Done used to clear it — so choosing King of the Hill from
-          inside a shuffle started the climb underneath and left the shuffle
-          still drawn on top of it. It read as the button not working, and the
-          only way through was to exit first.
-
-          Fast Shuffle loses nothing by being stood down: it writes every
-          judgement to the log and every score as it goes, so there is no unsaved
-          run to protect. An in-progress CLIMB is a different matter and is not
-          persisted yet — see the resume work in HANDOVER. */}
-      {modeOpen && (
-        <ModePanel
-          films={state.films}
-          tier={setupTier}
-          chosen={chosenMode}
-          onChoose={setChosenMode}
-          shuffle={shuffle}
-          onShuffle={setShuffle}
-          below={below}
-          above={above}
-          onBelow={setBelow}
-          onAbove={setAbove}
-          onClose={closeSetup}
-          onKoth={(t) => {
-            setShuffleRun(null);
-            if (beginRun(t)) closeSetup(); // a run that couldn't start leaves you in setup
-          }}
-          onSpotlight={(t) => {
-            setShuffleRun(null);
-            setSpotlightFor(t);
-            closeSetup();
-          }}
-          onFastShuffle={(opts) => {
-            setShuffleRun(opts);
-            closeSetup();
-          }}
-          onCurated={() => {
-            setShuffleRun(null);
-            closeSetup();
-            setCuratedOpen(true);
-          }}
-          onRankPile={(ids) => {
-            // Same handoff the Rough Cut summary uses, from a library that is
-            // already saved — no pass to apply first.
-            setShuffleRun(null);
-            closeSetup();
-            try {
-              commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
-            } catch {
-              /* fewer than two films left in the pile */
-            }
-          }}
-          onRoughCut={(t) => {
-            setShuffleRun(null);
-            setRoughCutTier(t);
-            closeSetup();
-          }}
-          onPickTier={() => {
-            setModeOpen(false);
-            setTierOpen(true);
-          }}
-        />
-      )}
-
-      {tierOpen && (
-        <TierPicker
-          films={state.films}
-          current={setupTier}
-          onClose={() => {
-            setTierOpen(false);
-            setModeOpen(true); // back where you came from, nothing started
-          }}
-          onPick={(t) => {
-            // Choosing a tier is a setting, not a start. It hands you back to the
-            // panel with the range still there to adjust; only Start plays.
-            setPickedTier(t);
-            setBelow(0);
-            setAbove(0); // a new tier's reach is its own question
-            setTierOpen(false);
-            setModeOpen(true);
-          }}
-        />
-      )}
-
-      {curatedOpen && (
-        <CuratedPicker
-          films={state.films}
-          onClose={() => setCuratedOpen(false)}
-          onPerson={(p) => {
-            setCuratedOpen(false);
-            onPerson?.(p);
-          }}
-          onGenre={beginGenre}
-        />
-      )}
+      {/* Every mode stands the Fast Shuffle run down first: `activeRun` decides
+          whether ShuffleDuel owns the surface, and leaving it set started the
+          climb underneath while the shuffle stayed drawn on top. Fast Shuffle
+          loses nothing by it — it writes every judgement and score as it goes. */}
+      {sheets}
 
       {spotlightFor !== null && (
         <SpotlightPicker
@@ -1033,6 +1014,8 @@ export default function DuelScreen({
         />
       )}
 
+      {/* Last, so the greeting sits over the game it is describing. */}
+      {overlay}
     </main>
   );
 }

@@ -2,34 +2,14 @@
 
 // The moment the app opens.
 //
-// ── This is not a loading screen ───────────────────────────────────────────
-//
-// It is important to be honest about that, because everything about how it is
-// built follows from it. The library comes off localStorage in under 92ms —
-// far too fast to see — so there is no wait here to cover. A splash is time you
-// CHOOSE to spend, taken from the user, every single time they open the app.
-//
-// Which means it has to buy something. What it buys is the only moment the
-// brand mark is ever the whole screen: the wordmark settling out of wide
-// tracking, then the five bars drawing outward from the centre in sequence.
-// In the header those bars are a static rule under a title; here they are the
-// mark assembling itself, and that is a thing you can only show once per
-// opening. Everything else the app does is film.
-//
-// Type and the brand rules — the two things this app draws — and nothing else.
-//
-// ── Why the timing is split in two ────────────────────────────────────────
-//
-// `SPLASH_HOLD_MS` is the deliberate part: how long the finished mark sits
-// still. `SPLASH_FADE_MS` is the apology for the deliberate part — the app is
-// legible through it, so the real cost is the hold and not the total.
+// NOT a loading screen. The library comes off localStorage in under 92ms, so
+// there is no wait to cover: this is time deliberately spent, and what it buys
+// is the only moment the brand mark is ever the whole screen.
 //
 // The hold is a FLOOR, not a duration. AppShell keeps this mounted until the
-// hold has elapsed AND the library is actually in hand, so on a slow device the
-// splash covers the load rather than vanishing onto an empty screen. On every
-// real device the library wins that race and the hold is the only thing being
-// waited on, which is the point: the length of the splash must not depend on
-// how fast the phone is, or it stops being a decision and becomes a symptom.
+// hold has elapsed AND the library is in hand, so the length never depends on
+// how fast the phone is — a splash whose duration is a symptom rather than a
+// decision is a bug.
 
 import { BARS } from "@/lib/brand";
 

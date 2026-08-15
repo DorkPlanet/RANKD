@@ -7,8 +7,6 @@ import {
   sessionProgress,
   sessionStats,
   tierProgress,
-  leastRanked,
-  lastTier,
 } from "@/lib/progress";
 import type { Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
@@ -202,84 +200,5 @@ describe("pct", () => {
   it("returns 0 rather than NaN on an empty total", () => {
     expect(pct(0, 0)).toBe(0);
     expect(Number.isNaN(pct(5, 0))).toBe(false);
-  });
-});
-
-// ── The opening selector's two ingredients ─────────────────────────────────
-//
-// `leastRanked` was written for a tier map that was built twice and rejected
-// twice, then deleted in cf1444a for having no caller. `RunStart` is the caller
-// it was always the ingredient for, so it is back, with tests this time.
-
-const slice = (rating: Rating, total: number, ranked: number) => ({ rating, total, ranked });
-
-describe("leastRanked", () => {
-  it("picks the tier with the smallest fraction done", () => {
-    const out = leastRanked([slice(4, 100, 90), slice(3, 100, 10), slice(2, 100, 50)]);
-    expect(out?.rating).toBe(3);
-  });
-
-  // By fraction, not by count: a small untouched tier is a more honest answer to
-  // "what's left" than a huge one that is nearly finished.
-  it("prefers a small untouched tier over a big nearly-finished one", () => {
-    const out = leastRanked([slice(4, 200, 190), slice(1, 10, 0)]);
-    expect(out?.rating).toBe(1);
-  });
-
-  it("breaks a tie on size, because the bigger pile is the more useful answer", () => {
-    const out = leastRanked([slice(2, 20, 0), slice(3, 180, 0)]);
-    expect(out?.rating).toBe(3);
-  });
-
-  it("ignores finished tiers", () => {
-    const out = leastRanked([slice(5, 30, 30), slice(4, 100, 99)]);
-    expect(out?.rating).toBe(4);
-  });
-
-  it("ignores empty tiers, which are finished by definition", () => {
-    expect(leastRanked([slice(5, 0, 0), slice(4, 10, 4)])?.rating).toBe(4);
-  });
-
-  it("has nothing to offer once everything is ranked", () => {
-    expect(leastRanked([slice(5, 30, 30), slice(4, 10, 10)])).toBeUndefined();
-  });
-});
-
-describe("lastTier", () => {
-  const at = (j: ReturnType<typeof newJudgement>, t: number) => ({ ...j, t });
-
-  it("reads the tier off the newest judgement", () => {
-    const films = [film("a", undefined, 4), film("b", undefined, 4), film("c", undefined, 2)];
-    const log = [
-      at(newJudgement("a", "b", "a", "koth"), 1000),
-      at(newJudgement("c", "a", "a", "koth"), 2000),
-    ];
-    expect(lastTier(films, log)).toBe(2);
-  });
-
-  // Rows are not guaranteed to arrive in order, so newest means the largest
-  // timestamp rather than the last element.
-  it("takes the newest by time, not by position", () => {
-    const films = [film("a", undefined, 5), film("c", undefined, 1)];
-    const log = [
-      at(newJudgement("a", "a", "a", "koth"), 9000),
-      at(newJudgement("c", "c", "a", "koth"), 1000),
-    ];
-    expect(lastTier(films, log)).toBe(5);
-  });
-
-  it("has no answer for an empty log, so the caller offers a start instead", () => {
-    expect(lastTier([film("a")], [])).toBeUndefined();
-  });
-
-  // Removal never touches the log, so the newest row can name a departed film.
-  it("falls back to the other side when the contender has been removed", () => {
-    const films = [film("b", undefined, 3)];
-    const log = [at(newJudgement("gone", "b", "a", "koth"), 1000)];
-    expect(lastTier(films, log)).toBe(3);
-  });
-
-  it("gives up when neither film is in the library any more", () => {
-    expect(lastTier([film("z")], [newJudgement("gone", "also-gone", "a", "koth")])).toBeUndefined();
   });
 });
