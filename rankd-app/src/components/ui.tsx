@@ -15,31 +15,61 @@ import { useEffect, useRef, useState } from "react";
 import { ORDERED_TIERS } from "@/lib/tiers";
 
 // The panel has to outlive its dismissal long enough to slide back down.
-const SHEET_EXIT_MS = 220;
+// Exported because the nav's toggle has to hold the sheet mounted for exactly
+// this long while it plays its exit; two different numbers would either cut the
+// animation short or leave a spent panel on screen.
+export const SHEET_EXIT_MS = 220;
 /** How far the sheet must be pulled down before it counts as a dismissal. */
 const PULL_TO_CLOSE_PX = 40;
 // Long enough to outlast the browser's synthesised click after a touch (~300ms).
-const SCRIM_ARM_MS = 400;
+// Exported for the nav toggle, which is vulnerable to the same ghost click for
+// the same reason and must ignore it for the same window.
+export const SCRIM_ARM_MS = 400;
 
 /**
- * Shared sheet chrome. Settings established this shape; modes, tier and
- * spotlight all reuse it, so every panel in the app dismisses the same way —
- * which is the entire reason it is one component rather than four similar ones.
+ * Shared sheet chrome. Settings established this shape and every panel in the
+ * app reuses it, so they all dismiss the same way — which is the entire reason
+ * it is one component rather than eight similar ones.
+ *
+ * ── It stops at the nav, it does not cover it ──────────────────────────────
+ *
+ * This used to be `inset-0`, so a sheet opened from the bottom bar slid up over
+ * the very button that opened it. That made the nav unreachable while a panel
+ * was up, and — worse — it made the panel feel like it had come from nowhere.
+ * A drawer opened by a button should be visibly hinged to that button.
+ *
+ * `--nav-h` is published by `BottomNav` (it cannot be a constant: the bar pads
+ * itself into the home-indicator strip, so its height depends on the device).
+ * It falls back to 0, which is correct for the screens that draw no nav at all.
  */
 export function Sheet({
   title,
   onClose,
+  closing: closingRequest,
   children,
 }: {
   title: string;
   onClose: () => void;
+  /**
+   * Close from OUTSIDE, playing the same exit as every other dismissal.
+   *
+   * The nav's toggle needs this. Unmounting the sheet directly would work and
+   * would skip the animation, which is a visible inconsistency on the one
+   * dismissal a user performs most often.
+   *
+   * A prop rather than an imperative handle because the alternative is setting
+   * state from an effect, and that is the cascading render the lint rule here
+   * exists to catch. The owner already knows it is closing; it just says so.
+   */
+  closing?: boolean;
   children: React.ReactNode;
 }) {
   // Closing plays the exit animation first and only then unmounts.
-  const [closing, setClosing] = useState(false);
+  const [selfClosing, setSelfClosing] = useState(false);
+  const closing = selfClosing || !!closingRequest;
   const close = () => {
     if (closing) return;
-    setClosing(true);
+    setSelfClosing(true);
     setTimeout(onClose, SHEET_EXIT_MS);
   };
 
@@ -91,11 +121,19 @@ export function Sheet({
   };
   return (
     <div
-      className={`fixed inset-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
+      className={`fixed inset-x-0 top-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
+      // Stops at the top of the nav. The scrim still dims everything above it,
+      // so the game is still clearly behind a layer — the bar is simply not
+      // part of what got covered.
+      style={{ bottom: "var(--nav-h, 0px)" }}
       onClick={onBackdrop}
     >
       <div
-        className={`max-h-[82vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5 ${closing ? "sheet-out" : "sheet-in"}`}
+        // `pb-6` rather than the old `pb-9`: that extra space existed to clear
+        // the home indicator back when the panel reached the bottom of the
+        // screen. The nav owns that strip now, so the padding was buying a gap
+        // nobody needed.
+        className={`max-h-[82vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-border bg-surface px-6 pb-6 pt-5 ${closing ? "sheet-out" : "sheet-in"}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* The grabber and the title row are both pull targets: a 4px bar is a

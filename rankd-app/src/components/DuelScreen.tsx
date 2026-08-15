@@ -39,7 +39,9 @@ import {
   BackRow,
   RangeSlider,
   ScopeTab,
+  SCRIM_ARM_MS,
   Sheet,
+  SHEET_EXIT_MS,
   ShuffleRow,
   StartButton,
 } from "./ui";
@@ -114,6 +116,9 @@ export default function DuelScreen({
   greet?: number;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
+  // Playing the Play sheet's exit before it unmounts, when the nav closes it.
+  const [modeClosing, setModeClosing] = useState(false);
+  const modeOpenedAt = useRef(0);
   // The tier of the run that just ended, held so `TierComplete` can be about it.
   // `endRun` nulls the session, so without this the summary has no idea which
   // tier it is summarising. Cleared on the way back to `RunStart`.
@@ -471,8 +476,29 @@ export default function DuelScreen({
   // does not.
   const closeSetup = () => {
     setModeOpen(false);
+    setModeClosing(false);
     setChosenMode(null);
     setPickedTier(null);
+  };
+
+  // ── RNK opens the Play sheet, and RNK closes it ────────────────────────────
+  //
+  // The nav sits above the scrim now, so its cells stay live while a panel is
+  // up and the button that raised one is the obvious way to put it down.
+  //
+  // Guarded against the ghost click for the same reason `Sheet` arms its own
+  // backdrop: the synthesised click ~300ms after a touch lands back on the cell
+  // that was just pressed, which without this would open and close the sheet on
+  // a single tap — and only ever on a real finger, never in a test.
+  const toggleModes = () => {
+    if (modeOpen) {
+      if (modeClosing || Date.now() - modeOpenedAt.current < SCRIM_ARM_MS) return;
+      setModeClosing(true);
+      setTimeout(closeSetup, SHEET_EXIT_MS);
+      return;
+    }
+    modeOpenedAt.current = Date.now();
+    setModeOpen(true);
   };
 
   // ── Done ───────────────────────────────────────────────────────────────────
@@ -619,6 +645,7 @@ export default function DuelScreen({
           onBelow={setBelow}
           onAbove={setAbove}
           onClose={closeSetup}
+          closing={modeClosing}
           onKoth={(t) => {
             setShuffleRun(null);
             if (beginRun(t)) closeSetup();
@@ -728,7 +755,7 @@ export default function DuelScreen({
         // No `fromOverlay` here: that flag only governs what picking a TIER
         // means, and inside Play a tier is a setting. Closing Play simply
         // reveals this layer again, because it was never dismissed.
-        onModes={() => setModeOpen(true)}
+        onModes={toggleModes}
         onAbandon={() => {
           dismissGreeting();
           clearRun();
@@ -819,7 +846,7 @@ export default function DuelScreen({
           <BottomNav
             screen="duel"
             onSettings={onSettings}
-            onModes={() => setModeOpen(true)}
+            onModes={toggleModes}
             onList={onList}
             onProfile={onProfile}
             films={state.films}
@@ -989,7 +1016,7 @@ export default function DuelScreen({
       <BottomNav
         screen="duel"
         onSettings={onSettings}
-        onModes={() => setModeOpen(true)}
+        onModes={toggleModes}
         onList={onList}
         onProfile={onProfile}
         films={state.films}
@@ -1053,12 +1080,68 @@ export function BottomNav({
   // would put the same state in three places to serve one control — the nav is
   // shared chrome, so the thing it opens is shared too.
   const [logging, setLogging] = useState(false);
+  const [logClosing, setLogClosing] = useState(false);
   // The Activity cell has no screen behind it yet. See `teaseTimer` below.
   const [teasing, setTeasing] = useState(false);
   const teaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
     if (teaseTimer.current) clearTimeout(teaseTimer.current);
   }, []);
+
+  // ── The bar publishes its own height ───────────────────────────────────────
+  //
+  // `Sheet` sits on top of the nav rather than over it, so it needs to know how
+  // tall the bar is. That cannot be a constant: the nav pads itself into the
+  // home-indicator strip with env(safe-area-inset-bottom), so its height is a
+  // property of the device and changes on rotation.
+  //
+  // Measured and republished on resize. Reset to 0 on unmount, because the
+  // screens that draw no nav (Rough Cut, the session summaries) should have
+  // their sheets reach the bottom of the screen as before — a stale height
+  // would float them above a bar that is not there.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--nav-h", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.setProperty("--nav-h", "0px");
+    };
+  }, []);
+
+  // ── Pressing the same cell again closes what it opened ─────────────────────
+  //
+  // Now that the nav stays above the scrim, its buttons are still live while a
+  // panel is up — so the obvious way to dismiss one is the control that raised
+  // it. Anything else would be a button that only works in one direction.
+  //
+  // GHOST CLICKS make this less trivial than it looks. A browser synthesises a
+  // `click` ~300ms after a finger lifts, at the coordinates it lifted from —
+  // which here is the nav cell that just opened the panel. Without a guard the
+  // sheet would open and shut itself on a single tap, and it would do it only
+  // on touch, which is exactly the bug `Sheet` already arms its backdrop
+  // against. Same window, same reasoning.
+  const openedAt = useRef(0);
+  const armed = () => Date.now() - openedAt.current > SCRIM_ARM_MS;
+
+  const toggleLog = () => {
+    if (logging) {
+      if (!armed() || logClosing) return;
+      setLogClosing(true);
+      setTimeout(() => {
+        setLogging(false);
+        setLogClosing(false);
+      }, SHEET_EXIT_MS);
+      return;
+    }
+    openedAt.current = Date.now();
+    setLogging(true);
+  };
   // ── A cell that answers ────────────────────────────────────────────────────
   //
   // Activity had no handler at all, so pressing it did nothing — not "nothing
@@ -1077,7 +1160,13 @@ export function BottomNav({
   };
   return (
     <nav
-      className="relative flex flex-shrink-0 items-stretch border-t"
+      ref={navRef}
+      // `z-40` puts the bar ABOVE the sheet scrim (z-30), which is what keeps it
+      // lit and pressable while a panel is open. `main` is `relative` with no
+      // z-index, so it creates no stacking context and this competes with the
+      // fixed scrim directly — remove the relative here and the whole thing
+      // silently stops working.
+      className="relative z-40 flex flex-shrink-0 items-stretch border-t"
       // Pad into the home-indicator strip so the bar's black reaches the
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -1115,11 +1204,20 @@ export function BottomNav({
           unlike the control it replaced. */}
       <NavItem
         label="Log a film"
-        onClick={onAddFilm ? () => setLogging(true) : undefined}
+        active={logging}
+        onClick={onAddFilm ? toggleLog : undefined}
         icon={<AddFilmIcon />}
       />
       {logging && onAddFilm && (
-        <LogFilm films={films ?? []} onAdd={onAddFilm} onClose={() => setLogging(false)} />
+        <LogFilm
+          films={films ?? []}
+          onAdd={onAddFilm}
+          closing={logClosing}
+          onClose={() => {
+            setLogging(false);
+            setLogClosing(false);
+          }}
+        />
       )}
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
       <NavItem label="Activity, coming soon" onClick={tease} icon={<ActivityIcon />} />
@@ -1181,6 +1279,7 @@ function ModePanel({
   onBelow,
   onAbove,
   onClose,
+  closing,
   onKoth,
   onFastShuffle,
   onCurated,
@@ -1199,6 +1298,8 @@ function ModePanel({
   onBelow: (v: number) => void;
   onAbove: (v: number) => void;
   onClose: () => void;
+  /** The nav is dismissing this; play the exit. See `toggleModes`. */
+  closing?: boolean;
   onKoth: (t: Rating) => void;
   onFastShuffle: (opts: ShuffleOptions) => void;
   onCurated: () => void;
@@ -1219,7 +1320,7 @@ function ModePanel({
 
   if (chosen === null) {
     return (
-      <Sheet title="Play" onClose={onClose}>
+      <Sheet title="Play" onClose={onClose} closing={closing}>
         <ModeRow
           title="King of the Hill"
           blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
@@ -1278,7 +1379,7 @@ function ModePanel({
   if (chosen === "roughcut") {
     const inTier = films.filter((f) => f.rating === tier && f.lock !== "hard").length;
     return (
-      <Sheet title="Rough Cut" onClose={onClose}>
+      <Sheet title="Rough Cut" onClose={onClose} closing={closing}>
         <p className="mb-3 text-[11px] leading-snug text-dim">
           One pass, one decision per film. Nothing is settled — it just gives the tier a rough
           order so ranking it properly afterwards is a fraction of the work.
@@ -1344,7 +1445,7 @@ function ModePanel({
   }
 
   return (
-    <Sheet title="King of the Hill" onClose={onClose}>
+    <Sheet title="King of the Hill" onClose={onClose} closing={closing}>
       <button
         onClick={onPickTier}
         className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"

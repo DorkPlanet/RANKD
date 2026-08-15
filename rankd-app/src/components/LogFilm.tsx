@@ -35,7 +35,10 @@ export function LogFilm({
   films,
   onAdd,
   onClose,
+  closing,
 }: {
+  /** The nav is dismissing this; play the exit. See `toggleLog` in BottomNav. */
+  closing?: boolean;
   /** The current library — used only to spot a film that is already in it. */
   films: Film[];
   onAdd: (film: Film) => void;
@@ -92,7 +95,7 @@ export function LogFilm({
   };
 
   return (
-    <Sheet title={chosen ? "How was it?" : "Log a film"} onClose={onClose}>
+    <Sheet title={chosen ? "How was it?" : "Log a film"} onClose={onClose} closing={closing}>
       {chosen ? (
         <RatingStep hit={chosen} onPick={(r) => add(chosen, r)} onBack={() => setChosen(null)} />
       ) : (
