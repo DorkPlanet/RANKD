@@ -43,3 +43,33 @@ export function resetFilms(): void {
   if (typeof window === "undefined") return;
   localStorage.removeItem(KEY);
 }
+
+/**
+ * Is this library still the untouched starter set?
+ *
+ * Sync needs to know whether a browser holds anything WORTH KEEPING, which is
+ * not the same question as whether the key exists. A fresh install shows the
+ * seed immediately and the credits sweep writes it to storage within seconds —
+ * so by the time anyone signs in, the key is there and a naive check calls it a
+ * real library. On a new phone that produced a conflict chooser offering "10
+ * films" against "861 films": a frightening question with an obvious answer,
+ * asked on the one device that had nothing to lose.
+ *
+ * Three conditions, all required. The ids must be exactly the seed's, nothing
+ * may be placed, and nothing may have been duelled — so a library that merely
+ * STARTED as the seed stops counting as untouched the moment any judgement
+ * lands on it, which is the point at which it becomes worth protecting.
+ */
+export function isUntouchedSeed(films: readonly Film[]): boolean {
+  if (films.length !== SEED_FILMS.length) return false;
+  if (films.some((f) => f.lock !== undefined || (f.duels ?? 0) > 0)) return false;
+  const seeded = new Set(SEED_FILMS.map((f) => f.id));
+  return films.every((f) => seeded.has(f.id));
+}
+
+/** Does this browser hold a library sync should treat as real? */
+export function hasRealLibrary(): boolean {
+  if (typeof window === "undefined") return false;
+  if (localStorage.getItem(KEY) === null) return false;
+  return !isUntouchedSeed(loadFilms());
+}

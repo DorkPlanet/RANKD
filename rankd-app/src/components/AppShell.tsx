@@ -19,6 +19,7 @@ import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { loadRun } from "@/lib/runs";
+import { syncOnOpen } from "@/lib/startupSync";
 import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
@@ -126,6 +127,13 @@ export default function AppShell() {
     // `loadRun` returns null for anything stale, unreadable, or naming a film
     // this library no longer holds.
     setState({ films, session: loadRun(films), journal: [] });
+
+    // Catch up with the account, if there is one. `pull` reloads the page, so on
+    // a new device this render is simply replaced by one holding the real
+    // library — which is why nothing here has to reconcile React state by hand.
+    // A conflict is deliberately left alone for the chooser in settings; see
+    // lib/startupSync.ts.
+    void syncOnOpen();
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //

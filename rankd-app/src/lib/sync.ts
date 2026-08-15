@@ -22,6 +22,7 @@
 // push that fails is retried on the next tick and nothing is lost meanwhile.
 
 import { collectBackup, applyBackup } from "./backup";
+import { hasRealLibrary } from "./store";
 import { SYNC_KEYS, validateBackup, type Backup, type BackupSummary } from "./backupFormat";
 import { loadLists, replaceLists, type SavedList } from "./lists";
 import { reconcile, type Reconciliation } from "./reconcile";
@@ -185,7 +186,11 @@ export async function reconcileWithAccount(): Promise<SyncOutcome> {
 
   const decision: Reconciliation = reconcile(
     {
-      hasLocalLibrary: localStorage.getItem("rankd-app-v1") !== null,
+      // Not "does the key exist". A fresh install writes the starter set within
+      // seconds of opening, so the key is always there by the time anyone signs
+      // in — and treating that as a real library asks a new phone to choose
+      // between 10 seed films and the account it just connected to.
+      hasLocalLibrary: hasRealLibrary(),
       dirty: isDirty(),
       lastSeenServerAt: readSyncState().lastSeenServerAt,
     },
