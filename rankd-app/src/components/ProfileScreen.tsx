@@ -117,8 +117,6 @@ export default function ProfileScreen({
   const earned = badges.filter((b) => b.got).length;
 
   const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
-  /** Films the library holds and the ranking has not settled. Drives the CTA. */
-  const toGo = model.total - model.placedCount;
   const hero = placed[0];
   const topTen = placed.slice(0, 10);
   const bannerFilm = films.find((f) => f.id === profile.bannerFilmId) ?? hero;
@@ -235,23 +233,11 @@ export default function ProfileScreen({
               </div>
             )}
 
-            {/* The profile is the landing screen, so it is where a sitting
-                STARTS. Until now the only route back into the game from here was
-                the nav's RNK — correct, but silent: nothing on the page you land
-                on ever suggested playing. The wording follows the library rather
-                than being fixed, because "Keep ranking" is the wrong thing to
-                say to somebody who has not started. */}
-            <button
-              onClick={onDuel}
-              className="mt-3.5 w-full rounded-xl py-2.5 text-center text-[12px] font-bold active:scale-[0.99]"
-              style={{ color: "#1c1405", background: "var(--gold)" }}
-            >
-              {model.placedCount === 0
-                ? "Start ranking"
-                : toGo > 0
-                  ? `Keep ranking · ${toGo.toLocaleString()} to place`
-                  : "Rank something"}
-            </button>
+            {/* A gold "start ranking" button lived here and was cut on sight.
+                The nav's RNK cell already does this from every screen, and a
+                second, louder route to the same place made the profile look
+                like it was selling the game back to you. The Duels counter
+                above is still a link into it for anyone who wants one. */}
           </div>
 
           {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
