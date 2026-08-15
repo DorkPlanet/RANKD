@@ -62,11 +62,32 @@ export function Account() {
       setChecked(true);
       if (!who) return;
 
-      startSync();
+      // ── Reconcile FIRST. Never start syncing into an unresolved conflict ────
+      //
+      // `startSync` used to run here, before the await, and it is not passive:
+      // it watches for local changes and pushes them on a debounce. So a device
+      // whose library disagreed with the account would begin uploading its own
+      // copy while the chooser was still on screen asking which one to keep.
+      //
+      // Observed, not theorised. A browser was cleared to simulate a second
+      // device, seeded its ten starter films, and the credits sweep marked it
+      // dirty within seconds. By the time "Keep the account" was pressed, that
+      // push had already replaced 861 films with 10 — so the pull dutifully
+      // fetched the wrong library, and the choice had been decided by a race
+      // before the user was even asked.
+      //
+      // Syncing therefore begins only once there is nothing to argue about.
       const outcome = await reconcileWithAccount();
       if (cancelled) return;
-      if (outcome.kind === "conflict") setConflict(outcome.sides);
-      else if (outcome.kind === "offline") setNote("Can't reach your account right now.");
+      if (outcome.kind === "conflict") {
+        setConflict(outcome.sides);
+        return; // `resolve` starts sync once the user has decided
+      }
+      if (outcome.kind === "offline") {
+        setNote("Can't reach your account right now.");
+        return; // and nothing is pushed at a server we could not read
+      }
+      startSync();
     })();
     return () => {
       cancelled = true;
@@ -80,6 +101,10 @@ export function Account() {
       if (keep === "cloud") await pull();
       else await pushOverServer();
       setConflict(null);
+      // Only now, with one library agreed on, is it safe to watch for changes
+      // and send them. Reached solely on the "keep this device" path, since
+      // `pull` has already reloaded away on the other.
+      startSync();
       setNote("Kept this device's library.");
     } finally {
       setBusy(false);
