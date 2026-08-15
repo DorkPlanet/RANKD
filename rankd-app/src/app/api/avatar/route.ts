@@ -78,16 +78,35 @@ export async function POST(req: Request) {
   // adding another file nobody will ever reference again. The extension follows
   // the content type so the served file keeps a sensible name.
   const ext = type === "image/png" ? "png" : type === "image/jpeg" ? "jpg" : "webp";
-  const { url } = await put(`avatars/${user.id}.${ext}`, blob, {
-    access: "public",
-    contentType: type,
-    addRandomSuffix: false,
-    // Overwriting a fixed key means the URL is stable, which would otherwise be
-    // served stale from the CDN after a change. A short cache keeps the picture
-    // fresh without giving up caching entirely.
-    cacheControlMaxAge: 60,
-    allowOverwrite: true,
-  });
-
-  return Response.json({ url });
+  try {
+    const { url } = await put(`avatars/${user.id}.${ext}`, blob, {
+      access: "public",
+      contentType: type,
+      addRandomSuffix: false,
+      // Overwriting a fixed key means the URL is stable, which would otherwise
+      // be served stale from the CDN after a change. A short cache keeps the
+      // picture fresh without giving up caching entirely.
+      cacheControlMaxAge: 60,
+      allowOverwrite: true,
+    });
+    return Response.json({ url });
+  } catch (e) {
+    // ── Configured is not the same as working ────────────────────────────────
+    //
+    // `blobConfigured` can only see that a store is attached. It cannot see
+    // whether this particular environment is allowed to reach it — OIDC is
+    // enabled per environment, so a project with Preview and Production working
+    // can still refuse Development, which is exactly what happens locally.
+    //
+    // Without this the throw escaped as a bare 500 with no body at all, so the
+    // client fell back to a generic message and the actual reason — which the
+    // SDK states plainly — was only visible in the server log. An upload that
+    // fails for a reason nobody can read is the failure mode this route was
+    // written to avoid.
+    console.error("avatar: blob upload failed", e);
+    return Response.json(
+      { error: "That could not be uploaded. Try again shortly." },
+      { status: 502 },
+    );
+  }
 }
