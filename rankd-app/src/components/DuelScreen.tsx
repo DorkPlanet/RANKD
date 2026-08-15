@@ -481,15 +481,8 @@ export default function DuelScreen({
     setPickedTier(null);
   };
 
-  // ── RNK opens the Play sheet, and RNK closes it ────────────────────────────
-  //
-  // The nav sits above the scrim now, so its cells stay live while a panel is
-  // up and the button that raised one is the obvious way to put it down.
-  //
-  // Guarded against the ghost click for the same reason `Sheet` arms its own
-  // backdrop: the synthesised click ~300ms after a touch lands back on the cell
-  // that was just pressed, which without this would open and close the sheet on
-  // a single tap — and only ever on a real finger, never in a test.
+  // RNK opens the Play sheet and RNK closes it. Ghost-click guarded — see
+  // `toggleLog` in `BottomNav` for what that is and why the window is 400ms.
   const toggleModes = () => {
     if (modeOpen) {
       if (modeClosing || Date.now() - modeOpenedAt.current < SCRIM_ARM_MS) return;
@@ -993,7 +986,6 @@ export default function DuelScreen({
           pile={session.unconfirmed}
           confirmed={session.confirmed}
           films={state.films}
-          tier={session.tier}
           onPick={decide}
           onDraw={declineToCall}
           onDone={endRun}
@@ -1088,17 +1080,11 @@ export function BottomNav({
     if (teaseTimer.current) clearTimeout(teaseTimer.current);
   }, []);
 
-  // ── The bar publishes its own height ───────────────────────────────────────
-  //
-  // `Sheet` sits on top of the nav rather than over it, so it needs to know how
-  // tall the bar is. That cannot be a constant: the nav pads itself into the
-  // home-indicator strip with env(safe-area-inset-bottom), so its height is a
-  // property of the device and changes on rotation.
-  //
-  // Measured and republished on resize. Reset to 0 on unmount, because the
-  // screens that draw no nav (Rough Cut, the session summaries) should have
-  // their sheets reach the bottom of the screen as before — a stale height
-  // would float them above a bar that is not there.
+  // The bar publishes its own height for `Sheet` to sit on top of. Measured
+  // rather than declared, because env(safe-area-inset-bottom) makes it a
+  // property of the device that changes on rotation. Reset to 0 on unmount, or
+  // sheets on the screens that draw no nav would float above a bar that is not
+  // there.
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = navRef.current;
@@ -1116,16 +1102,11 @@ export function BottomNav({
 
   // ── Pressing the same cell again closes what it opened ─────────────────────
   //
-  // Now that the nav stays above the scrim, its buttons are still live while a
-  // panel is up — so the obvious way to dismiss one is the control that raised
-  // it. Anything else would be a button that only works in one direction.
-  //
   // GHOST CLICKS make this less trivial than it looks. A browser synthesises a
   // `click` ~300ms after a finger lifts, at the coordinates it lifted from —
-  // which here is the nav cell that just opened the panel. Without a guard the
-  // sheet would open and shut itself on a single tap, and it would do it only
-  // on touch, which is exactly the bug `Sheet` already arms its backdrop
-  // against. Same window, same reasoning.
+  // here, the cell that just opened the panel. Unguarded, the sheet opens and
+  // shuts on a single tap, and only ever on touch. Same trap `Sheet` arms its
+  // backdrop against, same window.
   const openedAt = useRef(0);
   const armed = () => Date.now() - openedAt.current > SCRIM_ARM_MS;
 
@@ -1745,7 +1726,6 @@ function Duel({
   pile,
   confirmed,
   films,
-  tier,
   onPick,
   onDraw,
   onDone,
@@ -1763,7 +1743,6 @@ function Duel({
   pile: string[]; // unconfirmed, index 0 = top
   confirmed: string[]; // locked shelf, index 0 = #1
   films: Film[];
-  tier: Rating;
   onPick: (id: string) => void;
   onDraw: () => void;
   /** End the run and go back to the empty screen. */
@@ -2052,7 +2031,6 @@ function Duel({
       <Rolodex
         lowToHigh={lowToHigh}
         locked={locked}
-        tier={tier}
         contenderId={contender.id}
         challengerId={challenger.id}
         onScrub={onScrub}

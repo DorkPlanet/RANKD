@@ -1,27 +1,20 @@
 "use client";
 
-// Choosing which part of a photograph is you.
-//
-// The upload used to square-crop from the centre and go. That is a guess, and it
-// is wrong for most photographs — faces sit off-centre, phones shoot 4:3, and a
-// group shot has no correct centre at all. This is the screen that stops the app
-// deciding on your behalf.
+// Choosing which part of a photograph is you, rather than letting the app guess.
 //
 // ── The geometry, because this is where croppers go wrong ──────────────────
 //
-// One square viewport of `VIEWPORT` CSS pixels, with a circular mask drawn over
-// it. The image is positioned by a translation `(tx, ty)` and a scale `s`, both
-// in viewport space, and the INVARIANT is that the image always covers the
-// viewport completely: `tx <= 0`, `ty <= 0`, `tx >= VIEWPORT - displayedWidth`,
-// `ty >= VIEWPORT - displayedHeight`.
+// One square viewport of `VIEWPORT` CSS pixels with a circular mask over it. The
+// image is placed by a translation `(tx, ty)` and a scale `s`, both in viewport
+// space, and the INVARIANT is that it always covers the viewport completely:
+// `tx <= 0`, `ty <= 0`, `tx >= VIEWPORT - displayedWidth`, and the same for y.
 //
-// Enforcing that on every change is what makes the crop safe. Without it you can
-// drag a corner inward and upload an avatar with a transparent wedge in it —
-// which no amount of clamping at render time can fix afterwards, because by then
-// the picture has been written.
+// Enforce it on every change, not at render. Miss it and a corner can be dragged
+// inward to upload an avatar with a transparent wedge — unfixable afterwards,
+// because by then the picture is written.
 //
-// `s` starts at the COVER scale (the smaller image dimension exactly fills the
-// viewport) and only ever goes up, so the invariant is satisfiable at every zoom.
+// `s` starts at the COVER scale (smaller image dimension exactly fills the
+// viewport) and only goes up, so the invariant stays satisfiable at every zoom.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 

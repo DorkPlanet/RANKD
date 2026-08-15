@@ -117,6 +117,3 @@ export function searchList(model: ListModel, query: string): (RankedFilm | Film)
     .sort((a, b) => a.title.localeCompare(b.title));
   return [...placed, ...unplaced];
 }
-
-export const isRanked = (row: RankedFilm | Film): row is RankedFilm =>
-  (row as RankedFilm).film !== undefined;

@@ -7,7 +7,6 @@
 // localStorage. Adding `avatarUrl` did not change that rule, it used it.
 
 import type { Film } from "./types";
-import { isPlaced } from "./lock";
 import type { Rating } from "./tiers";
 import { markDirty } from "./syncState";
 
@@ -24,16 +23,11 @@ export interface Profile {
    * the initial — see `avatarOf`.
    */
   avatarUrl?: string;
-  avatarFilmId?: string;
   bannerFilmId?: string;
   // A frame from a scene, not a poster — posters are the library's currency and
   // seeing one more of them at the top of your own profile goes stale fast. Held
   // as a plain URL, so the whole profile stays a few hundred bytes.
   bannerStill?: string;
-  // Undefined means "follow the ranking" — the top four placed films, kept
-  // current automatically. An array means you've pinned your own and the
-  // ranking no longer decides.
-  favouriteIds?: string[];
   /**
    * Saved rankings you chose to show, newest pin last, capped at `MAX_PINNED`.
    *
@@ -94,14 +88,6 @@ export function avatarOf(profile: Profile, accountImage?: string | null): Avatar
   if (profile.avatarUrl) return { kind: "image", url: profile.avatarUrl };
   if (accountImage) return { kind: "image", url: accountImage };
   return { kind: "initial", letter: profile.name.trim().charAt(0).toUpperCase() || "?" };
-}
-
-export function pickFilm(films: Film[], id: string | undefined, ranked: Film[]): Film | undefined {
-  if (id) {
-    const chosen = films.find((f) => f.id === id);
-    if (chosen) return chosen;
-  }
-  return ranked.find((f) => f.poster);
 }
 
 export interface PersonStat {
@@ -320,16 +306,4 @@ export function autoCollections(ranked: Film[], print: Fingerprint, top: TopThin
     );
   }
   return out;
-}
-
-// Favourites follow the ranking until you say otherwise. Pinned ids are resolved
-// in the order you pinned them, not in rank order — the point of pinning is that
-// you decided the order.
-export function favouriteFilms(profile: Profile, films: Film[], ranked: Film[]): Film[] {
-  if (profile.favouriteIds?.length) {
-    return profile.favouriteIds
-      .map((id) => films.find((f) => f.id === id))
-      .filter((f): f is Film => !!f);
-  }
-  return ranked.filter(isPlaced).slice(0, 4);
 }

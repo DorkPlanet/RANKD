@@ -44,11 +44,6 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let pushing = false;
 let enabled = false;
 
-/** Whether there is a signed-in account to sync with. Set by `startSync`. */
-export function syncEnabled(): boolean {
-  return enabled;
-}
-
 // ── Pushing ─────────────────────────────────────────────────────────────────
 
 async function push(): Promise<void> {
@@ -221,11 +216,15 @@ export async function reconcileWithAccount(): Promise<SyncOutcome> {
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-let detach: (() => void) | null = null;
-
 /**
  * Begin syncing for a signed-in visitor. Idempotent, and a no-op when signed
  * out — which is the state the app is in by default and must keep working in.
+ *
+ * There is deliberately no `stopSync`. Signing out submits a form to Auth.js
+ * (see `lib/account.ts`), which is a full navigation — the document is torn
+ * down and every listener with it. A teardown function would be code that only
+ * ever runs in a world this app does not have, and the one that existed here
+ * was never called by anything.
  */
 export function startSync(): void {
   if (enabled) return;
@@ -234,27 +233,12 @@ export function startSync(): void {
   // A dirty browser that was closed mid-debounce still has work to send.
   if (isDirty()) schedule();
 
-  const onDirty = () => {
-    if (isDirty()) schedule();
-  };
   // Backgrounding a tab on a phone is how most sessions END, so this is the
   // flush that matters — `beforeunload` never fires reliably on mobile.
-  const onHide = () => {
+  subscribeSync(() => {
+    if (isDirty()) schedule();
+  });
+  document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden" && isDirty()) void push();
-  };
-
-  const unsub = subscribeSync(onDirty);
-  document.addEventListener("visibilitychange", onHide);
-  detach = () => {
-    unsub();
-    document.removeEventListener("visibilitychange", onHide);
-  };
-}
-
-export function stopSync(): void {
-  enabled = false;
-  if (timer) clearTimeout(timer);
-  timer = null;
-  detach?.();
-  detach = null;
+  });
 }

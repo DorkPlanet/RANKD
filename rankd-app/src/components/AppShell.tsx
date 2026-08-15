@@ -64,20 +64,12 @@ const VEIL_MS = 200;
  * needs migrating, and someone who clears their ranking goes back to landing on
  * the duel — which is where they now have work to do.
  *
- * ── It is asked ONCE, at load, and that is load-bearing ────────────────────
- *
- * This used to be evaluated on every render, for as long as nobody had navigated
- * — and its input is "has anything been placed", which the act of playing
- * CHANGES. So a new user who opened on the duel, played a climb and confirmed
- * their first film was thrown onto the profile by that confirm: the predicate
- * flipped mid-run and the landing rule re-fired as though the app were opening.
- * Nothing had navigated, so nothing overrode it, and the run was left running
- * behind a screen nobody asked for.
- *
- * "Where the app opens" is a question about opening. Asking it continuously
- * turned it into a rule about where the app should BE, which is not the same
- * thing and is not this function's business. The answer is now taken when the
- * library lands and held.
+ * ASKED ONCE, at load, and that is load-bearing. Its input is "has anything been
+ * placed", which the act of playing CHANGES — so evaluated on every render it
+ * re-fires mid-run, and confirming your first film throws you onto the profile
+ * with the climb still running behind it. Where the app OPENS is a question
+ * about opening; asking it continuously makes it a rule about where the app
+ * should be, which is not this function's business.
  */
 function openingScreen(films: readonly Film[]): Screen {
   return films.some(isPlaced) ? "profile" : "duel";
@@ -133,12 +125,21 @@ export default function AppShell() {
   // new-library gate below. Deliberately not persisted: it dies with the reload.
   const [replaying, setReplaying] = useState(false);
 
+  // ── The two `set-state-in-effect` lint errors are DELIBERATE ───────────────
+  //
+  // This effect and the brightness one below are the whole of the lint baseline,
+  // and both are load-bearing. They read localStorage, which does not exist on
+  // the server — so the values cannot be lazy `useState` initialisers without
+  // the first client render disagreeing with the server's HTML and tearing the
+  // hydration. Reading them in an effect is what keeps the first paint
+  // identical on both sides; the cascading render is the price.
+  //
+  // Fix them only with a pattern that keeps that parity. Moving the reads into
+  // `useState` compiles, passes lint, and breaks hydration silently.
   useEffect(() => {
     const films = loadFilms();
-    // Restored, not invented. This used to start a brand new run on a tier the
-    // app chose, which is why finding a game in progress felt arbitrary: it was.
-    // `loadRun` returns null for anything stale, unreadable, or naming a film
-    // this library no longer holds.
+    // Restored, not invented: `loadRun` returns null for anything stale,
+    // unreadable, or naming a film this library no longer holds.
     setState({ films, session: loadRun(films), journal: [] });
     // Decided here, on the library as it arrived, and never re-derived. Guests
     // cannot be in play yet — nothing has started a run — so `films` is already

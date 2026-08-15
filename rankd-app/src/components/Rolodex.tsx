@@ -9,14 +9,12 @@
 
 import { useEffect, useRef } from "react";
 
-import type { Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 import { LockIcon } from "./Icons";
 
 export function Rolodex({
   lowToHigh,
   locked,
-  tier,
   contenderId,
   challengerId,
   onScrub,
@@ -25,7 +23,6 @@ export function Rolodex({
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
-  tier: Rating;
   contenderId: string;
   challengerId: string;
   onScrub: (id: string) => void;
@@ -187,9 +184,8 @@ export function Rolodex({
               <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
-            // Every film in the pile is a live opponent. `inPlay` used to fade
-            // the ones a spotlight's binary search had already ruled out; a climb
-            // rules nothing out, so there is nothing to grey.
+            // Every film in the pile is a live opponent: a climb rules nothing
+            // out, so there is nothing to grey.
             <div
               key={f.id}
               data-fid={f.id}

@@ -84,15 +84,10 @@ export default function RoughCut({
   const [next, setNext] = useState<"rank" | "split">("rank");
   const start = useRef<{ x: number; y: number } | null>(null);
 
-  // ── Live gesture state ─────────────────────────────────────────────────────
-  //
-  // `drag` is how far the thumb has pulled the card, and `aimed` is the bucket
-  // it would land in if released now. Both are null when nothing is being
-  // dragged, so the card sits still and all three targets read equally.
-  //
-  // The flick used to report nothing until release: you pulled, the poster did
-  // not move, and then a film vanished. Following the thumb is what turns that
-  // from a shortcut you have to remember into a gesture you can see working.
+  // `drag` is how far the thumb has pulled the card; `aimed` is the bucket it
+  // would land in if released now. Both null when idle, so nothing moves and all
+  // three targets read equally. Following the thumb is what turns the flick from
+  // a shortcut you must remember into a gesture you can see working.
   const [drag, setDrag] = useState<number | null>(null);
   const [aimed, setAimed] = useState<Bucket | null>(null);
   // Bumped on every placement, purely as an animation key for the progress bar.

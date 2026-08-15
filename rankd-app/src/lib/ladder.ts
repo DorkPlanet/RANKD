@@ -604,12 +604,6 @@ export function stepBackFromConfirm(state: RankState): RankState {
   return { films, session: s, journal: state.journal };
 }
 
-// "Jump to top" button — flick the current contender up.
-export function jumpToTop(state: RankState): RankState {
-  if (!state.session) return state;
-  return flickToTop(state, state.session.contenderId);
-}
-
 // Rolodex scrub — the fatigue shortcut, in both directions. Aim the duel at any
 // film in the pile: scrub up to leap past ones the contender clears, or down to
 // drop past ones that beat it.

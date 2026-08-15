@@ -119,28 +119,6 @@ button * {
   transition: opacity 0.55s ease;
 }
 
-/* When the right-hand status outgrows its half of the row it's masked off at
-   the edge nearest the centre, then drifts across to reveal the rest rather
-   than being clipped dead or shoving the middle label off true. */
-@keyframes row-reveal {
-  0%,
-  18% {
-    transform: translateX(0);
-  }
-  82%,
-  100% {
-    transform: translateX(var(--reveal-x));
-  }
-}
-.row-reveal {
-  animation: row-reveal 7s ease-in-out infinite alternate;
-}
-@media (prefers-reduced-motion: reduce) {
-  .row-reveal {
-    animation: none;
-  }
-}
-
 /* Dual-thumb range. Rather than stacking two full-width inputs — where the
    handles sit on top of each other at the default and the lower one can't be
    grabbed at all — each input owns its own HALF of the track, meeting at the
@@ -352,27 +330,6 @@ button * {
   );
 }
 
-/* ── The shelf ─────────────────────────────────────────────────────────────
-   Films as objects leaning on a rail, not thumbnails in a grid. Alternating
-   tilt is what stops six posters reading as a row of cells. */
-.shelf-slot {
-  aspect-ratio: 2 / 3;
-  overflow: hidden;
-  border-radius: 3px;
-  background: var(--border);
-  border: 1px solid color-mix(in srgb, var(--gold) 14%, transparent);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.6);
-  transform-origin: bottom center;
-}
-/* The rail the shelf stands on — brightest under the middle, fading at both
-   ends so it reads as light falling on an edge rather than a drawn line. */
-.shelf-rail {
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, transparent, var(--gold), transparent);
-  opacity: 0.55;
-}
-
 /* ── The flagship ──────────────────────────────────────────────────────────
    The front-of-store display: your number one, presented rather than listed. */
 .flagship {
@@ -579,24 +536,6 @@ button * {
   .coach-card { animation: none; }
 }
 
-/* The RNK title card's scrim.
-   `banner-fade` is tuned for a TMDb backdrop, which arrives already dim and
-   wide. A poster is the opposite: saturated, high contrast, and printed with
-   type of its own. Reusing the banner's gradient left it blazing directly under
-   the header, where it fought the wordmark, and washed out the serif line
-   sitting on its lower third.
-   So: heavier at the top so the header stays the loudest thing on the screen,
-   open through the middle where the artwork earns its place, and solid at the
-   foot so the offer can be read at a glance. */
-.poster-fade {
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--bg) 62%, transparent) 0%,
-    color-mix(in srgb, var(--bg) 22%, transparent) 34%,
-    color-mix(in srgb, var(--bg) 72%, transparent) 76%,
-    var(--bg) 100%
-  );
-}
 
 /* Horizontal pickers hide their scrollbar. WebKit needs the pseudo-element;
    `scrollbar-width: none` covers the rest. On the RNK screen's tier strip the

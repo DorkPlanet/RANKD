@@ -1,24 +1,16 @@
 // Getting a phone photo down to something worth uploading.
 //
-// A modern phone camera produces 3–5MB at 4000px on the long edge. The avatar is
-// drawn at 58px and never larger, so uploading the original would be spending
-// three hundred times the bytes on detail that is thrown away by the first
-// `object-fit: cover` it meets. Shrinking here rather than on the server also
-// means the slow, unreliable half — the upload — is the small half.
+// A phone camera produces 3–5MB at 4000px on the long edge; the avatar is drawn
+// at 58px. Uploading the original would spend three hundred times the bytes on
+// detail the first `object-fit: cover` throws away. Shrinking here rather than
+// on the server also means the slow, unreliable half — the upload — is small.
 //
-// ── Why the crop is a parameter and not a default ──────────────────────────
+// This module does NOT decide what part of the image is the subject. It renders
+// a square region given in source pixels; choosing that region is
+// `AvatarCropper`'s job, because it is the only thing that can see it. Centre-
+// cropping on the user's behalf is a guess, and it is wrong for most photos.
 //
-// The first version square-cropped from the CENTRE and uploaded immediately.
-// That is a guess, and it is wrong for most photographs: faces sit off-centre,
-// phone cameras shoot 4:3 portrait, and a group shot has no correct centre at
-// all. The user reported it before anyone had uploaded a second picture.
-//
-// So this module no longer decides what part of the image is the subject. It
-// takes a square region in SOURCE pixels and renders exactly that. Choosing the
-// region is `AvatarCropper`'s job, because it is the only thing that can see it.
-//
-// Everything below runs in the browser. The server never resizes anything, which
-// is why the route can stay short and needs no image library.
+// All of it runs in the browser, which is why the route needs no image library.
 
 /** What the picture is shrunk to, on its long edge. */
 export const AVATAR_SIZE = 256;
@@ -46,11 +38,10 @@ export function decodeImage(file: File): Promise<ImageBitmap> {
 /**
  * Render a chosen square of an image to a small WebP.
  *
- * Returns WebP where the browser can encode it and falls back to whatever it
- * produced instead. The fallback matters: `toBlob` with an unsupported type does
- * not throw, it silently hands back a PNG — several times larger than intended,
- * and it would still upload fine. So the type is read back off the blob rather
- * than assumed, and that value is what sets the request's Content-Type.
+ * TRAP: `toBlob` with an unsupported type does not throw — it silently hands
+ * back a PNG, several times larger, which would still upload fine. So the type
+ * is read back off the blob rather than assumed, and that is what sets the
+ * request's Content-Type.
  */
 export async function cropAvatar(bitmap: ImageBitmap, box: CropBox): Promise<{ blob: Blob; type: string }> {
   const canvas = document.createElement("canvas");

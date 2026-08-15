@@ -56,8 +56,3 @@ export async function syncOnOpen(): Promise<SyncOutcome | null> {
     return null;
   }
 }
-
-/** Test seam. */
-export function resetStartupSync(): void {
-  ran = false;
-}

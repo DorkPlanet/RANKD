@@ -62,9 +62,6 @@ export function subjectEyebrow(s: RankSubject): string {
   }
 }
 
-/** Only people have a face; genre and tier cards enlarge the #1 poster instead. */
-export const hasPortrait = (s: RankSubject): boolean => s.kind === "director" || s.kind === "actor";
-
 export const subjectFromPerson = (p: Person, portrait?: string): RankSubject => ({
   kind: p.role,
   name: p.name,

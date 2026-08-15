@@ -1,19 +1,11 @@
 // Getting hold of a human, from inside the app.
 //
-// Until this existed there was no way at all: the app is installed from a URL,
-// has no app-store listing to review and no address anywhere in its chrome, so a
-// tester who hit something had to already know how to reach the user personally.
+// An endpoint rather than a `mailto:` link, which would throw the user out to a
+// mail client with an empty draft to address, write and remember to send. The
+// report worth having is the one written in the ten seconds after something went
+// wrong, and every context switch in that window loses some of them.
 //
-// ── Why an endpoint rather than a mailto: link ─────────────────────────────
-//
-// A `mailto:` costs nothing and was the obvious first answer. It was rejected
-// because of what it does on the device this app is actually used on: it throws
-// the user out of Rankd into a mail client, with an empty draft they have to
-// address, write, and remember to send. Most people close it. The report we want
-// is the one written in the ten seconds after the thing went wrong, and every
-// context switch in that window loses some of them.
-//
-// The cost is a public endpoint, which is handled below rather than ignored.
+// The cost is a public endpoint, handled below rather than ignored.
 
 import { getSession } from "@/lib/auth";
 

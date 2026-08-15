@@ -26,9 +26,6 @@ export const tierMid = (r: number): number => Math.round((tierMin(r) + tierMax(r
 // Seed score for a freshly-rated film — the midpoint of its tier.
 export const seedScore = (r: number): number => tierMid(r);
 
-export const clampScore = (score: number, r: number): number =>
-  Math.min(tierMax(r), Math.max(tierMin(r), score));
-
 // A rating drawn as stars — "★★★★" / "★★★★½" — so a tier reads as what it is
 // rather than as a number beside a symbol.
 export const starsFor = (r: number): string => "★".repeat(Math.floor(r)) + (r % 1 ? "½" : "");

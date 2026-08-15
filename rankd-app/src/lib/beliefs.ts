@@ -144,9 +144,3 @@ export function beliefsWhenIdle(
   });
   return inFlight;
 }
-
-/** Drop the cache. For tests, and for a library replaced wholesale by an import. */
-export function forgetBeliefs(): void {
-  cached = null;
-  inFlight = null;
-}

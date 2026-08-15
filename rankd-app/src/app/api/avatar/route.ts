@@ -1,20 +1,13 @@
 // Uploading a face.
 //
-// `profile.ts` stores no images by design — a banner is a film id and a still
-// URL, and the whole profile costs a few hundred bytes rather than competing
-// with 861 films for the same 5MB of localStorage. That rule is not being
-// broken here: what gets stored is still a URL. Only the hosting is new.
+// `profile.ts` stores no images, only references to them — this keeps that rule:
+// what lands in the profile is a URL. Only the hosting is new.
 //
-// ── Why this is behind sign-in ─────────────────────────────────────────────
-//
-// An upload endpoint with no auth is a free file host for the entire internet,
-// and it would be discovered. `requireUser` is the same gate the sync routes
-// use, so there is one definition of "signed in" in this app rather than two.
-//
-// The consequence, stated plainly: you cannot have a custom picture without an
-// account. That is not a limitation of the design so much as the design — the
-// picture lives on a server, and a server needs to know whose it is. Signed-out
-// users keep the initial, which is what they have today and costs them nothing.
+// BEHIND SIGN-IN, deliberately. An upload endpoint with no auth is a free file
+// host for the internet and would be found. `requireUser` is the same gate the
+// sync routes use, so "signed in" has one definition here rather than two. The
+// consequence is that a custom picture needs an account; signed-out users keep
+// the initial, which costs them nothing.
 
 import { put } from "@vercel/blob";
 
@@ -36,17 +29,13 @@ const ALLOWED = new Set(["image/webp", "image/jpeg", "image/png"]);
 /**
  * Is blob storage reachable from this deployment?
  *
- * TWO ways, and checking only the first was wrong. `@vercel/blob` authenticates
- * either with a classic `BLOB_READ_WRITE_TOKEN`, or — which is what connecting a
- * store through the Vercel dashboard actually sets up now — with OIDC, using
- * `BLOB_STORE_ID` plus a short-lived `VERCEL_OIDC_TOKEN` that the platform
- * injects at runtime.
+ * TWO ways to hold the key, and either is enough. `@vercel/blob` authenticates
+ * with a classic `BLOB_READ_WRITE_TOKEN`, OR with OIDC via `BLOB_STORE_ID` plus
+ * a short-lived `VERCEL_OIDC_TOKEN` the platform injects at runtime.
  *
- * Connecting the store in the dashboard hands over `BLOB_STORE_ID` and no
- * read-write token at all. So the original guard refused every upload on a
- * deployment where uploads worked perfectly, and said "not configured" about a
- * store that was configured. Checking for the token alone is checking for one
- * particular way of holding the key rather than for the key.
+ * Connecting a store through the Vercel dashboard sets `BLOB_STORE_ID` and no
+ * token at all, so checking only for the token refuses every upload on a
+ * deployment where uploads work.
  */
 const blobConfigured = (): boolean =>
   !!process.env.BLOB_READ_WRITE_TOKEN || !!process.env.BLOB_STORE_ID;
@@ -91,18 +80,11 @@ export async function POST(req: Request) {
     });
     return Response.json({ url });
   } catch (e) {
-    // ── Configured is not the same as working ────────────────────────────────
-    //
-    // `blobConfigured` can only see that a store is attached. It cannot see
-    // whether this particular environment is allowed to reach it — OIDC is
-    // enabled per environment, so a project with Preview and Production working
-    // can still refuse Development, which is exactly what happens locally.
-    //
-    // Without this the throw escaped as a bare 500 with no body at all, so the
-    // client fell back to a generic message and the actual reason — which the
-    // SDK states plainly — was only visible in the server log. An upload that
-    // fails for a reason nobody can read is the failure mode this route was
-    // written to avoid.
+    // Configured is not the same as reachable: OIDC is enabled PER ENVIRONMENT,
+    // so a project whose Preview and Production work can still refuse
+    // Development — which is what every local upload hits. Uncaught, this
+    // escapes as a bare 500 with no body and the SDK's plain-English reason
+    // reaches nobody but this log.
     console.error("avatar: blob upload failed", e);
     return Response.json(
       { error: "That could not be uploaded. Try again shortly." },

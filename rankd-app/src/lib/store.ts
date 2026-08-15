@@ -39,11 +39,6 @@ export function saveFilms(films: Film[]): void {
   }
 }
 
-export function resetFilms(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(KEY);
-}
-
 /**
  * Is this library still the untouched starter set?
  *
