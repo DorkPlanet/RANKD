@@ -361,8 +361,14 @@ export default function DuelScreen({
     if (state.session && !next.session && !state.session.crossTier) {
       setEndedTier(state.session.tier);
     }
-    // A new run supersedes any summary still standing.
-    if (next.session) setEndedTier(null);
+    // A new run supersedes any summary still standing, and answers the greeting:
+    // starting something IS the choice it was asking for, whichever sheet it was
+    // started from. Doing it here rather than at each entry point means a mode
+    // added later cannot leave the overlay hanging over its own run.
+    if (next.session) {
+      setEndedTier(null);
+      setDismissedGreet(greet);
+    }
 
     // Keep the climb across closing the app. One call, on the single path every
     // change to a session goes through, so no future transition can forget to
@@ -699,9 +705,15 @@ export default function DuelScreen({
         <TierPicker
           films={state.films}
           current={setupTier}
+          // Closing hands you back to whatever OPENED it. From the Play sheet
+          // that is Play; from the overlay or the empty screen it is nothing at
+          // all, because they are still underneath. Reopening Play regardless
+          // meant dismissing the picker raised a second sheet you had to dismiss
+          // as well.
           onClose={() => {
             setTierOpen(false);
-            setModeOpen(true);
+            if (fromOverlay.current) fromOverlay.current = false;
+            else setModeOpen(true);
           }}
           onPick={(t) => {
             // From the overlay a tier is a START, not a setting: you asked to
@@ -710,6 +722,7 @@ export default function DuelScreen({
             if (fromOverlay.current) {
               fromOverlay.current = false;
               setTierOpen(false);
+              dismissGreeting();
               beginRun(t);
               return;
             }
@@ -738,32 +751,42 @@ export default function DuelScreen({
   // The greeting, when there is a climb waiting behind it. Rendered by both the
   // running branch and the empty one, so arriving always gets the same layer.
   const inTier = session ? state.films.filter((f) => f.rating === session.tier) : [];
-  const overlay = greeting ? (
-    <ResumeOverlay
-      run={
-        session && !session.crossTier && session.mode === "koth"
-          ? { tier: session.tier, placed: inTier.filter(isPlaced).length, total: inTier.length }
-          : null
-      }
-      films={state.films.length}
-      placed={state.films.filter(isPlaced).length}
-      onContinue={dismissGreeting}
-      onTier={() => {
-        fromOverlay.current = true;
-        dismissGreeting();
-        setTierOpen(true);
-      }}
-      onModes={() => {
-        dismissGreeting();
-        setModeOpen(true);
-      }}
-      onAbandon={() => {
-        dismissGreeting();
-        clearRun();
-        commit({ ...state, session: null }, false);
-      }}
-    />
-  ) : null;
+  const resumable = session && !session.crossTier && session.mode === "koth" ? session : null;
+  // Never over Fast Shuffle: `activeRun` gives ShuffleDuel the whole surface,
+  // and that mode has no pile to come back to anyway.
+  const overlay =
+    greeting && resumable && !activeRun ? (
+      <ResumeOverlay
+        run={{
+          tier: resumable.tier,
+          placed: inTier.filter(isPlaced).length,
+          total: inTier.length,
+        }}
+        onContinue={dismissGreeting}
+        // The greeting is NOT dismissed here. The overlay sits below the sheets,
+        // so it stays put while the picker opens over it and is still there when
+        // the picker closes — nothing flashes, and closing lands you back where
+        // you were rather than dropping you into the game.
+        onTier={() => {
+          fromOverlay.current = true;
+          setTierOpen(true);
+        }}
+        // No `fromOverlay` here: that flag only governs what picking a TIER
+        // means, and inside Play a tier is a setting. Closing Play simply
+        // reveals this layer again, because it was never dismissed.
+        onModes={() => setModeOpen(true)}
+        onAbandon={() => {
+          dismissGreeting();
+          clearRun();
+          commit({ ...state, session: null }, false);
+          // Abandoning is not finishing. `commit` records the tier so a run that
+          // ENDS gets its summary, but throwing one away should land on the
+          // empty screen — a report congratulating you on work you just
+          // discarded is the app not listening. Batched after, so this wins.
+          setEndedTier(null);
+        }}
+      />
+    ) : null;
 
   // A finished run's summary. Skipped while greeting: arriving at RNK fresh and
   // being shown the report of a session you ended yesterday is not where you
@@ -795,11 +818,50 @@ export default function DuelScreen({
   // LAYER over the game rather than in a page that replaces it. `overlay` is
   // what you actually see here.
   if (!session && !runResult) {
+    const placedNow = state.films.filter(isPlaced).length;
     return (
       <>
         <main className="relative flex h-dvh flex-col overflow-hidden select-none">
           <Header onSettings={onSettings} onTrophies={onTrophies} />
-          <div className="min-h-0 flex-1" />
+          {/* A real screen rather than a frosted card, because there is no game
+              to frost: keeping the header and the nav means you can still see
+              where you are and leave. The line sits in the middle and the
+              choices sit low, within a thumb. */}
+          <div className="flex min-h-0 flex-1 flex-col px-7">
+            <div className="flex flex-1 items-center justify-center text-center">
+              <div>
+                <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
+                  Nothing on the table
+                </p>
+                <p className="mt-2 text-[12px] text-dim tabular-nums">
+                  {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed
+                </p>
+              </div>
+            </div>
+            <div className="flex-shrink-0 pb-5">
+              <button
+                onClick={() => {
+                  fromOverlay.current = true;
+                  setTierOpen(true);
+                }}
+                className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
+              >
+                Pick a tier
+              </button>
+              <button
+                onClick={() => setModeOpen(true)}
+                className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
+              >
+                Something else
+              </button>
+              <button
+                onClick={onProfile}
+                className="mt-3 w-full py-2 text-center text-[12px] text-dim active:scale-95"
+              >
+                Your profile
+              </button>
+            </div>
+          </div>
           <BottomNav
             screen="duel"
             onSettings={onSettings}
@@ -811,7 +873,6 @@ export default function DuelScreen({
           />
         </main>
         {sheets}
-        {overlay}
       </>
     );
   }
