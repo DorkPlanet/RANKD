@@ -24,7 +24,7 @@ import Sheet from "./Sheet";
 import { autoCollections, avatarOf, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
 import { fetchAccount } from "@/lib/account";
 import { AvatarCropper } from "./AvatarCropper";
-import { loadLists, type SavedList } from "@/lib/lists";
+import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
 import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
@@ -66,6 +66,9 @@ export default function ProfileScreen({
   const [pickingFilm, setPickingFilm] = useState(false);
   const [stillsFor, setStillsFor] = useState<Film | null>(null);
   const [openList, setOpenList] = useState<SavedList | null>(null);
+  // Whether the shelf's card shortcut was what opened it. Separate from
+  // `openList` so closing the card still leaves the list behind it.
+  const [openOnCard, setOpenOnCard] = useState(false);
   // Read once per mount and re-read whenever one is saved, pinned or deleted.
   // A counter rather than storing the lists themselves, so the source of truth
   // stays localStorage and nothing here can drift from it.
@@ -425,9 +428,70 @@ export default function ProfileScreen({
                   eyebrow={pinned ? "PINNED" : (list.source ?? "RANKING").toUpperCase()}
                   title={list.name}
                   sub={`${list.entries.length} films`}
-                  onClick={() => setOpenList(list)}
+                  onClick={() => {
+                    setOpenOnCard(false);
+                    setOpenList(list);
+                  }}
+                  // Only where a card can actually be drawn. `SavedListSheet`
+                  // uses the same two conditions — a subject to be OF, and two
+                  // films to compare — and offering the shortcut on a tile that
+                  // cannot honour it would be worse than not offering it.
+                  onCard={
+                    subjectOf(list) && list.entries.length >= 2
+                      ? () => {
+                          setOpenOnCard(true);
+                          setOpenList(list);
+                        }
+                      : undefined
+                  }
                 />
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── THE TROPHY CASE ──────────────────────────────────────────────
+            Badges lived behind the trophy in the header and nowhere else, so
+            the profile counted them in a stat tile and then never showed you
+            one. A number is a score; the badges themselves are the thing worth
+            looking at, and this is the screen for looking at what your library
+            amounts to.
+
+            Earned only. The full list including everything still to do is what
+            the sheet is for — putting the locked ones here would turn a shelf of
+            what you have done into a chore list, on the one screen that exists
+            to say what you have done.
+
+            All of them still carry the same star mark; bespoke icons are in
+            POTENTIAL-FEATURES.md. */}
+        {earned > 0 && (
+          <section className="mt-5">
+            <button
+              onClick={onTrophies}
+              className="mb-2.5 flex w-full items-baseline justify-between px-6 text-left active:scale-[0.99]"
+            >
+              {/* Not "BADGES". The counter band at the top of this screen
+                  already carries that word, and two headings with the same
+                  label on one page make the reader check whether they are
+                  looking at the same thing twice. */}
+              <span className="text-[10px] font-extrabold tracking-[0.18em] text-dim">TROPHY CASE</span>
+              <span className="text-[10px] text-dim tabular-nums">
+                {earned} of {badges.length} ›
+              </span>
+            </button>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto px-6 pb-1">
+              {badges
+                .filter((b) => b.got)
+                .map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={onTrophies}
+                    className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 active:scale-[0.98]"
+                  >
+                    <span className="text-[13px] text-gold">★</span>
+                    <span className="whitespace-nowrap text-[11px] text-text-hi">{b.name}</span>
+                  </button>
+                ))}
             </div>
           </section>
         )}
@@ -494,6 +558,7 @@ export default function ProfileScreen({
               : pinnedIds.filter((id) => id !== openList.id);
             onProfile({ ...profile, pinnedListIds: next });
           }}
+          startOnCard={openOnCard}
           onClose={() => setOpenList(null)}
           onDeleted={() => {
             setOpenList(null);
@@ -706,34 +771,63 @@ function MiniCard({
   title,
   sub,
   onClick,
+  onCard,
 }: {
   film?: Film;
   eyebrow: string;
   title: string;
   sub?: string;
   onClick: () => void;
+  /**
+   * Straight to the shareable card, skipping the sheet.
+   *
+   * The card renderer is some of the best work in the app and it was four taps
+   * from anywhere: profile, tile, sheet, then a button called "Make the card"
+   * that you had to already know was there. Nothing on this shelf said cards
+   * existed. A tile that can make one now says so on its face.
+   */
+  onCard?: () => void;
 }) {
   return (
-    <button onClick={onClick} className="flagship w-[172px] flex-shrink-0 text-left active:scale-[0.98]">
-      {film?.poster && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={film.poster}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover opacity-40"
-          style={{ objectPosition: "center 20%" }}
-        />
-      )}
-      <span className="flagship-wash" />
-      <span className="relative block p-3">
-        <span className="block text-[8px] font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
-        <span className="mt-1 block truncate font-display text-[19px] leading-tight tracking-wide text-text-hi">
-          {title}
+    // A div, not a button. The card shortcut is a control INSIDE this tile, and
+    // a button inside a button is invalid markup that browsers resolve by
+    // dropping one of them — usually the inner one, which is the shortcut.
+    <div className="flagship relative w-[172px] flex-shrink-0 text-left">
+      <button onClick={onClick} className="block w-full text-left active:scale-[0.98]">
+        {film?.poster && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={film.poster}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover opacity-40"
+            style={{ objectPosition: "center 20%" }}
+          />
+        )}
+        <span className="flagship-wash" />
+        <span className="relative block p-3">
+          <span className="block text-[8px] font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
+          <span className="mt-1 block truncate font-display text-[19px] leading-tight tracking-wide text-text-hi">
+            {title}
+          </span>
+          {sub && <span className="mt-0.5 block truncate text-[10px] text-dim">{sub}</span>}
         </span>
-        {sub && <span className="mt-0.5 block truncate text-[10px] text-dim">{sub}</span>}
-      </span>
-    </button>
+      </button>
+      {onCard && (
+        <button
+          onClick={onCard}
+          aria-label={`Make a card for ${title}`}
+          className="absolute bottom-2 right-2 z-10 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.14em] active:scale-95"
+          style={{
+            color: "var(--gold)",
+            borderColor: "color-mix(in srgb, var(--gold) 40%, transparent)",
+            background: "color-mix(in srgb, var(--bg) 78%, transparent)",
+          }}
+        >
+          Card
+        </button>
+      )}
+    </div>
   );
 }
 

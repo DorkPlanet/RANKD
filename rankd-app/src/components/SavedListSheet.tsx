@@ -28,6 +28,7 @@ export default function SavedListSheet({
   onPin,
   onClose,
   onDeleted,
+  startOnCard,
 }: {
   list: SavedList;
   /** The live library, so rows can refresh their artwork. */
@@ -38,8 +39,13 @@ export default function SavedListSheet({
   onPin: (pin: boolean) => void;
   onClose: () => void;
   onDeleted: () => void;
+  /** Opened by the shelf's card shortcut, so skip straight to the designs. */
+  startOnCard?: boolean;
 }) {
-  const [showCard, setShowCard] = useState(false);
+  // Closing the card view still lands on the list underneath, whichever way you
+  // arrived — a shortcut that also became the only way out would make the list
+  // unreachable for anyone who used it.
+  const [showCard, setShowCard] = useState(!!startOnCard);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const rows = useMemo(() => hydrate(list, films), [list, films]);
