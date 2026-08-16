@@ -16,6 +16,7 @@ import { exportBackup, importBackup } from "@/lib/backup";
 import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
 import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
+import type { Prefs } from "@/lib/prefs";
 import { resetRanking } from "@/lib/reset";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
@@ -79,6 +80,8 @@ type RowId = "library" | "account" | "install" | "help" | "say" | "reset";
 export function Settings({
   brightness,
   onChange,
+  prefs,
+  onPrefs,
   onClose,
   films,
   onImport,
@@ -86,6 +89,8 @@ export function Settings({
 }: {
   brightness: number;
   onChange: (t: number) => void;
+  prefs: Prefs;
+  onPrefs: (patch: Partial<Prefs>) => void;
   onClose: () => void;
   films: Film[];
   onImport: (films: Film[]) => void;
@@ -124,9 +129,35 @@ export function Settings({
         max={100}
         value={Math.round(brightness * 100)}
         onChange={(e) => onChange(parseInt(e.target.value, 10) / 100)}
-        className="mb-4 w-full"
+        className="mb-3 w-full"
         style={{ accentColor: "var(--accent)" }}
       />
+
+      {/* Beside brightness rather than inside a row, because it is the same
+          KIND of thing: how the app looks and moves, decided once and then
+          forgotten. Everything in the rows below is a task — import, sign in,
+          reset — and burying a display switch among those makes it a chore to
+          find.
+
+          The list drifts on its own after a couple of seconds so a long list
+          reads itself while you look at it. Some people find that unsettling
+          rather than restful. `useDriftScroll` already stands down for
+          `prefers-reduced-motion`; this is for the people who want it still
+          without turning motion off across their whole phone. */}
+      <label className="mb-4 flex cursor-pointer items-center justify-between gap-3 active:scale-[0.99]">
+        <span className="min-w-0">
+          <span className="block text-[14px] text-text-hi">Let the list drift</span>
+          <span className="block text-[11px] leading-snug text-dim">
+            Scrolls slowly on its own when you stop touching it
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          className="tickbox flex-shrink-0"
+          checked={prefs.listDrift}
+          onChange={(e) => onPrefs({ listDrift: e.target.checked })}
+        />
+      </label>
 
       <Row
         title="Your films"

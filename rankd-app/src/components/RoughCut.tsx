@@ -65,6 +65,8 @@ export default function RoughCut({
   onTrophies,
   onNavigate,
   onAddFilm,
+  onBegan,
+  onInfo,
 }: {
   films: Film[];
   tier: Rating;
@@ -80,6 +82,19 @@ export default function RoughCut({
    */
   onNavigate: (to: "modes" | "list" | "profile") => void;
   onAddFilm: (film: Film) => void;
+  /**
+   * A pass is on screen with its targets mounted.
+   *
+   * The tour cannot be fired by arriving at a screen, because this is not one —
+   * it is a branch inside the duel screen, and `tourFor` maps screens. It also
+   * cannot ride on the duel tour's trigger, which is gated on a live session
+   * that Rough Cut deliberately does not have. Same shape as `onRunBegan`, and
+   * for the same reason: the marks point at things that exist only once the
+   * pass is actually running.
+   */
+  onBegan?: () => void;
+  /** Open a film. Hold the poster; same gesture as the duel screen. */
+  onInfo?: (film: Film) => void;
 }) {
   // The pile is fixed for the duration of a pass. Re-deriving it as scores
   // change would reorder the queue under the user mid-pass — they would see
@@ -110,6 +125,28 @@ export default function RoughCut({
   // Bumped on every placement, purely as an animation key for the progress bar.
   const [beat, setBeat] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
+  // Hold-to-open, matching PosterCard exactly: same 450ms, same 8px movement
+  // cancel, same `held` flag so the release that ends a hold cannot also count
+  // as a tap. Duplicated rather than shared because the two cards disagree about
+  // what a tap MEANS — there it picks a winner, here it does nothing at all.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const held = useRef(false);
+  const cancelHold = () => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  };
+  const startHold = (f: Film) => {
+    cancelHold();
+    holdTimer.current = setTimeout(() => {
+      held.current = true;
+      onInfo?.(f);
+    }, 450);
+  };
+  // A pass that unmounts mid-hold must not open a film onto a screen that has
+  // already gone.
+  useEffect(() => cancelHold, []);
   // The three targets, so a placed card can be sent to the one it was filed
   // under. Measured at animation time rather than stored as coordinates, which
   // would go stale the moment the layout moved.
@@ -129,6 +166,21 @@ export default function RoughCut({
   useEffect(() => {
     saveRoughCut({ tier, films: pool, at, choices, n: pass.n });
   }, [tier, pool, at, choices, pass.n]);
+
+  // Once per mount, and only while there is genuinely a pass on screen — a pool
+  // this short renders the summary instead, and the marks would point at
+  // nothing. `resolveSteps` would filter them all out and the tour would burn
+  // itself as "seen" having shown the user zero steps, which is the exact bug
+  // the duel tour's session gate exists to prevent.
+  const began = useRef(false);
+  useEffect(() => {
+    if (began.current || pool.length === 0) return;
+    began.current = true;
+    onBegan?.();
+    // Deliberately once: re-firing as the queue advances would raise the coach
+    // over a pass already in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // How the deal is going, counted from `choices` rather than tracked
   // separately — three tallies kept in state would be three more things that
@@ -378,7 +430,7 @@ export default function RoughCut({
             digits, no hairlines, label tucked under. ~30px back to the poster,
             and it still reads at a glance because nothing else up here is
             gold. */}
-        <div className="mt-2.5 flex justify-center">
+        <div data-tour="rc-count" className="mt-2.5 flex justify-center">
           <Countdown
             n={pool.length - at}
             label={pool.length - at === 1 ? "film left" : "films left"}
@@ -406,9 +458,12 @@ export default function RoughCut({
         // every cycle — measured at 8px of overlap. Clearance has to exceed the
         // travel or the collision is intermittent, which is worse than
         // constant.
+        data-tour="rc-card"
         className="rc-card flex min-h-0 flex-col items-center px-8 pt-4"
+        onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
         onPointerDown={(e) => {
           start.current = { x: e.clientX, y: e.clientY };
+          held.current = false;
           // Capture, so a drag that leaves the card still reports its release
           // here. Same reason `PosterCard` does it: without this the gesture is
           // lost the moment the thumb crosses the poster's edge.
@@ -417,20 +472,38 @@ export default function RoughCut({
           } catch {
             // best-effort — the gesture still works, it just cannot leave the card
           }
+          // Hold to open the film. The duel screen has had this since the start
+          // and this screen never did, so the same press on the same artwork did
+          // two different things depending on which mode you were in — and the
+          // mode WITHOUT it is the one where you are placing a film blind, with
+          // no opponent to judge it against, which is exactly when you would
+          // want to check what it is.
+          startHold(film);
         }}
         onPointerMove={(e) => {
           const from = start.current;
           if (!from) return;
           const dy = e.clientY - from.y;
+          // Any real movement means a flick, not a hold.
+          if (Math.abs(dy) > 8 || Math.abs(e.clientX - from.x) > 8) cancelHold();
           // Resisted rather than followed 1:1, and capped: the card is reporting
           // the gesture, not being dragged across the screen.
           setDrag(Math.max(-DRAG_CAP, Math.min(DRAG_CAP, dy * 0.55)));
           setAimed(Math.abs(dy) > FLICK_PX ? (dy < 0 ? "top" : "bottom") : null);
         }}
         onPointerUp={(e) => {
+          cancelHold();
           const from = start.current;
           start.current = null;
           if (!from) {
+            setDrag(null);
+            setAimed(null);
+            return;
+          }
+          // The hold already opened the info card. Releasing must not then file
+          // the film you were only looking at.
+          if (held.current) {
+            held.current = false;
             setDrag(null);
             setAimed(null);
             return;
@@ -446,6 +519,7 @@ export default function RoughCut({
           setAimed(null);
         }}
         onPointerCancel={() => {
+          cancelHold();
           start.current = null;
           setDrag(null);
           setAimed(null);
@@ -578,7 +652,7 @@ export default function RoughCut({
         ))}
       </div>
 
-      <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-center px-5">
+      <div data-tour="rc-targets" className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-center px-5">
         {(
           [
             { bucket: "bottom", label: "Lower", tone: "text-dim" },
@@ -608,7 +682,7 @@ export default function RoughCut({
       {/* `pb-2`, not `pb-6`: the nav underneath now owns the bottom edge and
           carries the safe-area padding, so the old clearance would be counted
           twice and squeeze the poster. */}
-      <div className="flex flex-shrink-0 items-center justify-center gap-1 pb-2">
+      <div data-tour="rc-out" className="flex flex-shrink-0 items-center justify-center gap-1 pb-2">
         <button
           onClick={undo}
           disabled={at === 0}

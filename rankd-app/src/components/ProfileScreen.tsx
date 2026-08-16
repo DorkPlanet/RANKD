@@ -322,7 +322,7 @@ export default function ProfileScreen({
                     onClick={() =>
                       setOpen({
                         title: people.director!.name,
-                        blurb: "Every film of theirs in your library, best first.",
+                        blurb: "Every film of theirs in your library, your favourite first.",
                         films: filmsOf(people.director!.name, true),
                       })
                     }
@@ -340,7 +340,7 @@ export default function ProfileScreen({
                     onClick={() =>
                       setOpen({
                         title: a.name,
-                        blurb: "Every film of theirs in your library, best first.",
+                        blurb: "Every film of theirs in your library, your favourite first.",
                         films: filmsOf(a.name, false),
                       })
                     }

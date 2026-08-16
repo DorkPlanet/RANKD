@@ -22,6 +22,7 @@ import { loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
 import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
+import { DEFAULT_PREFS, loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
@@ -93,6 +94,10 @@ export default function AppShell() {
   // has to work from whichever screen you're looking at.
   const [trophiesOpen, setTrophiesOpen] = useState(false);
   const [brightness, setBrightness] = useState(0);
+  // Read in the same effect as brightness rather than as a lazy initialiser —
+  // see the note on that effect for why localStorage cannot be read during the
+  // first render without tearing hydration.
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   // Whose filmography is open, and who a cross-tier run was just asked for.
   // Both live here because opening one means closing the info card, and starting
   // the other means changing screens.
@@ -266,6 +271,7 @@ export default function AppShell() {
     setBrightness(b);
     applyBrightness(b);
     setProfile(loadProfile());
+    setPrefs(loadPrefs());
   }, []);
 
   // ── Arriving at the duel ───────────────────────────────────────────────────
@@ -305,6 +311,16 @@ export default function AppShell() {
     setBrightness(t);
     applyBrightness(t);
     saveBrightness(t);
+  };
+
+  // Takes a partial so a caller changes the one field it cares about without
+  // having to hold — and risk staling — the rest of the object.
+  const changePrefs = (patch: Partial<Prefs>) => {
+    setPrefs((p) => {
+      const next = { ...p, ...patch };
+      savePrefs(next);
+      return next;
+    });
   };
 
   // Swap the whole library for an imported one.
@@ -523,6 +539,15 @@ export default function AppShell() {
             if (seen.has("duel") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("duel"), 20);
           }}
+          // Rough Cut gets its own, on the same terms. It cannot go through
+          // `tourFor` because it is a branch rather than a screen, and it could
+          // never have ridden the duel tour's trigger, which requires a session
+          // this mode does not create. The mode the app now recommends FIRST was
+          // the one mode with no tutorial at all.
+          onRoughCutBegan={() => {
+            if (seen.has("roughcut") || !(newLibrary || replaying)) return;
+            setTimeout(() => setTourDue("roughcut"), 20);
+          }}
           personRun={personRun}
           personGuests={personGuests}
           personPortrait={personPortrait}
@@ -545,7 +570,8 @@ export default function AppShell() {
           onPoster={setMeta}
           onAddFilm={addFilm}
           // A tutorial is a held moment. Nothing behind it may move.
-          frozen={showCoach}
+          // Neither may it move when the reader has said they don't want it to.
+          frozen={showCoach || !prefs.listDrift}
         />
       ) : (
         <ProfileScreen
@@ -609,6 +635,8 @@ export default function AppShell() {
         <Settings
           brightness={brightness}
           onChange={changeBrightness}
+          prefs={prefs}
+          onPrefs={changePrefs}
           onClose={() => setSettingsOpen(false)}
           films={library}
           onImport={loadLibrary}

@@ -27,16 +27,29 @@ export function SessionEnd({
   onList,
   onAgain,
   againLabel,
+  extra,
 }: {
   title: string;
   blurb: string;
-  /** What was ranked, best first. Shown as posters; only the top few fit. */
+  /** What was ranked, your favourite first. Shown as posters; only the top few fit. */
   films: Film[];
   /** Short "what it cost / what it made" pairs. Empty ones are dropped. */
   stats: { label: string; value: string }[];
   onList: () => void;
   onAgain: () => void;
   againLabel: string;
+  /**
+   * What to do NEXT, specific to the run that just ended.
+   *
+   * Above the two exits, because it is the thing most likely to be wanted and
+   * both exits lead away from it. A tier run puts the remaining Rough Cut piles
+   * here; without it, finishing one pile of three dead-ended on a screen whose
+   * only routes were the list or the top-level mode sheet, and the other two
+   * piles were four taps away through a menu.
+   *
+   * Optional and unstyled by this component. It is a slot, not a feature.
+   */
+  extra?: React.ReactNode;
 }) {
   const top = films.slice(0, 5);
 
@@ -83,6 +96,8 @@ export function SessionEnd({
           ))}
         </div>
       )}
+
+      {extra}
 
       {/* The way out. The list is primary because that is where what you just
           made now lives — the old screen's only exit was starting more work. */}

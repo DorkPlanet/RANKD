@@ -32,6 +32,9 @@ import { RunSummary } from "./RunSummary";
 import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
 import { bandsOf, BUCKETS, type Bucket } from "@/lib/roughCut";
+import { loadRoughCut } from "@/lib/roughCutRun";
+import { cardDataFromFilms } from "@/lib/card/data";
+import { CardPicker } from "./CardPicker";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
 import { clearRun, saveRun } from "@/lib/runs";
@@ -85,6 +88,7 @@ export default function DuelScreen({
   personPortrait,
   onPersonRunHandled,
   onRunBegan,
+  onRoughCutBegan,
   onPerson,
   greet = 0,
 }: {
@@ -98,6 +102,8 @@ export default function DuelScreen({
   onAddFilm: (film: Film) => void;
   /** A run just started, so the duel's posters and strip are about to exist. */
   onRunBegan?: () => void;
+  /** Same contract as onRunBegan, for the mode that has no session. */
+  onRoughCutBegan?: () => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
@@ -123,6 +129,11 @@ export default function DuelScreen({
   // `endRun` nulls the session, so without this the summary has no idea which
   // tier it is summarising. Cleared on the way back to `RunStart`.
   const [endedTier, setEndedTier] = useState<Rating | null>(null);
+  // Which films the run that just ended actually worked through. `endRun` nulls
+  // the session and takes the pile with it, exactly as it takes the tier — so
+  // this is remembered for the same reason `endedTier` is, and at the same
+  // moment. Null means the whole tier.
+  const [endedIds, setEndedIds] = useState<string[] | null>(null);
   const [tierOpen, setTierOpen] = useState(false);
   // A tier chosen for the NEXT run but not started. Without it the only way to
   // change the tier on screen was to start a game, which is exactly why picking
@@ -334,6 +345,10 @@ export default function DuelScreen({
     // that exists nowhere else and must not be pre-empted by a tier report.
     if (state.session && !next.session && !state.session.crossTier) {
       setEndedTier(state.session.tier);
+      // The whole pile, settled and unsettled — `confirmed` alone would drop
+      // everything the run never reached, and "still to place" is precisely a
+      // count of those.
+      setEndedIds([...state.session.confirmed, ...state.session.unconfirmed]);
     }
     // A new run supersedes any summary still standing, and answers the greeting:
     // starting something IS the choice it was asking for, whichever sheet it was
@@ -341,6 +356,7 @@ export default function DuelScreen({
     // added later cannot leave the overlay hanging over its own run.
     if (next.session) {
       setEndedTier(null);
+      setEndedIds(null);
       setDismissedGreet(greet);
     }
 
@@ -524,6 +540,7 @@ export default function DuelScreen({
     }
     commit({ ...state, session: null }, false);
     setEndedTier(null);
+    setEndedIds(null);
   };
 
   // Run the same pile again, starting from the order you just settled on rather
@@ -607,6 +624,8 @@ export default function DuelScreen({
         onSettings={onSettings}
         onTrophies={onTrophies}
         onAddFilm={onAddFilm}
+        onBegan={onRoughCutBegan}
+        onInfo={onInfo}
         // Rough Cut now draws the nav, so its cells have to actually go
         // somewhere. Clearing the tier first drops this branch, which puts the
         // next render back on a tree that renders `sheets` — so opening Play
@@ -688,6 +707,11 @@ export default function DuelScreen({
         <TierPicker
           films={state.films}
           current={setupTier}
+          // Only when the picker was opened FROM the Rough Cut setup, which is
+          // exactly when the pile state answers the question being asked. The
+          // overlay's "Pick a tier" and King of the Hill both land here too and
+          // neither has piles to report.
+          forRoughCut={chosenMode === "roughcut"}
           // Closing hands you back to whatever OPENED it. From the Play sheet
           // that is Play; from the overlay or the empty screen it is nothing at
           // all, because they are still underneath. Reopening Play regardless
@@ -770,6 +794,7 @@ export default function DuelScreen({
           // empty screen — a report congratulating you on work you just
           // discarded is the app not listening. Batched after, so this wins.
           setEndedTier(null);
+          setEndedIds(null);
         }}
       />
     ) : null;
@@ -783,11 +808,22 @@ export default function DuelScreen({
         <TierComplete
           films={state.films}
           tier={endedTier}
+          runIds={endedIds ?? undefined}
           onPickTier={() => {
             setEndedTier(null);
+            setEndedIds(null);
             setModeOpen(true);
           }}
           onList={onList}
+          // Straight into the next pile. `commit` clears `endedTier` for us the
+          // moment the new session exists, so this branch stands itself down.
+          onRankPile={(ids) => {
+            try {
+              commit({ ...startRun(state.films, endedTier, { only: ids }), journal: state.journal }, false);
+            } catch {
+              /* fewer than two films left in the pile — the buttons already guard this */
+            }
+          }}
         />
         {sheets}
       </>
@@ -1014,7 +1050,26 @@ export default function DuelScreen({
         // A run that exists but has no pair left: the tier ran out, or Done was
         // pressed. `session` is non-null here — the no-run case took the whole
         // surface above, before this tree was built.
-        <TierComplete films={state.films} tier={session?.tier ?? DEFAULT_TIER} onPickTier={() => setTierOpen(true)} onList={onList} />
+        // The session is still alive here, so the pile can be read straight off
+        // it rather than remembered — this is the branch where a run exists but
+        // has no pair left, not the one where it has already been torn down.
+        <TierComplete
+          films={state.films}
+          tier={session?.tier ?? DEFAULT_TIER}
+          runIds={session ? [...session.confirmed, ...session.unconfirmed] : undefined}
+          onPickTier={() => setTierOpen(true)}
+          onList={onList}
+          onRankPile={(ids) => {
+            try {
+              commit(
+                { ...startRun(state.films, session?.tier ?? DEFAULT_TIER, { only: ids }), journal: state.journal },
+                false,
+              );
+            } catch {
+              /* fewer than two films left in the pile */
+            }
+          }}
+        />
       )}
 
       <BottomNav
@@ -1314,6 +1369,21 @@ function ModePanel({
   if (chosen === null) {
     return (
       <Sheet title="Play" onClose={onClose} closing={closing}>
+        {/* FIRST, not second. It was already above Fast Shuffle on the
+            reasoning below; the same argument taken to its conclusion puts it
+            above King of the Hill too.
+
+            King of the Hill costs n(n-1)/2 duels and is the wrong first move on
+            any tier worth ranking — at 185 films it is several thousand
+            comparisons from a standing start. Rough Cut is one pass, one
+            decision per film, and it hands the climb a nearly-sorted pile. So
+            the order of this list is the order the work should actually happen
+            in, rather than the order the modes were built in. */}
+        <ModeRow
+          title="Rough Cut"
+          blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
+          onClick={() => setChosen("roughcut")}
+        />
         <ModeRow
           title="King of the Hill"
           blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
@@ -1321,14 +1391,6 @@ function ModePanel({
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
-        {/* Offered before Fast Shuffle on purpose: on a tier of any size this is
-            the thing that should happen first, and burying it under the mode
-            people are already unsure about would hide the cheapest win. */}
-        <ModeRow
-          title="Rough Cut"
-          blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
-          onClick={() => setChosen("roughcut")}
-        />
         <ModeRow
           title="Fast Shuffle"
           blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."
@@ -1655,11 +1717,28 @@ function TierPicker({
   current,
   onClose,
   onPick,
+  forRoughCut,
 }: {
   films: Film[];
   current: Rating;
   onClose: () => void;
   onPick: (t: Rating) => void;
+  /**
+   * Show what Rough Cut has already done to each tier.
+   *
+   * ── Why this is a flag and not just always on ──────────────────────────
+   *
+   * Choosing a tier for Rough Cut was two screens answering one question. You
+   * picked blind here — stars and a count, nothing else — and only saw whether
+   * that tier was already split, or had a pass half finished, after the picker
+   * closed and the setup sheet came back. The one fact that decides which tier
+   * to open was on the screen you had just left.
+   *
+   * King of the Hill shares this component and has no piles, so the extra line
+   * would be dead furniture there. Off by default: a shared control should not
+   * carry one caller's vocabulary for every other caller to read past.
+   */
+  forRoughCut?: boolean;
 }) {
   const counts = tierCounts(films);
   return (
@@ -1667,24 +1746,74 @@ function TierPicker({
       {ORDERED_TIERS.map((t) => {
         const n = counts.get(t) ?? 0;
         const playable = n >= 2;
+        // Derived per tier rather than up front. Ten tiers of a large library is
+        // still a single pass each and only runs while the sheet is open, where
+        // hoisting it would mean recomputing all ten on every parent render.
+        const cut = forRoughCut && playable ? roughCutState(films, t) : null;
         return (
           <button
             key={t}
             disabled={!playable}
             onClick={() => onPick(t)}
-            className="mb-1.5 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-30"
+            className="mb-1.5 flex w-full flex-col gap-1 rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-30"
           >
-            <span className="text-base text-gold">{starsFor(t)}</span>
-            <span className="flex items-center gap-2 text-[11px] text-dim">
-              {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
-              {n === 1 && " — needs 2"}
-              {t === current && <span className="text-gold">✓</span>}
+            <span className="flex w-full items-center justify-between">
+              <span className="text-base text-gold">{starsFor(t)}</span>
+              <span className="flex items-center gap-2 text-[11px] text-dim">
+                {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
+                {n === 1 && " — needs 2"}
+                {t === current && <span className="text-gold">✓</span>}
+              </span>
             </span>
+            {cut && (cut.resuming !== null || cut.split) && (
+              <span className="flex w-full items-center gap-2 text-[10px] tabular-nums">
+                {/* A half-finished pass outranks the split, because it is the
+                    thing you would want to know first: the piles will still be
+                    there afterwards, and the pass will not survive being
+                    ignored in favour of starting a new one. */}
+                {cut.resuming !== null ? (
+                  <span className="text-gold">
+                    {cut.resuming} left in an unfinished pass
+                  </span>
+                ) : (
+                  <span className="text-dim">
+                    Split {cut.bands.top} / {cut.bands.middle} / {cut.bands.bottom}
+                  </span>
+                )}
+              </span>
+            )}
           </button>
         );
       })}
     </Sheet>
   );
+}
+
+/**
+ * What Rough Cut has already done to one tier, or nothing worth saying.
+ *
+ * Both facts come from state that already exists — no new bookkeeping. The split
+ * is read straight off the scores (`bandsOf`), because a film's score IS which
+ * third it sits in; the unfinished pass comes from the resume record.
+ *
+ * `split` deliberately counts bands holding anything at all, hard locks
+ * included. A tier whose upper pile has been ranked to the end is still a tier
+ * that was split, and reporting it as unsplit was the bug that made the third
+ * pile disappear.
+ */
+function roughCutState(films: Film[], tier: Rating) {
+  const bands = bandsOf(films, tier);
+  const counts = {
+    top: bands.top.length,
+    middle: bands.middle.length,
+    bottom: bands.bottom.length,
+  };
+  const resume = loadRoughCut(films, tier);
+  return {
+    bands: counts,
+    split: BUCKETS.filter((b) => bands[b].length > 0).length > 1,
+    resuming: resume ? resume.films.length - resume.at : null,
+  };
 }
 
 // A label wrapping a hidden file input — a styled <button> can't open a picker.
@@ -2275,30 +2404,76 @@ function ConfirmView({
 function TierComplete({
   films,
   tier,
+  runIds,
   onPickTier,
   onList,
+  onRankPile,
 }: {
   films: Film[];
   tier: Rating;
+  /**
+   * The films this run actually worked through, when it was a slice of the tier
+   * rather than the whole thing.
+   *
+   * Without it the counts describe the TIER and are read as describing the run.
+   * Rank the second of three Rough Cut piles and "6 placed" is true of 4★ and a
+   * lie about the twenty minutes you just spent — it silently includes the pile
+   * you finished last week. Absent means the run was the whole tier, where the
+   * two happen to coincide.
+   */
+  runIds?: string[];
   onPickTier: () => void;
   onList: () => void;
+  /** Climb another of this tier's Rough Cut piles. */
+  onRankPile?: (ids: string[]) => void;
 }) {
   const inTier = films.filter((f) => f.rating === tier);
-  const ranked = inTier.filter(isPlaced).sort((a, b) => b.score - a.score);
-  const duels = inTier.reduce((n, f) => n + (f.duels ?? 0), 0);
+  const scope = runIds ? inTier.filter((f) => runIds.includes(f.id)) : inTier;
+  const ranked = scope.filter(isPlaced).sort((a, b) => b.score - a.score);
+  const duels = scope.reduce((n, f) => n + (f.duels ?? 0), 0);
   // This screen is reached two ways — the tier ran out of films, or you pressed
   // Done — and it used to say the same thing either way. Stopping after two
   // duels was congratulated with "Every film in this tier has found its spot"
   // above a count of zero, which is both false and, at the exact moment you
   // chose to stop, faintly insulting. The distinction costs one subtraction.
-  const left = inTier.length - ranked.length;
+  const left = scope.length - ranked.length;
   const finished = left === 0 && ranked.length > 0;
+  const pile = runIds !== undefined && scope.length < inTier.length;
+
+  // ── What is still worth doing in this tier ────────────────────────────────
+  //
+  // Derived from the library rather than from run bookkeeping. A film's score IS
+  // which third it sits in, so "are there piles left" is a question about the
+  // tier as it stands — which means it answers correctly whether the run that
+  // just ended was a pile, the whole tier, or something from three sessions ago.
+  //
+  // Hard locks are filtered out because a pile that has been climbed to the end
+  // has nothing left to offer, and offering it would restart a finished job.
+  const bands = bandsOf(films, tier);
+  const openBands = BUCKETS.map((b) => ({
+    bucket: b,
+    films: bands[b].filter((f) => f.lock !== "hard"),
+  })).filter((b) => b.films.length >= 2);
+  // More than one occupied band is what makes this a SPLIT tier rather than an
+  // untouched one, which reads as all-middle. Without the check, finishing an
+  // ordinary King of the Hill run would offer to "rank a pile" of a tier nobody
+  // ever cut.
+  const wasSplit = BUCKETS.filter((b) => bands[b].length > 0).length > 1;
+  const offer = wasSplit && onRankPile ? openBands : [];
+
+  // Only once something is actually in order. Two films is the floor the rest of
+  // the card path already uses (see `SavedListSheet`), and a card of one entry
+  // is not a ranking.
+  const card = ranked.length >= 2 ? cardDataFromFilms({ kind: "tier", rating: tier }, ranked.slice(0, 10)) : null;
+
   return (
     <SessionEnd
-      title={finished ? `${starsFor(tier)} ranked` : "Session done"}
+      title={finished ? (pile ? "Pile ranked" : `${starsFor(tier)} ranked`) : "Session done"}
       blurb={
         finished
-          ? "Every film in this tier has found its spot."
+          ? pile
+            ? "That pile is in order. The rest of the tier is untouched."
+            : "Every film in this tier has found its spot."
           : "Every answer is kept. Pick this tier back up whenever you like."
       }
       films={ranked}
@@ -2310,6 +2485,35 @@ function TierComplete({
       onList={onList}
       onAgain={onPickTier}
       againLabel={finished ? "Rank another tier" : "Keep ranking"}
+      extra={
+        (offer.length > 0 || card) && (
+          <div className="flex w-full max-w-[300px] flex-col gap-4">
+            {offer.length > 0 && (
+              <div>
+                <p className="mb-2 text-[9px] font-extrabold uppercase tracking-[0.18em] text-dim">
+                  Still split — rank another pile
+                </p>
+                <div className="flex gap-2">
+                  {offer.map(({ bucket, films: pileFilms }) => (
+                    <button
+                      key={bucket}
+                      onClick={() => onRankPile!(pileFilms.map((f) => f.id))}
+                      className="flex-1 rounded-xl border border-border py-2.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98]"
+                    >
+                      {bucket === "top" ? "Upper" : bucket === "middle" ? "Middle" : "Lower"}
+                      <span className="ml-1.5 text-dim tabular-nums">{pileFilms.length}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* The one place a tier's order becomes a thing you can keep. It was
+                reachable only after a cross-tier person run, which meant the
+                mode most people actually use produced nothing shareable. */}
+            {card && <CardPicker data={card} />}
+          </div>
+        )
+      }
     />
   );
 }

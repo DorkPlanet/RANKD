@@ -26,6 +26,7 @@ export const SYNC_KEYS = [
   "rankd-profile-v1", // name, bio, banner, pinned rankings
   "rankd-brightness",
   "rankd-strip-open",
+  "rankd-prefs-v1", // display preferences — see lib/prefs.ts
 ] as const;
 
 // ── Which keys each FILE format owns ───────────────────────────────────────
@@ -38,7 +39,24 @@ export const SYNC_KEYS = [
 //
 // So ownership is recorded per format. A restore clears only what its own format
 // knew about; anything introduced later is none of that file's business.
-const FILE_1 = SYNC_KEYS;
+// ── Why this is a literal list and not `= SYNC_KEYS` ───────────────────────
+//
+// It WAS an alias, and that quietly undid the rule the comment above states.
+// Format 1 is frozen history — it is the set of keys a file written by that
+// build could possibly carry. Aliasing it to the live wire set meant every key
+// added for sync was retroactively declared "owned by format 1", and ownership
+// is precisely what gives a restore permission to CLEAR a key. So restoring an
+// old format-1 file would delete a preference that file never knew existed.
+//
+// The two sets happened to be identical when the alias was written. They are
+// not the same THING, and this is the line where that stops being free.
+const FILE_1 = [
+  "rankd-app-v1",
+  "rankd-log-v1",
+  "rankd-profile-v1",
+  "rankd-brightness",
+  "rankd-strip-open",
+] as const;
 
 const FILE_2 = [
   ...SYNC_KEYS,

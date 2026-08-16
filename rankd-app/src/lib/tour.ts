@@ -20,13 +20,22 @@
 // · Say what the gesture DOES. "Flick up" without "parks it at the top" teaches
 //   a motion and not a meaning, and the meaning is the unguessable part.
 // · PREFERENCE, never quality. This is a record of what one person would rather
-//   watch, not a verdict on which film is better.
+//   watch, not a verdict on which film is better. "Best first" broke this and
+//   was caught in review: it is YOUR FAVOURITE first, and nothing in this app
+//   claims one film is better than another.
 // · No em dashes. The house tell of machine-written copy, and this is the first
 //   thing a new user reads.
+// · DEFINE EVERY WORD THE APP INVENTED, at the first place it appears. The copy
+//   used to lean on "tier", "pile" and "settled" as though the reader already
+//   had them. They are not English, they are this app's vocabulary, and a
+//   tutorial that assumes its own jargon teaches nothing to the only people who
+//   need it. "Tier" is defined in the first duel step and then used freely,
+//   because it appears all over the UI and dodging it here would leave the
+//   reader stuck the moment they meet a screen that says TIER.
 
 const KEY = "rankd-tour-v1";
 
-export type TourId = "duel" | "list";
+export type TourId = "duel" | "list" | "roughcut";
 
 export interface TourStep {
   id: string;
@@ -34,6 +43,21 @@ export interface TourStep {
   target: string;
   title: string;
   body: string;
+  /**
+   * A demonstration the screen underneath should play while this step is up.
+   *
+   * The marks can frame a control and describe it; they cannot show it working,
+   * and for the Rough Cut targets that is most of the explanation. Three words
+   * and a box tell you nothing about what filing a film actually does.
+   *
+   * The screen owns the demo, not the coach — see `lib/tourDemo.ts`. Coach knows
+   * only that a name is active, so a screen can demonstrate whatever it likes
+   * without this module learning about piles.
+   *
+   * Nothing a demo does is recorded. It animates over ghost state and the real
+   * queue never moves; see the note on `demo` in RoughCut.
+   */
+  demo?: string;
 }
 
 /**
@@ -55,31 +79,31 @@ const DUEL_STEPS: readonly TourStep[] = [
     id: "pick",
     target: "card",
     title: "Tap the one you prefer",
-    body: "Two films, one question. Not which is better, but which you'd rather watch. Tap it: that's a duel, and it is the whole game.",
+    body: "These two films have the same star rating from you. Films sharing a rating are called a tier, and this app puts your tier in order. Not which film is better, but which you'd rather watch. Tap it.",
   },
   {
     id: "flick",
     target: "card",
-    title: "Flick to assert",
-    body: "Certain it belongs at the very top? Flick the card up and it parks there. Flick down sends it to the bottom. No duel is recorded, because you're skipping the argument rather than winning it.",
+    title: "Flick when you already know",
+    body: "Sure it's your favourite in the tier? Flick the card up and it parks at the top. Flick down sends it to the bottom. No duel is recorded, because you're skipping the argument rather than winning it.",
   },
   {
     id: "hold",
     target: "card",
     title: "Hold for the details",
-    body: "Press and hold a poster to open the film: year, director, cast, and where it currently sits.",
+    body: "Press and hold a poster to open the film: year, director, cast, and where it sits in your order.",
   },
   {
     id: "strip",
     target: "strip",
-    title: "The pile you're in",
-    body: "Pull this up for the pile you're working through, and to jump straight to any film in it.",
+    title: "The rest of the tier",
+    body: "Pull this up to see every film you're working through, and tap any of them to jump straight there.",
   },
   {
     id: "roughcut",
     target: "rank",
-    title: "Start with a Rough Cut",
-    body: "Ranking a big tier by duelling it is thousands of comparisons. Rough Cut deals it into three piles in a single pass: one decision per film, nothing compared. It lives under RNK, and on a full tier it's where to start.",
+    title: "Got a big library? Start with a Rough Cut",
+    body: "A tier of 100 films is 4,950 duels this way, which is hours. Rough Cut is 100 taps, which is about two minutes, and it leaves every pile small enough to duel properly afterwards. It lives under RNK.",
   },
 ];
 
@@ -96,25 +120,84 @@ const LIST_STEPS: readonly TourStep[] = [
     id: "row",
     target: "list-row",
     title: "Your ranking, in order",
-    body: "Every tier in turn, best first. The number on the left is where that film sits. Tap any row to open it.",
+    body: "One tier at a time, your favourite first. Nothing here says a film is better than another, only that you'd reach for it sooner. The number on the left is where it sits across everything. Tap any row to open it.",
   },
   {
     id: "unrnkd",
     target: "list-unrnkd",
-    title: "Rated is not ranked",
-    body: "Below this line are films you've rated but never placed. They have a star rating and no position yet. Ranking is the job of deciding the order inside a rating, which is what the duels are for.",
+    title: "UN-RNKD is not unrated",
+    body: "Each tier holds the films you rated the same. Inside it, the ones marked UN-RNKD are imported films that have never been through the ranking system, so they have no position yet. Giving one a position is what the duels are for.",
   },
   {
     id: "jump",
     target: "list-jump",
     title: "Jump to a tier",
-    body: "Straight to any star rating, with a count of how much of it you've settled. It's the quickest way to find where there's still work.",
+    body: "Straight to any star rating, with a count of how many you've settled there. It's the quickest way to find where there's still work.",
+  },
+];
+
+/**
+ * Rough Cut: the mode the app recommends and never explained.
+ *
+ * The duel tour has a step saying this mode EXISTS and points at the nav cell.
+ * That was the whole of it. Arriving here you got a poster, three words and no
+ * indication that the card is draggable, that a flick does anything, or that
+ * leaving keeps your work — on the surface the app tells new users to start
+ * with, and the one whose gestures are least guessable, because there is no
+ * opponent to make "tap the one you prefer" self-evident.
+ *
+ * It could not have fired even if it existed: `tourFor` gates the duel tour on
+ * a live session, and Rough Cut runs without one. So this is its own tour with
+ * its own trigger, on the same deferred path — see `onRoughCutBegan`.
+ *
+ * Middle deliberately gets its own step. Up and down are one gesture with two
+ * directions and read as a pair; the middle pile has no gesture at all, and a
+ * reader who has just been taught two flicks will look for a third.
+ */
+const ROUGHCUT_STEPS: readonly TourStep[] = [
+  {
+    id: "rc-card",
+    target: "rc-card",
+    title: "One at a time",
+    body: "One tier for you to break into smaller piles: upper, middle, lower. This is the film you're placing, and there is nothing to compare it against.",
+  },
+  {
+    id: "rc-targets",
+    target: "rc-targets",
+    title: "Upper, middle or lower",
+    body: "Once it's in smaller piles you finally get to decide where your taste lies. Watch: each film drops into a pile and the count above it goes up. None of this is being recorded, it's just showing you how.",
+    demo: "deal",
+  },
+  {
+    id: "rc-flick",
+    target: "rc-card",
+    title: "Or flick it",
+    body: "Flick the card up for upper, down for lower. Drag it a little first and the target you're aimed at lifts, so you can see where it will land before you let go. Middle has no flick: tap it.",
+  },
+  {
+    id: "rc-hold",
+    target: "rc-card",
+    title: "Hold for the details",
+    body: "Press and hold the poster to open the film: year, director, cast, and where it sits in your order.",
+  },
+  {
+    id: "rc-count",
+    target: "rc-count",
+    title: "How many are left",
+    body: "This counts down as you go. A big tier is a few minutes at one a second, which is the point of doing it this way.",
+  },
+  {
+    id: "rc-out",
+    target: "rc-out",
+    title: "Stopping keeps your work",
+    body: "Done saves everything you placed and leaves the rest for later. Undo takes back the last one. Come back to a half-finished pass and it picks up where you stopped.",
   },
 ];
 
 export const TOURS: Record<TourId, readonly TourStep[]> = {
   duel: DUEL_STEPS,
   list: LIST_STEPS,
+  roughcut: ROUGHCUT_STEPS,
 };
 
 /**
@@ -153,7 +236,7 @@ export function seenTours(): Set<TourId> {
     // Unreadable. Treat every tour as seen rather than unseen: a tutorial that
     // cannot record having run would otherwise reappear on every single open,
     // which is far worse than never appearing at all.
-    return new Set<TourId>(["duel", "list"]);
+    return new Set<TourId>(["duel", "list", "roughcut"]);
   }
 }
 
