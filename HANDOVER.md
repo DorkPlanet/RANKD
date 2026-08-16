@@ -28,7 +28,7 @@ signed-out was deleted**, deliberately: the gate is one line, and lifting it sta
 line. Read `SignInGate.tsx`'s header before arguing with it, and
 "Remove the signed-out code paths" in `POTENTIAL-FEATURES.md` before deleting anything.
 
-**449 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**453 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -330,6 +330,38 @@ Seven user reports, four root causes. Plan at
   recommendation to wait until an account buys something beyond sync — and with the note
   that two of the four items should probably survive regardless, because making sign-in
   mandatory makes the offline problem worse, not better.
+
+**Session K, part four — two bugs the phone found that the desktop could not.**
+
+- **The chooser asked which of two IDENTICAL libraries to destroy.** Screenshotted: "864
+  films, 949 duels" against "864 films, 949 duels". `reconcile` is pure and sees three
+  booleans — has a library, is dirty, has the server moved — and **all three are true on
+  an ordinary single device**, because the credits sweep marks the browser dirty every few
+  minutes whether or not anything changed and any push moves the stamp past
+  `lastSeenServerAt`. So it correctly returned `conflict` for a disagreement that did not
+  exist. `reconcileWithAccount` now compares both payloads on the same `contentHash` that
+  `push` already uses to skip pointless uploads; identical means up to date, so it records
+  the server's stamp and reports `in-sync`. **Answering it either way was a no-op, which is
+  exactly why it could survive undetected** — the bug had no consequence except the
+  question. `test/falseConflict.test.ts` pins it, including that a real difference still
+  asks.
+- **`Account` also reconciled on every mount**, and it mounts whenever the settings sheet
+  opens — so the app asked at boot and asked again on each open, against a browser the
+  sweep had since marked dirty. `syncOnOpen` caches its promise now and `Account` reads
+  that: one question per page load, one answer, shared.
+- **`--nav-h` was measured against the wrong viewport.** It is consumed as a `bottom` on
+  `position: fixed` elements, whose containing block is the LAYOUT viewport
+  (`document.documentElement.clientHeight`). It was measured against
+  `visualViewport.height`, which shrinks by the height of the URL bar when chrome is on
+  screen and agrees with the layout viewport only when chrome is hidden. **So it was right
+  on every desktop and on a phone mid-scroll, and wrong the rest of the time** — the worst
+  available failure mode, and why the Settings sheet still showed a gap after the others
+  looked fixed. `visualViewport` is still listened to; it is the signal that chrome moved,
+  not the thing to measure.
+- **Measuring lesson, for the browser tools:** a Browser-pane tab that is not FRONTED does
+  not advance CSS animations. A sheet measured in a background tab reads as stuck at
+  `translateY(100%)` with `animationPlayState: running`, which looks exactly like a real
+  layout bug. `tabs_select` first, then measure.
 
 - **localStorage stays.** The user asked whether to remove it. Local-first with a server
   mirror is standard for an offline-capable PWA and is the only reason the signed-out app
