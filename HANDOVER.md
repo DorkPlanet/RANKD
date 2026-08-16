@@ -28,7 +28,7 @@ signed-out was deleted**, deliberately: the gate is one line, and lifting it sta
 line. Read `SignInGate.tsx`'s header before arguing with it, and
 "Remove the signed-out code paths" in `POTENTIAL-FEATURES.md` before deleting anything.
 
-**453 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**454 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -333,18 +333,40 @@ Seven user reports, four root causes. Plan at
 
 **Session K, part four — two bugs the phone found that the desktop could not.**
 
-- **The chooser asked which of two IDENTICAL libraries to destroy.** Screenshotted: "864
-  films, 949 duels" against "864 films, 949 duels". `reconcile` is pure and sees three
-  booleans — has a library, is dirty, has the server moved — and **all three are true on
-  an ordinary single device**, because the credits sweep marks the browser dirty every few
-  minutes whether or not anything changed and any push moves the stamp past
-  `lastSeenServerAt`. So it correctly returned `conflict` for a disagreement that did not
-  exist. `reconcileWithAccount` now compares both payloads on the same `contentHash` that
-  `push` already uses to skip pointless uploads; identical means up to date, so it records
-  the server's stamp and reports `in-sync`. **Answering it either way was a no-op, which is
-  exactly why it could survive undetected** — the bug had no consequence except the
-  question. `test/falseConflict.test.ts` pins it, including that a real difference still
-  asks.
+- **The chooser asked which of two IDENTICAL libraries to destroy, and it took THREE
+  goes to actually kill.** Screenshotted twice by the user: "864 films, 949 duels" against
+  "864 films, 949 duels". Worth reading in full, because each fix was correct and none of
+  the first two was sufficient — a good example of stopping at the first true cause.
+  - **Cause 1, the trigger.** `reconcile` is pure and sees three booleans — has a library,
+    is dirty, has the server moved — and **all three are true on an ordinary single
+    device**, because the credits sweep marks the browser dirty every few minutes whether
+    or not anything changed and any push moves the stamp past `lastSeenServerAt`. So it
+    correctly returned `conflict` for a disagreement that did not exist.
+  - **Cause 2, why comparing payloads was not enough.** The first fix compared the two
+    sides on `contentHash` over all of `SYNC_KEYS` — which carries **brightness, the strip
+    state and display prefs** alongside the work. Nudging the brightness slider therefore
+    made the payloads genuinely differ while films and duels, the only numbers the chooser
+    prints, stayed identical. **A preference is not a library.** The question is now asked
+    about `WORK_KEYS` alone (`rankd-app-v1`, `rankd-log-v1`) — the things that cannot be
+    merged without inventing duels nobody fought. Everything else is a setting and either
+    side's value will do.
+  - **Cause 3, and the nastiest.** `push()` returned early unless `enabled`, and `enabled`
+    is only set by `startSync`, which runs when the **Account panel mounts**.
+    Reconciliation happens at **boot**. So every push `reconcileWithAccount` decided —
+    including the long-standing `case "push"` — landed on a closed gate and returned
+    silently, while the outcome still reported `"pushed"`. Nothing looked wrong; the
+    browser simply stayed dirty and reconciled to the same answer on every open, forever.
+    Decided pushes now pass `force`; the background watcher deliberately does not, because
+    it must stay off until somebody has agreed there is nothing to argue about.
+  - **The chooser also replaced the entire panel**, so while it was up there was no email,
+    no "Back up now", and **no way to sign out** — the user was stuck behind a question
+    they did not want to answer. It is a banner above the account block now, and every
+    control underneath stays reachable.
+  - **Why it hid so well:** answering it either way was a no-op, because the two sides
+    held the same work. The bug had no consequence except the question, so nothing was
+    ever corrupted to point at it. `test/falseConflict.test.ts` pins all of it, including
+    that the browser must end CLEAN — asserting the outcome string alone would have passed
+    against cause 3.
 - **`Account` also reconciled on every mount**, and it mounts whenever the settings sheet
   opens — so the app asked at boot and asked again on each open, against a browser the
   sweep had since marked dirty. `syncOnOpen` caches its promise now and `Account` reads
