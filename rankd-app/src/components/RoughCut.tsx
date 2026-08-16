@@ -232,6 +232,37 @@ export default function RoughCut({
   };
 
   /**
+   * Come back to this one later.
+   *
+   * ── Why a defer and not a skip ─────────────────────────────────────────────
+   *
+   * The hard part of this screen is being asked about a film before you have any
+   * feel for the tier. The first few decisions are guesses, and you only learn
+   * they were wrong once you have seen the rest.
+   *
+   * A real skip — drop it, move on — would answer that by quietly losing films,
+   * which is the one thing a pass over your whole tier must not do. Sending it
+   * to the BACK costs nothing and fixes the actual problem: by the time it comes
+   * round again you have seen everything else, so the question has an answer it
+   * did not have the first time.
+   *
+   * `at` deliberately does not move. Nothing was decided, so the count of what
+   * is left and the progress bar must both stay exactly where they were —
+   * advancing either would report work that did not happen.
+   */
+  const skip = () => {
+    // With one film left there is no "back" to send it to, and the button would
+    // redraw the same card and look broken.
+    if (at >= pool.length - 1) return;
+    const next = [...pool];
+    const [moved] = next.splice(at, 1);
+    next.push(moved);
+    setPass({ films: next, n: pass.n });
+    setDrag(null);
+    setAimed(null);
+  };
+
+  /**
    * Apply this pass, then climb one of its piles.
    *
    * The applied library is handed OUT rather than read back from the prop: the
@@ -689,6 +720,16 @@ export default function RoughCut({
           className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-30"
         >
           Undo
+        </button>
+        {/* In the middle, between taking one back and stopping altogether,
+            because that is what it is: neither a decision nor an exit. Disabled
+            on the last film, where there is nowhere behind it to go. */}
+        <button
+          onClick={skip}
+          disabled={at >= pool.length - 1}
+          className="px-4 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-30"
+        >
+          Skip
         </button>
         {/* Leaving keeps what you placed. A pass abandoned two-thirds through is
             still two-thirds of a sorted tier, and throwing that away to punish

@@ -173,8 +173,8 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
   {
     id: "rc-out",
     target: "rc-out",
-    title: "Stopping keeps your work",
-    body: "Done saves everything you placed and leaves the rest for later. Undo takes back the last one. Come back to a half-finished pass and it picks up where you stopped.",
+    title: "Skip, undo, stop",
+    body: "Not sure about a film? Skip sends it to the back and brings it round once you've seen the rest. Undo takes back the last one. Done saves everything you placed and picks up where you stopped next time.",
   },
 ];
 
