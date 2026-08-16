@@ -120,7 +120,21 @@ export async function DELETE(request: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
-  const ids = new URL(request.url).searchParams.getAll("id");
+  const params = new URL(request.url).searchParams;
+
+  // `?all=1` is the wipe, and it is a separate spelling on purpose: an empty
+  // `id` list must stay an error rather than quietly meaning "everything",
+  // because that is the shape a bug takes when a client builds the query string
+  // from a list it failed to load.
+  if (params.get("all") === "1") {
+    const gone = await db
+      .delete(savedLists)
+      .where(eq(savedLists.userId, user.id))
+      .returning({ id: savedLists.id });
+    return NextResponse.json({ deleted: gone.length });
+  }
+
+  const ids = params.getAll("id");
   if (ids.length === 0) return NextResponse.json({ error: "No id given." }, { status: 400 });
 
   // Scoped to the caller's own rows, so an id belonging to someone else matches

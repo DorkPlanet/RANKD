@@ -54,6 +54,35 @@ body {
   overscroll-behavior: none;
 }
 
+/* ── The strip below the app ────────────────────────────────────────────────
+   `.h-app` is `100svh` on purpose (see its note below), which means every
+   `main` deliberately UNDER-fills a mobile browser whose URL bar has retracted.
+   Whatever is left over is painted by `body`, and `body` is `--bg` navy while
+   the nav sitting immediately above it is `--header-bg` black. Two near-blacks
+   that are not the same black, so the shortfall read as a seam across the
+   bottom of the phone rather than as nothing at all.
+
+   Filling it with the BAR's colour makes the bar look like it reaches the
+   physical edge, which is what it is trying to do with its own
+   env(safe-area-inset-bottom) padding already. `body` keeps `--bg`, so no
+   screen changes.
+
+   `z-index: -1` puts it above the body background and below every screen —
+   `main` is `relative` with no z-index, which is enough to sit over this and
+   NOT enough to make a stacking context, so the nav's `z-40` still beats the
+   sheet scrim. Do not give this a positive z-index. */
+body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 100svh;
+  z-index: -1;
+  background: var(--header-bg);
+  pointer-events: none;
+}
+
 /* Holding a poster must open our info card, not the OS "Save image / Open in
    new tab" callout. preventDefault on contextmenu doesn't cover iOS Safari's
    image callout — that needs -webkit-touch-callout explicitly. */

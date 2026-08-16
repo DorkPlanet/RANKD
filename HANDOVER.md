@@ -16,11 +16,10 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (16 Aug 2026):** Session J, closed. Everything is committed, pushed to
-`origin/master`, and deployed to production. There is no side branch — `master` is what is
-live.
+**State (16 Aug 2026):** Session K. Committed to `master`, **not yet deployed** — check
+`git log origin/master..` before assuming otherwise. There is no side branch.
 
-**415 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**440 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -212,6 +211,96 @@ Landed, roughly in the order it was found:
   with no import control in sight. `filmsFromFile` in `importCsv.ts` is now shared by both
   controls; the zip handling must never be on only one of them. Settings also opens on the
   library row when the library is empty.
+
+**Session K — the wipe that undid itself, and four layering bugs.**
+Seven user reports, four root causes. Plan at
+`C:\Users\jarra\.claude\plans\okay-good-now-linked-hanrahan.md`.
+
+- **"Delete everything" now reaches the ACCOUNT.** It cleared this browser and left the
+  server row, so the reload looked to `reconcile.ts` exactly like a new phone — no local
+  library, no `lastSeenServerAt` — and it pulled the whole thing back, then reloaded a
+  second time. `/api/library` gained `DELETE`; `/api/lists` gained `?all=1` (a separate
+  spelling from the per-id path on purpose: an empty id list must stay an error, not
+  silently mean everything). `wipeAccount()` runs FIRST and **the local wipe does not
+  happen if it fails** — a browser emptied while the mirror survives is precisely the state
+  that restores itself. 401 counts as success: signed out means there is nothing to delete.
+- **Background writes were refilling storage during the reload.** `location.reload()` does
+  not stop the page. The credits sweep's `.finally(flush)` and the duel screen's poster
+  backfill both resolve afterwards holding the PRE-wipe library and write it back through
+  `saveFilms`; the sweep's own stop flag is set by an effect cleanup a reload never runs.
+  **This one bit signed-OUT users too.** `lib/wiped.ts` is a one-way flag checked by
+  `saveFilms`, `markDirty`, `push` and `pull`. It is its own four-line module because
+  `syncState.ts` imports nothing — read by the four modules that write, anything it
+  imported back would be a cycle. Do not move the flag into `reset.ts`.
+- **One overlay at a time.** `AppShell` had five independent booleans and nothing stopped
+  them all being true; two call sites had grown ad-hoc pairwise closes to patch the worst
+  pair. Now a single `Overlay` union — `info | person | settings | trophies | log` — so
+  replacing is the only thing the slot can do. **`go()` empties it**, which is what makes a
+  bottom-bar press close the sheet over it (it changed `screen` and nothing else, and
+  overlays render outside the screen branch, so Settings simply re-parented itself over
+  wherever you had navigated to). `CollectionSheet` now closes itself before delegating to
+  `onInfo`; a screen handing off to the shell was where the rule was still being broken.
+  DuelScreen's setup states were already exclusive by hand and were left alone.
+- **The Log drawer was rendered INSIDE `<nav>`.** The nav is `relative z-40`, which is a
+  stacking context, so its `z-30` sheet was ordered *within* the nav and painted over the
+  bar — the only mis-layered overlay in the app. Its state moved to `AppShell` with the
+  rest; `BottomNav` keeps `logging` and `onToggleLog`. **Nothing renders inside that nav
+  now, and nothing should.** Bonus: it survives a tab press long enough to animate out,
+  which it could not when a screen change unmounted the nav under it.
+- **`--nav-h` is a POSITION now, not a height.** It was `offsetHeight`, which assumes the
+  bar's bottom edge is the bottom of the screen. `main` is `100svh` and the nav is pinned
+  at its foot, but a sheet is `position: fixed` and measures the REAL viewport — so with
+  the URL bar retracted the two disagreed by exactly the slack `svh` was erring by, and
+  that slack was the gap under every drawer. Now `visualViewport.height + offsetTop -
+  nav.getBoundingClientRect().top`, republished on `visualViewport` resize/scroll as well
+  as the `ResizeObserver`. In a fullscreen PWA it is still `offsetHeight`.
+- **The seam at the bottom of the screen** is the same cause seen from the other side: the
+  shortfall below `main` was painted by `body` (`--bg` navy) against a nav painted
+  `--header-bg` black. `body::after` fills everything below `100svh` with the bar's colour
+  at `z-index: -1`. **Do not give it a positive z-index** — `main` is `relative` with no
+  z-index, which is enough to sit over this and not enough to make a stacking context, and
+  the nav's `z-40` beating the sheet scrim depends on that.
+- **`.h-app` was NOT touched**, and must not be. See its comment in `globals.css`.
+- **The tutorial replaying after a wipe needed no code.** `rankd-tour-v1` was already
+  removed by the wipe and is correctly absent from `SYNC_KEYS`; what came back was the
+  LIBRARY, and tours only fire on a library with nothing placed. Verified live: wiped key
+  plus unplaced films fires the list coach mark.
+**Session K, part two — item 3: tier cards and the `runRequest` collapse.**
+
+- **The app's own answer was write-only.** Every duel feeds the master order, and the only
+  way to LOOK at that order as a shareable thing was to finish a King of the Hill run and
+  catch the card on the summary before dismissing it. Miss it and your top ten existed
+  nowhere you could point at. `lib/card/live.ts` projects `rankedFilms` into `liveViews` —
+  the overall Top 10 plus one per tier — and the profile shows them in a
+  **STRAIGHT FROM YOUR LIST** shelf ABOVE the saved one, because they are the thing the
+  app is building and a saved ranking is a side quest off it. `LiveCardSheet` reads one
+  back and offers the three designs.
+- **`RankSubject` gained `{ kind: "overall" }`**, and `isLiveSubject` is now the single
+  place the rule lives: a live subject may be DRAWN and may never be saved, resumed or
+  pushed. Saving one would freeze a copy at today, and the next duel would leave it
+  asserting a top ten that is no longer yours while looking exactly like one that is.
+  `poolForSubject` returns nothing for both live kinds, so no run can start over one — a
+  tier run already writes scores, and a second cross-tier order would contradict it.
+  That switch is exhaustive on purpose: a new kind must fail the build there.
+- **`runRequest` replaced three props and a fourth code path.** `personRun` /
+  `personGuests` / `personPortrait` were separate, set together, cleared together, and
+  kept consistent by nothing; genre runs bypassed all three and started themselves. The
+  handover flagged that "only one is ever set" was true only because nothing had yet set
+  two, and that resume would make it three. Now one object, one pool selector
+  (`poolForSubject`), one pile builder (`pileFor`, which owns the merge-by-id that a blind
+  concat once turned into a 19-film climb against 35 duplicates), and one start.
+  **Two pending requests are unrepresentable rather than merely unlikely.**
+- Verified live end to end: genre run and person run both start, carry their subject to
+  the summary, draw their card, and leave `score`, `duels` and the evidence log untouched
+  with no guest leaked into the library.
+
+- **localStorage stays.** The user asked whether to remove it. Local-first with a server
+  mirror is standard for an offline-capable PWA and is the only reason the signed-out app
+  works at all. `backupFormat.ts` gained the **index of all 14 keys** and who owns each,
+  since there is no single `KEYS` constant. `rankd-review-dismissed-v1` is dead but stays
+  listed, and its existing comment already says why — ownership is what gives a restore
+  permission to clear it, so dropping it strands the value on old devices forever.
+  The stale `rankd-synced-at` reference is now `rankd-sync-v1`.
 
 **A tutorial sandbox was built and then deleted in the same session.** It ran the real
 screens over sample films with every write guarded. The user's call, and the right one:
@@ -680,6 +769,14 @@ lock-at-the-bottom family. Reasoning at
 `C:\Users\jarra\.claude\plans\foamy-painting-hammock.md` (Parts Two–Four); the older plan
 at `distributed-conjuring-oasis.md` still holds for item 3 below.
 
+**Session K took a bug block ahead of all of this and cleared it** — the wipe, the overlay
+stacking, the Log drawer's layering, the bottom seam and the drawer gap. Nothing was
+renumbered for it; those were fixes to shipped behaviour rather than new items, and they
+are written up under Landed. **Session K then took item 3 as well**, so with 1 and 4
+landed in Session G and 2 parked by the user's own decision, the top of this list is now
+**item 5 (profile visual pass)** or **6 (avatar from library artwork)**, whichever is
+wanted first — 6 is the smaller and is fully unblocked.
+
 1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
    per screen, revisitable from Settings. See the decision block above. The original entry
    read: A new user is told nothing and infers everything. The user supplied
@@ -715,7 +812,8 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
      **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a
      row's height, and nothing new goes inside the list scroller** — drag handles and lock
      toggles want to violate both.
-3. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
+3. ~~**Tier cards, and the `runRequest` collapse.**~~ — **LANDED in Session K**, both
+   halves. See the Landed entry. The original read: A tier card is a live view over
    `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
    writes scores and a second cross-tier order would contradict it. **This is also the
    Profile Card's "Top 10" slot** (#11), described from the other direction. Do the prop
@@ -723,6 +821,14 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
    already two effects reaching for `state.session`, and resume would make it three. They
    cannot race today because only one is ever set at a time, but that is a property nobody
    is enforcing.
+   - **What it leaves for #4:** the profile's named slots are now half-answered. Top 10
+     exists and is live; "favourite actor" and "favourite director" are still absent, and
+     they are a different thing — a saved ranking, not a projection. Do not try to make
+     those live too; there is no master order across a person's work, which is the whole
+     reason a person run exists.
+   - **And for #7 (resume):** `RunRequest` is the shape a resumed run should be rebuilt
+     INTO. `adoptRun` gets a request, not three props, and `subjectKey` is already the
+     primary key `lib/runs.ts` wants.
 4. ~~**Profile card slots + persistence + JPG re-export**~~ — **LANDED in Session G**: the
     shelf, the viewer, re-export, pinning, the `{v:2}` payload and the per-format backup key
     set are all in. What remains of the original item is the auto-save floor and named
@@ -809,6 +915,18 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
     testing cannot see this at all.
   - **Sync feeling quieter.** An unchanged library no longer re-uploads 468KB on every
     dirty tick.
+- **Three from Session K that only a phone can settle.** All three were fixed against a
+  theory the code proves and a desktop viewport cannot exercise, because they all turn on
+  the real viewport being taller than `100svh`, which only happens when a mobile URL bar
+  retracts.
+  - **The seam at the bottom of the screen.** Check with the URL bar both extended and
+    retracted, and again in the installed PWA. Measured correct at the identity case
+    (desktop, where `svh` equals the viewport) — that proves the formula, not the fix.
+  - **The gap under every drawer.** Same cause, same test. Open Settings and the Log
+    drawer with the URL bar retracted; the sheet's bottom edge must sit on the bar.
+  - **Delete everything while signed in ON TWO DEVICES.** Nothing may come back on either,
+    and the second device must not push the library back up. The single-device path is
+    covered by `test/wipe.test.ts`; two devices racing is not.
 - **The sign-in jitter is still UNPROVEN and untouched.** The suspect is
   `window.location.reload()` at the end of `pull()` in `sync.ts` — signing in reconciles,
   decides to pull, and tears the whole app down and boots it again. **It has never been
@@ -925,6 +1043,22 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Gotchas that have already cost time
 
+- **A reload does not stop the page (Session K).** `location.reload()` leaves timers
+  firing and fetches resolving until the navigation actually commits, and effect cleanups
+  never run at all. "Delete everything" cleared storage and watched the credits sweep
+  refill it from a closure holding the deleted library. **If you clear state and reload,
+  something has to refuse the writes still in flight** — see `lib/wiped.ts`.
+- **A `z-index` only competes inside its own stacking context (Session K).** The Log
+  drawer was `z-30` and the bar it painted over was `z-40`, which reads as impossible until
+  you notice the drawer was rendered as a CHILD of the bar. **A number lower than another
+  number tells you nothing until you know both live in the same context.** Overlays go
+  over screens, never inside chrome.
+- **`position: fixed` and `100svh` measure different things (Session K).** `main` is cut to
+  `svh` — deliberately an under-estimate — while a fixed sheet measures the real viewport.
+  They agree on a desktop and in a fullscreen PWA, and disagree by however much the URL bar
+  was hiding everywhere else. Both the seam and the drawer gap were that one difference.
+  **A layout bug that reproduces on no desktop viewport is usually a viewport-unit
+  disagreement, not a spacing mistake.**
 - **A "clearing" write is more dangerous than a "saving" one (Session J).** While the
   tutorial sandbox existed, the obvious guard was "do not save". The real hazard was that
   `saveRun` and `saveRoughCut` both REMOVE their key when handed something unresumable — so

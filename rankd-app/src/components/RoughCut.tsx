@@ -64,7 +64,8 @@ export default function RoughCut({
   onSettings,
   onTrophies,
   onNavigate,
-  onAddFilm,
+  logging,
+  onToggleLog,
   onBegan,
   onInfo,
 }: {
@@ -81,7 +82,9 @@ export default function RoughCut({
    * — so the caller only has to do the navigating.
    */
   onNavigate: (to: "modes" | "list" | "profile") => void;
-  onAddFilm: (film: Film) => void;
+  /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
+  logging?: boolean;
+  onToggleLog?: () => void;
   /**
    * A pass is on screen with its targets mounted.
    *
@@ -320,8 +323,8 @@ export default function RoughCut({
       onModes={() => leaveTo("modes")}
       onList={() => leaveTo("list")}
       onProfile={() => leaveTo("profile")}
-      films={films}
-      onAddFilm={onAddFilm}
+      logging={logging}
+      onToggleLog={onToggleLog}
     />
   );
 

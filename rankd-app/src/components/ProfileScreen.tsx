@@ -26,6 +26,9 @@ import { fetchAccount } from "@/lib/account";
 import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
+import LiveCardSheet from "./LiveCardSheet";
+import { liveViews } from "@/lib/card/live";
+import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
 import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import type { Film } from "@/lib/types";
@@ -47,7 +50,8 @@ export default function ProfileScreen({
   onDuel,
   onList,
   onTrophies,
-  onAddFilm,
+  logging,
+  onToggleLog,
 }: {
   films: Film[];
   profile: Profile;
@@ -59,7 +63,9 @@ export default function ProfileScreen({
   onDuel: () => void;
   onList: () => void;
   onTrophies: () => void;
-  onAddFilm: (film: Film) => void;
+  /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
+  logging?: boolean;
+  onToggleLog?: () => void;
 }) {
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
@@ -69,6 +75,9 @@ export default function ProfileScreen({
   // Whether the shelf's card shortcut was what opened it. Separate from
   // `openList` so closing the card still leaves the list behind it.
   const [openOnCard, setOpenOnCard] = useState(false);
+  // A live view — the overall top ten, or one tier's. Not a saved list and it
+  // never becomes one; see `lib/card/live.ts`.
+  const [openLive, setOpenLive] = useState<RankSubject | null>(null);
   // Read once per mount and re-read whenever one is saved, pinned or deleted.
   // A counter rather than storing the lists themselves, so the source of truth
   // stays localStorage and nothing here can drift from it.
@@ -91,6 +100,11 @@ export default function ProfileScreen({
       dead = true;
     };
   }, []);
+
+  // What the master list already says, ready to be looked at. Recomputed from
+  // the library rather than stored, which is the entire distinction between
+  // these and the saved shelf below.
+  const live = useMemo(() => liveViews(films), [films]);
 
   // Memoised so the `?? []` fallback is not a fresh array every render, which
   // would make the shelf below recompute on every keystroke in the bio field.
@@ -415,6 +429,42 @@ export default function ProfileScreen({
             be saved and never seen again. Pinned ones lead — that is what
             pinning is — and the rest follow, so this is both the shelf and the
             way to see everything at once. */}
+        {/* ── What the list already says ──────────────────────────────────
+            The app's whole output was write-only from here. Every duel feeds
+            the master order, and the only way to LOOK at that order as a thing
+            — let alone share it — was to finish a King of the Hill run and
+            catch the card on the summary screen before dismissing it. Miss it
+            and your top ten existed nowhere you could point at.
+
+            These sit ABOVE the saved shelf on purpose. They are the answer the
+            app is actually building; a saved ranking is a side quest off it.
+
+            Nothing here can be saved or pinned, and the sheet says so. A frozen
+            copy of a live view starts lying the moment you duel again. */}
+        {live.length > 0 && (
+          <section className="mt-5">
+            <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
+              STRAIGHT FROM YOUR LIST
+            </div>
+            <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-6 pb-1">
+              {live.map(({ subject, films: top }) => (
+                <MiniCard
+                  key={subjectKey(subject)}
+                  film={top[0]}
+                  eyebrow={subjectEyebrow(subject).toUpperCase()}
+                  title={subjectTitle(subject)}
+                  sub={`${top.length} film${top.length === 1 ? "" : "s"}`}
+                  onClick={() => setOpenLive(subject)}
+                  // No card shortcut. The tile is already one tap from the
+                  // designs, and the list underneath is the part a reader has
+                  // never been shown — skipping it would hide the new thing to
+                  // save a tap on the old one.
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {savedLists.length > 0 && (
           <section className="mt-5">
             <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
@@ -539,9 +589,24 @@ export default function ProfileScreen({
         </div>
       </div>
 
-      <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} films={films} onAddFilm={onAddFilm} />
+      <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} logging={logging} onToggleLog={onToggleLog} />
 
-      {open && <CollectionSheet c={open} onInfo={onInfo} onClose={() => setOpen(null)} />}
+      {/* Closes itself on the way through. `onInfo` opens a film card in
+          `AppShell`, which renders over this sheet rather than inside it, so
+          passing the handler straight through left two stacked panels and a
+          reader who had to dismiss them one at a time. One overlay at a time is
+          the rule everywhere; a screen handing off to the shell is where it was
+          being quietly broken. */}
+      {open && (
+        <CollectionSheet
+          c={open}
+          onInfo={(f) => {
+            setOpen(null);
+            onInfo(f);
+          }}
+          onClose={() => setOpen(null)}
+        />
+      )}
 
       {openList && (
         <SavedListSheet
@@ -566,6 +631,20 @@ export default function ProfileScreen({
           }}
         />
       )}
+      {/* Closes itself before handing off to the shell's film card, for the same
+          reason `CollectionSheet` does. One overlay at a time. */}
+      {openLive && (
+        <LiveCardSheet
+          subject={openLive}
+          films={films}
+          onInfo={(f) => {
+            setOpenLive(null);
+            onInfo(f);
+          }}
+          onClose={() => setOpenLive(null)}
+        />
+      )}
+
       {editing && <EditIdentity profile={profile} onSave={onProfile} onClose={() => setEditing(false)} />}
 
 

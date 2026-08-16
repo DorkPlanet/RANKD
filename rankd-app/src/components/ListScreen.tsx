@@ -46,7 +46,8 @@ export default function ListScreen({
   onProfile,
   onPoster,
   onTrophies,
-  onAddFilm,
+  logging,
+  onToggleLog,
   frozen,
 }: {
   films: Film[];
@@ -70,7 +71,9 @@ export default function ListScreen({
   onProfile: () => void;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
-  onAddFilm: (film: Film) => void;
+  /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
+  logging?: boolean;
+  onToggleLog?: () => void;
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
@@ -264,8 +267,8 @@ export default function ListScreen({
         onModes={onDuel}
         onList={() => {}}
         onProfile={onProfile}
-        films={films}
-        onAddFilm={onAddFilm}
+        logging={logging}
+        onToggleLog={onToggleLog}
       />
     </main>
   );

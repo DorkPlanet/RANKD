@@ -9,8 +9,10 @@
 // lives in memory, and navigating away would destroy it mid-run. When sessions
 // are persisted this becomes the one place to swap in real routing.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DuelScreen from "./DuelScreen";
+import { LogFilm } from "./LogFilm";
+import { SCRIM_ARM_MS, SHEET_EXIT_MS } from "./ui";
 import { FilmInfo } from "./FilmInfo";
 import { Settings } from "./Settings";
 import ListScreen from "./ListScreen";
@@ -32,6 +34,8 @@ import { InstallPrompt } from "./InstallPrompt";
 import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
+import { subjectFromPerson } from "@/lib/subject";
+import type { RunRequest } from "@/lib/curated";
 import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
@@ -44,6 +48,21 @@ const SWEEP_GAP_MS = 400;
 const SWEEP_BATCH = 10;
 
 type Screen = "duel" | "list" | "profile";
+
+/**
+ * What is open OVER the current screen. At most one, ever.
+ *
+ * A union rather than a flag each, so "only one at a time" is a thing the type
+ * cannot express otherwise rather than a rule every call site has to keep. The
+ * two that carry a subject carry it here, which also means a film card cannot
+ * be open with nothing to show.
+ */
+type Overlay =
+  | { kind: "info"; film: Film }
+  | { kind: "person"; person: Person }
+  | { kind: "settings" }
+  | { kind: "trophies" }
+  | { kind: "log" };
 
 /** Matches `.veil-out` in globals.css. Kept here only to sequence the tour behind it. */
 const VEIL_MS = 200;
@@ -89,25 +108,58 @@ export default function AppShell() {
   // that. See `openingScreen` for why it must not stay derived.
   const [screen, setScreen] = useState<Screen | null>(null);
   const [profile, setProfile] = useState<Profile>(EMPTY_PROFILE);
-  const [infoFilm, setInfoFilm] = useState<Film | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Lives here, not on the profile — the trophy sits in the shared header, so it
-  // has to work from whichever screen you're looking at.
-  const [trophiesOpen, setTrophiesOpen] = useState(false);
+  // ── One overlay, not five booleans ─────────────────────────────────────────
+  //
+  // These were five independent pieces of state, and nothing stopped them being
+  // true at once: Settings, the trophy case, a film card and a person sheet
+  // could all be open together, each unaware of the others, with the reader
+  // left to dismiss them one at a time in an order nobody designed. Two call
+  // sites had grown ad-hoc pairwise closes to patch the worst pair.
+  //
+  // A single slot makes the rule structural instead of remembered — opening
+  // anything replaces whatever was open, because there is only one place to put
+  // it. `go` empties it, which is what makes a bottom-bar press close the sheet
+  // over it.
+  //
+  // The trophy case and Settings live here rather than on a screen because both
+  // are reached from the shared header, so they have to work from whichever
+  // screen you are looking at. Logging joined them for a different reason: it
+  // was rendered INSIDE `BottomNav`, whose `z-40` is a stacking context, so its
+  // sheet painted over the very bar it belongs to. Overlays go over screens,
+  // never inside chrome.
+  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  // The log sheet is the one overlay that plays an exit animation before it
+  // unmounts, so its closing frame outlives the slot being emptied. Kept as its
+  // own flag rather than a sixth `kind`, which would make every reader of
+  // `overlay` handle a state that is on its way out.
+  const [logClosing, setLogClosing] = useState(false);
+  // ── Pressing the same cell again closes what it opened ─────────────────────
+  //
+  // Moved here with the sheet it drives, and it has to sit with the other hooks
+  // rather than beside `toggleLog` further down: there is an early return
+  // between the two, and a conditionally-called hook is a different hook order
+  // on the render that takes it.
+  //
+  // GHOST CLICKS are why the guard exists at all. A browser synthesises a
+  // `click` ~300ms after a finger lifts, at the coordinates it lifted from —
+  // here, the cell that just opened the panel. Unguarded, the sheet opens and
+  // shuts on a single tap, and only ever on touch. Same trap `Sheet` arms its
+  // backdrop against, same window.
+  const logOpenedAt = useRef(0);
   const [brightness, setBrightness] = useState(0);
   // Read in the same effect as brightness rather than as a lazy initialiser —
   // see the note on that effect for why localStorage cannot be read during the
   // first render without tearing hydration.
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
-  // Whose filmography is open, and who a cross-tier run was just asked for.
-  // Both live here because opening one means closing the info card, and starting
-  // the other means changing screens.
-  const [person, setPerson] = useState<Person | null>(null);
-  const [personRun, setPersonRun] = useState<Person | null>(null);
-  const [personGuests, setPersonGuests] = useState<Film[]>([]);
-  // Their face, fetched by the sheet and carried through to the share card. A
-  // plain value rather than another request, so it starts no effect of its own.
-  const [personPortrait, setPersonPortrait] = useState<string | undefined>(undefined);
+  // The curated run just asked for. Whose filmography is OPEN is an overlay and
+  // lives in the slot above; this is the request that outlives it, because
+  // acting on it means changing screens.
+  //
+  // One object where there were three pieces of state — the subject, the
+  // borrowed films and the portrait were separate, set together and cleared
+  // together, and nothing but discipline kept them consistent. See
+  // `lib/curated.ts`.
+  const [runRequest, setRunRequest] = useState<RunRequest | null>(null);
   // What the last sitting amounted to. Read once, here, for the reason below.
   const [recap, setRecap] = useState<VisitDelta | null>(null);
   // ── The splash, in two flags ───────────────────────────────────────────────
@@ -542,12 +594,37 @@ export default function AppShell() {
       setGreet((g) => g + 1); // coming back to the game earns the overlay again
     }
     setScreen(s);
+    // Whatever was open over the old screen does not follow you to the new one.
+    // These render outside the screen branch, so without this a Settings sheet
+    // simply re-parented itself over wherever you had just navigated to and had
+    // to be dismissed separately — pressing a bottom-bar tab looked like it had
+    // done nothing.
+    setOverlay(null);
+    setLogClosing(false);
     setTourDue(null);
     const due = tourFor(s);
     if (due) setTimeout(() => setTourDue(due), arriving ? VEIL_MS + 20 : 20);
   };
 
   const goDuel = () => go("duel");
+
+  const toggleLog = () => {
+    if (overlay?.kind === "log") {
+      if (Date.now() - logOpenedAt.current <= SCRIM_ARM_MS || logClosing) return;
+      setLogClosing(true);
+      setTimeout(() => {
+        // Only if it is still the thing on screen. `go` empties the slot on a
+        // tab press, and this timer would otherwise close whatever had taken
+        // its place in the meantime.
+        setOverlay((o) => (o?.kind === "log" ? null : o));
+        setLogClosing(false);
+      }, SHEET_EXIT_MS);
+      return;
+    }
+    logOpenedAt.current = Date.now();
+    setLogClosing(false);
+    setOverlay({ kind: "log" });
+  };
 
   /**
    * "Show me the tutorials again" — be treated as new.
@@ -570,7 +647,7 @@ export default function AppShell() {
    * as the reader wanders, not just the first.
    */
   const startTour = () => {
-    setSettingsOpen(false);
+    setOverlay(null);
     forgetTours();
     setSeen(new Set());
     setReplaying(true);
@@ -594,12 +671,13 @@ export default function AppShell() {
         <DuelScreen
           state={state}
           setState={setState}
-          onInfo={setInfoFilm}
-          onSettings={() => setSettingsOpen(true)}
-          onTrophies={() => setTrophiesOpen(true)}
+          onInfo={(f) => setOverlay({ kind: "info", film: f })}
+          onSettings={() => setOverlay({ kind: "settings" })}
+          onTrophies={() => setOverlay({ kind: "trophies" })}
           onList={() => go("list")}
           onProfile={() => go("profile")}
-          onAddFilm={addFilm}
+          logging={overlay?.kind === "log"}
+          onToggleLog={toggleLog}
           // A run just started, so the duel's targets exist now. Deferred a tick
           // for the same reason every other tour start is: `Coach` measures as
           // it renders, and the posters have not committed yet.
@@ -626,27 +704,22 @@ export default function AppShell() {
             if (seen.has("roughcut") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("roughcut"), 20);
           }}
-          personRun={personRun}
-          personGuests={personGuests}
-          personPortrait={personPortrait}
-          onPerson={setPerson}
-          onPersonRunHandled={() => {
-            setPersonRun(null);
-            setPersonGuests([]);
-            setPersonPortrait(undefined);
-          }}
+          runRequest={runRequest}
+          onPerson={(p) => setOverlay({ kind: "person", person: p })}
+          onRunRequestHandled={() => setRunRequest(null)}
         />
       ) : current === "list" ? (
         <ListScreen
           films={library}
           profile={profile}
-          onInfo={setInfoFilm}
-          onSettings={() => setSettingsOpen(true)}
-          onTrophies={() => setTrophiesOpen(true)}
+          onInfo={(f) => setOverlay({ kind: "info", film: f })}
+          onSettings={() => setOverlay({ kind: "settings" })}
+          onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onPoster={setMeta}
-          onAddFilm={addFilm}
+          logging={overlay?.kind === "log"}
+          onToggleLog={toggleLog}
           // A tutorial is a held moment. Nothing behind it may move.
           // Neither may it move when the reader has said they don't want it to.
           frozen={showCoach || !prefs.listDrift}
@@ -657,71 +730,90 @@ export default function AppShell() {
           profile={profile}
           recap={recap}
           onProfile={changeProfile}
-          onInfo={setInfoFilm}
-          onSettings={() => setSettingsOpen(true)}
-          onTrophies={() => setTrophiesOpen(true)}
+          onInfo={(f) => setOverlay({ kind: "info", film: f })}
+          onSettings={() => setOverlay({ kind: "settings" })}
+          onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onList={() => go("list")}
-          onAddFilm={addFilm}
+          logging={overlay?.kind === "log"}
+          onToggleLog={toggleLog}
         />
       )}
 
-      {trophiesOpen && <Trophies films={library} onClose={() => setTrophiesOpen(false)} />}
+      {/* ── The overlay slot ──────────────────────────────────────────────────
+          One branch, so the "only one at a time" rule is visible as a shape
+          rather than asserted in a comment. Every hand-off between two of them
+          — a film card to a person, a person to a film card — is now a single
+          assignment, because replacing is all the slot can do. */}
+      {overlay?.kind === "trophies" && (
+        <Trophies films={library} onClose={() => setOverlay(null)} />
+      )}
 
-      {infoFilm && (
+      {overlay?.kind === "info" && (
         <FilmInfo
-          film={infoFilm}
+          film={overlay.film}
           films={library}
-          onClose={() => setInfoFilm(null)}
-          // The info card closes on the way through: two stacked sheets over the
-          // duel is one too many, and you came here to leave this film behind.
-          onPerson={(p) => {
-            setInfoFilm(null);
-            setPerson(p);
-          }}
+          onClose={() => setOverlay(null)}
+          onPerson={(p) => setOverlay({ kind: "person", person: p })}
           // Guests are not in the library, so there is nothing to remove them
           // from - offering it would be a button that silently does nothing.
-          onRemove={infoFilm.guest ? undefined : (f) => removeFilm(f.id)}
+          onRemove={overlay.film.guest ? undefined : (f) => removeFilm(f.id)}
           // Same reasoning as removal: a guest is not in the library, so there
           // is nothing to correct and the fix would be written to nothing.
-          onFixMatch={infoFilm.guest ? undefined : fixMatch}
+          onFixMatch={overlay.film.guest ? undefined : fixMatch}
         />
       )}
 
-      {person && (
+      {overlay?.kind === "person" && (
         <PersonSheet
-          person={person}
+          person={overlay.person}
           films={library}
-          onClose={() => setPerson(null)}
-          onInfo={(f) => {
-            setPerson(null);
-            setInfoFilm(f);
-          }}
+          onClose={() => setOverlay(null)}
+          onInfo={(f) => setOverlay({ kind: "info", film: f })}
+          // A real add, not the nav's toggle: the sheet offers to log a
+          // borrowed film straight into the library.
           onAddFilm={addFilm}
           onRank={(p, guests, portrait) => {
-            setPerson(null);
-            setPersonPortrait(portrait);
+            setOverlay(null);
             // A fresh object every time, so asking for the same person twice is
             // two requests. The duel screen starts a run when this prop CHANGES,
             // and handing back the identical object would be a no-op it read as
             // "nothing new to do".
-            setPersonRun({ ...p });
-            setPersonGuests(guests);
+            setRunRequest({ subject: subjectFromPerson(p, portrait), guests });
             goDuel();
           }}
         />
       )}
 
-      {settingsOpen && (
+      {overlay?.kind === "settings" && (
         <Settings
           brightness={brightness}
           onChange={changeBrightness}
           prefs={prefs}
           onPrefs={changePrefs}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => setOverlay(null)}
           films={library}
           onImport={loadLibrary}
           onTour={startTour}
+        />
+      )}
+
+      {/* Rendered here rather than inside `BottomNav`, where it used to live
+          next to the button that opens it. The nav is `relative z-40`, which is
+          a stacking context, so a `z-30` sheet nested inside it was scoped to
+          that context and painted over the bar instead of under it — the one
+          sheet in the app that did. Being a sibling of the screens also means
+          it survives a tab press long enough to animate out, which it could not
+          do when a screen change unmounted the nav underneath it. */}
+      {overlay?.kind === "log" && (
+        <LogFilm
+          films={library}
+          onAdd={addFilm}
+          closing={logClosing}
+          onClose={() => {
+            setOverlay(null);
+            setLogClosing(false);
+          }}
         />
       )}
 

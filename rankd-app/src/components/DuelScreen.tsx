@@ -29,7 +29,6 @@ import { PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
-import { LogFilm } from "./LogFilm";
 import RoughCut from "./RoughCut";
 import { bandsOf, BUCKETS, type Bucket } from "@/lib/roughCut";
 import { loadRoughCut } from "@/lib/roughCutRun";
@@ -62,10 +61,15 @@ import {
   TrophyIcon,
 } from "./Icons";
 import { BARS } from "@/lib/brand";
-import { beliefsFor } from "@/lib/beliefs";
-import { filmsBy, rankByBelief, type Person } from "@/lib/people";
-import { subjectFromPerson, subjectTitle, type RankSubject } from "@/lib/subject";
-import { filmsInGenre, MIN_GENRE_RUN } from "@/lib/genres";
+import { type Person } from "@/lib/people";
+import { subjectTitle, type RankSubject } from "@/lib/subject";
+import { MIN_GENRE_RUN } from "@/lib/genres";
+import { pileFor, type RunRequest } from "@/lib/curated";
+
+/** Stable, so `guests` is not a fresh array every render. */
+const EMPTY_GUESTS: readonly Film[] = [];
+/** Two films is the floor for a climb: one has nothing to be ranked against. */
+const MIN_CURATED_RUN = 2;
 import { CuratedPicker } from "./CuratedPicker";
 import type { Film, RankState } from "@/lib/types";
 
@@ -84,12 +88,11 @@ export default function DuelScreen({
   onList,
   onProfile,
   onTrophies,
-  onAddFilm,
+  logging,
+  onToggleLog,
   onImportFile,
-  personRun,
-  personGuests = [],
-  personPortrait,
-  onPersonRunHandled,
+  runRequest,
+  onRunRequestHandled,
   onRunBegan,
   onRoughCutBegan,
   onPerson,
@@ -102,20 +105,25 @@ export default function DuelScreen({
   onList: () => void;
   onProfile: () => void;
   onTrophies: () => void;
-  onAddFilm: (film: Film) => void;
+  /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
+  logging?: boolean;
+  onToggleLog?: () => void;
   /** A picked ratings file, from the empty screen own import control. */
   onImportFile?: (file: File) => void;
   /** A run just started, so the duel's posters and strip are about to exist. */
   onRunBegan?: () => void;
   /** Same contract as onRunBegan, for the mode that has no session. */
   onRoughCutBegan?: () => void;
-  /** A person whose films should be ranked against each other, across tiers. */
-  personRun?: Person | null;
-  /** Films borrowed for that run only — never saved to the library. */
-  personGuests?: Film[];
-  /** Their photo, for the share card. Absent when TMDb had none. */
-  personPortrait?: string;
-  onPersonRunHandled?: () => void;
+  /**
+   * A curated run somebody asked for — a director, an actor, a genre.
+   *
+   * ONE prop, where there were three (`personRun`, `personGuests`,
+   * `personPortrait`) plus a fourth path for genre that bypassed them entirely.
+   * Two pending requests are now unrepresentable rather than merely unlikely.
+   * See `lib/curated.ts`.
+   */
+  runRequest?: RunRequest | null;
+  onRunRequestHandled?: () => void;
   /** Open a filmography from the curated picker. */
   onPerson?: (person: Person) => void;
   /**
@@ -213,23 +221,28 @@ export default function DuelScreen({
   // has no pile, no order and no end. It is a climb now; see `personRun` below.
   const activeRun: ShuffleOptions | null = shuffleRun;
 
-  // What the run on screen is about, when it isn't a tier. Derived, not stored:
-  // a person run stays "handed over" until its summary is dismissed, so the
-  // request is still here to read from, and mirroring it into local state would
-  // be a second copy of one fact — plus a setState inside an effect, which is
-  // the cascading render the linter is right to object to.
-  // A genre run has no `Person` to derive a subject from, so it carries its own.
-  // Only ever one of these is set: a run replaces whatever was on screen, and
-  // `beginGenre` clears the person request on its way in.
-  const [genreSubject, setGenreSubject] = useState<RankSubject | null>(null);
+  // What the run on screen is about, when it isn't a tier.
+  //
+  // A request that arrived as a PROP is read straight back off it — it stays
+  // "handed over" until its summary is dismissed, so mirroring it into local
+  // state would be a second copy of one fact plus a setState inside an effect,
+  // which is the cascading render the linter is right to object to.
+  //
+  // A run started from INSIDE this screen (the Curator's genre option) has no
+  // prop to read, so it keeps its subject here. The two can no longer disagree:
+  // `startCurated` clears the prop request on its way in, and there is only one
+  // of it now rather than three.
+  const [localSubject, setLocalSubject] = useState<RankSubject | null>(null);
   const [curatedOpen, setCuratedOpen] = useState(false);
   // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
   // it has no pile, no climb and no confirm, so none of the duel branches apply.
   const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
 
-  const runSubject: RankSubject | null = personRun
-    ? subjectFromPerson(personRun, personPortrait)
-    : genreSubject;
+  const runSubject: RankSubject | null = runRequest?.subject ?? localSubject;
+  // Borrowed films, if this run has any. Read off the request rather than held
+  // separately — a guest list with no run to belong to was one of the three
+  // props this collapse removed.
+  const guests = runRequest?.guests ?? EMPTY_GUESTS;
   // A finished cross-tier order, waiting to be kept or exported. This is the one
   // result the app cannot recover once it is gone: it lives in no film's score
   // and in no tier, so the summary holds it until the user decides.
@@ -239,31 +252,29 @@ export default function DuelScreen({
     complete: boolean;
   } | null>(null);
 
-  // A person's filmography, handed over to be ranked against itself — as a
-  // KING OF THE HILL climb, cross-tier, over an explicit pile.
+  // A curated pile, handed over to be ranked against itself — as a KING OF THE
+  // HILL climb, cross-tier, over an explicit `only` list.
   //
   // Three things make it different from every other run, and all three are the
   // reason it needed `only` and `crossTier` in ladder.ts:
-  //   · the pile is a person's work, which is not a tier and cannot be selected
-  //     by one;
+  //   · the pile is a person's work or a genre, which is not a tier and cannot
+  //     be selected by one;
   //   · it starts in BELIEF order, the only ordering in the app that spans star
   //     ratings, so the climb begins from the best guess rather than from stars;
   //   · confirming writes no score and no lock, so ranking Mann against Mann
   //     cannot quietly rewrite your main list.
-  // Borrowed films are merged in here and never leave: `saveFilms` strips them.
+  // Borrowed films are merged in by `pileFor` and never leave: `saveFilms`
+  // strips them.
+  //
+  // The pile-building moved to `lib/curated.ts` so this effect and `beginGenre`
+  // stopped being two implementations of the same three steps.
   useEffect(() => {
-    if (!personRun) return;
-    const person = personRun;
+    if (!runRequest) return;
+    const request = runRequest;
     setState((s) => {
       if (!s) return s;
-      // Merged by id, not appended. An updater must be safe to run twice on the
-      // same input — React does exactly that in development — and a blind
-      // concat put every borrowed film in the pile a second time: a 19-film
-      // filmography started as a 35-film climb against duplicates of itself.
-      const have = new Set(s.films.map((f) => f.id));
-      const all = [...s.films, ...personGuests.filter((g) => !have.has(g.id))];
-      const order = rankByBelief(filmsBy(all, person), beliefsFor(all, log));
-      if (order.length < 2) return s; // nothing to duel — leave the run alone
+      const { all, order } = pileFor(s.films, request, log);
+      if (order.length < MIN_CURATED_RUN) return s; // nothing to duel — leave the run alone
       try {
         return {
           ...startRun(all, order[0].rating, {
@@ -277,12 +288,12 @@ export default function DuelScreen({
       }
     });
     // Deliberately NOT handing the request back here. The run needs to know
-    // whose films these are for as long as it is on screen — including the
+    // what these films are for as long as it is on screen — including the
     // summary at the end, which is the only place the answer exists. It is
     // released when that summary is dismissed.
     // Only when a new request arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personRun]);
+  }, [runRequest]);
 
   // Fill in artwork for the tier being played. Scoped to the active pile rather
   // than the whole library — an import can be hundreds of films, and only these
@@ -580,16 +591,25 @@ export default function DuelScreen({
   // library order would be an arbitrary slice.
   const beginGenre = (genre: string, limit: number) => {
     setCuratedOpen(false);
-    const pool = rankByBelief(filmsInGenre(state.films, genre), beliefsFor(state.films, log));
-    const only = pool.slice(0, limit).map((f) => f.id);
-    if (only.length < MIN_GENRE_RUN) return;
-    setGenreSubject({ kind: "genre", name: genre });
+    const request: RunRequest = { subject: { kind: "genre", name: genre }, limit };
+    const { all, order } = pileFor(state.films, request, log);
+    if (order.length < MIN_GENRE_RUN) return;
+    setLocalSubject(request.subject);
     setRunResult(null);
-    onPersonRunHandled?.(); // a genre run supersedes any person request still held
+    // A run started here supersedes any request still held by the shell. Stated
+    // rather than relied on: `runSubject` prefers the prop, so leaving a stale
+    // one behind would put a director's name over a genre's climb.
+    onRunRequestHandled?.();
     try {
-      commit({ ...startRun(state.films, pool[0].rating, { only, crossTier: true }), journal: state.journal }, false);
+      commit(
+        {
+          ...startRun(all, order[0].rating, { only: order.map((f) => f.id), crossTier: true }),
+          journal: state.journal,
+        },
+        false,
+      );
     } catch {
-      setGenreSubject(null);
+      setLocalSubject(null);
     }
   };
 
@@ -628,7 +648,8 @@ export default function DuelScreen({
         }}
         onSettings={onSettings}
         onTrophies={onTrophies}
-        onAddFilm={onAddFilm}
+        logging={logging}
+        onToggleLog={onToggleLog}
         onBegan={onRoughCutBegan}
         onInfo={onInfo}
         // Rough Cut now draws the nav, so its cells have to actually go
@@ -946,8 +967,8 @@ export default function DuelScreen({
             onModes={toggleModes}
             onList={onList}
             onProfile={onProfile}
-            films={state.films}
-            onAddFilm={onAddFilm}
+            logging={logging}
+            onToggleLog={onToggleLog}
           />
         </main>
         {sheets}
@@ -1020,7 +1041,7 @@ export default function DuelScreen({
           onAgain={rankAgain}
           onDone={() => {
             setRunResult(null);
-            onPersonRunHandled?.(); // the request is finished with now, not before
+            onRunRequestHandled?.(); // the request is finished with now, not before
           }}
         />
       ) : /* Fast Shuffle owns the whole surface while it runs: it has no pile, no
@@ -1031,7 +1052,7 @@ export default function DuelScreen({
           // writes below strip them, so there is no path from "I ranked a
           // director's whole filmography" to "my library gained forty films I
           // have never seen".
-          films={personGuests.length ? [...state.films, ...personGuests] : state.films}
+          films={guests.length ? [...state.films, ...guests] : state.films}
           onFilms={(films) => {
             const mine = films.filter((f) => !f.guest);
             saveFilms(mine);
@@ -1045,7 +1066,7 @@ export default function DuelScreen({
               if (!s) return s;
               // A guest is not in `s.films`, so this maps over nothing and saves
               // the library unchanged — correct, but stated rather than relied on.
-              if (personGuests.some((g) => g.id === id)) return s;
+              if (guests.some((g) => g.id === id)) return s;
               const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
               saveFilms(films);
               return { ...s, films };
@@ -1055,7 +1076,7 @@ export default function DuelScreen({
           onInfo={onInfo}
           onExit={() => {
             setShuffleRun(null);
-            onPersonRunHandled?.();
+            onRunRequestHandled?.();
           }}
           onList={onList}
         />
@@ -1134,8 +1155,8 @@ export default function DuelScreen({
         onModes={toggleModes}
         onList={onList}
         onProfile={onProfile}
-        films={state.films}
-        onAddFilm={onAddFilm}
+        logging={logging}
+        onToggleLog={onToggleLog}
       />
 
       {/* Every mode stands the Fast Shuffle run down first: `activeRun` decides
@@ -1178,24 +1199,28 @@ export function BottomNav({
   onModes,
   onList,
   onProfile,
-  films,
-  onAddFilm,
+  logging,
+  onToggleLog,
 }: {
   screen: "duel" | "list" | "profile";
   onSettings: () => void;
   onModes?: () => void;
   onList: () => void;
   onProfile?: () => void;
-  /** The library, so logging can say when a film is already in it. */
-  films?: Film[];
-  onAddFilm?: (film: Film) => void;
+  /** Whether the log sheet is up, so the cell that opened it stays lit. */
+  logging?: boolean;
+  onToggleLog?: () => void;
 }) {
-  // The sheet lives here rather than in each screen because the button does.
-  // Three screens render this nav, and threading an open-flag through all three
-  // would put the same state in three places to serve one control — the nav is
-  // shared chrome, so the thing it opens is shared too.
-  const [logging, setLogging] = useState(false);
-  const [logClosing, setLogClosing] = useState(false);
+  // ── Nothing renders inside this nav ─────────────────────────────────────────
+  //
+  // The log sheet used to, on the reasoning that the sheet belongs where the
+  // button is. It cost the app its only mis-layered overlay: `z-40` below makes
+  // this element a stacking context, so a `z-30` sheet nested in it is z-ordered
+  // WITHIN the nav and paints over the bar's own background rather than under
+  // it. Every other sheet in the app is a sibling of the screens and sits
+  // correctly beneath. Its state moved to `AppShell` alongside the rest of the
+  // overlays; this keeps the lit flag and the toggle, which is all a control
+  // needs. Do not move it back, and do not render anything else here.
   // The Activity cell has no screen behind it yet. See `teaseTimer` below.
   const [teasing, setTeasing] = useState(false);
   const teaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1203,49 +1228,60 @@ export function BottomNav({
     if (teaseTimer.current) clearTimeout(teaseTimer.current);
   }, []);
 
-  // The bar publishes its own height for `Sheet` to sit on top of. Measured
-  // rather than declared, because env(safe-area-inset-bottom) makes it a
-  // property of the device that changes on rotation. Reset to 0 on unmount, or
-  // sheets on the screens that draw no nav would float above a bar that is not
-  // there.
+  // ── `--nav-h` is a POSITION, not a height ──────────────────────────────────
+  //
+  // It is what `Sheet` sits its `bottom` on, so what it has to answer is "how
+  // far up from the bottom of the screen does the bar start". That used to be
+  // `offsetHeight`, on the assumption that the bar's own bottom edge IS the
+  // bottom of the screen. It is not, and the gap the user sees under every
+  // drawer is the difference.
+  //
+  // `main` is cut to `100svh` — the SMALLEST the viewport ever gets — and this
+  // nav is pinned at its foot by flex, so in a mobile browser with the URL bar
+  // retracted `main` ends well above the true bottom edge. A sheet is
+  // `position: fixed` and measures the REAL viewport, so `bottom: offsetHeight`
+  // put it `offsetHeight` up from the real bottom while the bar sits
+  // `offsetHeight` up from `main`'s bottom. The two disagree by exactly the
+  // slack that `svh` was erring by, and that slack is the gap.
+  //
+  // Measuring the bar's top edge against the visual viewport gets both cases
+  // right and needs no assumption about which viewport unit won: in a
+  // fullscreen PWA the two are equal and this is still `offsetHeight`.
+  //
+  // `visualViewport` rather than `innerHeight` because the URL bar sliding away
+  // fires no resize on `window` in some mobile browsers, and an on-screen
+  // keyboard shrinks one and not the other. Reset to 0 on unmount, or sheets on
+  // screens that draw no nav would float above a bar that is not there.
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = navRef.current;
     if (!el) return;
-    const publish = () =>
-      document.documentElement.style.setProperty("--nav-h", `${el.offsetHeight}px`);
+    const publish = () => {
+      const vv = window.visualViewport;
+      const bottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
+      // Clamped: a bar measured below the fold would give a negative offset and
+      // push a sheet off the bottom of the screen, which is worse than a seam.
+      const up = Math.max(0, Math.round(bottom - el.getBoundingClientRect().top));
+      document.documentElement.style.setProperty("--nav-h", `${up}px`);
+    };
     publish();
     const ro = new ResizeObserver(publish);
     ro.observe(el);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", publish);
+    vv?.addEventListener("scroll", publish);
+    window.addEventListener("resize", publish);
+    window.addEventListener("orientationchange", publish);
     return () => {
       ro.disconnect();
+      vv?.removeEventListener("resize", publish);
+      vv?.removeEventListener("scroll", publish);
+      window.removeEventListener("resize", publish);
+      window.removeEventListener("orientationchange", publish);
       document.documentElement.style.setProperty("--nav-h", "0px");
     };
   }, []);
 
-  // ── Pressing the same cell again closes what it opened ─────────────────────
-  //
-  // GHOST CLICKS make this less trivial than it looks. A browser synthesises a
-  // `click` ~300ms after a finger lifts, at the coordinates it lifted from —
-  // here, the cell that just opened the panel. Unguarded, the sheet opens and
-  // shuts on a single tap, and only ever on touch. Same trap `Sheet` arms its
-  // backdrop against, same window.
-  const openedAt = useRef(0);
-  const armed = () => Date.now() - openedAt.current > SCRIM_ARM_MS;
-
-  const toggleLog = () => {
-    if (logging) {
-      if (!armed() || logClosing) return;
-      setLogClosing(true);
-      setTimeout(() => {
-        setLogging(false);
-        setLogClosing(false);
-      }, SHEET_EXIT_MS);
-      return;
-    }
-    openedAt.current = Date.now();
-    setLogging(true);
-  };
   // ── A cell that answers ────────────────────────────────────────────────────
   //
   // Activity had no handler at all, so pressing it did nothing — not "nothing
@@ -1306,23 +1342,7 @@ export function BottomNav({
           could not do at all: the library only ever arrived by CSV, so it knew
           your past and had nothing to say about tonight. Works on every screen,
           unlike the control it replaced. */}
-      <NavItem
-        label="Log a film"
-        active={logging}
-        onClick={onAddFilm ? toggleLog : undefined}
-        icon={<AddFilmIcon />}
-      />
-      {logging && onAddFilm && (
-        <LogFilm
-          films={films ?? []}
-          onAdd={onAddFilm}
-          closing={logClosing}
-          onClose={() => {
-            setLogging(false);
-            setLogClosing(false);
-          }}
-        />
-      )}
+      <NavItem label="Log a film" active={logging} onClick={onToggleLog} icon={<AddFilmIcon />} />
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
       <NavItem label="Activity, coming soon" onClick={tease} icon={<ActivityIcon />} />
       {/* Account owns the profile; Settings moved to the gear on its cover, so

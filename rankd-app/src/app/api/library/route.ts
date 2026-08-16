@@ -77,3 +77,23 @@ export async function PUT(request: Request) {
 
   return NextResponse.json({ updatedAt: updatedAt.toISOString() });
 }
+
+// "Delete everything and start fresh" reaches the account, not just the browser.
+//
+// It has to. Clearing local storage alone leaves the mirror intact, and the
+// reload that follows looks to `reconcile.ts` exactly like a new phone — no
+// local library, no `lastSeenServerAt` — so it pulls the whole thing back down
+// a second later. That was the bug. A wipe that does not include this row is
+// not a wipe, it is a slow restore.
+//
+// Deleting the row rather than storing an empty payload is deliberate: no row
+// is already a meaningful state here (see GET), and it is the state a
+// never-pushed account is in, which is what "start fresh" is asking for.
+export async function DELETE() {
+  const user = await requireUser();
+  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+  await db.delete(libraries).where(eq(libraries.userId, user.id));
+
+  return NextResponse.json({ deleted: true });
+}

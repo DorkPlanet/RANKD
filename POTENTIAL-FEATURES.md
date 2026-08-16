@@ -185,15 +185,25 @@ Groundwork already gathered:
   the bottom, and the middle is tap-only.
 - **Fast Shuffle silently ignores flicks.** It passes `noop` for `onFlick`/`onSink`, so a
   gesture that works on the duel screen does nothing here with no feedback.
-- **Two Sheet implementations.** `ui.tsx` (z-30 scrim, pull-to-close, 400ms backdrop
-  arming, animated exit) and `Sheet.tsx` (z-40, no pull, no arming, instant unmount). The
-  duplication is knowingly documented but the two behave differently.
-- **Sheets can stack.** `modeOpen`, `tierOpen` and `curatedOpen` are three independent
-  booleans in `DuelScreen.tsx`; mutual exclusion is done by hand at each transition, so a
-  missed pairing leaves two scrims on top of each other. The nav is deliberately above the
-  scrim, so "Log a film" can be opened over an open Play sheet.
+- **Two Sheet implementations, and three hand-rolled copies.** `ui.tsx` (z-30 scrim,
+  pull-to-close, 400ms backdrop arming, animated exit, stops at `var(--nav-h)`) and
+  `Sheet.tsx` (z-40 `inset-0`, no pull, no arming, instant unmount, paints over the nav).
+  The duplication is knowingly documented; what is not documented is that
+  `CollectionSheet` and `EditIdentity` in `ProfileScreen.tsx` and `AvatarCropper.tsx` each
+  repeat `Sheet.tsx`'s markup rather than using it. **This is the one real item left in
+  this section.** Session K made every overlay mutually exclusive, which removed the sharp
+  edge — two of these can no longer be on screen together — so what remains is that a
+  reader meets two different dismissal behaviours depending on which panel they opened.
+  Consolidating is a design decision (does a sheet animate out or not?) before it is a
+  refactor.
+- ~~**Sheets can stack.**~~ Fixed in Session K. `AppShell` owns a single `Overlay` union
+  and `go()` empties it. `DuelScreen`'s `modeOpen` / `tierOpen` / `curatedOpen` are still
+  three booleans, but they are a deliberate setup SEQUENCE and each transition already
+  closes the last; they were left alone rather than forced into a union that would fight
+  the flow. The nav is still deliberately above the scrim — but "Log a film" no longer
+  renders inside it, so it can no longer paint over the bar.
 - **Existing guards are for ghost clicks, not stacking** — `SCRIM_ARM_MS`, `toggleModes`,
-  `toggleLog`.
+  and `toggleLog`, which moved to `AppShell` with the sheet it drives.
 
 ---
 

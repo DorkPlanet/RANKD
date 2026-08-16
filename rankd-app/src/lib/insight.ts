@@ -71,7 +71,8 @@ const pct = (n: number, of: number) => (of === 0 ? 0 : n / of);
 const seen = (films: readonly InsightFilm[]): (InsightFilm & { rating: Rating })[] =>
   films.filter((f): f is InsightFilm & { rating: Rating } => !f.guest && f.rating !== undefined);
 
-const possessive = (s: RankSubject) => (s.kind === "genre" || s.kind === "tier" ? "this list" : "their work");
+const possessive = (s: RankSubject) =>
+  s.kind === "director" || s.kind === "actor" ? "their work" : "this list";
 
 /** "Christopher Nolan's" — or just "these" when the subject isn't a person. */
 const possessiveName = (s: RankSubject) =>

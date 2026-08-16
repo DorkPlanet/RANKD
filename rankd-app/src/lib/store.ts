@@ -1,6 +1,7 @@
 import type { Film } from "./types";
 import { migrateLock } from "./lock";
 import { markDirty } from "./syncState";
+import { isWiped } from "./wiped";
 
 // Local-first persistence. The master library lives in localStorage and is
 // mirrored to an account when there is one (see sync.ts).
@@ -49,6 +50,9 @@ export function loadFilms(): Film[] {
 // does upstream. See `guest` in lib/types.ts.
 export function saveFilms(films: Film[]): void {
   if (typeof window === "undefined") return;
+  // A wiped document is on its way to a reload, and the callers still running
+  // are holding the library it just deleted. See `wiped.ts`.
+  if (isWiped()) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
     markDirty();

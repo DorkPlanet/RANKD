@@ -17,7 +17,8 @@ import { filmsFromFile, mergeFilms } from "@/lib/importCsv";
 import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import type { Prefs } from "@/lib/prefs";
-import { resetRanking, wipeEverything } from "@/lib/reset";
+import { resetRanking, wipeAccount, wipeEverything } from "@/lib/reset";
+import { fetchAccount } from "@/lib/account";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
@@ -314,8 +315,15 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
   const [arming, setArming] = useState(false);
   const [wiping, setWiping] = useState(false);
   const [duels, setDuels] = useState(0);
+  // Signed in changes what the second tap is agreeing to: the wipe reaches the
+  // account, which means every other device the user has. The copy has to say
+  // so, so the answer is needed before the button is armed rather than after.
+  const [hasAccount, setHasAccount] = useState(false);
+  const [wipeFailed, setWipeFailed] = useState(false);
+  const [wipeBusy, setWipeBusy] = useState(false);
   useEffect(() => {
     void loadLog().then((l) => setDuels(l.length));
+    void fetchAccount().then((a) => setHasAccount(!!a));
   }, []);
 
   const placed = films.filter((f) => f.lock).length;
@@ -398,22 +406,54 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
               your profile. The app opens as if you had just installed it. Save a backup first if
               you want any of it back.
             </p>
+            {/* Said separately because it is a different claim. The paragraph
+                above is about this phone; this one is about every device the
+                account touches, and burying it in the same sentence would let
+                it be skimmed. */}
+            {hasAccount && (
+              <p className="mb-2 text-[11px] leading-snug text-gold">
+                Your saved copy goes too, so it will not come back on your other devices.
+              </p>
+            )}
+            {wipeFailed && (
+              <p className="mb-2 text-[11px] leading-snug" style={{ color: "#D81E26" }}>
+                Your saved copy could not be reached, so nothing was deleted. Check your connection
+                and try again.
+              </p>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setWiping(false)} className={BTN}>
                 Keep it
               </button>
               <button
+                disabled={wipeBusy}
                 onClick={() => {
-                  wipeEverything();
-                  // Reloaded rather than re-rendered: every screen read the
-                  // library once at mount and would be holding films that no
-                  // longer exist.
-                  location.reload();
+                  void (async () => {
+                    setWipeBusy(true);
+                    setWipeFailed(false);
+                    try {
+                      // Account FIRST, and nothing local happens if it fails.
+                      // A browser emptied while the account copy survives is
+                      // the exact state that restores itself: the reload looks
+                      // like a new phone to `reconcile.ts`, which pulls. Half a
+                      // wipe is worse than none.
+                      await wipeAccount();
+                    } catch {
+                      setWipeFailed(true);
+                      setWipeBusy(false);
+                      return;
+                    }
+                    wipeEverything();
+                    // Reloaded rather than re-rendered: every screen read the
+                    // library once at mount and would be holding films that no
+                    // longer exist.
+                    location.reload();
+                  })();
                 }}
                 style={{ color: "#D81E26", borderColor: "#D81E26" }}
-                className="flex-1 rounded-xl border py-2.5 text-center text-xs font-bold active:scale-[0.98]"
+                className="flex-1 rounded-xl border py-2.5 text-center text-xs font-bold active:scale-[0.98] disabled:opacity-50"
               >
-                Delete it all
+                {wipeBusy ? "Deleting" : "Delete it all"}
               </button>
             </div>
           </>

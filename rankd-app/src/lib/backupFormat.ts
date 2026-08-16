@@ -79,12 +79,54 @@ export const FILE_KEYS = FILE_2;
 
 // Deliberately in NEITHER set:
 //
-//  · `rankd-run-v1` — an in-progress climb is ephemeral device state, and a
-//    backup carries what you decided rather than what you had not decided yet.
-//    Nobody wants a half-finished duel following them onto another phone.
-//  · `rankd-synced-at` — sync bookkeeping about THIS browser. Carrying one
+//  · `rankd-run-v1` and `rankd-roughcut-v1` — an in-progress climb or pass is
+//    ephemeral device state, and a backup carries what you decided rather than
+//    what you had not decided yet. Nobody wants a half-finished duel following
+//    them onto another phone.
+//  · `rankd-sync-v1` — sync bookkeeping about THIS browser. Carrying one
 //    device's marker to another would make the second believe it had already
 //    pushed work it has never seen.
+//  · `rankd-visit-v1` — the recap's before-and-after snapshots. It describes
+//    what changed on THIS device since you last looked, which is a question
+//    another device cannot answer.
+//  · `rankd-install-hint-v1` — dismissing the install nudge on a phone says
+//    nothing about whether a tablet should see it. `lib/install.ts` says so at
+//    more length.
+//
+// ── Every key this app stores, and who owns it ─────────────────────────────
+//
+// There is no single `KEYS` constant: each module declares its own `const KEY`
+// and this file is the only place the sets are assembled, so this is the index.
+// Keep it current — the wipe in `lib/reset.ts` sweeps by the `rankd-` prefix and
+// will therefore take anything added here without being told.
+//
+// LIBRARY DATA — the work, and what a backup exists for.
+//   `rankd-app-v1`      store.ts      films, scores, locks, duel counts
+//   `rankd-log-v1`      log.ts        the evidence log, every judgement
+//   `rankd-lists-v1`    lists.ts      saved rankings (file set only; the wire
+//                                     syncs these as their own rows)
+//   `rankd-profile-v1`  profile.ts    name, bio, banner, pinned rankings
+//
+// RUN STATE — resumable, device-local, in neither set.
+//   `rankd-run-v1`       runs.ts        an in-progress tier climb
+//   `rankd-roughcut-v1`  roughCutRun.ts an in-progress Rough Cut pass
+//
+// PREFERENCES — small, yours, and carried.
+//   `rankd-prefs-v1`    prefs.ts      list drift
+//   `rankd-brightness`  brightness.ts
+//   `rankd-strip-open`  DuelScreen    whether the film strip is open
+//
+// FLAGS — what this browser has already been shown.
+//   `rankd-tour-v1`               tour.ts     which coach marks have run
+//   `rankd-install-hint-v1`       install.ts  install nudge dismissed
+//   `rankd-review-dismissed-v1`   nowhere     dead; see FILE_2 above
+//
+// BOOKKEEPING — never backed up, never synced.
+//   `rankd-sync-v1`  syncState.ts  deviceId, last seen, dirty, last pushed hash
+//
+// sessionStorage, per tab and never carried anywhere:
+//   `rankd-sitting-v1`        RunStatus.tsx  this sitting's baseline
+//   `rankd-visit-sitting-v1`  visit.ts       whether a sitting has been opened
 
 export interface Backup {
   format: number;

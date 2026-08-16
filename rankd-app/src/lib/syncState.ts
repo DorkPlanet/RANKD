@@ -1,14 +1,17 @@
 // Sync bookkeeping about THIS browser: who it is, when it last synced, and
 // whether it has written anything since.
 //
-// A leaf module on purpose — it imports nothing. `store.ts`, `log.ts`,
-// `profile.ts` and `lists.ts` each call `markDirty()` after their existing
-// write, and if that mark lived in `sync.ts` (which reads all four to build a
-// payload) every one of them would be an import cycle.
+// A leaf module on purpose. `store.ts`, `log.ts`, `profile.ts` and `lists.ts`
+// each call `markDirty()` after their existing write, and if that mark lived in
+// `sync.ts` (which reads all four to build a payload) every one of them would be
+// an import cycle. The single import below is `wiped.ts`, which imports nothing
+// itself and exists precisely so this file can stay reachable from all four.
 //
 // None of this is ever backed up or synced. It describes the device, not the
 // person: carrying one browser's "last synced" marker to another would make the
 // second believe it had already pushed work it has never seen.
+
+import { isWiped } from "./wiped";
 
 const KEY = "rankd-sync-v1";
 
@@ -89,6 +92,10 @@ export function isDirty(): boolean {
  */
 export function markDirty(): void {
   if (typeof window === "undefined") return;
+  // A wiped document has nothing worth sending, and re-creating this key would
+  // hand the next reconciliation a browser that claims to have unsynced work.
+  // `wiped.ts` imports nothing, so this stays a leaf. See its header.
+  if (isWiped()) return;
   const s = readSyncState();
   if (s.dirtyAt !== null) return;
   write({ ...s, dirtyAt: new Date().toISOString() });

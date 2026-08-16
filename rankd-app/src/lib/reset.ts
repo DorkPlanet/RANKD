@@ -22,6 +22,7 @@
 
 import { seedScore } from "./tiers";
 import type { Film } from "./types";
+import { markWiped } from "./wiped";
 
 /**
  * Every film back to unranked, keeping the film itself.
@@ -49,17 +50,60 @@ import type { Film } from "./types";
  * The caller reloads. Every screen reads the library once at mount, so clearing
  * storage underneath a live app leaves it showing a library that no longer
  * exists — the same reason `importBackup` and `pull` reload.
+ *
+ * ── Why this sets a flag ───────────────────────────────────────────────────
+ *
+ * `location.reload()` does not stop the page. Timers keep firing and in-flight
+ * fetches keep resolving until the navigation actually commits, and two of them
+ * write the whole library back: the credits sweep in `AppShell` flushes
+ * `saveFilms(pending)` when its backfill settles, and the duel screen's poster
+ * backfill does the same per film. Both hold the PRE-wipe library in a closure,
+ * and the sweep's stop flag is only set by an effect cleanup that a reload never
+ * runs. So the wipe cleared storage and then something quietly refilled it.
+ *
+ * Rather than chase every caller, the wipe raises a one-way flag (`wiped.ts`)
+ * and the write paths that matter — `saveFilms` in `store.ts`, `markDirty` in
+ * `syncState.ts`, `push`/`pull` in `sync.ts` — check it. One guard, and it
+ * cannot be forgotten by the next thing that writes through them.
  */
 export function wipeEverything(): void {
   if (typeof window === "undefined") return;
+  // Raised before storage is touched, not after: a write racing the loop below
+  // is exactly the case this exists to stop.
+  markWiped();
   try {
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith("rankd-")) localStorage.removeItem(key);
     }
-    // A sitting is per-tab and would otherwise survive as a stale baseline.
+    // Sittings are per-tab and would otherwise survive as stale baselines.
+    // BOTH of them: `visit.ts` reads its own and returns the existing recap
+    // early, so leaving it meant the freshly emptied browser never opened a
+    // first sitting in the tab that wiped it.
     sessionStorage.removeItem("rankd-sitting-v1");
+    sessionStorage.removeItem("rankd-visit-sitting-v1");
   } catch {
     // Storage disabled. There is nothing stored to clear either.
+  }
+}
+
+/**
+ * Delete the account's copy as well, so signing in again does not hand the
+ * library straight back.
+ *
+ * Throws on failure, and the caller must NOT wipe locally if it does: a browser
+ * emptied while the mirror survives is precisely the state that pulls itself
+ * back, which is the bug this whole path exists to fix. Better to leave
+ * everything as it was and say so.
+ */
+export async function wipeAccount(): Promise<void> {
+  const [library, lists] = await Promise.all([
+    fetch("/api/library", { method: "DELETE" }),
+    fetch("/api/lists?all=1", { method: "DELETE" }),
+  ]);
+  // 401 is a success here, not a failure: it means nobody is signed in, so
+  // there is no account copy to delete and the local wipe is the whole job.
+  for (const res of [library, lists]) {
+    if (!res.ok && res.status !== 401) throw new Error("The account copy could not be deleted.");
   }
 }
 
