@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
+import { FixMatch } from "./FixMatch";
 import { confidenceOf } from "@/lib/shuffle";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
@@ -32,6 +33,7 @@ export function FilmInfo({
   onClose,
   onPerson,
   onRemove,
+  onFixMatch,
 }: {
   film: Film;
   films?: Film[];
@@ -40,10 +42,13 @@ export function FilmInfo({
   onPerson?: (person: Person) => void;
   /** Take this film out of the library. Absent where removal makes no sense. */
   onRemove?: (film: Film) => void;
+  /** Replace this film's artwork and credits with another TMDb film's. */
+  onFixMatch?: (film: Film, meta: FilmMeta) => void;
 }) {
   const [meta, setMeta] = useState<FilmMeta | null>(null);
   // Whether the remove control has been armed by a first tap.
   const [armed, setArmed] = useState(false);
+  const [fixing, setFixing] = useState(false);
   useEffect(() => {
     let live = true;
     fetchMeta(film).then((m) => {
@@ -185,6 +190,36 @@ export function FilmInfo({
             than asking "are you sure" — the thing worth knowing is that the
             duels it fought stay in the record, because someone about to lose a
             film assumes they lose everything with it. */}
+        {/* Above Remove, because it is the gentler answer to the same feeling.
+            Somebody looking at a poster that is not their film reaches for the
+            nearest control, and if the only one is "Remove from library" they
+            will delete a film they own to get rid of artwork that is wrong. */}
+        {onFixMatch &&
+          (fixing ? (
+            <FixMatch
+              film={film}
+              onCancel={() => setFixing(false)}
+              onFixed={(m) => {
+                onFixMatch(film, m);
+                setFixing(false);
+                // Closed on purpose. The card is showing the old film's
+                // credits, cast and synopsis from a fetch keyed on the old
+                // match, and reopening is one tap — where watching half of it
+                // refresh in place would be its own small lie.
+                onClose();
+              }}
+            />
+          ) : (
+            <div className="border-t border-border px-4 py-3">
+              <button
+                onClick={() => setFixing(true)}
+                className="w-full text-center text-[11px] font-semibold text-dim active:scale-95"
+              >
+                Wrong film?
+              </button>
+            </div>
+          ))}
+
         {onRemove && (
           <div className="border-t border-border px-4 py-3">
             {armed ? (

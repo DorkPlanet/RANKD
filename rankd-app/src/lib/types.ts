@@ -32,6 +32,22 @@ export interface Film {
   // TMDb had nothing under this title and year. Remembered so the fetch queue
   // stops retrying it every session — an unmatched film never becomes matched.
   noMatch?: boolean;
+  // Which TMDb film this is, once anything has resolved it.
+  tmdbId?: number;
+  // The user said which film this is, so nothing may guess again.
+  //
+  // Matching by title is a guess and sometimes a wrong one — a niche title
+  // returns whatever popular film shares a word with it, and the app then wears
+  // that artwork with total confidence. `bestMatch` refuses the worst of those
+  // now, but no amount of scoring makes the guess right every time, and a wrong
+  // poster is jarring in a way a missing one is not: a blank says "not found",
+  // artwork says "found it" and is believed.
+  //
+  // So a correction has to STICK. Without this the credits sweep would re-ask
+  // by title on the next pass, land on the same wrong film, and quietly undo
+  // the fix — which is worse than never offering one, because the user would
+  // watch their correction evaporate and not know why.
+  pinnedMeta?: boolean;
   // How many duels this film has been through. Cheap to keep, and it's the only
   // record of how much evidence sits behind a placement.
   duels?: number;

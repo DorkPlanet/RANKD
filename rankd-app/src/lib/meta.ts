@@ -6,6 +6,15 @@ import type { Film } from "./types";
 // it or to let a stale synopsis outlive a cache bust.
 
 export interface FilmMeta {
+  /**
+   * Which TMDb film this is.
+   *
+   * The one field here that IS worth persisting, against the rule above,
+   * because it is the answer to "which film did we decide this was" — and once
+   * a person has corrected a bad match, that answer must survive. See
+   * `pinnedMeta` in types.ts.
+   */
+  tmdbId?: number;
   poster?: string;
   synopsis?: string;
   runtime?: number;
@@ -54,10 +63,14 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 //
 // `noMatch` stops the other trap: a film TMDb can't find never gains a poster,
 // so it would qualify forever and be asked about again every single session.
-export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch;
+// `pinnedMeta` is the third trap and the newest. Once a person has said which
+// film this is, asking TMDb by title again could only find its way back to the
+// wrong one — so a corrected film is finished, whatever fields it is missing.
+// See `pinnedMeta` in types.ts.
+export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch && !f.pinnedMeta;
 
 export const needsMeta = (f: Film): boolean =>
-  !f.noMatch && (!f.poster || !f.director || !f.genres || !f.keywords);
+  !f.noMatch && !f.pinnedMeta && (!f.poster || !f.director || !f.genres || !f.keywords);
 
 // Who made it, and what kind of thing it is.
 //
@@ -65,17 +78,47 @@ export const needsMeta = (f: Film): boolean =>
 // by actor, by genre — as opposed to merely displayed. A film with artwork and
 // no credits looks complete on the list screen and is invisible to every one of
 // those questions, which is why the gap went unnoticed for so long.
-export const needsCredits = (f: Film): boolean => !f.noMatch && (!f.director || !f.genres);
+export const needsCredits = (f: Film): boolean =>
+  !f.noMatch && !f.pinnedMeta && (!f.director || !f.genres);
 
 // Fold a fetched response into the stored film. Only the fields worth persisting
 // are taken — synopsis, runtime and genres stay derived, since they'd bloat
 // localStorage and can go stale, but who made a film does not change.
-export function withMeta(film: Film, meta: FilmMeta): Film {
+export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
+  // ── A correction REPLACES; a backfill only fills gaps ──────────────────────
+  //
+  // Two whole objects rather than one with a conditional spread. The fallbacks
+  // in the backfill case exist so an unhelpful response cannot wipe fields the
+  // app already had — and that is exactly wrong for a correction, where what is
+  // stored belongs to a DIFFERENT film and keeping any of it leaves the card
+  // half one film and half another: the new poster over the old director.
+  //
+  // Written out twice because the two rules disagree about nearly every field,
+  // and a spread that overrides half of them reads as though they mostly agree.
+  if (pinned) {
+    return {
+      ...film,
+      tmdbId: meta.tmdbId ?? film.tmdbId,
+      pinnedMeta: true,
+      // Cleared: a film that could not be found by title has just been found by
+      // hand, and leaving the flag would tell every reader it is still
+      // unmatched — including the queue, which would then skip it forever.
+      noMatch: false,
+      poster: meta.poster,
+      director: meta.director,
+      cast: meta.cast,
+      genres: meta.genres,
+      keywords: meta.keywords,
+      runtime: meta.runtime,
+    };
+  }
+
   // An empty response means TMDb has no film by that title and year. Recorded so
   // the queue stops asking about it every session forever.
   const empty = !meta.poster && !meta.director && !meta.genres?.length;
   return {
     ...film,
+    tmdbId: meta.tmdbId ?? film.tmdbId,
     noMatch: empty || film.noMatch,
     poster: meta.poster ?? film.poster,
     director: meta.director ?? film.director,

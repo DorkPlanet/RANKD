@@ -419,6 +419,29 @@ export default function AppShell() {
       return { ...s, films, session: inPlay ? null : s.session };
     });
 
+  /**
+   * The user has said which film this actually is.
+   *
+   * Written as a pin, so `withMeta` REPLACES the old film's fields rather than
+   * filling gaps, and the credits sweep never asks about this one again. Both
+   * halves matter: without the replace the card would end up half one film and
+   * half another, and without the pin the next sweep would search by title,
+   * land on the same wrong film, and quietly undo the correction.
+   *
+   * The film's own identity — its id, title, year, rating, score, every
+   * placement it has earned and every duel it has fought — is untouched. This
+   * corrects what the app FETCHED about a film, not which film it is in your
+   * library, and a correction that silently re-rated something would be a much
+   * worse bug than the one it fixes.
+   */
+  const fixMatch = (film: Film, meta: FilmMeta) =>
+    setState((s) => {
+      if (!s) return s;
+      const films = s.films.map((f) => (f.id === film.id ? withMeta(f, meta, true) : f));
+      saveFilms(films);
+      return { ...s, films };
+    });
+
   // The hold is a floor, not a duration: the splash leaves when the deliberate
   // time is up AND there is an app behind it to reveal. On any real device the
   // library (<92ms) is long since in hand and the hold is the only thing being
@@ -652,6 +675,9 @@ export default function AppShell() {
           // Guests are not in the library, so there is nothing to remove them
           // from - offering it would be a button that silently does nothing.
           onRemove={infoFilm.guest ? undefined : (f) => removeFilm(f.id)}
+          // Same reasoning as removal: a guest is not in the library, so there
+          // is nothing to correct and the fix would be written to nothing.
+          onFixMatch={infoFilm.guest ? undefined : fixMatch}
         />
       )}
 
