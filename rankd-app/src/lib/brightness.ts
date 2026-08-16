@@ -10,6 +10,8 @@
 // both. The text tokens are now constants (see globals.css) and this controls
 // the surfaces only. --accent and --gold were already constant across the range.
 
+import { markDirty } from "./syncState";
+
 const KEY = "rankd-brightness";
 export const DEFAULT_BRIGHTNESS = 0;
 
@@ -64,5 +66,10 @@ export function loadBrightness(): number {
 }
 
 export function saveBrightness(t: number): void {
-  if (typeof window !== "undefined") localStorage.setItem(KEY, String(clamp01(t)));
+  if (typeof window === "undefined") return;
+  localStorage.setItem(KEY, String(clamp01(t)));
+  // In `SYNC_KEYS`, so it has to mark. `markDirty` is first-write-wins, so
+  // dragging the slider marks once rather than once per frame. See `savePrefs`
+  // for what leaving this out cost.
+  markDirty();
 }

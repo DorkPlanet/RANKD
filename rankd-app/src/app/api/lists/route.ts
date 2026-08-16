@@ -9,7 +9,7 @@
 // private, which is the value that cannot expose anyone by accident.
 
 import { NextResponse } from "next/server";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { requireUser } from "@/lib/auth";
 import { db, savedLists } from "@/lib/db";
@@ -62,10 +62,25 @@ export async function GET() {
   return NextResponse.json({ lists });
 }
 
-// Upsert by client id. A list is immutable in practice — its order freezes at
+// The whole shelf, authoritatively.
+//
+// Upsert by client id: a list is immutable in practice — its order freezes at
 // save time (see lib/lists.ts) — so a repeat push of the same id is a re-sync of
 // something unchanged, not an edit, and overwriting is safe. `renameList` is the
 // one thing that does change, and this carries the new name across.
+//
+// ── Why it also DELETES what it was not sent ───────────────────────────────
+//
+// It used to upsert only, which gave it no way to express a removal. `syncLists`
+// always sends the client's entire shelf, so a deleted list arrived as an
+// absence — and an absence meant nothing to an upsert. The row survived, the
+// next pull handed the list back, and the deletion undid itself. Deleting the
+// last one was worse still: the client skipped the request entirely.
+//
+// So absence is now meaningful, which is what makes this a sync rather than an
+// append. That is only safe BECAUSE the client sends the complete set every
+// time; a partial push against this route would delete real work. If a
+// paginated or incremental push is ever added, this has to change with it.
 export async function PUT(request: Request) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -81,6 +96,18 @@ export async function PUT(request: Request) {
   if (!Array.isArray(lists) || !lists.every(isListPayload)) {
     return NextResponse.json({ error: "That doesn't look like a set of saved lists." }, { status: 400 });
   }
+  const keep = lists.map((l) => l.id);
+
+  // Scoped to this user's own rows, so an id belonging to somebody else is
+  // neither kept nor deleted by what they send.
+  await db
+    .delete(savedLists)
+    .where(
+      keep.length === 0
+        ? eq(savedLists.userId, user.id)
+        : and(eq(savedLists.userId, user.id), notInArray(savedLists.id, keep)),
+    );
+
   if (lists.length === 0) return NextResponse.json({ written: 0 });
 
   const updatedAt = new Date();

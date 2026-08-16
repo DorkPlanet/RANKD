@@ -21,6 +21,8 @@
 // user cannot leave. Anything unreadable falls back to the default for that
 // field alone, so one bad value cannot take the rest with it.
 
+import { markDirty } from "./syncState";
+
 const KEY = "rankd-prefs-v1";
 
 export interface Prefs {
@@ -62,6 +64,12 @@ export function savePrefs(prefs: Prefs): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(KEY, JSON.stringify(prefs));
+    // This key is in `SYNC_KEYS` and nothing here used to say so. It reached the
+    // account only as a passenger on some other write, which meant it could sit
+    // differing from the server indefinitely — and a difference the sync layer
+    // has not been told about is what produced a conflict chooser offering two
+    // identical libraries. If it is synced, it marks.
+    markDirty();
   } catch {
     // Storage full or disabled. The preference holds for this session and is
     // forgotten on reload, which is the right way for a display toggle to fail.

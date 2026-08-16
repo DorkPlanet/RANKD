@@ -219,6 +219,64 @@ Not a code task. What it needs to cover, in plain language:
 
 ---
 
+## The account as the real source of truth
+
+**The user's stated direction, 17 Aug 2026:** sync should be "fast, quick and behind the
+scenes", the account should be the default, and localStorage should "only be used to help
+the app function, not be the be all end all" — kept for now because signed-out testing
+needs it, **gone eventually if it is not standard practice**.
+
+Session L delivered most of what that asks for without touching the storage model: sync now
+actually runs (it previously only ran if you opened Settings), retries, and merges instead
+of asking. What follows is what would be left, and it is a much bigger job than it sounds.
+
+### Why the blob is the blocker
+
+`libraries` is **one row per user with a single `payload jsonb`** (`db/schema.ts`),
+measured at **468KB** for an 861-film library. Postgres cannot update jsonb in place: every
+write is a fresh TOAST write plus dead tuples for autovacuum. A 30-minute session at one
+duel per three seconds would be ~600 rewrites of half a megabyte on one row.
+
+So "write to the server on every duel" is not a client problem, it is a schema problem. It
+needs a `film` row per (user, film) and a `judgement` row per duel, so a duel becomes two
+small inserts.
+
+### What it costs
+
+- **The shared format goes.** `backupFormat.ts` currently has one elegant property: the
+  wire payload and the file backup are literally the same object, validated by the same
+  code. Per-row storage ends that, and the file backup has to be assembled separately.
+- **The duel loop stops being synchronous.** `commit` (`DuelScreen.tsx`) is synchronous
+  today and a tap is durable before the next frame. `saveFilms` is called from inside React
+  `setState` updaters in at least two places, so making the authoritative write async
+  ripples through ~12 call sites — into the code the handover already flags as the most
+  guarded in the app.
+- **`pull()`'s `window.location.reload()`** is tolerable once per sign-in and intolerable
+  as the steady-state answer to "the server changed". Server-authority means reconciling
+  React state in place instead.
+- **The credits sweep** would become 861 requests rather than 86 local writes. It stays
+  local, becomes a bulk endpoint, or moves server-side.
+
+### The honest framing
+
+What is affordable, and what Session L actually built, is:
+
+> **the account is authoritative for conflict resolution; localStorage is a write-through
+> cache with a durable local queue.**
+
+That is a real architecture and it is what most offline-capable apps mean when they say
+"the server is the source of truth". Full server-authority — the server on the read path —
+means abandoning the blob, and the blob is load-bearing for the backup format, the
+validator and the reconciliation logic at once.
+
+**Recommendation: do not start this until something actually needs it.** The two things
+that would are (a) a social feature where another person reads your data, and (b) a library
+big enough that the 468KB blob becomes slow. Neither exists yet. Revisit then.
+
+Shares a precondition with the next entry: both wait on signed-out no longer being needed.
+
+---
+
 ## Remove the signed-out code paths
 
 **Parked deliberately, with a recommendation attached. Do not do this on a whim.**

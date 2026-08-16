@@ -16,7 +16,7 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (17 Aug 2026):** Session K, closed. Everything is committed, pushed to
+**State (17 Aug 2026):** Session L, closed. Everything is committed, pushed to
 `origin/master`, and deployed to production. There is no side branch — `master` is what is
 live. Deploy verified by grepping the live bundle for four strings added this session, not
 by a 200.
@@ -28,7 +28,7 @@ signed-out was deleted**, deliberately: the gate is one line, and lifting it sta
 line. Read `SignInGate.tsx`'s header before arguing with it, and
 "Remove the signed-out code paths" in `POTENTIAL-FEATURES.md` before deleting anything.
 
-**454 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**472 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -330,6 +330,61 @@ Seven user reports, four root causes. Plan at
   recommendation to wait until an account buys something beyond sync — and with the note
   that two of the four items should probably survive regardless, because making sign-in
   mandatory makes the offline problem worse, not better.
+
+**Session L — sync was barely running, and the chooser was answering the wrong question.**
+Plan at `C:\Users\jarra\.claude\plans\okay-good-now-linked-hanrahan.md`.
+
+- **THE BIG ONE: no background push was happening at all.** `startSync` is the only thing
+  that sets `enabled`, and `push`/`schedule` both return early without it. `startSync` was
+  called from exactly two places, both in `Account.tsx` — which mounts only when the
+  settings sheet is opened. **So on any session where the reader never opened Settings,
+  nothing was ever pushed**: no debounce, no flush on backgrounding. An evening of duels
+  sat in localStorage until the next app open. That is a durability hole on an app that
+  now gates behind sign-in *precisely* so a ranking is safe, and it is why the conflict
+  chooser was routine rather than rare — a browser holding a session of unsent work will
+  of course disagree with the account. `AppShell` now starts the watcher off
+  `syncOnOpen`'s outcome, **never on `conflict` or `offline`**; that guard is the one
+  `Account.tsx` documents as having already cost a real library.
+- **A failed push had no retry.** Both failure paths said "retried on the next tick" and
+  there was no next tick: `schedule` is armed from `notify`, and `markDirty` only notifies
+  on the clean→dirty TRANSITION, so an already-dirty browser generates no further
+  notifications however many more duels are fought. One bad request stranded the session.
+  Bounded backoff now, 10s → 30s → 2m → 10m.
+- **The chooser now MERGES rather than asking.** `reconcile.ts`'s founding claim — two
+  libraries cannot be combined "without inventing judgements the user never made" — is
+  correct about the DERIVED state and wrong about the EVIDENCE. Every row in a union of
+  two logs is a duel somebody really fought, and `fitBeliefs` maximises a strictly concave
+  posterior, so it has one maximum and the merged answer does not depend on how the two
+  histories interleave. `mergeLibrary.ts` unions the evidence and the authored fields
+  (`rating`, `pinnedMeta`, hard locks), discards everything derived, and re-derives it from
+  the union. **A hard lock from either side survives** — a confirm is a commitment.
+- **Tombstones, because undo exists.** `retractJudgements` removes a row locally; the other
+  device still holds it, and a naive union hands the mis-tap straight back. The log's
+  stored shape gained an optional `x: string[]`, so a retraction survives the round trip.
+  Optional, so `v` did not change and older readers decode these files unchanged.
+- **Judgement ids are device-scoped now.** They were `time + a counter that resets every
+  page load`, so two devices whose first duel landed in the same millisecond minted
+  identical ids — and a union-by-id would have silently dropped one of two real
+  judgements. Four characters off `deviceId()`.
+- **`canMerge` refuses exactly one case**: an empty log on one side only. That is the
+  signature of "Clear my ranking", which throws the log away *on purpose* so the model
+  cannot re-place everything from the same duels. Merging would undo the reset. That is
+  the one question left worth asking, and the chooser stays for it.
+- **The prefs in `SYNC_KEYS` now mark dirty.** `rankd-prefs-v1`, `rankd-brightness` and
+  `rankd-strip-open` were synced but never marked, so they reached the account only as
+  passengers — which is what produced the brightness false-conflict in Session K.
+- **`PUT /api/lists` is authoritative.** It was an upsert, so a deleted list arrived as an
+  absence and an absence meant nothing: the row survived and the next pull handed it back.
+  It now deletes what it was not sent. **Only safe because the client always sends the
+  complete shelf** — if an incremental push is ever added, this must change with it.
+- **`deviceId()` touched `localStorage` unguarded** — a real bug with no caller until
+  judgement ids started using it, at which point 53 tests went red at once.
+- **NOT done, deliberately, against the plan:** logging confirm and promotion events. The
+  plan wanted them so a merged log could rebuild hard locks from evidence alone. Building
+  the merge showed they buy nothing here — hard locks are unioned straight from the two
+  film records, which is simpler and works retroactively. Adding them would have been a log
+  format change for a capability nothing uses. Revisit only if a full rebuild-from-log-alone
+  is ever needed.
 
 **Session K, part four — two bugs the phone found that the desktop could not.**
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { saveFilms } from "@/lib/store";
+import { markDirty } from "@/lib/syncState";
 import {
   startRun,
   getPair,
@@ -213,6 +214,8 @@ export default function DuelScreen({
   const toggleStrip = () =>
     setStripOpen((v) => {
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");
+      // In `SYNC_KEYS`, so it marks — same reasoning as brightness and prefs.
+      markDirty();
       return !v;
     });
   // Fast Shuffle is now the only thing that takes this screen over. A person run

@@ -68,9 +68,18 @@ function write(next: SyncBookkeeping): void {
   }
 }
 
-/** This browser's id, minted and stored on first use. */
+/**
+ * This browser's id, minted and stored on first use.
+ *
+ * The `window` guard matches every other function here and was missing: the
+ * `localStorage` read below is unconditional, so calling this anywhere without
+ * a DOM threw. Nothing did until judgement ids started carrying a device tag,
+ * at which point every test that mints a judgement went red at once — the
+ * bug was real and simply had no caller.
+ */
 export function deviceId(): string {
   const s = readSyncState();
+  if (typeof window === "undefined") return s.deviceId;
   if (!localStorage.getItem(KEY)) write(s);
   return s.deviceId;
 }

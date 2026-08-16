@@ -23,6 +23,7 @@ import { filmsFromFile } from "@/lib/importCsv";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
+import { startSync } from "@/lib/sync";
 import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
 import { DEFAULT_PREFS, loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
@@ -220,7 +221,29 @@ export default function AppShell() {
     // library — which is why nothing here has to reconcile React state by hand.
     // A conflict is deliberately left alone for the chooser in settings; see
     // lib/startupSync.ts.
-    void syncOnOpen();
+    //
+    // ── And then WATCH, which is the part that was missing ──────────────────
+    //
+    // `startSync` used to be called only from `Account`, which mounts only when
+    // the settings sheet is opened. So on any session where the reader never
+    // opened settings, `enabled` stayed false and `push`/`schedule` returned
+    // early every time: no debounce, no flush on backgrounding, nothing. A
+    // whole evening of duels sat in localStorage until the next app open, and
+    // the account was "backed up" as of hours ago.
+    //
+    // That is what made the conflict chooser routine rather than rare — a
+    // browser holding a session of unsent work will of course disagree with the
+    // account — and it is a durability hole besides, on an app that now asks
+    // people to sign in precisely so their ranking is safe.
+    //
+    // NEVER on `conflict` or `offline`, and that guard is not decoration.
+    // `Account.tsx` records what starting the watcher over an unresolved
+    // conflict actually cost: it pushed a device's 10-film library over the
+    // account's 861 while the chooser was still on screen asking which to keep.
+    // Same rule here, same reason.
+    void syncOnOpen().then((outcome) => {
+      if (outcome && outcome.kind !== "conflict" && outcome.kind !== "offline") startSync();
+    });
 
     // Ask who is signed in, and let the splash's hold cover the answer.
     //
