@@ -16,10 +16,19 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (16 Aug 2026):** Session K. Committed to `master`, **not yet deployed** — check
-`git log origin/master..` before assuming otherwise. There is no side branch.
+**State (17 Aug 2026):** Session K, closed. Everything is committed, pushed to
+`origin/master`, and deployed to production. There is no side branch — `master` is what is
+live. Deploy verified by grepping the live bundle for four strings added this session, not
+by a 200.
 
-**440 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**THE APP IS NOW GATED BEHIND SIGN-IN.** `SignInGate.tsx`, rendered by `AppShell` before
+any screen. This reverses the oldest assumption in the codebase — that the app works fully
+with no account — and a lot of comments still describe the old world. **Nothing
+signed-out was deleted**, deliberately: the gate is one line, and lifting it stays one
+line. Read `SignInGate.tsx`'s header before arguing with it, and
+"Remove the signed-out code paths" in `POTENTIAL-FEATURES.md` before deleting anything.
+
+**449 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -293,6 +302,34 @@ Seven user reports, four root causes. Plan at
 - Verified live end to end: genre run and person run both start, carry their subject to
   the summary, draw their card, and leave `score`, `duels` and the evidence log untouched
   with no guest leaked into the library.
+
+**Session K, part three — the front door, and a reversal.**
+
+- **The app is gated behind sign-in.** The user's call, against my initial recommendation,
+  and they were right on the decisive point: the friction is smaller than it looks because
+  the step immediately after it is exporting a CSV out of Letterboxd. Anyone who will do
+  that will not be stopped by a Google button. The real argument for it is that an
+  anonymous library lived in exactly ONE browser — clear it, lose the phone, switch
+  devices, and an 861-film ranking was gone with no recovery and nothing the app could say
+  afterwards.
+- **The trap, and it is the important part of this entry.** `fetchAccount` answered `null`
+  for both "signed out" and "could not ask". Harmless while it only decided whether to
+  draw an avatar; **catastrophic as a gate** — it would wall a signed-in reader off from
+  their own library the moment they lost signal, which is precisely the failure the
+  local-first design exists to prevent, aimed at the people most invested in the app.
+  `fetchSession` now returns `in` / `out` / `unknown`, a 5xx counts as `unknown` because a
+  server failing to answer is not a claim about the reader, and `unknown` falls back to
+  `rankd-signed-in-v1`. **A definite `out` clears that flag**, so a browser signed out
+  elsewhere cannot let itself back in by going offline. Verified live by forging the flag
+  against a real session: the server's no wins and the flag is wiped.
+- The flag is **not a credential** and must never be treated as one. Every route re-checks
+  the real session server-side (`requireUser`); the worst a forged flag buys is a look at
+  a library already sitting on the device that forged it. It is in neither backup set.
+- **Nothing signed-out was deleted.** The user asked for the removal to be written down as
+  a job with conditions rather than done. It is, in `POTENTIAL-FEATURES.md`, with the
+  recommendation to wait until an account buys something beyond sync — and with the note
+  that two of the four items should probably survive regardless, because making sign-in
+  mandatory makes the offline problem worse, not better.
 
 - **localStorage stays.** The user asked whether to remove it. Local-first with a server
   mirror is standard for an offline-capable PWA and is the only reason the signed-out app
@@ -928,6 +965,16 @@ resumed run should be rebuilt into.
   depends on state outside the repo — a Google console, a DNS record, a dashboard toggle —
   must be re-confirmed with the user before it is allowed to block or shape a decision.
   Sign-in works for anyone with a Google account, today.
+- **The gate, on a real phone (Session K).** Two things, and the second is the one that
+  breaks quietly:
+  - **A stranger's first open.** Splash, then the sign-in screen, then the app. Nothing of
+    the app visible before signing in.
+  - **AEROPLANE MODE, after having signed in once on that device.** You must land in your
+    library, NOT on the wall. This is `fetchSession` answering `unknown` and falling back
+    to `hasSignedInBefore()`; it is unit-tested (`test/session.test.ts`) but the real
+    combination of a service worker, a cached page and no network is not something a
+    desktop reproduces. **If this is broken, the gate is locking people out of their own
+    libraries and it is the most urgent thing in this file.**
 - **Three things from Session I that only a human can close.**
   - **Upload a real photograph** through the cropper on the deployed site. Off-centre is
     the case worth trying, since that is the one the old centre-crop got wrong.
