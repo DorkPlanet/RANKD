@@ -18,10 +18,12 @@ import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import type { Prefs } from "@/lib/prefs";
 import { resetRanking } from "@/lib/reset";
+import { looksLikeZip, readFromZip, wantRatingsCsv } from "@/lib/zip";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
 import { Feedback } from "./Feedback";
+import { ImportGuide } from "./ImportGuide";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
 
 /** Stable reference for `useSyncExternalStore`. */
@@ -108,7 +110,28 @@ export function Settings({
   }, []);
 
   const takeFile = async (file: File, merge: boolean) => {
-    const { films: parsed, skipped } = parseLetterboxdCsv(await file.text());
+    // ── The zip is accepted whole ────────────────────────────────────────────
+    //
+    // Letterboxd hands you a .zip and the importer wants one file inside it.
+    // Extracting that file on a phone is the step people actually abandon: it
+    // means a file manager, a folder nobody can find again, and on some phones
+    // no obvious route at all. Reading it here removes the step.
+    //
+    // Sniffed by CONTENT, not by extension. A phone's file picker reports all
+    // sorts of types for the same file, and the first four bytes never lie.
+    const buffer = await file.arrayBuffer();
+    let text: string | null = null;
+    if (looksLikeZip(new Uint8Array(buffer))) {
+      text = await readFromZip(buffer, wantRatingsCsv);
+      if (text === null) {
+        setNote("That zip has no ratings.csv in it. Open it and pick that file instead.");
+        return;
+      }
+    } else {
+      text = new TextDecoder().decode(buffer);
+    }
+
+    const { films: parsed, skipped } = parseLetterboxdCsv(text);
     if (parsed.length === 0) {
       setNote("No rated films in that file.");
       return;
@@ -165,7 +188,10 @@ export function Settings({
         open={open === "library"}
         onToggle={() => toggle("library")}
       >
-        <p className="mb-2 text-[11px] text-dim">Add a Letterboxd export.</p>
+        <p className="mb-2.5 text-[11px] text-dim">Add a Letterboxd export.</p>
+        <div className="mb-3 rounded-xl border border-border px-3 py-2.5">
+          <ImportGuide compact />
+        </div>
         <div className="mb-4 flex gap-2">
           <ImportButton label="Merge" merge onFile={takeFile} />
           <ImportButton label="Replace" onFile={takeFile} />

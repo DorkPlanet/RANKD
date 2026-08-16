@@ -35,6 +35,7 @@ import { bandsOf, BUCKETS, type Bucket } from "@/lib/roughCut";
 import { loadRoughCut } from "@/lib/roughCutRun";
 import { cardDataFromFilms } from "@/lib/card/data";
 import { CardPicker } from "./CardPicker";
+import { ImportGuide } from "./ImportGuide";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
 import { clearRun, saveRun } from "@/lib/runs";
@@ -867,10 +868,19 @@ export default function DuelScreen({
                   {empty ? "No films yet" : "Nothing on the table"}
                 </p>
                 {empty ? (
-                  <p className="mx-auto mt-2 max-w-[260px] text-[12px] leading-relaxed text-dim">
-                    Bring your ratings over from Letterboxd and this becomes your list to
-                    put in order.
-                  </p>
+                  <>
+                    <p className="mx-auto mt-2 max-w-[260px] text-[12px] leading-relaxed text-dim">
+                      Bring your ratings over from Letterboxd and this becomes your list to
+                      put in order.
+                    </p>
+                    {/* The steps, here rather than only behind the button. This
+                        is the screen a new user lands on, and "Import your
+                        films" tells somebody who has never exported anything
+                        precisely nothing about where to go. */}
+                    <div className="mx-auto mt-5 max-w-[290px] rounded-xl border border-border px-3.5 py-3 text-left">
+                      <ImportGuide />
+                    </div>
+                  </>
                 ) : (
                   <p className="mt-2 text-[12px] text-dim tabular-nums">
                     {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed

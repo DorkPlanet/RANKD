@@ -93,6 +93,35 @@ across the whole library.
 
 ---
 
+## Rough Cut: placing a film blind
+
+**The problem, which is real.** You are asked to file a film into upper, middle or lower
+without being able to hold the whole tier in your head. Early decisions are guesses, and
+you only find out they were wrong later.
+
+**The proposal:** show up to four films at once, select several, drop them into a bracket
+together, and let the page refill.
+
+**Why not this first.** It costs the thing that makes the mode work. Today it is one tap
+or one flick per film; select-then-drop is two actions, so four films become five
+interactions instead of four and most of the batching gain disappears. The flick gestures
+do not survive four cards either — you would need drag-to-target, which is fussier on a
+phone. And comparing four films against each other is a small sort, which drifts the mode
+toward the thing it exists to avoid.
+
+**Try instead: reference thumbnails.** Show the last one or two films filed under each
+bracket, small, above the buttons. Every decision then becomes relative to what you have
+already done rather than to a tier you cannot remember. No new gesture, no change to the
+mechanic, and it attacks the actual complaint.
+
+**Also already true:** "Split again" catches wrong-box films on a second pass, and that
+pass is cheap. The counts over each bracket help a little too.
+
+If thumbnails ship and it still feels blind, multi-select is the next step — and by then
+we will know it earned it.
+
+---
+
 ## Badge icons
 
 ~29 badges in `src/lib/achievements.ts` all render the same filled or hollow star

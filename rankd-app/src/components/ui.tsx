@@ -318,7 +318,10 @@ export function ImportButton({
       {label}
       <input
         type="file"
-        accept=".csv,text/csv"
+        // The zip is offered first because it is what Letterboxd actually hands
+        // you — see `takeFile`, which reads the ratings file straight out of it.
+        // The csv stays accepted for anyone who has already extracted one.
+        accept=".zip,application/zip,.csv,text/csv"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
