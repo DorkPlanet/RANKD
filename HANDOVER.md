@@ -893,7 +893,14 @@ resumed run should be rebuilt into.
 
 ## Pinned — built but not shipped
 
-- **Accounts (Session E).** On branch `accounts`, written and tested. Needs a Neon database
+- ~~**Accounts (Session E).**~~ **SHIPPED. This entry was stale and actively
+  misleading — corrected in Session K.** Auth, the database, sync and Blob avatars are all
+  on `master` and all configured in production: `AUTH_SECRET`, `AUTH_GOOGLE_ID`,
+  `AUTH_GOOGLE_SECRET`, `DATABASE_URL`, `BLOB_STORE_ID` are set on Preview and Production
+  (`npx vercel env ls --scope rankd2`). **The `accounts` branch is dead history — do not
+  merge it**, it predates everything Sessions F–K did to those files. The original entry's
+  setup notes are kept below only because the reasoning still explains the choices.
+  Needed a Neon database
   (**use the POOLED connection string**) and a Google OAuth client with redirect URIs
   `http://localhost:3000/api/auth/callback/google` and
   `https://rankd-app-eight.vercel.app/api/auth/callback/google`. Then `npm run db:migrate`
@@ -909,11 +916,18 @@ resumed run should be rebuilt into.
 
 ## Waiting on the user — nothing else blocks this
 
-- **Publish the OAuth consent screen.** Google Cloud console → **Google Auth Platform** →
-  **Audience** → *Publish app*. While it says *Testing*, only accounts on the test-user list
-  can sign in and everyone else gets a flat `access_denied`. Rankd asks only for name and
-  email — non-sensitive scopes — so publishing needs **no verification review** and takes
-  effect immediately. **Until this is done the app cannot be handed to anybody.**
+- ~~**Publish the OAuth consent screen.**~~ **ALREADY DONE, and this entry was WRONG for
+  several sessions.** The user confirmed on 16 Aug 2026 that the consent screen has been
+  *In production* all along. It claimed "until this is done the app cannot be handed to
+  anybody", which was a false blocker sitting at the top of the waiting-on-user list and
+  shaping decisions underneath it.
+  **This is the second time this file has asserted a blocker that was not real** — see the
+  `leastRanked` note near the top, which claimed a module was in the tree for two sessions
+  while it was not. The lesson is the same and evidently needs restating: **an item on
+  this list that nobody has re-checked is a claim, not a fact.** Anything here that
+  depends on state outside the repo — a Google console, a DNS record, a dashboard toggle —
+  must be re-confirmed with the user before it is allowed to block or shape a decision.
+  Sign-in works for anyone with a Google account, today.
 - **Three things from Session I that only a human can close.**
   - **Upload a real photograph** through the cropper on the deployed site. Off-centre is
     the case worth trying, since that is the one the old centre-crop got wrong.
