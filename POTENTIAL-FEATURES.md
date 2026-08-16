@@ -219,6 +219,54 @@ Not a code task. What it needs to cover, in plain language:
 
 ---
 
+## Remove the signed-out code paths
+
+**Parked deliberately, with a recommendation attached. Do not do this on a whim.**
+
+The app is gated behind sign-in as of 17 Aug 2026 (`SignInGate.tsx`), but **nothing that
+served signed-out users was deleted**. That was the user's explicit call: keep them, and
+record when removing them would be right.
+
+### Why they were kept
+
+- **Offline play needs most of them anyway.** localStorage stays regardless — a ranking
+  app that dies in a tunnel is worse than one that asks for a login. Removing "signed-out"
+  is therefore a much smaller job than it sounds, because the biggest piece of it is not
+  actually about being signed out.
+- **The gate is one line while they survive.** `if (!signedIn) return <SignInGate />` in
+  `AppShell`. Delete the branches underneath and that decision stops being reversible,
+  which is the wrong shape for a product bet made on its first day.
+
+### What would actually come out
+
+Smaller than it looks. Most of the app never knew about accounts:
+
+- `AvatarMenu`'s `signedIn` split — the "sign in if you would rather upload a photo" line
+  and the conditional upload option (`ProfileScreen.tsx`).
+- `Account.tsx`'s signed-out branch, the whole `if (!account)` block.
+- `hasSignedInBefore` / `rankd-signed-in-v1` in `account.ts`, **only if** the offline case
+  is being solved another way. Read `fetchSession`'s header first: this flag exists so a
+  signed-in reader with no network is not locked out of their own library, and that
+  problem does not go away by making sign-in mandatory. **It gets worse.**
+- The `{ kind: "unknown" }` arm of `SessionState` — same caveat, same reason. Probably
+  keep.
+
+### What has to be true first
+
+1. **Sign-in has been mandatory long enough to be sure**, and nobody has asked for the
+   door back. A month of real use, not a week.
+2. **The offline story is settled independently.** If the answer is still "trust the
+   remembered flag", then two of the four items above are load-bearing and stay.
+3. **There is something an account is FOR beyond sync** — Activity, usernames, following.
+   Until then the gate is charging a price the product has not yet built the thing for,
+   and that is an argument for possibly lifting it rather than for cementing it.
+
+**Recommendation: leave this alone until 3 is true.** The cleanup buys a modest amount of
+code clarity and costs the ability to change your mind, and right now the ability to
+change your mind is worth more.
+
+---
+
 ## Notes
 
 - The sign-in reload in `sync.ts` `pull()` (`window.location.reload()`) is still the main

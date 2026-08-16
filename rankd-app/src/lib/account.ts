@@ -60,5 +60,94 @@ export async function signInWithGoogle(): Promise<void> {
 }
 
 export async function signOutOfAccount(): Promise<void> {
+  // Forgotten BEFORE the navigation, not after: `post` submits a form and the
+  // document is torn down, so anything queued after it never runs.
+  forgetSignedIn();
   await post("/api/auth/signout");
+}
+
+// ── Is anyone signed in, and do we actually know? ──────────────────────────
+//
+// `fetchAccount` answers `null` for two very different situations: nobody is
+// signed in, and we could not ask. That conflation is harmless when the answer
+// only decides whether to show an avatar. It is not harmless now that it
+// decides whether the app opens at all — treating "offline" as "signed out"
+// would put the sign-in wall in front of somebody's own library on a plane,
+// which is precisely the failure the local-first design exists to avoid.
+//
+// So the gate asks this instead, and gets three answers rather than two.
+
+const SIGNED_IN_KEY = "rankd-signed-in-v1";
+
+export type SessionState =
+  | { kind: "in"; account: AccountInfo }
+  | { kind: "out" }
+  /** The network could not be asked. Says nothing about whether anyone is signed in. */
+  | { kind: "unknown" };
+
+/**
+ * Has this browser ever completed a sign-in?
+ *
+ * Device state, like the install hint: it describes this browser rather than
+ * the person, so it is deliberately in neither backup set and never synced. Its
+ * only job is to answer the offline case — see `sessionKnown` below.
+ *
+ * Not a security boundary and not pretending to be one. Every route that
+ * matters re-checks the real session server-side (`requireUser`), so the worst
+ * a forged flag buys is a look at a library already on the device it was forged
+ * on.
+ */
+export function hasSignedInBefore(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(SIGNED_IN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberSignedIn(): void {
+  try {
+    localStorage.setItem(SIGNED_IN_KEY, "1");
+  } catch {
+    // Storage disabled. The gate then asks the network every open, which works.
+  }
+}
+
+export function forgetSignedIn(): void {
+  try {
+    localStorage.removeItem(SIGNED_IN_KEY);
+  } catch {
+    // Nothing stored to forget.
+  }
+}
+
+/** Who is signed in, distinguishing "nobody" from "could not ask". */
+export async function fetchSession(): Promise<SessionState> {
+  let res: Response;
+  try {
+    res = await fetch("/api/auth/session", { cache: "no-store" });
+  } catch {
+    return { kind: "unknown" };
+  }
+  // A 5xx is the server failing to answer, which is not the same claim as "you
+  // are signed out" either. Only a successful response with no user is.
+  if (!res.ok) return res.status >= 500 ? { kind: "unknown" } : { kind: "out" };
+
+  let session: { user?: { email?: string; name?: string; image?: string } };
+  try {
+    session = (await res.json()) as typeof session;
+  } catch {
+    return { kind: "unknown" };
+  }
+
+  const email = session?.user?.email;
+  if (!email) {
+    // A definite "no". Clear the remembered flag, or a browser that signed out
+    // somewhere else would keep letting itself in whenever it went offline.
+    forgetSignedIn();
+    return { kind: "out" };
+  }
+  rememberSignedIn();
+  return { kind: "in", account: { email, name: session.user?.name, image: session.user?.image } };
 }

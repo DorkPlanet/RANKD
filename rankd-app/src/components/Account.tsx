@@ -202,7 +202,9 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
         <button
           onClick={() => {
             // The library stays exactly where it is — signing out ends the
-            // mirroring, it does not take anything away.
+            // mirroring, it does not take anything away. It DOES now return you
+            // to the sign-in screen, since that is the front door; signing back
+            // in reveals this same library rather than an empty one.
             clearSyncState();
             void signOutOfAccount();
           }}

@@ -31,6 +31,8 @@ import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
 import Coach from "./Coach";
 import { InstallPrompt } from "./InstallPrompt";
+import SignInGate from "./SignInGate";
+import { fetchSession, hasSignedInBefore } from "@/lib/account";
 import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
@@ -171,6 +173,14 @@ export default function AppShell() {
   // reason to spend the time is that the arrival should not feel abrupt.
   const [held, setHeld] = useState(false);
   const [splashGone, setSplashGone] = useState(false);
+  // ── The gate ───────────────────────────────────────────────────────────────
+  //
+  // `null` while the session is still being asked about, which is why the
+  // splash's hold is load-bearing rather than decorative now: it is the window
+  // the answer arrives in, so neither the gate nor the app is ever shown and
+  // then replaced by the other. A flash of a sign-in wall at somebody already
+  // signed in is worse than a slightly longer splash.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
   // Which tour is on screen. Set one tick AFTER a navigation, never during it:
   // `Coach` resolves its targets as it renders, so mounting it in the same
   // commit as a screen change measures the screen the user is leaving.
@@ -211,6 +221,18 @@ export default function AppShell() {
     // A conflict is deliberately left alone for the chooser in settings; see
     // lib/startupSync.ts.
     void syncOnOpen();
+
+    // Ask who is signed in, and let the splash's hold cover the answer.
+    //
+    // "Could not ask" is NOT "signed out" — see `fetchSession`. Offline, this
+    // falls back to whether this browser has ever completed a sign-in, so a
+    // signed-in reader on a plane gets their library rather than a wall they
+    // cannot get through without the network they do not have. That is the one
+    // case a naive gate breaks, and it breaks it for exactly the people who
+    // have most invested in the app.
+    void fetchSession().then((s) => {
+      setSignedIn(s.kind === "in" || (s.kind === "unknown" && hasSignedInBefore()));
+    });
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //
@@ -500,7 +522,10 @@ export default function AppShell() {
   // library (<92ms) is long since in hand and the hold is the only thing being
   // waited on — which is the point. A splash whose length depends on the speed
   // of the phone is not a decision, it is a symptom.
-  const splashLeaving = held && !!state;
+  // `signedIn !== null` joined the condition when the gate landed: the splash
+  // now also covers the session lookup, so the reader never sees the app and
+  // then the wall, or the wall and then the app.
+  const splashLeaving = held && !!state && signedIn !== null;
 
   useEffect(() => {
     if (!splashLeaving) return;
@@ -511,7 +536,23 @@ export default function AppShell() {
   const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
 
   // Still nothing to show behind it — the splash IS the screen for now.
-  if (!state) return splash;
+  if (!state || signedIn === null) return splash;
+
+  // ── The gate ───────────────────────────────────────────────────────────────
+  //
+  // Above every hook, below none of them: this sits after the last `useState`
+  // and `useEffect` in this component, so taking it cannot change the hook
+  // order. The library has already loaded by here and stays loaded — nothing is
+  // cleared on the way past, so signing in reveals whatever this browser was
+  // already holding rather than starting anyone from nothing.
+  if (!signedIn) {
+    return (
+      <>
+        <SignInGate />
+        {splash}
+      </>
+    );
+  }
 
   // What the user actually owns. A person run merges borrowed films into
   // `state.films` so the engine can duel them, and the duel screen is the only

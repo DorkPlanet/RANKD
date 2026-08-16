@@ -92,6 +92,11 @@ export const FILE_KEYS = FILE_2;
 //  · `rankd-install-hint-v1` — dismissing the install nudge on a phone says
 //    nothing about whether a tablet should see it. `lib/install.ts` says so at
 //    more length.
+//  · `rankd-signed-in-v1` — whether THIS browser has ever completed a sign-in.
+//    Restoring it onto a device that has not would let that device past the
+//    gate while offline, which is the one thing it exists to decide. It is not
+//    a credential and is not treated as one: every route re-checks the real
+//    session server-side. See `fetchSession` in lib/account.ts.
 //
 // ── Every key this app stores, and who owns it ─────────────────────────────
 //
@@ -116,9 +121,10 @@ export const FILE_KEYS = FILE_2;
 //   `rankd-brightness`  brightness.ts
 //   `rankd-strip-open`  DuelScreen    whether the film strip is open
 //
-// FLAGS — what this browser has already been shown.
+// FLAGS — what this browser has already been shown, or already done.
 //   `rankd-tour-v1`               tour.ts     which coach marks have run
 //   `rankd-install-hint-v1`       install.ts  install nudge dismissed
+//   `rankd-signed-in-v1`          account.ts  has ever signed in on this browser
 //   `rankd-review-dismissed-v1`   nowhere     dead; see FILE_2 above
 //
 // BOOKKEEPING — never backed up, never synced.
