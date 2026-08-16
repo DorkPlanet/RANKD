@@ -31,7 +31,7 @@ import { Rolodex } from "./Rolodex";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
 import RoughCut from "./RoughCut";
-import { bandsOf, BUCKETS, type Bucket } from "@/lib/roughCut";
+import { bandsOf, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
 import { loadRoughCut } from "@/lib/roughCutRun";
 import { cardDataFromFilms } from "@/lib/card/data";
 import { CardPicker } from "./CardPicker";
@@ -345,6 +345,50 @@ export default function DuelScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pileKey]);
+
+  // ── The same artwork fetch, for Rough Cut ─────────────────────────────────
+  //
+  // The effect above is gated on `state.session`, and Rough Cut deliberately has
+  // no session — it has no pile, no climb and no confirm. So it was the one mode
+  // in the app with NO artwork fetch of its own, left waiting on the credits
+  // sweep, which walks the whole library at one film per 400ms. On a library
+  // that has not been swept yet that means every card is a placeholder, on the
+  // single screen most exposed to it: it shows one film at a time and asks you
+  // to judge it.
+  //
+  // Widening the range made it obvious rather than causing it — a range reaches
+  // into tiers the sweep is even less likely to have reached.
+  //
+  // Fetched in queue order, which is the order they will be seen, for the same
+  // reason the duel's version sorts by when-seen.
+  const rcKey = roughCutTier === null ? "" : `${roughCutTier} ${roughCutRange.below} ${roughCutRange.above}`;
+  useEffect(() => {
+    if (roughCutTier === null || !state) return;
+    const need = roughCutPool(
+      state.films,
+      roughCutTier,
+      roughCutRange.below,
+      roughCutRange.above,
+    ).filter(needsMeta);
+    if (need.length === 0) return;
+
+    let stopped = false;
+    backfillPosters(
+      need,
+      (id, meta) =>
+        setState((s) => {
+          if (!s) return s;
+          const films = s.films.map((f) => (f.id === id ? withMeta(f, meta) : f));
+          saveFilms(films);
+          return { ...s, films };
+        }),
+      () => stopped,
+    );
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rcKey]);
 
   if (!state) return null;
   const { session } = state;
