@@ -166,7 +166,7 @@ threaded through two components and read by neither, and four CSS blocks. All go
   narrating at length what code used to do. Those headers are cut to the trap and the
   invariant. The older "don't change this back" notes are guardrails and were LEFT.
 
-**Session J (`890d3f0` … `bbd47c7`) — onboarding, Rough Cut, and three data bugs.**
+**Session J (`890d3f0` … `54885b5`) — onboarding, Rough Cut, and three data bugs.**
 Two rounds of feedback from real use. Everything deployed.
 
 Landed, roughly in the order it was found:
@@ -203,6 +203,15 @@ Landed, roughly in the order it was found:
   surfaced** (a "Card" chip on shelf tiles, earned badges as their own TROPHY CASE row).
 - Fast Shuffle got the countdown too; float travel nearly doubled (9px over 6.5s was
   invisible).
+- **"Delete everything and start fresh"** in Settings → Start again (`wipeEverything` in
+  `reset.ts`). Every other reset keeps your library, which is right for fixing a ranking
+  and useless for seeing the app as a new user does. Clears all `rankd-` keys plus the
+  per-tab sitting, then reloads.
+- **The empty screen's import is a real file picker.** It opened Settings, where every row
+  is collapsed — so the one button on a new user's only screen led to a list of shut rows
+  with no import control in sight. `filmsFromFile` in `importCsv.ts` is now shared by both
+  controls; the zip handling must never be on only one of them. Settings also opens on the
+  library row when the library is empty.
 
 **A tutorial sandbox was built and then deleted in the same session.** It ran the real
 screens over sample films with every write guarded. The user's call, and the right one:
