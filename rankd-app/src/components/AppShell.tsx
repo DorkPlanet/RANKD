@@ -528,24 +528,29 @@ export default function AppShell() {
 
   const goDuel = () => go("duel");
 
-  // Asked for from Settings: forget both tours and start again from the duel.
-  // `replaying` is what lets them run at all on a ranked library, and it stays
-  // on for the rest of the session so the list tour still fires when the user
-  // wanders over to it.
   /**
-   * Run the tutorial on the sample films, touching nothing.
+   * Run the tutorial. Always the sandbox, whatever the library holds.
    *
-   * The old `startTour` drew coach marks over your REAL library, which meant it
-   * could not run at all for the person who needs it most: a new user with no
-   * films has no posters to point at, no tier to open and no run to start, so
-   * every step would have filtered out and the tour would have marked itself
-   * seen having shown nothing.
+   * ── Why there is no longer a branch here ───────────────────────────────────
    *
-   * `setSandbox` is the whole safety story and it is a single switch rather
-   * than a prop threaded through five components — see lib/sandbox.ts for why,
-   * and for the list of writes it stops. It is cleared on every exit below.
+   * This used to run the sandbox only for an EMPTY library and otherwise fall
+   * back to drawing marks over your real films. That second path had a
+   * condition nobody could see: it only showed anything if a run happened to be
+   * in progress. With films but no live duel — which is most of the time, and
+   * is exactly the state the RNK screen sits in — pressing the button set the
+   * screen to duel, queued nothing, and appeared to do nothing at all.
+   *
+   * The fallback was also the worse teacher. Marks over your own library depend
+   * on that library being in the right shape: a tier with something in it, a
+   * duel on screen, a strip open. The sandbox is the same five films in the
+   * same state every time, so the tutorial is the same tutorial for everyone
+   * and cannot be half-shown.
+   *
+   * `setSandbox` is the whole safety story, a single switch rather than a prop
+   * threaded through five components — see lib/sandbox.ts for what it stops.
+   * Cleared in `endTutorial` and again on unmount.
    */
-  const startTutorial = () => {
+  const startTour = () => {
     setSettingsOpen(false);
     forgetTours();
     setSeen(new Set());
@@ -562,28 +567,6 @@ export default function AppShell() {
     setSandbox(false);
     setTutorial(false);
     setTourDue(null);
-  };
-
-  const startTour = () => {
-    // With no library there is nothing to draw marks on, so the tutorial runs
-    // on the sample films instead. With one, the marks over your own films are
-    // the better teacher and they still work.
-    if (library.length === 0) return startTutorial();
-    setSettingsOpen(false);
-    forgetTours();
-    setSeen(new Set());
-    setReplaying(true);
-    if (current !== "duel") setVeil((v) => v + 1);
-    setScreen("duel");
-    setTourDue(null);
-    // Only if a duel is actually on screen. With no run in progress the RNK
-    // screen is `RunStart`, which has none of the tour's targets — so the replay
-    // waits for `onRunBegan` exactly like a first run does. `replaying` stays on
-    // for the session, so it will fire the moment they start something.
-    //
-    // Named rather than derived from `tourFor`, which would still be reading the
-    // pre-reset `seen` and `replaying` from this render's closure.
-    if (state.session) setTimeout(() => setTourDue("duel"), VEIL_MS + 20);
   };
 
   return (
