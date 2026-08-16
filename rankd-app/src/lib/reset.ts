@@ -34,6 +34,35 @@ import type { Film } from "./types";
  * behind would mean an "unranked" library that still sorted itself into last
  * session's order the moment anything read it.
  */
+/**
+ * Wipe this browser back to a first open — films, ranking, evidence, profile,
+ * saved lists, tours, preferences, the lot.
+ *
+ * Distinct from "Clear my ranking", which deliberately keeps your library. This
+ * is for seeing the app as a new user sees it, which nothing else could do:
+ * every existing reset preserves the one thing a first open does not have.
+ *
+ * Only `rankd-` keys, so nothing belonging to another app on the same origin is
+ * touched. Sync bookkeeping goes too — leaving it would tell the next sign-in
+ * this browser had already pushed a library it no longer holds.
+ *
+ * The caller reloads. Every screen reads the library once at mount, so clearing
+ * storage underneath a live app leaves it showing a library that no longer
+ * exists — the same reason `importBackup` and `pull` reload.
+ */
+export function wipeEverything(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith("rankd-")) localStorage.removeItem(key);
+    }
+    // A sitting is per-tab and would otherwise survive as a stale baseline.
+    sessionStorage.removeItem("rankd-sitting-v1");
+  } catch {
+    // Storage disabled. There is nothing stored to clear either.
+  }
+}
+
 export function resetRanking(films: readonly Film[]): Film[] {
   return films.map((f) => {
     const next: Film = { ...f, score: seedScore(f.rating) };

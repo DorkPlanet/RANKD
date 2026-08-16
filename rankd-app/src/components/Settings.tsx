@@ -17,7 +17,7 @@ import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
 import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import type { Prefs } from "@/lib/prefs";
-import { resetRanking } from "@/lib/reset";
+import { resetRanking, wipeEverything } from "@/lib/reset";
 import { looksLikeZip, readFromZip, wantRatingsCsv } from "@/lib/zip";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
@@ -320,6 +320,7 @@ function InstallRow({ open, onToggle }: { open: boolean; onToggle: () => void })
 // Neither touches films or star ratings.
 function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]) => void }) {
   const [arming, setArming] = useState(false);
+  const [wiping, setWiping] = useState(false);
   const [duels, setDuels] = useState(0);
   useEffect(() => {
     void loadLog().then((l) => setDuels(l.length));
@@ -379,6 +380,53 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           </div>
         </>
       )}
+
+      {/* ── Back to a first open ────────────────────────────────────────────
+          Every other reset here keeps your library, which is right for someone
+          fixing a ranking and useless for the one thing they cannot otherwise
+          do: see the app as a new user sees it. Empty is a real state now, with
+          its own screens, and this is the only way to reach it.
+
+          Two taps, and the second one says the number out loud. This is the
+          most destructive control in the app — it takes the films as well —
+          so it sits last, dimmest, and behind its own arming. */}
+      <div className="mt-4 border-t border-border pt-3">
+        {!wiping ? (
+          <button
+            onClick={() => setWiping(true)}
+            disabled={films.length === 0}
+            className="w-full text-center text-[11px] text-dim active:scale-95 disabled:opacity-35"
+          >
+            Delete everything and start fresh
+          </button>
+        ) : (
+          <>
+            <p className="mb-2 text-[11px] leading-snug text-gold">
+              Removes all {films.length.toLocaleString()} films, every placement, every duel and
+              your profile. The app opens as if you had just installed it. Save a backup first if
+              you want any of it back.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setWiping(false)} className={BTN}>
+                Keep it
+              </button>
+              <button
+                onClick={() => {
+                  wipeEverything();
+                  // Reloaded rather than re-rendered: every screen read the
+                  // library once at mount and would be holding films that no
+                  // longer exist.
+                  location.reload();
+                }}
+                style={{ color: "#D81E26", borderColor: "#D81E26" }}
+                className="flex-1 rounded-xl border py-2.5 text-center text-xs font-bold active:scale-[0.98]"
+              >
+                Delete it all
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </>
   );
 }
