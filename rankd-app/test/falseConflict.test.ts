@@ -62,11 +62,16 @@ afterEach(() => vi.unstubAllGlobals());
 const serverReplies = (films: string) =>
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ payload: payload(films), updatedAt: SERVER_AT, deviceId: "d2" }),
-    } as unknown as Response),
+    vi.fn().mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        return { ok: true, json: async () => ({ updatedAt: SERVER_AT }) } as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ payload: payload(films), updatedAt: SERVER_AT, deviceId: "d2" }),
+      } as Response;
+    }),
   );
 
 describe("reconcileWithAccount", () => {
@@ -76,10 +81,14 @@ describe("reconcileWithAccount", () => {
 
     const outcome = await reconcileWithAccount();
 
-    expect(outcome.kind).toBe("in-sync");
+    expect(outcome.kind).not.toBe("conflict");
+    expect(outcome.kind).toBe("pushed");
   });
 
-  it("records the server's stamp, so it stops asking on the next open", async () => {
+  // The whole point: it has to end CLEAN. Reporting "pushed" while leaving the
+  // browser dirty is what made this reconcile to the same answer on every open
+  // — `push` was returning early because `startSync` had not run yet.
+  it("actually resolves, so it stops asking on the next open", async () => {
     seedLocal(FILMS);
     serverReplies(FILMS);
 
@@ -88,6 +97,34 @@ describe("reconcileWithAccount", () => {
     const state = JSON.parse(store.get("rankd-sync-v1")!);
     expect(state.lastSeenServerAt).toBe(SERVER_AT);
     expect(state.dirtyAt).toBeNull();
+  });
+
+  // The one that actually bit. Brightness rides in SYNC_KEYS, so nudging the
+  // slider made the payloads differ while films and duels — the only numbers
+  // the chooser prints — stayed identical on both sides.
+  it("does NOT ask when only a preference differs", async () => {
+    seedLocal(FILMS);
+    store.set("rankd-brightness", "0.13");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+        if (init?.method === "PUT") return { ok: true, json: async () => ({ updatedAt: SERVER_AT }) } as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            payload: { ...payload(FILMS), keys: { ...payload(FILMS).keys, "rankd-brightness": "0.9" } },
+            updatedAt: SERVER_AT,
+            deviceId: "d2",
+          }),
+        } as Response;
+      }),
+    );
+
+    const outcome = await reconcileWithAccount();
+
+    // Pushed, not asked: this device's setting goes up and the two sides agree.
+    expect(outcome.kind).toBe("pushed");
   });
 
   // The chooser still has to appear when it is earning its keep.
@@ -108,7 +145,7 @@ describe("reconcileWithAccount", () => {
     store.set("rankd-install-hint-v1", "1");
     serverReplies(FILMS);
 
-    expect((await reconcileWithAccount()).kind).toBe("in-sync");
+    expect((await reconcileWithAccount()).kind).not.toBe("conflict");
     expect(SYNC_KEYS).not.toContain("rankd-run-v1");
   });
 });

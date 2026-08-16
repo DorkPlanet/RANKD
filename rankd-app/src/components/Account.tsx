@@ -131,10 +131,19 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   // point is that the app works without one — reads as a demand.
   if (!checked) return null;
 
-  if (conflict) {
-    return (
-      <div>
-        <span className="text-xs font-extrabold tracking-[0.12em] text-gold">TWO LIBRARIES</span>
+  // ── The chooser is a BANNER, not a takeover ────────────────────────────────
+  //
+  // It used to `return` in place of the whole panel, so while it was up there
+  // was no way to sign out, no email shown, and no way to reach any other
+  // account control — the panel drew normally and then, a beat later, was
+  // replaced by a question. A user who did not want to answer it was simply
+  // stuck, which is how a wrong conflict stopped being cosmetic.
+  //
+  // Rendered above the account block now and returning nothing, so every
+  // control underneath stays reachable whether or not the question is answered.
+  const chooser = conflict ? (
+    <div className="mb-4 rounded-xl border border-gold/40 p-3">
+      <span className="text-xs font-extrabold tracking-[0.12em] text-gold">TWO LIBRARIES</span>
         <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
           This browser and your account have both been used since they last agreed. Nothing is
           merged — combining two rankings would invent judgements you never made — so pick the one
@@ -162,9 +171,8 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
             Keep the account
           </button>
         </div>
-      </div>
-    );
-  }
+    </div>
+  ) : null;
 
   if (!account) {
     return (
@@ -184,6 +192,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   const state = readSyncState();
   return (
     <div>
+      {chooser}
       <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
         <span className="text-text-hi">{account.email}</span>
         <br />
