@@ -58,6 +58,8 @@ const TARGET =
 export default function RoughCut({
   films,
   tier,
+  below = 0,
+  above = 0,
   onFilms,
   onExit,
   onRankPile,
@@ -71,6 +73,9 @@ export default function RoughCut({
 }: {
   films: Film[];
   tier: Rating;
+  /** Widen the pass either side of the anchor tier. Each film keeps its own rating. */
+  below?: number;
+  above?: number;
   onFilms: (films: Film[]) => void;
   onExit: () => void;
   /** Apply the pass and start a King of the Hill run over just this pile. */
@@ -111,7 +116,7 @@ export default function RoughCut({
   // that still matches this library or null.
   const [resumed] = useState(() => loadRoughCut(films, tier));
   const [pass, setPass] = useState<{ films: Film[]; n: number }>(() =>
-    resumed ? { films: resumed.films, n: resumed.n } : { films: roughCutPool(films, tier), n: 1 },
+    resumed ? { films: resumed.films, n: resumed.n } : { films: roughCutPool(films, tier, below, above), n: 1 },
   );
   const pool = pass.films;
   const [at, setAt] = useState(resumed?.at ?? 0);

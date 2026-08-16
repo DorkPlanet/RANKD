@@ -240,6 +240,13 @@ export default function DuelScreen({
   // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
   // it has no pile, no climb and no confirm, so none of the duel branches apply.
   const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
+  // The reach the pass was started with. Held separately from the setup panel's
+  // `below`/`above`, which keep changing as the panel is reopened — a running
+  // pass must not silently re-scope itself underneath the reader.
+  const [roughCutRange, setRoughCutRange] = useState<{ below: number; above: number }>({
+    below: 0,
+    above: 0,
+  });
 
   const runSubject: RankSubject | null = runRequest?.subject ?? localSubject;
   // Borrowed films, if this run has any. Read off the request rather than held
@@ -628,6 +635,8 @@ export default function DuelScreen({
       <RoughCut
         films={state.films}
         tier={roughCutTier}
+        below={roughCutRange.below}
+        above={roughCutRange.above}
         onFilms={(films) => {
           saveFilms(films);
           setState((s) => (s ? { ...s, films } : s));
@@ -723,6 +732,8 @@ export default function DuelScreen({
           }}
           onRoughCut={(t) => {
             setShuffleRun(null);
+            // Frozen at the moment the pass starts, for the reason on the state.
+            setRoughCutRange({ below, above });
             setRoughCutTier(t);
             closeSetup();
           }}
@@ -1526,7 +1537,11 @@ function ModePanel({
   // be, which on a fresh session is DEFAULT_TIER — so it always opened on 4★ and
   // there was no way to say otherwise.
   if (chosen === "roughcut") {
-    const inTier = films.filter((f) => f.rating === tier && f.lock !== "hard").length;
+    // Counted over the RANGE, not the anchor tier, so the number on the start
+    // button is the number of films the pass will actually deal.
+    const inTier = films.filter(
+      (f) => f.rating >= tier - below && f.rating <= tier + above && f.lock !== "hard",
+    ).length;
     return (
       <Sheet title="Rough Cut" onClose={onClose} closing={closing}>
         <p className="mb-3 text-[11px] leading-snug text-dim">
@@ -1545,6 +1560,37 @@ function ModePanel({
             </span>
           </span>
         </button>
+        {/* The same reach the climb and Fast Shuffle already had. Rough Cut was
+            the one mode locked to a single tier, which made it useless for the
+            case it is best at: two thin neighbouring tiers that together are
+            worth one pass. Every film still keeps its own star rating —
+            `applyRoughCut` scores each one inside its OWN band, so a range
+            decides which films are dealt and nothing else. */}
+        <div className="mb-3 rounded-xl border border-border px-4 py-3">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-sm text-text-hi">Range</span>
+            <span className="text-[11px] text-gold">
+              {starsFor(tier - below)} – {starsFor(tier + above)}
+            </span>
+          </div>
+          <RangeSlider
+            tier={tier}
+            low={tier - below}
+            high={tier + above}
+            onLow={(v) => onBelow(tier - v)}
+            onHigh={(v) => onAbove(v - tier)}
+          />
+          <div className="flex justify-between text-[10px] text-dim">
+            <span>½</span>
+            <span>★★★★★</span>
+          </div>
+          {(below > 0 || above > 0) && (
+            <p className="mt-2 text-[11px] leading-snug text-dim">
+              Every film keeps its own star rating — this only decides which films are dealt.
+            </p>
+          )}
+        </div>
+
         <StartButton
           label={`Start · ${inTier} film${inTier === 1 ? "" : "s"}`}
           onClick={() => onRoughCut(tier)}

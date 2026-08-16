@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { choose, confirm, startRun } from "@/lib/ladder";
 import { applyRoughCut, bandsOf, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
-import { tierMax, tierMin } from "@/lib/tiers";
+import { tierMax, tierMid, tierMin } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
 const film = (id: string, score: number, over: Partial<Film> = {}): Film => ({
@@ -231,5 +231,57 @@ describe("bandsOf after piles have been ranked", () => {
     expect(open("top")).toHaveLength(0);
     expect(open("middle")).toHaveLength(0);
     expect(open("bottom").map((f) => f.id).sort()).toEqual(["e", "f"]);
+  });
+});
+
+// A pass may now span neighbouring tiers, the same reach the climb and Fast
+// Shuffle already had. The danger the range introduces is that a film could be
+// scored into a band that is not its own — which is what a star rating IS to
+// everything downstream, so it would silently re-rate it.
+describe("a pass across a range of tiers", () => {
+  const mixed = (): Film[] => [
+    { id: "a4", title: "a4", rating: 4, score: tierMid(4) },
+    { id: "b4", title: "b4", rating: 4, score: tierMid(4) },
+    { id: "c3", title: "c3", rating: 3, score: tierMid(3) },
+    { id: "d3", title: "d3", rating: 3, score: tierMid(3) },
+  ];
+
+  it("deals films from the tiers below when asked", () => {
+    expect(roughCutPool(mixed(), 4, 1, 0).map((f) => f.id).sort()).toEqual(["a4", "b4", "c3", "d3"]);
+  });
+
+  it("deals only the anchor tier by default, exactly as before", () => {
+    expect(roughCutPool(mixed(), 4).map((f) => f.id).sort()).toEqual(["a4", "b4"]);
+  });
+
+  // The one that matters. A 3★ film sorted during a 4★-anchored pass must land
+  // inside the 3★ band, not the 4★ one.
+  it("scores every film inside its OWN tier's band", () => {
+    const assignment = new Map<string, Bucket>([
+      ["a4", "top"],
+      ["c3", "top"],
+      ["d3", "bottom"],
+    ]);
+
+    const after = applyRoughCut(mixed(), 4, assignment);
+    const scoreOf = (id: string) => after.find((f) => f.id === id)!.score;
+
+    expect(scoreOf("a4")).toBeGreaterThanOrEqual(tierMin(4));
+    expect(scoreOf("a4")).toBeLessThanOrEqual(tierMax(4));
+    expect(scoreOf("c3")).toBeGreaterThanOrEqual(tierMin(3));
+    expect(scoreOf("c3")).toBeLessThanOrEqual(tierMax(3));
+    expect(scoreOf("d3")).toBeGreaterThanOrEqual(tierMin(3));
+    expect(scoreOf("d3")).toBeLessThanOrEqual(tierMax(3));
+  });
+
+  it("still separates the thirds within each tier it touched", () => {
+    const assignment = new Map<string, Bucket>([
+      ["c3", "top"],
+      ["d3", "bottom"],
+    ]);
+    const after = applyRoughCut(mixed(), 4, assignment);
+    const scoreOf = (id: string) => after.find((f) => f.id === id)!.score;
+
+    expect(scoreOf("c3")).toBeGreaterThan(scoreOf("d3"));
   });
 });

@@ -57,22 +57,46 @@ export function applyRoughCut(
 ): Film[] {
   if (assignment.size === 0) return [...films];
 
-  const lo = tierMin(tier);
-  const hi = tierMax(tier);
-  const third = (hi - lo) / 3;
-
-  // Sub-bands run best-first down the band: "top" takes the highest scores.
-  const bandOf = (b: Bucket): [number, number] =>
-    b === "top" ? [lo + 2 * third, hi] : b === "middle" ? [lo + third, lo + 2 * third] : [lo, lo + third];
+  // ── Banded by each film's OWN rating, not the run's anchor tier ───────────
+  //
+  // This used to take `tierMin(tier)`/`tierMax(tier)` once and score every film
+  // against that one band. Correct while a pass could only ever cover a single
+  // tier; wrong the moment the setup grew a range, because a 3★ film sorted
+  // during a 4★-anchored pass would have been written a score inside the 4★
+  // band — which is what a star rating IS to everything downstream. The pass
+  // would have silently re-rated it.
+  //
+  // `tier` is still the parameter because it is the run's anchor and the
+  // signature is used elsewhere; it is simply no longer what the arithmetic
+  // hangs off. A single-tier pass is unchanged: every film's own band IS the
+  // tier's band.
+  const bandOf = (rating: number, b: Bucket): [number, number] => {
+    const lo = tierMin(rating);
+    const third = (tierMax(rating) - lo) / 3;
+    return b === "top"
+      ? [lo + 2 * third, lo + 3 * third]
+      : b === "middle"
+        ? [lo + third, lo + 2 * third]
+        : [lo, lo + third];
+  };
 
   const scores = new Map<string, number>();
-  for (const bucket of BUCKETS) {
-    const members = films
-      .filter((f) => assignment.get(f.id) === bucket)
-      .sort((a, b) => b.score - a.score);
-    if (members.length === 0) continue;
+  // Grouped by rating as well as bucket, so two ratings' "upper" thirds are
+  // spread inside their own bands rather than sharing one range.
+  const groups = new Map<string, Film[]>();
+  for (const f of films) {
+    const bucket = assignment.get(f.id);
+    if (!bucket) continue;
+    const key = `${f.rating} ${bucket}`;
+    const seen = groups.get(key);
+    if (seen) seen.push(f);
+    else groups.set(key, [f]);
+  }
 
-    const [bLo, bHi] = bandOf(bucket);
+  for (const [key, group] of groups) {
+    const [ratingStr, bucket] = key.split(" ") as [string, Bucket];
+    const members = [...group].sort((a, b) => b.score - a.score);
+    const [bLo, bHi] = bandOf(parseFloat(ratingStr), bucket);
     // Spread across the sub-band rather than stacking on its midpoint: identical
     // scores would hand the climb an arbitrary order again, which is the exact
     // thing this pass exists to fix.
@@ -133,8 +157,20 @@ export function bandsOf(films: readonly Film[], tier: Rating): Record<Bucket, Fi
   return out;
 }
 
-export function roughCutPool(films: readonly Film[], tier: Rating): Film[] {
+/**
+ * The films a pass asks about.
+ *
+ * `below`/`above` widen it either side of the anchor tier, the same reach the
+ * climb and Fast Shuffle already offered. Rough Cut was the one mode locked to
+ * a single tier, which made it useless for exactly the case it is best at: a
+ * neighbouring pair of thin tiers that together are worth one pass.
+ *
+ * Every film still keeps its own star rating — the range only decides which
+ * films are dealt, and `applyRoughCut` scores each one inside its OWN band.
+ * Default 0/0, so every existing caller behaves exactly as before.
+ */
+export function roughCutPool(films: readonly Film[], tier: Rating, below = 0, above = 0): Film[] {
   return films
-    .filter((f) => f.rating === tier && f.lock !== "hard")
+    .filter((f) => f.rating >= tier - below && f.rating <= tier + above && f.lock !== "hard")
     .sort((a, b) => b.score - a.score);
 }
