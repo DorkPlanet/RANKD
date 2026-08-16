@@ -1248,17 +1248,32 @@ export function BottomNav({
   // right and needs no assumption about which viewport unit won: in a
   // fullscreen PWA the two are equal and this is still `offsetHeight`.
   //
-  // `visualViewport` rather than `innerHeight` because the URL bar sliding away
-  // fires no resize on `window` in some mobile browsers, and an on-screen
-  // keyboard shrinks one and not the other. Reset to 0 on unmount, or sheets on
-  // screens that draw no nav would float above a bar that is not there.
+  // ── Measured against the LAYOUT viewport, not the visual one ───────────────
+  //
+  // This value is consumed as a `bottom` on `position: fixed` elements, and a
+  // fixed element's containing block is the initial containing block — the
+  // LAYOUT viewport, whose height is `document.documentElement.clientHeight`.
+  // `getBoundingClientRect().top` is in those same coordinates, so both ends of
+  // the subtraction have to be.
+  //
+  // The first version of this used `visualViewport.height`, which is a
+  // different quantity: it shrinks when the URL bar is on screen and grows when
+  // it retracts, while the layout viewport stays put. The two agree exactly
+  // when browser chrome is hidden — which is every desktop, and a phone
+  // mid-scroll — and disagree by the height of the URL bar the rest of the
+  // time. So the sheets sat correctly on the bar in testing and drifted off it
+  // in normal use, which is the worst possible way for this to be wrong.
+  //
+  // `visualViewport` is still LISTENED to, because it is the only reliable
+  // signal that mobile chrome moved; it just is not what gets measured. Reset
+  // to 0 on unmount, or sheets on screens that draw no nav would float above a
+  // bar that is not there.
   const navRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = navRef.current;
     if (!el) return;
     const publish = () => {
-      const vv = window.visualViewport;
-      const bottom = vv ? vv.height + vv.offsetTop : window.innerHeight;
+      const bottom = document.documentElement.clientHeight || window.innerHeight;
       // Clamped: a bar measured below the fold would give a negative offset and
       // push a sheet off the bottom of the screen, which is worse than a seam.
       const up = Math.max(0, Math.round(bottom - el.getBoundingClientRect().top));

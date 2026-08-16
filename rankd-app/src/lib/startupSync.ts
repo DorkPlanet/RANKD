@@ -32,7 +32,7 @@
 import { fetchAccount } from "./account";
 import { reconcileWithAccount, type SyncOutcome } from "./sync";
 
-let ran = false;
+let inFlight: Promise<SyncOutcome | null> | null = null;
 
 /**
  * Reconcile once per page load, for a signed-in visitor.
@@ -41,18 +41,33 @@ let ran = false;
  * development, and two reconciliations racing each other is exactly how a pull
  * and a push get interleaved.
  *
+ * ── Why it CACHES rather than returning null on a second call ──────────────
+ *
+ * `Account` used to run its own `reconcileWithAccount` on mount, and `Account`
+ * mounts every time the settings sheet is opened. So opening settings asked the
+ * question again, on a browser the credits sweep had since marked dirty — and
+ * the answer arrived a beat after the panel had already drawn, replacing the
+ * sign-out button with the TWO LIBRARIES chooser in front of somebody who had
+ * come to look at their account.
+ *
+ * Reconciliation is a page-load concern, not a panel concern: it is a read plus
+ * at most one write, and asking twice cannot produce a better answer. So the
+ * promise is kept and handed to every later caller, and `Account` reads this
+ * instead of asking again. One question per load, one answer, shared.
+ *
  * Never throws. A visitor who is signed out, offline, or whose account cannot
  * be reached gets the app precisely as it has always worked, which is the
  * promise this whole feature was built around.
  */
-export async function syncOnOpen(): Promise<SyncOutcome | null> {
-  if (ran) return null;
-  ran = true;
-  try {
-    const who = await fetchAccount();
-    if (!who) return null;
-    return await reconcileWithAccount();
-  } catch {
-    return null;
-  }
+export function syncOnOpen(): Promise<SyncOutcome | null> {
+  inFlight ??= (async () => {
+    try {
+      const who = await fetchAccount();
+      if (!who) return null;
+      return await reconcileWithAccount();
+    } catch {
+      return null;
+    }
+  })();
+  return inFlight;
 }

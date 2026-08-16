@@ -16,10 +16,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { fetchAccount, signInWithGoogle, signOutOfAccount, type AccountInfo } from "@/lib/account";
+import { syncOnOpen } from "@/lib/startupSync";
 import {
   pull,
   pushOverServer,
-  reconcileWithAccount,
   startSync,
   syncNow,
   type ConflictSides,
@@ -81,8 +81,15 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
       // before the user was even asked.
       //
       // Syncing therefore begins only once there is nothing to argue about.
-      const outcome = await reconcileWithAccount();
-      if (cancelled) return;
+      //
+      // `syncOnOpen`, NOT `reconcileWithAccount`. This panel mounts every time
+      // the settings sheet is opened, and reconciling on each mount asked a
+      // question the app had already answered at boot — against a browser the
+      // credits sweep had marked dirty since. The chooser then landed on top of
+      // the sign-out button a beat after the panel drew. `syncOnOpen` reconciles
+      // once per page load and hands the same answer to everyone after that.
+      const outcome = await syncOnOpen();
+      if (cancelled || !outcome) return;
       if (outcome.kind === "conflict") {
         setConflict(outcome.sides);
         onConflict?.(true);
