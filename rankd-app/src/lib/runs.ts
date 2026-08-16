@@ -22,6 +22,7 @@
 // Excluded from the file backup for the same reason: a backup carries what you
 // decided, and this is what you had not decided yet.
 
+import { isSandbox } from "./sandbox";
 import type { Film, PlacementSession } from "./types";
 
 const KEY = "rankd-run-v1";
@@ -69,6 +70,10 @@ const idsOf = (s: PlacementSession): string[] => [
  */
 export function saveRun(session: PlacementSession | null): void {
   if (typeof window === "undefined") return;
+  // A tutorial duel must not be offered back as a run to resume — and, worse,
+  // must not CLEAR a real half-finished climb, which is what the `removeItem`
+  // below would do the moment the demonstration ended.
+  if (isSandbox()) return;
   try {
     const keep = session?.promotionQueue ? (session.resumeAfter ?? null) : session;
     if (!isResumable(keep)) return void localStorage.removeItem(KEY);

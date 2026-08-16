@@ -52,6 +52,47 @@ mechanic above. Building Daily Check first means building that twice.
 
 ---
 
+## Fast Shuffle, reframed as the lazy mode
+
+**The idea.** Reframe Fast Shuffle as a mindless mode: infinite pairs, no piles, no
+climbing, no confirming. Keep answering and the model's confidence climbs until the order
+*should* be right without anyone having hand-curated it. For people who want to enjoy the
+app without caring about perfect curation. It takes nothing away from Rough Cut or King of
+the Hill, and actually ranking something stays the real thing.
+
+**This is mostly a reframe, not a build — which is the good news.** The mechanic already
+works exactly as described. `matchmaker.ts` serves whichever pair the model can least
+predict, `bayes.ts` keeps a mean and a spread per film, and a shuffle answer moves the
+belief without ever hard-locking anything. The lazy mode is already in there; the app just
+never says so.
+
+**What is actually missing is the payoff.** Nothing on screen ever tells you the model is
+getting more sure. You answer, the posters change, and there is no sense of accumulating
+anything — which is precisely why it reads as aimless rather than as a mode with a point.
+The number needed already exists as `spread`. Surfacing it, per tier or across the
+library, is what turns a loop into a mode.
+
+**The hierarchy is already in the data, and must stay visible.** A shuffle answer writes a
+soft lock; a King of the Hill confirm writes a hard one. The list already draws the
+difference — gold and bold for "you placed this", dim for "placed by the evidence". That
+distinction is the thing that keeps ranking the be-all and end-all, and it is doing real
+work today.
+
+**The risk to design around.** Say "94% confident" and people will read it as finished and
+stop. For the lazy user that is the point and it is fine. But the two kinds of position
+must not become indistinguishable, or the app's central claim — that you decided this —
+quietly dilutes into a claim that a model guessed it. Whatever the confidence readout
+looks like, it should read as *the app's belief about your taste*, never as *your
+ranking*. The wording matters more than the number.
+
+**Worth checking before building:** whether confidence over a large library moves at all
+on a human timescale. The old library progress bars were removed for exactly this reason —
+at 861 films one duel moved them a quarter of a pixel, and a meter that cannot visibly
+respond to what you just did is furniture. Per tier is more likely to feel alive than
+across the whole library.
+
+---
+
 ## Badge icons
 
 ~29 badges in `src/lib/achievements.ts` all render the same filled or hollow star

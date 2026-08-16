@@ -1,23 +1,43 @@
 import type { Film } from "./types";
 import { migrateLock } from "./lock";
+import { isSandbox } from "./sandbox";
 import { SEED_FILMS } from "./seed";
 import { markDirty } from "./syncState";
 
-// Local-first persistence. No backend yet — the master library lives in
-// localStorage, seeded on first run. (Accounts/sync arrive in a later phase.)
+// Local-first persistence. The master library lives in localStorage and is
+// mirrored to an account when there is one (see sync.ts).
 const KEY = "rankd-app-v1";
 
+/**
+ * The library, or nothing.
+ *
+ * ── Why a new browser is EMPTY ─────────────────────────────────────────────
+ *
+ * This used to return `SEED_FILMS`, so opening the app for the first time
+ * handed you ten films somebody else had chosen and rated. People read that as
+ * their library and could not tell which part was theirs — a wrong default
+ * dressed as a starter kit.
+ *
+ * A real user arrives with a library to import or with nothing, and both are
+ * fine. Nothing is a legitimate state the screens now say out loud, and the
+ * import is the onboarding. The seed films still exist, but as the tutorial's
+ * cast — they are displayed, never written, and never yours.
+ *
+ * An unreadable payload also returns nothing rather than the sample set.
+ * Silently replacing a corrupt library with somebody else's films would look
+ * exactly like the data loss it is.
+ */
 export function loadFilms(): Film[] {
-  if (typeof window === "undefined") return SEED_FILMS;
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(KEY);
     // Migrated on the way in, so every reader downstream sees `lock` and the
     // legacy `confirmed` flag exists nowhere except this one line.
     if (raw) return (JSON.parse(raw) as Film[]).map(migrateLock);
   } catch {
-    // ignore corrupt/absent storage — fall through to seed
+    // ignore corrupt/absent storage
   }
-  return SEED_FILMS;
+  return [];
 }
 
 // Guests are stripped HERE rather than at each call site.
@@ -31,6 +51,9 @@ export function loadFilms(): Film[] {
 // does upstream. See `guest` in lib/types.ts.
 export function saveFilms(films: Film[]): void {
   if (typeof window === "undefined") return;
+  // The tutorial drives the real screens over the sample films. They write like
+  // any other run; nothing they write is yours. See lib/sandbox.ts.
+  if (isSandbox()) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
     markDirty();
@@ -55,11 +78,45 @@ export function saveFilms(films: Film[]): void {
  * STARTED as the seed stops counting as untouched the moment any judgement
  * lands on it, which is the point at which it becomes worth protecting.
  */
+/**
+ * The ten films this app used to hand every new browser.
+ *
+ * Frozen, and deliberately not derived from anything. They are no longer the
+ * seed set and no build will ever write them again — but devices that ran the
+ * old build are still holding them, and the check below is the only thing
+ * standing between one of those devices and a conflict chooser offering "ten
+ * films" against the account it just signed into.
+ *
+ * Dropping this list would not fail a test. It would reintroduce, for existing
+ * users only, the exact bug `isUntouchedSeed` was written to prevent — which is
+ * why it is a list of strings and not a lookup into `seed.ts`.
+ */
+const LEGACY_SEED_IDS = [
+  "the-godfather-1972",
+  "dune-2021",
+  "inception-2010",
+  "the-dark-knight-2008",
+  "interstellar-2014",
+  "la-la-land-2016",
+  "ex-machina-2014",
+  "sicario-2015",
+  "gone-girl-2014",
+  "drive-2011",
+] as const;
+
 export function isUntouchedSeed(films: readonly Film[]): boolean {
-  if (films.length !== SEED_FILMS.length) return false;
+  // Nothing at all is not "an untouched sample" — it is a browser with no
+  // library, which every caller already handles by its own route.
+  if (films.length === 0) return false;
   if (films.some((f) => f.lock !== undefined || (f.duels ?? 0) > 0)) return false;
-  const seeded = new Set(SEED_FILMS.map((f) => f.id));
-  return films.every((f) => seeded.has(f.id));
+
+  const matches = (ids: readonly string[]) => {
+    if (films.length !== ids.length) return false;
+    const set = new Set<string>(ids);
+    return films.every((f) => set.has(f.id));
+  };
+
+  return matches(SEED_FILMS.map((f) => f.id)) || matches(LEGACY_SEED_IDS);
 }
 
 /** Does this browser hold a library sync should treat as real? */

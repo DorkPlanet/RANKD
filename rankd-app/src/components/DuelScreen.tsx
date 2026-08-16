@@ -89,6 +89,9 @@ export default function DuelScreen({
   onPersonRunHandled,
   onRunBegan,
   onRoughCutBegan,
+  onTour,
+  tutorial,
+  onTutorialDone,
   onPerson,
   greet = 0,
 }: {
@@ -104,6 +107,20 @@ export default function DuelScreen({
   onRunBegan?: () => void;
   /** Same contract as onRunBegan, for the mode that has no session. */
   onRoughCutBegan?: () => void;
+  /** Run the tutorial. Offered on the empty screen, where it is most wanted. */
+  onTour?: () => void;
+  /**
+   * This whole screen is a demonstration.
+   *
+   * The films handed in are the sample set, nothing written anywhere persists
+   * (see `lib/sandbox.ts`), and the surface opens straight into a Rough Cut
+   * pass rather than the mode menu — because a tutorial that begins by asking
+   * you to choose a mode has already failed the person who does not know what
+   * the modes are.
+   */
+  tutorial?: boolean;
+  /** The demonstration is over: leave, and put the real library back. */
+  onTutorialDone?: () => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
@@ -220,7 +237,13 @@ export default function DuelScreen({
   const [curatedOpen, setCuratedOpen] = useState(false);
   // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
   // it has no pile, no climb and no confirm, so none of the duel branches apply.
-  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
+  // The tutorial opens straight into a pass. Set in the initialiser rather than
+  // an effect so the first paint is already the thing being demonstrated — an
+  // effect would show the empty screen for a frame and then replace it, which
+  // is the jump `tourDue` exists elsewhere to avoid.
+  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(
+    tutorial ? DEFAULT_TIER : null,
+  );
 
   const runSubject: RankSubject | null = personRun
     ? subjectFromPerson(personRun, personPortrait)
@@ -604,7 +627,14 @@ export default function DuelScreen({
           saveFilms(films);
           setState((s) => (s ? { ...s, films } : s));
         }}
-        onExit={() => setRoughCutTier(null)}
+        // Leaving the pass ends the demonstration outright. There is nothing
+        // behind it — the sample library has no other tier and no run — so
+        // dropping back to the mode screen would strand the reader in a
+        // five-film app that is not theirs.
+        onExit={() => {
+          setRoughCutTier(null);
+          if (tutorial) onTutorialDone?.();
+        }}
         // Climb just the pile that was cut, not the whole tier again. `only`
         // takes an arbitrary set of ids and is independent of `crossTier`, so
         // this is an ordinary run that writes scores and locks — it simply has a
@@ -841,6 +871,17 @@ export default function DuelScreen({
   // what you actually see here.
   if (!session && !runResult) {
     const placedNow = state.films.filter(isPlaced).length;
+    // ── The screen a brand-new user actually lands on ────────────────────────
+    //
+    // A new library is now EMPTY rather than pre-seeded, which makes this the
+    // first screen anyone sees — and it was written for a library that had
+    // films in it. "Nothing on the table" over "0 films" reads as a fault, and
+    // the gold button under it offered to pick a tier when there are no tiers
+    // to pick: a dead end presented as the primary action.
+    //
+    // With nothing to rank, the only useful thing this screen can do is say so
+    // and point at the import.
+    const empty = state.films.length === 0;
     return (
       <>
         <main className="relative flex h-app flex-col overflow-hidden select-none">
@@ -853,29 +894,61 @@ export default function DuelScreen({
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
                 <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
-                  Nothing on the table
+                  {empty ? "No films yet" : "Nothing on the table"}
                 </p>
-                <p className="mt-2 text-[12px] text-dim tabular-nums">
-                  {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed
-                </p>
+                {empty ? (
+                  <p className="mx-auto mt-2 max-w-[260px] text-[12px] leading-relaxed text-dim">
+                    Bring your ratings over from Letterboxd and this becomes your list to
+                    put in order.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-[12px] text-dim tabular-nums">
+                    {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex-shrink-0 pb-5">
-              <button
-                onClick={() => {
-                  fromOverlay.current = true;
-                  setTierOpen(true);
-                }}
-                className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
-              >
-                Pick a tier
-              </button>
-              <button
-                onClick={() => setModeOpen(true)}
-                className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
-              >
-                Something else
-              </button>
+              {empty ? (
+                <>
+                  <button
+                    onClick={onSettings}
+                    className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
+                  >
+                    Import your films
+                  </button>
+                  {/* Second, because seeing the game played is worth less than
+                      having something to play it on — but offered here rather
+                      than buried in Settings, since somebody with no library is
+                      exactly who the tutorial is for. */}
+                  {onTour && (
+                    <button
+                      onClick={onTour}
+                      className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
+                    >
+                      Show me how it works
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      fromOverlay.current = true;
+                      setTierOpen(true);
+                    }}
+                    className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
+                  >
+                    Pick a tier
+                  </button>
+                  <button
+                    onClick={() => setModeOpen(true)}
+                    className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
+                  >
+                    Something else
+                  </button>
+                </>
+              )}
               <button
                 onClick={onProfile}
                 className="mt-3 w-full py-2 text-center text-[12px] text-dim active:scale-95"

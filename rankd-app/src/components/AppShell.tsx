@@ -17,6 +17,8 @@ import ListScreen from "./ListScreen";
 import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
+import { setSandbox } from "@/lib/sandbox";
+import { SEED_FILMS } from "@/lib/seed";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
@@ -94,6 +96,20 @@ export default function AppShell() {
   // has to work from whichever screen you're looking at.
   const [trophiesOpen, setTrophiesOpen] = useState(false);
   const [brightness, setBrightness] = useState(0);
+  // The tutorial is running on the sample films. See startTutorial.
+  const [tutorial, setTutorial] = useState(false);
+  // Its own scratch library, so a demonstration cannot scribble on the real one
+  // — see the note where this is handed to DuelScreen. Reset on every start
+  // rather than on exit, so a second run of the tutorial begins unranked.
+  // Typed nullable purely to match the prop DuelScreen already takes. It is
+  // never actually null — `startTutorial` seeds it and the render below only
+  // reaches for it while the tutorial is on — but widening here beats widening
+  // the component's contract for one caller.
+  const [tutorialState, setTutorialState] = useState<RankState | null>(() => ({
+    films: SEED_FILMS,
+    session: null,
+    journal: [],
+  }));
   // Read in the same effect as brightness rather than as a lazy initialiser —
   // see the note on that effect for why localStorage cannot be read during the
   // first render without tearing hydration.
@@ -274,6 +290,18 @@ export default function AppShell() {
     setPrefs(loadPrefs());
   }, []);
 
+  // Belt and braces: a sandbox left on is silent, total data loss — nothing
+  // would save again for the rest of the session — so it is cleared if this
+  // component goes away with the tutorial still running.
+  //
+  // UP HERE, above every early return, because that is the rule. It was first
+  // written next to `endTutorial`, which sits after `if (!state) return splash`
+  // — so it ran on some renders and not others, and React threw "rendered more
+  // hooks than during the previous render" the moment the library loaded. An
+  // effect whose whole job is to run on the way out is exactly the kind that
+  // gets written next to the thing it guards rather than with its siblings.
+  useEffect(() => () => setSandbox(false), []);
+
   // ── Arriving at the duel ───────────────────────────────────────────────────
   //
   // The splash's language, a third of the length: the screen you were on is
@@ -434,7 +462,13 @@ export default function AppShell() {
   // duels behind them does not need to be told what a tap does, and ambushing
   // them with a tutorial on open would be the app talking over their own work.
   // Settings is where they ask for it.
-  const newLibrary = !library.some(isPlaced);
+  // A library with nothing settled in it is one the tours are still worth
+  // offering. An EMPTY one is not: every tour points at films, and the list
+  // tour fired over "Nothing here yet" — one step, explaining how to jump
+  // between tiers that do not exist, and then marking itself seen so the reader
+  // never got it again once they had films. Emptiness has its own screen now,
+  // and that screen offers the tutorial deliberately.
+  const newLibrary = library.length > 0 && !library.some(isPlaced);
 
   const tourFor = (s: Screen): TourId | null => {
     const id: TourId | null = s === "duel" ? "duel" : s === "list" ? "list" : null;
@@ -498,7 +532,43 @@ export default function AppShell() {
   // `replaying` is what lets them run at all on a ranked library, and it stays
   // on for the rest of the session so the list tour still fires when the user
   // wanders over to it.
+  /**
+   * Run the tutorial on the sample films, touching nothing.
+   *
+   * The old `startTour` drew coach marks over your REAL library, which meant it
+   * could not run at all for the person who needs it most: a new user with no
+   * films has no posters to point at, no tier to open and no run to start, so
+   * every step would have filtered out and the tour would have marked itself
+   * seen having shown nothing.
+   *
+   * `setSandbox` is the whole safety story and it is a single switch rather
+   * than a prop threaded through five components — see lib/sandbox.ts for why,
+   * and for the list of writes it stops. It is cleared on every exit below.
+   */
+  const startTutorial = () => {
+    setSettingsOpen(false);
+    forgetTours();
+    setSeen(new Set());
+    setReplaying(true);
+    setSandbox(true);
+    setTutorialState({ films: SEED_FILMS, session: null, journal: [] });
+    setTutorial(true);
+    if (current !== "duel") setVeil((v) => v + 1);
+    setScreen("duel");
+    setTourDue(null);
+  };
+
+  const endTutorial = () => {
+    setSandbox(false);
+    setTutorial(false);
+    setTourDue(null);
+  };
+
   const startTour = () => {
+    // With no library there is nothing to draw marks on, so the tutorial runs
+    // on the sample films instead. With one, the marks over your own films are
+    // the better teacher and they still work.
+    if (library.length === 0) return startTutorial();
     setSettingsOpen(false);
     forgetTours();
     setSeen(new Set());
@@ -520,8 +590,28 @@ export default function AppShell() {
     <>
       {current === "duel" ? (
         <DuelScreen
-          state={state}
-          setState={setState}
+          // Remounted when the tutorial starts or ends, and that is the point.
+          // `roughCutTier` is seeded from `tutorial` in a useState initialiser,
+          // so the flag flipping under a live component would change nothing —
+          // the key makes the switch a fresh mount, which is also what discards
+          // any run state the demonstration accumulated.
+          key={tutorial ? "tutorial" : "live"}
+          // ── The sandbox does NOT cover this, and it must not be asked to ────
+          //
+          // `setSandbox` guards what reaches localStorage. `setState` is React
+          // state, and pointing the tutorial at the real setter would have
+          // replaced the live in-memory library with five sample films the
+          // moment the demonstration touched anything — nothing on disk, so
+          // nothing lost permanently, but the app would be showing somebody
+          // else's five films until the next reload.
+          //
+          // So the demonstration gets its own state to scribble on. Two
+          // mechanisms because there are genuinely two problems: what persists,
+          // and what is on screen.
+          state={tutorial ? tutorialState : state}
+          setState={tutorial ? setTutorialState : setState}
+          tutorial={tutorial}
+          onTutorialDone={endTutorial}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
@@ -535,6 +625,7 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
+          onTour={startTour}
           onRunBegan={() => {
             if (seen.has("duel") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("duel"), 20);
