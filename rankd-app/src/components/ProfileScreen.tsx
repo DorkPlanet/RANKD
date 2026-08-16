@@ -33,6 +33,16 @@ import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import type { Film } from "@/lib/types";
 
+/**
+ * What a chosen frame is going to become.
+ *
+ * The banner and the avatar are the same two-step pick — a film, then a frame
+ * from it — differing only in where the URL lands and what shape it is shown
+ * in. Carried through the flow rather than inferred at the end, so the picker
+ * can be honest about the crop while you are still choosing.
+ */
+type StillTarget = "banner" | "avatar";
+
 interface Collection {
   title: string;
   blurb: string;
@@ -69,8 +79,19 @@ export default function ProfileScreen({
 }) {
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
-  const [pickingFilm, setPickingFilm] = useState(false);
-  const [stillsFor, setStillsFor] = useState<Film | null>(null);
+  // ── One film-picking flow, two things it can be picking FOR ────────────────
+  //
+  // The banner has always been "pick a film, then pick a frame from it". The
+  // avatar now borrows the same two steps rather than growing its own, so the
+  // target rides along instead of being inferred from which state happens to be
+  // set. Two booleans would have made "picking a banner AND an avatar" a state
+  // the type allowed.
+  const [pickingFor, setPickingFor] = useState<StillTarget | null>(null);
+  const [stillsFor, setStillsFor] = useState<{ film: Film; target: StillTarget } | null>(null);
+  const [avatarMenu, setAvatarMenu] = useState(false);
+  // The photo waiting to be cropped. Picking one does not upload it — see
+  // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
+  const [pendingAvatar, setPendingAvatar] = useState<File | null>(null);
   const [openList, setOpenList] = useState<SavedList | null>(null);
   // Whether the shelf's card shortcut was what opened it. Separate from
   // `openList` so closing the card still leaves the list behind it.
@@ -184,7 +205,7 @@ export default function ProfileScreen({
               than sitting on a photograph. */}
           <div className="banner-fade absolute inset-0" />
           <button
-            onClick={() => setPickingFilm(true)}
+            onClick={() => setPickingFor("banner")}
             className="absolute bottom-2 right-4 rounded-full border border-border px-2.5 py-1 text-[10px] text-dim active:scale-95"
             style={{ background: "color-mix(in srgb, var(--bg) 70%, transparent)" }}
           >
@@ -223,8 +244,7 @@ export default function ProfileScreen({
               <AvatarSlot
                 profile={profile}
                 accountImage={accountImage}
-                signedIn={signedIn}
-                onUploaded={(url) => onProfile({ ...profile, avatarUrl: url })}
+                onOpen={() => setAvatarMenu(true)}
               />
             </span>
             {/* The pencil sits after the name rather than pinned to the right
@@ -648,25 +668,78 @@ export default function ProfileScreen({
       {editing && <EditIdentity profile={profile} onSave={onProfile} onClose={() => setEditing(false)} />}
 
 
-      {pickingFilm && (
+      {avatarMenu && (
+        <AvatarMenu
+          profile={profile}
+          signedIn={signedIn}
+          onClose={() => setAvatarMenu(false)}
+          onPickFromFilms={() => {
+            setAvatarMenu(false);
+            setPickingFor("avatar");
+          }}
+          onUploadFile={(file) => {
+            setAvatarMenu(false);
+            setPendingAvatar(file);
+          }}
+          onRemove={() => {
+            setAvatarMenu(false);
+            // Deleted, not blanked. An empty string is still a value, and
+            // absence is the state `avatarOf` reads as "fall back to the
+            // account photo, then to the initial".
+            const next = { ...profile };
+            delete next.avatarUrl;
+            onProfile(next);
+          }}
+        />
+      )}
+
+      {/* Errors and the busy state belong to the cropper: it is the thing on
+          screen when either happens, and reporting an upload failure next to a
+          small circle the user is no longer looking at helped nobody. */}
+      {pendingAvatar && (
+        <AvatarCropper
+          file={pendingAvatar}
+          onCancel={() => setPendingAvatar(null)}
+          onUploaded={(url) => {
+            setPendingAvatar(null);
+            onProfile({ ...profile, avatarUrl: url });
+          }}
+        />
+      )}
+
+      {pickingFor && (
         <FilmPicker
           films={films}
           title="Pick a film"
-          blurb="Then choose a frame from it for the top of your profile."
-          onClose={() => setPickingFilm(false)}
+          blurb={
+            pickingFor === "banner"
+              ? "Then choose a frame from it for the top of your profile."
+              : "Then choose a frame from it for your picture."
+          }
+          onClose={() => setPickingFor(null)}
           onPick={(id) => {
-            setPickingFilm(false);
-            setStillsFor(films.find((f) => f.id === id) ?? null);
+            const film = films.find((f) => f.id === id);
+            setPickingFor(null);
+            setStillsFor(film ? { film, target: pickingFor } : null);
           }}
         />
       )}
 
       {stillsFor && (
         <StillPicker
-          film={stillsFor}
+          film={stillsFor.film}
+          target={stillsFor.target}
           onClose={() => setStillsFor(null)}
           onPick={(url) => {
-            onProfile({ ...profile, bannerFilmId: stillsFor.id, bannerStill: url });
+            // A frame costs a URL, exactly as the banner does, so this works
+            // signed out and adds nothing to the server. `avatarUrl` is read
+            // first by `avatarOf`, so choosing one also overrides the Google
+            // picture for anyone who has both.
+            onProfile(
+              stillsFor.target === "banner"
+                ? { ...profile, bannerFilmId: stillsFor.film.id, bannerStill: url }
+                : { ...profile, avatarUrl: url },
+            );
             setStillsFor(null);
           }}
         />
@@ -676,31 +749,36 @@ export default function ProfileScreen({
 }
 
 /**
- * The picture, and the way to change it.
+ * The picture, and the ways to change it.
  *
- * A label wrapping a hidden file input, the same trick `ImportButton` uses — a
- * styled button cannot open a file picker. Signed out it is not a control at
- * all, just the initial: uploads live behind auth (see `api/avatar/route.ts`),
- * and offering a button that can only ever answer "sign in first" would be the
- * app asking for something it has no intention of accepting.
+ * ── Why this is no longer signed-in only ───────────────────────────────────
  *
- * The pencil badge is only drawn when there is something to press, so the shape
- * itself says whether it is interactive.
+ * It used to render a bare initial when signed out, on the reasoning that
+ * uploads live behind auth (`api/avatar/route.ts`) and a button that can only
+ * answer "sign in first" is the app asking for something it will not accept.
+ * That reasoning was sound and the conclusion was too broad: it assumed a
+ * picture must be an UPLOAD. A frame from a film you already own is a URL, the
+ * same as `bannerStill`, so it costs no storage, needs no account, and keeps
+ * the whole profile a few hundred bytes. Signed out, that is the whole menu.
+ *
+ * So tapping opens a chooser rather than a file dialog directly. A label
+ * wrapping a hidden input is still how the upload option works — the same trick
+ * `ImportButton` uses, because a styled button cannot open a file picker.
+ *
+ * The pencil badge is now always drawn, because there is now always something
+ * to press.
  */
 function AvatarSlot({
   profile,
   accountImage,
-  signedIn,
-  onUploaded,
+  onOpen,
 }: {
   profile: Profile;
   accountImage: string | null;
-  signedIn: boolean;
-  onUploaded: (url: string) => void;
+  onOpen: () => void;
 }) {
   // The file waiting to be cropped. Picking one no longer uploads it — see
   // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
-  const [pending, setPending] = useState<File | null>(null);
   const avatar = avatarOf(profile, accountImage);
   // Big enough to be the face of the card rather than a bullet point beside the
   // name. Everything else here is derived from it so the badge and the fallback
@@ -733,64 +811,118 @@ function AvatarSlot({
     </span>
   );
 
-  if (!signedIn) return face;
-
   return (
-    <span className="relative flex-shrink-0">
-      <label className="relative block cursor-pointer active:scale-95">
-        {face}
-        <span
-          aria-hidden
-          className="absolute bottom-0 right-0 flex items-center justify-center rounded-full"
-          style={{ width: 23, height: 23, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
-        >
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 20h9" />
-            <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-          </svg>
-        </span>
-        <input
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            // Reset immediately, so choosing the same file twice fires again —
-            // which matters more now that cancelling the cropper is a real
-            // outcome and re-picking the same photo is the obvious retry.
-            e.target.value = "";
-            if (file) setPending(file);
-          }}
-        />
-      </label>
+    <button onClick={onOpen} aria-label="Change your picture" className="relative flex-shrink-0 active:scale-95">
+      {face}
+      <span
+        aria-hidden
+        className="absolute bottom-0 right-0 flex items-center justify-center rounded-full"
+        style={{ width: 23, height: 23, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
+      >
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </span>
+    </button>
+  );
+}
 
-      {/* Errors and the busy state belong to the cropper now: it is the thing
-          on screen when either happens, and reporting an upload failure next to
-          a small circle the user is no longer looking at helped nobody. */}
-      {pending && (
-        <AvatarCropper
-          file={pending}
-          onCancel={() => setPending(null)}
-          onUploaded={(url) => {
-            setPending(null);
-            onUploaded(url);
-          }}
-        />
+/**
+ * The menu behind the picture.
+ *
+ * Rendered by the screen rather than by `AvatarSlot`, alongside every other
+ * sheet here. A `position: fixed` overlay nested inside the avatar would be
+ * measured against any ancestor carrying a `transform` instead of against the
+ * viewport — the same class of bug that had the Log drawer painting over the
+ * bottom bar in Session K. Overlays belong at the top of a screen, not inside
+ * the control that opens them.
+ */
+function AvatarMenu({
+  profile,
+  signedIn,
+  onPickFromFilms,
+  onUploadFile,
+  onRemove,
+  onClose,
+}: {
+  profile: Profile;
+  signedIn: boolean;
+  onPickFromFilms: () => void;
+  onUploadFile: (file: File) => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Sheet title="Your picture" onClose={onClose}>
+      <p className="mb-4 text-[11px] leading-snug text-dim">
+        {signedIn
+          ? "A frame from one of your films, or a photo of your own."
+          : "A frame from one of your films. Sign in if you would rather upload a photo."}
+      </p>
+
+      <button
+        onClick={onPickFromFilms}
+        className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
+      >
+        <span className="block text-sm text-text-hi">Use a frame from a film</span>
+        <span className="block text-[11px] leading-snug text-dim">
+          Nothing is uploaded. Works whether or not you have an account.
+        </span>
+      </button>
+
+      {/* Uploads stay behind auth: they are the only option here that needs
+          somewhere to put a file. A label wrapping a hidden input is the same
+          trick `ImportButton` uses, because a styled button cannot open a file
+          picker. */}
+      {signedIn && (
+        <label className="mb-2 block w-full cursor-pointer rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]">
+          <span className="block text-sm text-text-hi">Upload a photo</span>
+          <span className="block text-[11px] leading-snug text-dim">You choose the crop.</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Reset immediately, so choosing the same file twice fires again
+              // — which matters more now that cancelling the cropper is a real
+              // outcome and re-picking the same photo is the obvious retry.
+              e.target.value = "";
+              if (file) onUploadFile(file);
+            }}
+          />
+        </label>
       )}
-    </span>
+
+      {/* Only when there is something to undo. `avatarOf` falls back to the
+          account photo and then to the initial, so removing never leaves an
+          empty circle. */}
+      {profile.avatarUrl && (
+        <button
+          onClick={onRemove}
+          className="w-full rounded-xl border border-border px-4 py-3 text-left text-sm text-dim active:scale-[0.99]"
+        >
+          Remove it
+        </button>
+      )}
+    </Sheet>
   );
 }
 
 function StillPicker({
   film,
+  target,
   onClose,
   onPick,
 }: {
   film: Film;
+  target: StillTarget;
   onClose: () => void;
   onPick: (url: string) => void;
 }) {
   const [stills, setStills] = useState<string[] | null>(null);
+  const forAvatar = target === "avatar";
 
   useEffect(() => {
     let dead = false;
@@ -805,18 +937,39 @@ function StillPicker({
 
   return (
     <Sheet title={film.title} onClose={onClose}>
-      <p className="mb-3 text-[11px] leading-snug text-dim">Choose a frame for the top of your profile.</p>
+      <p className="mb-3 text-[11px] leading-snug text-dim">
+        {forAvatar
+          ? "Choose a frame for your picture."
+          : "Choose a frame for the top of your profile."}
+      </p>
       {stills === null && <p className="text-[11px] text-dim">Finding frames…</p>}
       {stills?.length === 0 && (
         <p className="text-[11px] leading-snug text-dim">
           TMDb has no frames for this one. Try another film.
         </p>
       )}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Shown as circles when that is what they are about to become. A frame is
+          16:9 and an avatar is a circle, so a wide thumbnail would be picked on
+          the strength of a composition that gets cropped away — the same
+          complaint that put a cropper in front of uploaded photos. There is no
+          cropper here on purpose: these are stills the app chose from TMDb, not
+          somebody's own photograph, so the centre is reliably the subject and a
+          second decision would be ceremony. */}
+      <div className={forAvatar ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-2"}>
         {(stills ?? []).map((s) => (
-          <button key={s} onClick={() => onPick(s)} className="overflow-hidden rounded-lg active:scale-[0.97]">
+          <button
+            key={s}
+            onClick={() => onPick(s)}
+            className={`overflow-hidden active:scale-[0.97] ${forAvatar ? "rounded-full" : "rounded-lg"}`}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={s} alt="" loading="lazy" className="w-full object-cover" style={{ aspectRatio: "16/9" }} />
+            <img
+              src={s}
+              alt=""
+              loading="lazy"
+              className="w-full object-cover"
+              style={{ aspectRatio: forAvatar ? "1/1" : "16/9" }}
+            />
           </button>
         ))}
       </div>

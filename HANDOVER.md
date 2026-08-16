@@ -773,9 +773,10 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
 stacking, the Log drawer's layering, the bottom seam and the drawer gap. Nothing was
 renumbered for it; those were fixes to shipped behaviour rather than new items, and they
 are written up under Landed. **Session K then took item 3 as well**, so with 1 and 4
-landed in Session G and 2 parked by the user's own decision, the top of this list is now
-**item 5 (profile visual pass)** or **6 (avatar from library artwork)**, whichever is
-wanted first — 6 is the smaller and is fully unblocked.
+landed in Session G and 2 parked by the user's own decision, and 6 landed too, the top of
+this list is now **item 5 (profile visual pass)**, with **7 (resume a curated run)** the
+other live option — and 7 is now cheaper than it was, because `RunRequest` is the shape a
+resumed run should be rebuilt into.
 
 1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
    per screen, revisitable from Settings. See the decision block above. The original entry
@@ -855,11 +856,26 @@ wanted first — 6 is the smaller and is fully unblocked.
     **Still open, and the original entry's intent:** moving it toward what the JPG export
     looks like. That is a visual language question, not a structural one, and the structure
     is now out of its way.
-6. **Upload a profile picture.** The one item genuinely blocked: `profile.ts` deliberately
-    stores NO images — a banner is a film id and a still URL, so the whole profile costs a
-    few hundred bytes. Real uploads need server storage, which needs the pinned accounts
-    work. **An unblocked version exists now:** choose an avatar from artwork already in the
-    library, exactly as `bannerStill` already works.
+6. ~~**Upload a profile picture.**~~ — **LANDED in Session K.** Uploads themselves shipped
+    earlier (Blob + `AvatarCropper`); what was missing was that `AvatarSlot` rendered a
+    bare initial when signed OUT, so most users had no way to change their picture at all.
+    That gate was sound reasoning with too broad a conclusion: it assumed a picture must
+    be an upload. **A frame from a film you already own is a URL**, exactly as
+    `bannerStill` is — no storage, no account, and the whole profile stays a few hundred
+    bytes (measured at 101 with an avatar set).
+    - Tapping the circle now opens `AvatarMenu`: *use a frame from a film* always, *upload
+      a photo* when signed in, *remove it* when there is something to remove.
+    - The banner and the avatar are now ONE two-step flow with a `StillTarget` riding
+      along, rather than the avatar growing a second copy of it. `StillPicker` shows
+      **round, square-cropped** thumbnails for the avatar, so what you pick is what you
+      get — the same complaint that put a cropper in front of uploaded photos. There is
+      deliberately no cropper for stills: TMDb frames are not somebody's own photograph.
+    - `AvatarMenu` renders in the SCREEN's overlay block, not inside `AvatarSlot`. A fixed
+      overlay nested in the avatar would measure against any ancestor carrying a
+      `transform` rather than the viewport — the Log-drawer bug wearing a different hat.
+    - Original entry: `profile.ts` deliberately stores NO images — a banner is a film id
+      and a still URL. Real uploads need server storage, which needs the pinned accounts
+      work.
 7. **Resume an in-progress curated run.** `lib/runs.ts` (`rankd-runs-v1`) holding subject,
     session and **`guests: Film[]` in full** — ids alone lose every unseen film.
     `adoptRun(films, session)` belongs in `ladder.ts` with its own tests. Stays device-local
