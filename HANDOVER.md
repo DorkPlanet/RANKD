@@ -16,15 +16,27 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (15 Aug 2026):** Session I, closed. Everything is committed, merged to `master`,
-pushed to `origin/master`, deployed to production, and verified against the live bundle.
-There is no side branch — `master` is what is live.
+**State (16 Aug 2026):** Session J, closed. Everything is committed, pushed to
+`origin/master`, and deployed to production. There is no side branch — `master` is what is
+live.
 
-**356 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**415 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
 above the effect says so; leave it there.
+
+**A new library is EMPTY.** `loadFilms` used to return ten sample films, so a first open
+handed you somebody else's taste and no way to tell which part was yours. `lib/seed.ts` is
+gone. The only trace is `LEGACY_SEED_IDS` in `store.ts`, which exists purely so a device
+still holding the old ten is not offered a conflict chooser on sign-in. **Every screen now
+has a zero-film state and they are load-bearing, not defensive** — that is what a new user
+sees.
+
+**`POTENTIAL-FEATURES.md` is new, at the repo root.** Ideas thought through and
+deliberately not built, each with why it is parked and what has to be true first. Put
+things there rather than in this file's backlog when they are a design argument rather
+than a scheduled task.
 
 The old baseline was 3 — the extra was an unused `tier` in `Rolodex`, which turned out to
 be a prop threaded through two components and read by neither. Deleted in the triage.
@@ -153,6 +165,51 @@ threaded through two components and read by neither, and four CSS blocks. All go
 - **Comments were trimmed to the WHY.** This session had been breaking the rule below by
   narrating at length what code used to do. Those headers are cut to the trap and the
   invariant. The older "don't change this back" notes are guardrails and were LEFT.
+
+**Session J (`890d3f0` … `bbd47c7`) — onboarding, Rough Cut, and three data bugs.**
+Two rounds of feedback from real use. Everything deployed.
+
+Landed, roughly in the order it was found:
+
+- **Rough Cut: the third pile disappeared** after ranking two of three. `bandsOf` skipped
+  hard locks, so a ranked pile read as an empty band and the "already split" test then saw
+  a tier that was never cut. **Reproduced with a failing test before the fix.**
+- **Rough Cut resumes.** Placements were always kept — the scores ARE the piles — but the
+  queue position was not, so you were asked to redo what you had already filed.
+  `lib/roughCutRun.ts`, ids only, refuses rather than repairs.
+- **Rough Cut got a tour, hold-to-open, a countdown, pile counts, Skip, and first place in
+  the mode list.** It had no tutorial at all and the duel tour could never have fired on it
+  (gated on a session it deliberately lacks). **Skip defers rather than discards** — sends
+  the film to the back so the tier can reveal itself first.
+- **Wrong posters.** `/api/film` took `results[0]` blind, so a title TMDb does not hold
+  returned whatever popular film shared a word. `lib/tmdbMatch.ts` scores candidates on
+  title with the year as tie-breaker and returns nothing when the best is weak. The year is
+  **no longer sent to TMDb**, where it is a hard filter that emptied legitimate searches.
+- **And people can now fix one by hand.** "Wrong film?" on the info card. Two halves and
+  broken without either: the correction REPLACES rather than fills gaps, and `pinnedMeta`
+  takes the film out of every fetch queue for good — without it the sweep re-asks by title
+  next pass and the fix evaporates.
+- **Import takes the `.zip` whole** (`lib/zip.ts`, no dependency —
+  `DecompressionStream("deflate-raw")`). Extracting `ratings.csv` on a phone was the step
+  people abandon. Plus a four-step guide on the empty screen and beside the control.
+- **Sync stopped re-uploading an unchanged library.** 468KB went up whenever the dirty flag
+  was set, and many writes are re-writes. Content-hashed now.
+- **The avatar updates immediately.** The blob key is fixed and overwritten, so every
+  upload returned an identical URL and the device served its own cached copy. The URL
+  carries a version.
+- **`h-dvh` → `.h-app` (svh).** Every `main` clips its overflow and pins the nav at its
+  foot, so an over-estimated height pushes the bar off screen.
+- Profile: picture centred and overlapping the banner by a third; **cards and badges
+  surfaced** (a "Card" chip on shelf tiles, earned badges as their own TROPHY CASE row).
+- Fast Shuffle got the countdown too; float travel nearly doubled (9px over 6.5s was
+  invisible).
+
+**A tutorial sandbox was built and then deleted in the same session.** It ran the real
+screens over sample films with every write guarded. The user's call, and the right one:
+import-first dissolves the problem it solved, and the perimeter — a flag, five guarded
+write paths, a scratch React state — only ever served playing with films nobody owns.
+**Do not rebuild it.** Four tours now fire where they live (list, KotH, Rough Cut, logging
+a film) and Settings' "Refresh me" makes every screen new again.
 
 ## Decisions taken — do not relitigate
 
@@ -628,10 +685,27 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
    - **Do this after the mechanics settle.** A tutorial written against a screen that is
      about to change gets written twice.
 
-2. **Fast reorder and lock/unlock from the list view.** The dragging is not the hard part.
-   **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a row's
-   height, and nothing new goes inside the list scroller** — drag handles and lock toggles
-   want to violate both. That constraint IS this item.
+2. **THE EDITABLE LIST — the biggest thing outstanding, and the user's own founding idea.**
+   **Five separate pieces of feedback in Session J turned out to be this one problem**:
+   unlock and reorder from the list, adjust the order before confirming at the end of a
+   run, a ratings audit, exporting adjusted ratings back to Letterboxd, and "what if I put
+   a film in the wrong pile". Every mechanic in the app is earn-it-by-duelling; **nothing
+   is assert-it**, and a hard lock has no per-film way back — only the two bulk resets in
+   Settings.
+   - **A full audit has to be able to CHANGE a star rating** when a move crosses a tier
+     boundary. Today the only route by which a rating ever changes through play is
+     promotion. An audit that cannot re-rate is just reshuffling within a band, which
+     already works — so this is the part that makes it worth building.
+   - **The Letterboxd round trip is then nearly free.** `importCsv.ts` reads
+     `Name,Year,Rating` in half-stars, which is exactly the tier scale, so the export is
+     the same file with new numbers.
+   - The user's decision in Session J was **full audit, but test the current system
+     first** — hence parked, not dropped. Adjusting from the list view is wanted alongside
+     it, not instead of it. Longer write-up in `POTENTIAL-FEATURES.md`.
+   - The old constraint still holds and is the hard part of the list-view half:
+     **`ROW_H = 96` drives section spacers and tier-jump offsets, nothing may change a
+     row's height, and nothing new goes inside the list scroller** — drag handles and lock
+     toggles want to violate both.
 3. **Tier cards, and the `runRequest` collapse.** A tier card is a live view over
    `rankedFilms(films).slice(0,10)` — NOT a curated run, because a KotH tier run already
    writes scores and a second cross-tier order would contradict it. **This is also the
@@ -719,6 +793,19 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
   - **Add the app to an iPhone home screen** and check the address bar is gone and the
     icon reads properly. Every tag and asset is verified in the rendered head and serving
     200; "no address bar" is a claim about a device nobody has tested on.
+- **Two fixes from Session J that can ONLY be judged on a real phone**, because neither was
+  ever reproducible locally:
+  - **The avatar appearing immediately after upload.** The cause was the device serving its
+    own cached copy of a URL that never changes; the URL now carries a version. Local
+    testing cannot see this at all.
+  - **Sync feeling quieter.** An unchanged library no longer re-uploads 468KB on every
+    dirty tick.
+- **The sign-in jitter is still UNPROVEN and untouched.** The suspect is
+  `window.location.reload()` at the end of `pull()` in `sync.ts` — signing in reconciles,
+  decides to pull, and tears the whole app down and boots it again. **It has never been
+  reproduced**, because the signed-in flow needs auth configured locally. Do not replace it
+  on the strength of the theory: doing so means hand-reconciling React state across
+  `AppShell`, and a stale-library bug is worse than a slow sign-in. Confirm first.
 
 ## Operational facts for accounts (Session H)
 
@@ -829,6 +916,32 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Gotchas that have already cost time
 
+- **A "clearing" write is more dangerous than a "saving" one (Session J).** While the
+  tutorial sandbox existed, the obvious guard was "do not save". The real hazard was that
+  `saveRun` and `saveRoughCut` both REMOVE their key when handed something unresumable — so
+  a demonstration ending would have wiped a real half-finished climb. **When you guard a
+  writer, check what it does with null**, not just what it does with data.
+- **An alias made an old backup format claim keys it never carried (Session J).**
+  `FILE_1 = SYNC_KEYS` looked tidy and meant every key added for sync was retroactively
+  declared owned by format 1 — and ownership is what gives a restore permission to CLEAR a
+  key. Restoring an old file would have deleted a preference that file predated. **Frozen
+  history must be written out literally, never derived from something live.** Same reason
+  `LEGACY_SEED_IDS` is a list of strings.
+- **A tour that resolves to zero steps still marks itself seen (Session J).** `Coach`
+  filters steps to targets present in the DOM, and a tour whose targets are all absent
+  finishes immediately — burning the "seen" flag having taught nothing. That is why the
+  duel tour waits for a run, Rough Cut has `onBegan`, and **no tour fires on an empty
+  library at all**. Any new tour needs a trigger tied to its targets EXISTING, not to a
+  screen being current.
+- **Effects that clean something up get written next to the thing they guard, which is
+  often after an early return (Session J).** A `useEffect` placed beside `endTutorial` sat
+  below `if (!state) return splash` and React threw "rendered more hooks than during the
+  previous render" the moment the library loaded. **Hooks go with the other hooks.**
+- **A feature gated on the exact state you tested it in looks broken everywhere else
+  (Session J).** The tutorial ran only for an EMPTY library; with one film the button did
+  nothing, which is precisely the complaint that had prompted building it. Reported by the
+  user, reproduced in their exact state, then fixed by deleting the branch. **Before
+  shipping a conditional path, ask what the OTHER branch does — and test that one.**
 - **The landing rule re-fired mid-run, and had done since it was written (Session I).**
   `openingScreen` was evaluated on every render for as long as nobody had navigated — and
   its input is "has anything been placed", which PLAYING changes. So a new user who opened
