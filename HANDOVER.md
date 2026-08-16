@@ -915,18 +915,15 @@ wanted first — 6 is the smaller and is fully unblocked.
     testing cannot see this at all.
   - **Sync feeling quieter.** An unchanged library no longer re-uploads 468KB on every
     dirty tick.
-- **Three from Session K that only a phone can settle.** All three were fixed against a
-  theory the code proves and a desktop viewport cannot exercise, because they all turn on
-  the real viewport being taller than `100svh`, which only happens when a mobile URL bar
-  retracts.
-  - **The seam at the bottom of the screen.** Check with the URL bar both extended and
-    retracted, and again in the installed PWA. Measured correct at the identity case
-    (desktop, where `svh` equals the viewport) — that proves the formula, not the fix.
-  - **The gap under every drawer.** Same cause, same test. Open Settings and the Log
-    drawer with the URL bar retracted; the sheet's bottom edge must sit on the bar.
-  - **Delete everything while signed in ON TWO DEVICES.** Nothing may come back on either,
-    and the second device must not push the library back up. The single-device path is
-    covered by `test/wipe.test.ts`; two devices racing is not.
+- **Delete everything while signed in ON TWO DEVICES.** Nothing may come back on either,
+  and the second device must not push the library back up. The single-device path is
+  covered by `test/wipe.test.ts`; two devices racing is not. **Blocked on a deploy** —
+  there is no way to test it locally, because the signed-in flow needs auth configured.
+- **The seam and the drawer gap: DO NOT CHASE.** Both were fixed in Session K against a
+  theory the code proves, and both can only be exercised where the real viewport is
+  taller than `100svh` — a mobile browser with the URL bar retracted. The user has said
+  they look right and asked for them to be left alone until they say otherwise. Do not
+  put them back on this list, and do not "improve" them speculatively.
 - **The sign-in jitter is still UNPROVEN and untouched.** The suspect is
   `window.location.reload()` at the end of `pull()` in `sync.ts` — signing in reconciles,
   decides to pull, and tears the whole app down and boots it again. **It has never been
