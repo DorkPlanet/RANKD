@@ -215,8 +215,17 @@ export function Settings({
 
       {onTour && (
         <Row title="How to play" open={open === "help"} onToggle={() => toggle("help")}>
+          {/* Says what it DOES, because what it does is unusual. It shows
+              nothing on the spot — it puts the browser back to how it was on
+              day one, and the explanations then reappear as you arrive at each
+              screen. Labelled "Show me around" it read as a button that would
+              start something, and pressing it appeared to do nothing at all. */}
+          <p className="mb-2 text-[11px] leading-snug text-dim">
+            Every screen explains itself the first time you see it. This makes them all
+            new again, so the notes come back as you go.
+          </p>
           <button onClick={onTour} className={`${BTN} w-full`}>
-            Show me around
+            Refresh me
           </button>
         </Row>
       )}

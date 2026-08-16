@@ -35,7 +35,7 @@
 
 const KEY = "rankd-tour-v1";
 
-export type TourId = "duel" | "list" | "roughcut";
+export type TourId = "duel" | "list" | "roughcut" | "log";
 
 export interface TourStep {
   id: string;
@@ -43,21 +43,6 @@ export interface TourStep {
   target: string;
   title: string;
   body: string;
-  /**
-   * A demonstration the screen underneath should play while this step is up.
-   *
-   * The marks can frame a control and describe it; they cannot show it working,
-   * and for the Rough Cut targets that is most of the explanation. Three words
-   * and a box tell you nothing about what filing a film actually does.
-   *
-   * The screen owns the demo, not the coach — see `lib/tourDemo.ts`. Coach knows
-   * only that a name is active, so a screen can demonstrate whatever it likes
-   * without this module learning about piles.
-   *
-   * Nothing a demo does is recorded. It animates over ghost state and the real
-   * queue never moves; see the note on `demo` in RoughCut.
-   */
-  demo?: string;
 }
 
 /**
@@ -165,8 +150,7 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
     id: "rc-targets",
     target: "rc-targets",
     title: "Upper, middle or lower",
-    body: "Once it's in smaller piles you finally get to decide where your taste lies. Watch: each film drops into a pile and the count above it goes up. None of this is being recorded, it's just showing you how.",
-    demo: "deal",
+    body: "Once it's in smaller piles you finally get to decide where your taste lies. Tap the pile this film belongs in, and the count above it goes up.",
   },
   {
     id: "rc-flick",
@@ -194,10 +178,33 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
   },
 ];
 
+/**
+ * Logging a film: one step, because there is one idea.
+ *
+ * The search box explains itself. What does not is that this is how a film gets
+ * INTO the library at all outside an import — the app's whole vocabulary is
+ * built on films you already rated somewhere else, and nothing said that
+ * tonight's viewing has a way in.
+ *
+ * Kept to a single step deliberately. This sheet is reached on purpose, by
+ * somebody who has just watched something, and a four-step tour standing
+ * between them and typing a title would be the tutorial getting in the way of
+ * the thing it is explaining.
+ */
+const LOG_STEPS: readonly TourStep[] = [
+  {
+    id: "log-search",
+    target: "log-search",
+    title: "Just watched something?",
+    body: "Search for it, give it a rating, and it joins that tier as UN-RNKD. It is then in the queue like everything else, waiting to be put in order.",
+  },
+];
+
 export const TOURS: Record<TourId, readonly TourStep[]> = {
   duel: DUEL_STEPS,
   list: LIST_STEPS,
   roughcut: ROUGHCUT_STEPS,
+  log: LOG_STEPS,
 };
 
 /**
@@ -236,7 +243,7 @@ export function seenTours(): Set<TourId> {
     // Unreadable. Treat every tour as seen rather than unseen: a tutorial that
     // cannot record having run would otherwise reappear on every single open,
     // which is far worse than never appearing at all.
-    return new Set<TourId>(["duel", "list", "roughcut"]);
+    return new Set<TourId>(["duel", "list", "roughcut", "log"]);
   }
 }
 
@@ -253,6 +260,32 @@ export function markTourSeen(id: TourId, seen: ReadonlySet<TourId> = seenTours()
   } catch {
     // Nothing to do. `seenTours` fails closed, so it cannot loop.
   }
+}
+
+// ── A screen asking for its own tour ───────────────────────────────────────
+//
+// Most tours are owed at a moment `AppShell` can see: arriving at the list, a
+// run beginning. Logging a film is not one of those. That sheet is opened from
+// `BottomNav`, which is rendered inside all three screens — so telling AppShell
+// about it by prop would mean the same pass-through added to three separate
+// chains, existing only to carry one boolean upward.
+//
+// So the screen says so directly. `AppShell` still decides whether the tour is
+// actually owed (seen? replaying? a library with something in it?) — this only
+// reports that a surface with something to teach is now on screen, which is the
+// half the screen is the authority on.
+
+type TourListener = (id: TourId) => void;
+const wanted = new Set<TourListener>();
+
+/** A surface that has a tour just appeared. Safe to call when none is owed. */
+export function requestTour(id: TourId): void {
+  for (const fn of wanted) fn(id);
+}
+
+export function onTourRequested(fn: TourListener): () => void {
+  wanted.add(fn);
+  return () => wanted.delete(fn);
 }
 
 /** Settings asking for the whole thing again, both screens. */

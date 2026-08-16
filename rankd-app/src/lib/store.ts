@@ -1,7 +1,5 @@
 import type { Film } from "./types";
 import { migrateLock } from "./lock";
-import { isSandbox } from "./sandbox";
-import { SEED_FILMS } from "./seed";
 import { markDirty } from "./syncState";
 
 // Local-first persistence. The master library lives in localStorage and is
@@ -13,15 +11,15 @@ const KEY = "rankd-app-v1";
  *
  * ── Why a new browser is EMPTY ─────────────────────────────────────────────
  *
- * This used to return `SEED_FILMS`, so opening the app for the first time
+ * This used to return a set of sample films, so opening the app for the first time
  * handed you ten films somebody else had chosen and rated. People read that as
  * their library and could not tell which part was theirs — a wrong default
  * dressed as a starter kit.
  *
  * A real user arrives with a library to import or with nothing, and both are
- * fine. Nothing is a legitimate state the screens now say out loud, and the
- * import is the onboarding. The seed films still exist, but as the tutorial's
- * cast — they are displayed, never written, and never yours.
+ * fine. Nothing is a legitimate state the screens say out loud, and the import
+ * is the onboarding. The teaching happens on the reader's OWN films, the first
+ * time they arrive at a screen with something on it — see lib/tour.ts.
  *
  * An unreadable payload also returns nothing rather than the sample set.
  * Silently replacing a corrupt library with somebody else's films would look
@@ -51,9 +49,6 @@ export function loadFilms(): Film[] {
 // does upstream. See `guest` in lib/types.ts.
 export function saveFilms(films: Film[]): void {
   if (typeof window === "undefined") return;
-  // The tutorial drives the real screens over the sample films. They write like
-  // any other run; nothing they write is yours. See lib/sandbox.ts.
-  if (isSandbox()) return;
   try {
     localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
     markDirty();
@@ -63,33 +58,17 @@ export function saveFilms(films: Film[]): void {
 }
 
 /**
- * Is this library still the untouched starter set?
- *
- * Sync needs to know whether a browser holds anything WORTH KEEPING, which is
- * not the same question as whether the key exists. A fresh install shows the
- * seed immediately and the credits sweep writes it to storage within seconds —
- * so by the time anyone signs in, the key is there and a naive check calls it a
- * real library. On a new phone that produced a conflict chooser offering "10
- * films" against "861 films": a frightening question with an obvious answer,
- * asked on the one device that had nothing to lose.
- *
- * Three conditions, all required. The ids must be exactly the seed's, nothing
- * may be placed, and nothing may have been duelled — so a library that merely
- * STARTED as the seed stops counting as untouched the moment any judgement
- * lands on it, which is the point at which it becomes worth protecting.
- */
-/**
  * The ten films this app used to hand every new browser.
  *
- * Frozen, and deliberately not derived from anything. They are no longer the
- * seed set and no build will ever write them again — but devices that ran the
- * old build are still holding them, and the check below is the only thing
+ * Frozen, and deliberately a list of strings rather than a lookup into a module.
+ * No build will ever write them again — a new library is empty — but devices
+ * that ran the old build are still holding them, and this is the only thing
  * standing between one of those devices and a conflict chooser offering "ten
  * films" against the account it just signed into.
  *
- * Dropping this list would not fail a test. It would reintroduce, for existing
- * users only, the exact bug `isUntouchedSeed` was written to prevent — which is
- * why it is a list of strings and not a lookup into `seed.ts`.
+ * Deleting this would not fail a test today. It would reintroduce, for existing
+ * users only, the exact bug `isUntouchedSeed` exists to prevent. It can go once
+ * nobody is plausibly still holding them.
  */
 const LEGACY_SEED_IDS = [
   "the-godfather-1972",
@@ -104,19 +83,31 @@ const LEGACY_SEED_IDS = [
   "drive-2011",
 ] as const;
 
+/**
+ * Is this library nothing but the old starter set?
+ *
+ * Sync needs to know whether a browser holds anything WORTH KEEPING, which is
+ * not the same question as whether the key exists. The old build showed ten
+ * sample films immediately and the credits sweep wrote them to storage within
+ * seconds — so by the time anyone signed in, the key was there and a naive
+ * check called it a real library. On a new phone that produced a conflict
+ * chooser offering "10 films" against "861 films": a frightening question with
+ * an obvious answer, asked on the one device that had nothing to lose.
+ *
+ * Two conditions, both required. The ids must be exactly that set, and nothing
+ * may be placed or duelled — so a library that merely STARTED as the sample
+ * stops counting the moment any judgement lands on it, which is the point at
+ * which it becomes worth protecting.
+ */
 export function isUntouchedSeed(films: readonly Film[]): boolean {
   // Nothing at all is not "an untouched sample" — it is a browser with no
   // library, which every caller already handles by its own route.
   if (films.length === 0) return false;
+  if (films.length !== LEGACY_SEED_IDS.length) return false;
   if (films.some((f) => f.lock !== undefined || (f.duels ?? 0) > 0)) return false;
 
-  const matches = (ids: readonly string[]) => {
-    if (films.length !== ids.length) return false;
-    const set = new Set<string>(ids);
-    return films.every((f) => set.has(f.id));
-  };
-
-  return matches(SEED_FILMS.map((f) => f.id)) || matches(LEGACY_SEED_IDS);
+  const set = new Set<string>(LEGACY_SEED_IDS);
+  return films.every((f) => set.has(f.id));
 }
 
 /** Does this browser hold a library sync should treat as real? */

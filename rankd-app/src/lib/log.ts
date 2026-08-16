@@ -16,7 +16,6 @@
 // It stays deliberately dumb. No inference, no scores, no opinions about what a
 // row means. Just what happened, in order.
 
-import { isSandbox } from "./sandbox";
 import { markDirty } from "./syncState";
 
 // Which side won, naming the two ids the row carries: "a" = a beat b, "b" = b
@@ -141,11 +140,6 @@ export async function loadLog(): Promise<Judgement[]> {
  */
 export async function appendJudgements(incoming: readonly Judgement[]): Promise<void> {
   if (typeof window === "undefined" || incoming.length === 0) return;
-  // THE strict one. A log row asserts that two films were compared and a person
-  // chose between them, and every belief, badge and score in this app is built
-  // on that being literally true. A tutorial duel is a demonstration, not a
-  // judgement, and `settle` cannot tell the two apart — so this boundary does.
-  if (isSandbox()) return;
   try {
     const existing = await loadLog();
     const seen = new Set(existing.map((j) => j.id));
@@ -177,10 +171,6 @@ export async function appendJudgements(incoming: readonly Judgement[]): Promise<
  */
 export async function retractJudgements(ids: readonly string[]): Promise<void> {
   if (typeof window === "undefined" || ids.length === 0) return;
-  // Nothing was written in a sandbox, so there is nothing to take back — and a
-  // retraction that ran anyway would rewrite the real log to remove ids it does
-  // not contain, which is a write where none was asked for.
-  if (isSandbox()) return;
   try {
     const drop = new Set(ids);
     const kept = (await loadLog()).filter((j) => !drop.has(j.id));

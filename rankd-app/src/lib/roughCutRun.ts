@@ -23,7 +23,6 @@
 // Excluded from the file backup for the same reason a half-climb is: a backup
 // carries what you decided, and this is the part you had not decided yet.
 
-import { isSandbox } from "./sandbox";
 import type { Bucket } from "./roughCut";
 import type { Rating } from "./tiers";
 import type { Film } from "./types";
@@ -61,9 +60,6 @@ export interface ResumedPass {
  */
 export function saveRoughCut(pass: ResumedPass | null): void {
   if (typeof window === "undefined") return;
-  // Same trap as saveRun: a demonstration pass would not only offer itself back
-  // afterwards, its cleanup would clear a real pass the user had left half done.
-  if (isSandbox()) return;
   try {
     if (!pass || pass.at <= 0 || pass.at >= pass.films.length) {
       localStorage.removeItem(KEY);
@@ -121,7 +117,6 @@ export function loadRoughCut(films: readonly Film[], tier: Rating): ResumedPass 
 /** Throw the stored pass away. Called when one is finished or abandoned. */
 export function clearRoughCut(): void {
   if (typeof window === "undefined") return;
-  if (isSandbox()) return;
   try {
     localStorage.removeItem(KEY);
   } catch {

@@ -89,9 +89,6 @@ export default function DuelScreen({
   onPersonRunHandled,
   onRunBegan,
   onRoughCutBegan,
-  onTour,
-  tutorial,
-  onTutorialDone,
   onPerson,
   greet = 0,
 }: {
@@ -107,20 +104,6 @@ export default function DuelScreen({
   onRunBegan?: () => void;
   /** Same contract as onRunBegan, for the mode that has no session. */
   onRoughCutBegan?: () => void;
-  /** Run the tutorial. Offered on the empty screen, where it is most wanted. */
-  onTour?: () => void;
-  /**
-   * This whole screen is a demonstration.
-   *
-   * The films handed in are the sample set, nothing written anywhere persists
-   * (see `lib/sandbox.ts`), and the surface opens straight into a Rough Cut
-   * pass rather than the mode menu — because a tutorial that begins by asking
-   * you to choose a mode has already failed the person who does not know what
-   * the modes are.
-   */
-  tutorial?: boolean;
-  /** The demonstration is over: leave, and put the real library back. */
-  onTutorialDone?: () => void;
   /** A person whose films should be ranked against each other, across tiers. */
   personRun?: Person | null;
   /** Films borrowed for that run only — never saved to the library. */
@@ -237,13 +220,7 @@ export default function DuelScreen({
   const [curatedOpen, setCuratedOpen] = useState(false);
   // A Rough Cut pass owns the whole surface while it runs, like Fast Shuffle:
   // it has no pile, no climb and no confirm, so none of the duel branches apply.
-  // The tutorial opens straight into a pass. Set in the initialiser rather than
-  // an effect so the first paint is already the thing being demonstrated — an
-  // effect would show the empty screen for a frame and then replace it, which
-  // is the jump `tourDue` exists elsewhere to avoid.
-  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(
-    tutorial ? DEFAULT_TIER : null,
-  );
+  const [roughCutTier, setRoughCutTier] = useState<Rating | null>(null);
 
   const runSubject: RankSubject | null = personRun
     ? subjectFromPerson(personRun, personPortrait)
@@ -627,14 +604,7 @@ export default function DuelScreen({
           saveFilms(films);
           setState((s) => (s ? { ...s, films } : s));
         }}
-        // Leaving the pass ends the demonstration outright. There is nothing
-        // behind it — the sample library has no other tier and no run — so
-        // dropping back to the mode screen would strand the reader in a
-        // five-film app that is not theirs.
-        onExit={() => {
-          setRoughCutTier(null);
-          if (tutorial) onTutorialDone?.();
-        }}
+        onExit={() => setRoughCutTier(null)}
         // Climb just the pile that was cut, not the whole tier again. `only`
         // takes an arbitrary set of ids and is independent of `crossTier`, so
         // this is an ordinary run that writes scores and locks — it simply has a
@@ -917,18 +887,12 @@ export default function DuelScreen({
                   >
                     Import your films
                   </button>
-                  {/* Second, because seeing the game played is worth less than
-                      having something to play it on — but offered here rather
-                      than buried in Settings, since somebody with no library is
-                      exactly who the tutorial is for. */}
-                  {onTour && (
-                    <button
-                      onClick={onTour}
-                      className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
-                    >
-                      Show me how it works
-                    </button>
-                  )}
+                  {/* A "show me how it works" button lived here and is gone.
+                      With nothing in the library there is nothing to
+                      demonstrate: every tour points at films, a tier or a run,
+                      and none of those exist yet. The teaching now happens
+                      where it is useful — each screen explains itself the first
+                      time you arrive with something on it. */}
                 </>
               ) : (
                 <>

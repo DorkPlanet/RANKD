@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ORDERED_TIERS, seedScore, starsFor, type Rating } from "@/lib/tiers";
 import { slugId } from "@/lib/importCsv";
+import { requestTour } from "@/lib/tour";
 import { Sheet } from "./ui";
 import type { Film } from "@/lib/types";
 
@@ -49,6 +50,12 @@ export function LogFilm({
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [chosen, setChosen] = useState<SearchHit | null>(null);
+
+  // The sheet is on screen, so its one step has something to point at. AppShell
+  // decides whether it is actually owed — see `onTourRequested`.
+  useEffect(() => {
+    requestTour("log");
+  }, []);
 
   // Every keystroke supersedes the one before it. Without the sequence check a
   // slow early request can land after a fast later one and overwrite the results
@@ -106,6 +113,7 @@ export function LogFilm({
               it. Tapping the field is one tap, and it is the tap that means "I
               am ready to type". */}
           <input
+            data-tour="log-search"
             value={q}
             onChange={(e) => {
               const v = e.target.value;

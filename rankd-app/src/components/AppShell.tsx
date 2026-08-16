@@ -17,8 +17,6 @@ import ListScreen from "./ListScreen";
 import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
-import { setSandbox } from "@/lib/sandbox";
-import { SEED_FILMS } from "@/lib/seed";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
@@ -30,7 +28,7 @@ import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
 import Coach from "./Coach";
 import { InstallPrompt } from "./InstallPrompt";
-import { forgetTours, markTourSeen, seenTours, TOURS, type TourId } from "@/lib/tour";
+import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
 import type { Person } from "@/lib/people";
@@ -96,20 +94,6 @@ export default function AppShell() {
   // has to work from whichever screen you're looking at.
   const [trophiesOpen, setTrophiesOpen] = useState(false);
   const [brightness, setBrightness] = useState(0);
-  // The tutorial is running on the sample films. See startTutorial.
-  const [tutorial, setTutorial] = useState(false);
-  // Its own scratch library, so a demonstration cannot scribble on the real one
-  // — see the note where this is handed to DuelScreen. Reset on every start
-  // rather than on exit, so a second run of the tutorial begins unranked.
-  // Typed nullable purely to match the prop DuelScreen already takes. It is
-  // never actually null — `startTutorial` seeds it and the render below only
-  // reaches for it while the tutorial is on — but widening here beats widening
-  // the component's contract for one caller.
-  const [tutorialState, setTutorialState] = useState<RankState | null>(() => ({
-    films: SEED_FILMS,
-    session: null,
-    journal: [],
-  }));
   // Read in the same effect as brightness rather than as a lazy initialiser —
   // see the note on that effect for why localStorage cannot be read during the
   // first render without tearing hydration.
@@ -290,17 +274,30 @@ export default function AppShell() {
     setPrefs(loadPrefs());
   }, []);
 
-  // Belt and braces: a sandbox left on is silent, total data loss — nothing
-  // would save again for the rest of the session — so it is cleared if this
-  // component goes away with the tutorial still running.
+  // ── A screen reporting that it has something to teach ─────────────────────
   //
-  // UP HERE, above every early return, because that is the rule. It was first
-  // written next to `endTutorial`, which sits after `if (!state) return splash`
-  // — so it ran on some renders and not others, and React threw "rendered more
-  // hooks than during the previous render" the moment the library loaded. An
-  // effect whose whole job is to run on the way out is exactly the kind that
-  // gets written next to the thing it guards rather than with its siblings.
-  useEffect(() => () => setSandbox(false), []);
+  // The decision stays here: the screen knows it is on show, this knows whether
+  // the reader is owed it.
+  //
+  // Re-subscribed whenever those inputs change rather than reading them through
+  // refs. A ref would have to be written during render to stay current, and the
+  // subscribe/unsubscribe pair is two Set operations — cheaper than the bug
+  // where the callback closes over a stale `seen` and re-offers a tour the
+  // reader just dismissed.
+  //
+  // Deferred a tick for the same reason every other tour start is: `Coach`
+  // resolves its targets as it renders, and the sheet that just asked has not
+  // committed yet.
+  const owed = (state?.films.length ?? 0) > 0 && !(state?.films ?? []).some(isPlaced);
+  useEffect(
+    () =>
+      onTourRequested((id) => {
+        if (seen.has(id) || !(owed || replaying)) return;
+        setTimeout(() => setTourDue(id), 20);
+      }),
+    [seen, owed, replaying],
+  );
+
 
   // ── Arriving at the duel ───────────────────────────────────────────────────
   //
@@ -529,72 +526,50 @@ export default function AppShell() {
   const goDuel = () => go("duel");
 
   /**
-   * Run the tutorial. Always the sandbox, whatever the library holds.
+   * "Show me the tutorials again" — be treated as new.
    *
-   * ── Why there is no longer a branch here ───────────────────────────────────
+   * ── Why this does not START anything ───────────────────────────────────────
    *
-   * This used to run the sandbox only for an EMPTY library and otherwise fall
-   * back to drawing marks over your real films. That second path had a
-   * condition nobody could see: it only showed anything if a run happened to be
-   * in progress. With films but no live duel — which is most of the time, and
-   * is exactly the state the RNK screen sits in — pressing the button set the
-   * screen to duel, queued nothing, and appeared to do nothing at all.
+   * It used to jump to the duel screen and try to fire the duel tour there and
+   * then, which only worked if a run happened to already be in progress. With
+   * films but no live duel — the state the RNK screen normally sits in — it set
+   * the screen and did nothing else, so the button looked broken.
    *
-   * The fallback was also the worse teacher. Marks over your own library depend
-   * on that library being in the right shape: a tier with something in it, a
-   * duel on screen, a strip open. The sandbox is the same five films in the
-   * same state every time, so the tutorial is the same tutorial for everyone
-   * and cannot be half-shown.
+   * Each tour already knows when to appear: the list tour on arriving at the
+   * list, the duel tour when a run begins, Rough Cut when a pass does, logging
+   * when the sheet opens. So this only has to put the browser back into the
+   * state where they are all owed, and let the reader meet them where they
+   * live. Nothing is shown until you go somewhere that has something to teach.
    *
-   * `setSandbox` is the whole safety story, a single switch rather than a prop
-   * threaded through five components — see lib/sandbox.ts for what it stops.
-   * Cleared in `endTutorial` and again on unmount.
+   * `replaying` is what lets them fire on a library that has already been
+   * ranked, and it stays on for the rest of the session so every tour is caught
+   * as the reader wanders, not just the first.
    */
   const startTour = () => {
     setSettingsOpen(false);
     forgetTours();
     setSeen(new Set());
     setReplaying(true);
-    setSandbox(true);
-    setTutorialState({ films: SEED_FILMS, session: null, journal: [] });
-    setTutorial(true);
-    if (current !== "duel") setVeil((v) => v + 1);
-    setScreen("duel");
     setTourDue(null);
-  };
-
-  const endTutorial = () => {
-    setSandbox(false);
-    setTutorial(false);
-    setTourDue(null);
+    // And show the one for where you already are, rather than making the reader
+    // navigate somewhere and come back to see anything happen. Pressing a button
+    // and getting nothing is the whole complaint this was fixing.
+    //
+    // Named rather than derived from `tourFor`, which would still be reading the
+    // pre-reset `seen` and `replaying` from this render's closure. The duel tour
+    // needs a live run for the same reason it always has: its marks point at
+    // posters, and there are none between runs.
+    const here: TourId | null =
+      current === "list" ? "list" : current === "duel" && state.session ? "duel" : null;
+    if (here) setTimeout(() => setTourDue(here), 20);
   };
 
   return (
     <>
       {current === "duel" ? (
         <DuelScreen
-          // Remounted when the tutorial starts or ends, and that is the point.
-          // `roughCutTier` is seeded from `tutorial` in a useState initialiser,
-          // so the flag flipping under a live component would change nothing —
-          // the key makes the switch a fresh mount, which is also what discards
-          // any run state the demonstration accumulated.
-          key={tutorial ? "tutorial" : "live"}
-          // ── The sandbox does NOT cover this, and it must not be asked to ────
-          //
-          // `setSandbox` guards what reaches localStorage. `setState` is React
-          // state, and pointing the tutorial at the real setter would have
-          // replaced the live in-memory library with five sample films the
-          // moment the demonstration touched anything — nothing on disk, so
-          // nothing lost permanently, but the app would be showing somebody
-          // else's five films until the next reload.
-          //
-          // So the demonstration gets its own state to scribble on. Two
-          // mechanisms because there are genuinely two problems: what persists,
-          // and what is on screen.
-          state={tutorial ? tutorialState : state}
-          setState={tutorial ? setTutorialState : setState}
-          tutorial={tutorial}
-          onTutorialDone={endTutorial}
+          state={state}
+          setState={setState}
           onInfo={setInfoFilm}
           onSettings={() => setSettingsOpen(true)}
           onTrophies={() => setTrophiesOpen(true)}
@@ -608,7 +583,6 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
-          onTour={startTour}
           onRunBegan={() => {
             if (seen.has("duel") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("duel"), 20);

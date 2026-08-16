@@ -23,7 +23,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { resolveSteps, type TourStep } from "@/lib/tour";
-import { setDemo } from "@/lib/tourDemo";
 
 /** Matches `Sheet`'s backdrop arming delay, and for the same reason. */
 const ARM_MS = 400;
@@ -126,14 +125,6 @@ export default function Coach({
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [step]);
-
-  // Tell the screen underneath which demonstration, if any, belongs to the step
-  // on show. Cleared on unmount as well as on every step, so a tour that is
-  // skipped mid-demo cannot leave the screen animating to nobody.
-  useEffect(() => {
-    setDemo(step?.demo ?? null);
-    return () => setDemo(null);
   }, [step]);
 
   // Nothing on screen to point at — finish rather than render an empty scrim. A
