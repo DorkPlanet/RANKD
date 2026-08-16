@@ -13,12 +13,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { exportBackup, importBackup } from "@/lib/backup";
-import { mergeFilms, parseLetterboxdCsv } from "@/lib/importCsv";
+import { filmsFromFile, mergeFilms } from "@/lib/importCsv";
 import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import type { Prefs } from "@/lib/prefs";
 import { resetRanking, wipeEverything } from "@/lib/reset";
-import { looksLikeZip, readFromZip, wantRatingsCsv } from "@/lib/zip";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
@@ -99,7 +98,11 @@ export function Settings({
   onTour?: () => void;
 }) {
   // One at a time. Two open rows is the wall of text this replaced.
-  const [open, setOpen] = useState<RowId | null>(null);
+  // Open on the import when there is nothing to import INTO. Every row is shut
+  // by default, which is right for a settings sheet and wrong for the one
+  // arrival that has a single obvious next step — "Import your films" opened
+  // this and showed a list of closed rows with no import control in sight.
+  const [open, setOpen] = useState<RowId | null>(films.length === 0 ? "library" : null);
   const toggle = (id: RowId) => setOpen((o) => (o === id ? null : id));
 
   const [conflict, setConflict] = useState(false);
@@ -119,23 +122,12 @@ export function Settings({
     //
     // Sniffed by CONTENT, not by extension. A phone's file picker reports all
     // sorts of types for the same file, and the first four bytes never lie.
-    const buffer = await file.arrayBuffer();
-    let text: string | null = null;
-    if (looksLikeZip(new Uint8Array(buffer))) {
-      text = await readFromZip(buffer, wantRatingsCsv);
-      if (text === null) {
-        setNote("That zip has no ratings.csv in it. Open it and pick that file instead.");
-        return;
-      }
-    } else {
-      text = new TextDecoder().decode(buffer);
-    }
-
-    const { films: parsed, skipped } = parseLetterboxdCsv(text);
-    if (parsed.length === 0) {
-      setNote("No rated films in that file.");
+    const result = await filmsFromFile(file);
+    if ("error" in result) {
+      setNote(result.error);
       return;
     }
+    const { films: parsed, skipped } = result;
     onImport(merge ? mergeFilms(films, parsed) : parsed);
     setNote(`${merge ? "Merged" : "Imported"} ${parsed.length} films${skipped ? `, skipped ${skipped}` : ""}.`);
   };

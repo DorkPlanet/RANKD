@@ -1,6 +1,7 @@
 import type { Film } from "./types";
 import type { Rating } from "./tiers";
 import { seedScore } from "./tiers";
+import { looksLikeZip, readFromZip, wantRatingsCsv } from "./zip";
 
 // Letterboxd's ratings.csv: Date,Name,Year,Letterboxd URI,Rating
 // Only rated films appear in it, and ratings come in half stars — which is
@@ -95,4 +96,39 @@ export function mergeFilms(existing: Film[], incoming: Film[]): Film[] {
     byId.set(f.id, prev ? { ...prev, rating: f.rating } : f);
   }
   return [...byId.values()];
+}
+
+/**
+ * A picked file, whatever shape it arrived in, as films.
+ *
+ * Shared because there are two import controls now — Settings and the empty
+ * screen a new user actually lands on — and they must behave identically. The
+ * zip handling in particular is the difference between an import that works on
+ * a phone and one people abandon; having it on only one of the two buttons
+ * would be worse than not having it.
+ *
+ * Returns a message rather than throwing: both callers show it in place, and
+ * neither has anywhere useful to put an exception.
+ */
+export async function filmsFromFile(
+  file: File,
+): Promise<{ films: Film[]; skipped: number } | { error: string }> {
+  const buffer = await file.arrayBuffer();
+  let text: string;
+
+  // Sniffed by CONTENT, not extension: a phone's file picker reports all sorts
+  // of types for the same file, and the first four bytes never lie.
+  if (looksLikeZip(new Uint8Array(buffer))) {
+    const found = await readFromZip(buffer, wantRatingsCsv);
+    if (found === null) {
+      return { error: "That zip has no ratings.csv in it. Open it and pick that file instead." };
+    }
+    text = found;
+  } else {
+    text = new TextDecoder().decode(buffer);
+  }
+
+  const parsed = parseLetterboxdCsv(text);
+  if (parsed.films.length === 0) return { error: "No rated films in that file." };
+  return parsed;
 }

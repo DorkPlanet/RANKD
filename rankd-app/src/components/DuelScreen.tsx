@@ -36,6 +36,7 @@ import { loadRoughCut } from "@/lib/roughCutRun";
 import { cardDataFromFilms } from "@/lib/card/data";
 import { CardPicker } from "./CardPicker";
 import { ImportGuide } from "./ImportGuide";
+import { ImportButton } from "./ui";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
 import { clearRun, saveRun } from "@/lib/runs";
@@ -84,6 +85,7 @@ export default function DuelScreen({
   onProfile,
   onTrophies,
   onAddFilm,
+  onImportFile,
   personRun,
   personGuests = [],
   personPortrait,
@@ -101,6 +103,8 @@ export default function DuelScreen({
   onProfile: () => void;
   onTrophies: () => void;
   onAddFilm: (film: Film) => void;
+  /** A picked ratings file, from the empty screen own import control. */
+  onImportFile?: (file: File) => void;
   /** A run just started, so the duel's posters and strip are about to exist. */
   onRunBegan?: () => void;
   /** Same contract as onRunBegan, for the mode that has no session. */
@@ -891,12 +895,17 @@ export default function DuelScreen({
             <div className="flex-shrink-0 pb-5">
               {empty ? (
                 <>
-                  <button
-                    onClick={onSettings}
-                    className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
-                  >
-                    Import your films
-                  </button>
+                  {/* A real file picker, not a route into Settings. It used to
+                      open the sheet, where every row is collapsed by default —
+                      so the one button on a new user's only screen led to a
+                      list of closed rows with no import control anywhere in
+                      sight. The primary action on the empty screen has to BE
+                      the action. */}
+                  <ImportButton
+                    label="Import your films"
+                    merge={false}
+                    onFile={(f) => onImportFile?.(f)}
+                  />
                   {/* A "show me how it works" button lived here and is gone.
                       With nothing in the library there is nothing to
                       demonstrate: every tour points at films, a tier or a run,

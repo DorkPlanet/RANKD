@@ -17,6 +17,7 @@ import ListScreen from "./ListScreen";
 import ProfileScreen from "./ProfileScreen";
 import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
+import { filmsFromFile } from "@/lib/importCsv";
 import { loadFilms, saveFilms } from "@/lib/store";
 import { loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
@@ -606,6 +607,12 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
+          onImportFile={(file) => {
+            void filmsFromFile(file).then((r) => {
+              if ('error' in r) return;
+              loadLibrary(r.films);
+            });
+          }}
           onRunBegan={() => {
             if (seen.has("duel") || !(newLibrary || replaying)) return;
             setTimeout(() => setTourDue("duel"), 20);
