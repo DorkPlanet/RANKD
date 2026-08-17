@@ -160,7 +160,21 @@ export default function RoughCut({
   // would go stale the moment the layout moved.
   const targets = useRef<Partial<Record<Bucket, HTMLButtonElement | null>>>({});
 
-  const film = pool[at];
+  // ── Read the card from the LIVE library, not the frozen queue ─────────────
+  //
+  // `pool` is captured once when the pass starts, which is right for the ORDER —
+  // it must not reshuffle underneath the reader — and wrong for the film's
+  // contents. Artwork arrives asynchronously and lands in `state.films`, so a
+  // card rendered from the snapshot kept showing the placeholder it was born
+  // with no matter how many posters turned up behind it. Rough Cut shows one
+  // film at a time, so this was every card.
+  //
+  // The queue still decides WHICH film and in what order; this only decides
+  // which copy of it is drawn. Falls back to the snapshot for a film that has
+  // since left the library, which `loadRoughCut` already refuses to resume but
+  // a live removal could still produce.
+  const queued = pool[at];
+  const film = (queued && films.find((f) => f.id === queued.id)) ?? queued;
   const done = at >= pool.length;
 
   // Written after every render that moves the queue, rather than inside
