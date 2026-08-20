@@ -86,6 +86,8 @@ export default function ProfileScreen({
   logging?: boolean;
   onToggleLog?: () => void;
 }) {
+  // Which of the three zones is showing. See the tab bar for why.
+  const [tab, setTab] = useState<0 | 1 | 2>(0);
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
   // ── One film-picking flow, two things it can be picking FOR ────────────────
@@ -355,13 +357,40 @@ export default function ProfileScreen({
                 above is still a link into it for anyone who wants one. */}
           </div>
 
+
+          {/* ── Three pages, not one scroll ──────────────────────────────────
+              The zones were always the right grouping. The problem was that all
+              three were stacked, so the page ran to eight sections and nothing
+              broke it up — which is exactly how it read.
+
+              A tab keeps the grouping and throws away the length. It also puts
+              every sideways-scrolling shelf under one heading, where flicking
+              through posters is the actual job, instead of ambushing you with
+              four of them on the way down.
+
+              The identity block above stays put on all three: it is who this is,
+              not one of the three things being said about them. */}
+          <div className="mt-6 flex gap-1.5">
+            {(["What you like", "What you've made", "Where it stands"] as const).map((label, i) => (
+              <button
+                key={label}
+                onClick={() => setTab(i as 0 | 1 | 2)}
+                className={`flex-1 rounded-full border py-2 text-[10px] font-extrabold tracking-[0.1em] transition-colors ${
+                  tab === i ? "border-gold bg-gold text-[#1c1405]" : "border-border text-dim"
+                }`}
+              >
+                {label.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {tab === 0 && (
+            <>
           {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
               The thesis. Three blocks that were peers of everything else on the
               screen — the fingerprint, the odds and ends, the people — now sit
               under one heading, because they are one argument made three ways
               and the page never said so. */}
-          <Zone title="What you like" />
-
           {/* The shape, above the lines that describe it in words.
               It plots mean POSITION per genre, never win rate and never how much
               of a genre you own — see the header of `taste.ts` for why both of
@@ -507,20 +536,18 @@ export default function ProfileScreen({
               </div>
             </Section>
           )}
+            </>
+          )}
         </div>
 
+        {tab === 1 && (
+          <>
         {/* ── WHAT YOU'VE MADE ─────────────────────────────────────────────
             Both shelves under one heading. They are the same kind of object —
             a set of films with a name — and the only difference is whether the
             app derived it or you sat through the duels for it. That distinction
             is already carried by each card's eyebrow, so it does not also need
             two unrelated-looking headers. */}
-        {(hero || savedLists.length > 0) && (
-          <div className="px-6">
-            <Zone title="What you've made" />
-          </div>
-        )}
-
         {/* Collections scroll sideways so user-made lists can join them without
             the screen growing another full-width block each time. */}
         {hero && (
@@ -687,6 +714,10 @@ export default function ProfileScreen({
           </section>
         )}
 
+          </>
+        )}
+        {tab === 2 && (
+          <>
         {/* ── THE LEDGER ───────────────────────────────────────────────────
             Last, and deliberately. This is the most detailed thing on the page
             and the least likely to be why anyone opened it — so it is what you
@@ -698,7 +729,6 @@ export default function ProfileScreen({
             chart too many, and no other app can draw this one because no other
             app knows the difference between owning a film and placing it. */}
         <div className="px-6">
-          <Zone title="Where it stands" />
           <Section title="Your tiers">
             <div className="space-y-2">
               {tiers.map((t) => (
@@ -728,6 +758,8 @@ export default function ProfileScreen({
             </p>
           </Section>
         </div>
+          </>
+        )}
       </div>
 
       <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} logging={logging} onToggleLog={onToggleLog} />
@@ -1289,28 +1321,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-/**
- * A chapter heading, one level above `Section`.
- *
- * The screen's problem was never its contents — it was that eight blocks all
- * wore the same 10px tracked label, so nothing was subordinate to anything and
- * the page read as a list of unrelated facts about you. There was no way to tell
- * that "Your taste", "Odds and ends" and "Your highest rated" are three angles
- * on ONE claim while "Your tiers" is a different kind of thing entirely.
- *
- * So this is deliberately unlike a Section: the serif face the app uses for
- * numbers and titles, sentence case rather than tracked caps, and a rule that
- * fades out — the same `card-rule` already separating the identity block. Two
- * levels is enough. A third would be the same mistake one rung down.
- */
-function Zone({ title }: { title: string }) {
-  return (
-    <div className="mt-8">
-      <div className="card-rule" />
-      <h2 className="mt-4 font-serif text-[17px] font-bold leading-none text-text-hi">{title}</h2>
-    </div>
-  );
-}
 
 function EditIdentity({
   profile,
