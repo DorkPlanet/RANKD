@@ -429,8 +429,8 @@ export default function ProfileScreen({
             <Section title="Odds and ends">
               <div className="space-y-2.5">
                 {facts.map((f) => (
-                  <p key={f.label} className="text-[13px] leading-snug text-dim">
-                    {f.label} <span className="text-text-hi">{f.value}</span>
+                  <p key={f.label} className="text-[13px] leading-snug text-text">
+                    {f.label} <span className="text-gold">{f.value}</span>
                     {f.note ? <span className="text-dim"> · {f.note}</span> : null}
                   </p>
                 ))}
@@ -453,8 +453,8 @@ export default function ProfileScreen({
             <Section title="What your list says">
               <div className="space-y-2.5">
                 {notes.map((n) => (
-                  <p key={n.id} className="text-[13px] leading-snug text-dim">
-                    {n.before} <span className="text-text-hi">{n.subject}</span>
+                  <p key={n.id} className="text-[13px] leading-snug text-text">
+                    {n.before} <span className="text-gold">{n.subject}</span>
                     {/* No space before a full stop or a comma. A note whose tail
                         begins with punctuation would otherwise read "the 2020s ."
                         — which it did, on the first render of this. */}

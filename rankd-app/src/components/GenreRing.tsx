@@ -72,8 +72,13 @@ export function GenreRing({ films }: { films: Film[] }) {
         }}
         className="no-scrollbar flex snap-x snap-mandatory overflow-x-auto"
       >
-        {/* Pane one — the shape */}
-        <div className="w-full flex-shrink-0 snap-center">
+        {/* Pane one — the shape.
+            A horizontal scroller is as tall as its tallest child, and the list
+            pane is taller than the ring. Left to itself the ring sat at the top
+            with a block of dead space under it, which read as a rendering
+            fault. Centring turns that into even breathing room above and below,
+            with no height measuring and no state to keep in sync. */}
+        <div className="flex w-full flex-shrink-0 snap-center flex-col justify-center">
           <svg
             viewBox="0 0 120 120"
             className="mx-auto block w-[58%]"
@@ -100,9 +105,31 @@ export function GenreRing({ films }: { films: Film[] }) {
               FILMS
             </text>
           </svg>
-          <p className="mt-2 text-center text-[10px] text-dim">
-            {slices.length} genres. Swipe for all of them.
-          </p>
+          {/* The five biggest, named, under the ring.
+              A ring on its own is a shape with no words on it, and pane one was
+              a chart floating in a column of nothing. This is the summary the
+              mock had, and the "N more" it ends on is honest here in a way it
+              was not before: the rest are one swipe away and the line under it
+              says so. */}
+          <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1">
+            {slices.slice(0, 5).map((s) => (
+              <div key={s.name} className="flex items-center gap-2 text-[10px]">
+                <span className="h-2 w-2 flex-shrink-0 rounded-[2px]" style={{ background: s.colour }} />
+                <span className="min-w-0 truncate text-dim">{axisLabel(s.name)}</span>
+                <span className="ml-auto flex-shrink-0 tabular-nums text-text">{s.count}</span>
+              </div>
+            ))}
+            {slices.length > 5 && (
+              <div className="flex items-center gap-2 text-[10px]">
+                <span className="h-2 w-2 flex-shrink-0 rounded-[2px] bg-border" />
+                <span className="min-w-0 truncate text-dim">{slices.length - 5} more</span>
+                <span className="ml-auto flex-shrink-0 tabular-nums text-text">
+                  {slices.slice(5).reduce((n, s) => n + s.count, 0)}
+                </span>
+              </div>
+            )}
+          </div>
+          <p className="mt-2.5 text-center text-[10px] text-dim">Swipe for all {slices.length}.</p>
         </div>
 
         {/* Pane two — every one of them, largest first, with the bar doing the
