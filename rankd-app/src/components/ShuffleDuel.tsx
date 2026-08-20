@@ -52,6 +52,9 @@ export interface ShuffleOptions {
   includeConfirmed: boolean;
 }
 
+/** How many films ahead the in-session artwork walk goes. See its use below. */
+const LOOKAHEAD = 80;
+
 export default function ShuffleDuel({
   films,
   onFilms,
@@ -169,7 +172,23 @@ export default function ShuffleDuel({
     const pool = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed });
     // Films with no artwork at all first — a missing poster is a hole on screen,
     // where missing credits are a detail nobody is looking at.
-    const queue = [...pool.filter(needsPoster), ...pool.filter((f) => !needsPoster(f) && needsMeta(f))];
+    // CAPPED, and the cap is the point.
+    //
+    // This is a LOOKAHEAD — "usually fetched before it is ever served" — and a
+    // lookahead does not need to be the whole library deep. King of the Hill
+    // backfills the pile it is playing, a tier at most. Fast Shuffle's pool is
+    // whatever scope you chose, and on "All films" that is every film you own.
+    //
+    // Queuing all of them meant a walk over ~861 films on entry, and the walk is
+    // the expensive part: each step used to rewrite the entire library to
+    // localStorage. That is fixed in `backfillPosters` itself, but the queue had
+    // no business being that long either. Anything past the cap is the credits
+    // sweep's job, which already walks the whole library on its own timer and is
+    // built to be slow.
+    const queue = [
+      ...pool.filter(needsPoster),
+      ...pool.filter((f) => !needsPoster(f) && needsMeta(f)),
+    ].slice(0, LOOKAHEAD);
     if (queue.length > 0) void backfillPosters(queue, onMeta, () => stopped);
     return () => {
       stopped = true;

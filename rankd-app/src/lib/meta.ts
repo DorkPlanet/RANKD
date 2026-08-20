@@ -145,10 +145,56 @@ export async function backfillPosters(
     // waiting out the whole tier again before reaching anything new.
     const cached = cache.has(film.id);
     const meta = await fetchMeta(film);
-    if (meta.poster || meta.director || meta.cast?.length || meta.genres?.length) {
-      onFound(film.id, meta);
-    }
-    if (!cached) await new Promise((r) => setTimeout(r, gapMs));
+    // ── Only report a CHANGE ─────────────────────────────────────────────────
+    //
+    // `onFound` is not cheap at the other end. Every call lands in a `setState`
+    // that runs `saveFilms`, which is a full `JSON.stringify` and a synchronous
+    // `localStorage.setItem` of the entire library — around half a megabyte on a
+    // real one.
+    //
+    // The old test was "did the response contain anything at all", which is true
+    // for every film that already has its artwork and credits. So walking a
+    // fully-swept pool rewrote the whole library once per film and changed
+    // nothing whatsoever each time.
+    //
+    // Fast Shuffle is where that bites: its queue is the whole POOL, where King
+    // of the Hill only ever backfills the pile it is playing. On a warm cache
+    // there is no pacing either (see below), so hundreds of half-megabyte writes
+    // ran back to back with nothing yielding between them — which locks the
+    // device, not merely the tab. Reported 21 Aug 2026: one swipe into Fast
+    // Shuffle and the phone stopped, every time, while King of the Hill was fine.
+    if (adds(film, meta)) onFound(film.id, meta);
+    // ── Yield on EVERY film, cached or not ───────────────────────────────────
+    //
+    // The pause used to be skipped entirely for a cache hit, on the reasoning
+    // above — which is sound about network pacing and wrong about the event
+    // loop. With a warm cache this loop never awaited anything real, so it ran
+    // as one uninterrupted block over the entire pool and the main thread had no
+    // chance to paint or handle a tap in between.
+    //
+    // A zero-delay `setTimeout` is still a macrotask, so the thread gets a turn.
+    // The cached path stays effectively free; it just stops being greedy.
+    await new Promise((r) => setTimeout(r, cached ? 0 : gapMs));
   }
+}
+
+/**
+ * Whether this response would actually change the film.
+ *
+ * Deliberately checks the fields `withMeta` fills rather than comparing whole
+ * objects: `withMeta` only ever fills gaps in the backfill case, so a response
+ * that repeats what is already stored produces an identical film and a pointless
+ * write of the whole library.
+ */
+function adds(film: Film, meta: FilmMeta): boolean {
+  return (
+    (!!meta.poster && !film.poster) ||
+    (!!meta.director && !film.director) ||
+    (!!meta.cast?.length && !film.cast?.length) ||
+    (!!meta.genres?.length && !film.genres?.length) ||
+    (!!meta.keywords?.length && !film.keywords?.length) ||
+    (!!meta.runtime && !film.runtime) ||
+    (!!meta.tmdbId && !film.tmdbId)
+  );
 }
 
