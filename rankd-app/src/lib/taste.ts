@@ -35,12 +35,10 @@
 // film at #391. Rating first, belief second, is the order Rankd would actually
 // apply.
 
-import { beliefsFor } from "./beliefs";
 import type { Belief } from "./bayes";
 import { seedOf } from "./beliefs";
 import { genresIn } from "./genres";
 import { isPlaced } from "./lock";
-import type { Judgement } from "./log";
 import type { Film } from "./types";
 
 /** Below this a genre has nothing to say and is left off the chart entirely. */
@@ -153,13 +151,25 @@ export function tasteShape(films: readonly Film[], axes: readonly string[]): Tas
   return shapeFrom(films, yourOrder(films), axes);
 }
 
-/** Rankd's shape over the same films, drawn alongside yours. */
+/**
+ * Rankd's shape over the same films, drawn alongside yours.
+ *
+ * Takes beliefs rather than fitting them, and that is not a style choice.
+ * `beliefsFor` carries a warning on the function itself — expensive, and callers
+ * on an interaction path want `beliefsWhenIdle` or the cached `lastBeliefs`
+ * instead. The first version of this ignored it and fitted the whole log inline,
+ * from a profile effect keyed on the library array. The credits sweep rewrites
+ * that array every few minutes, so every sweep pass triggered a fresh
+ * several-hundred-millisecond fit on the main thread.
+ *
+ * The caller does the fitting, which is what lets it be the cached, idle one.
+ */
 export function rankdShape(
   films: readonly Film[],
-  log: readonly Judgement[],
+  beliefs: Map<string, Belief>,
   axes: readonly string[],
 ): TasteShape {
-  return shapeFrom(films, rankdOrder(films, beliefsFor(films, log)), axes);
+  return shapeFrom(films, rankdOrder(films, beliefs), axes);
 }
 
 /** Axes and values together, for a caller that wants to draw one shape. */

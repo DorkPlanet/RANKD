@@ -33,6 +33,7 @@ import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
 import { loadLog } from "@/lib/log";
+import { beliefsWhenIdle } from "@/lib/beliefs";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
 
@@ -167,10 +168,12 @@ export default function ProfileScreen({
   useEffect(() => {
     let dead = false;
     if (taste.length < 3) return;
-    void loadLog().then((log) => {
-      if (dead) return;
-      setRankd(rankdShape(films, log, taste.map((a) => a.genre)));
-    });
+    void loadLog()
+      .then((log) => beliefsWhenIdle(films, log))
+      .then((beliefs) => {
+        if (dead) return;
+        setRankd(rankdShape(films, beliefs, taste.map((a) => a.genre)));
+      });
     return () => {
       dead = true;
     };

@@ -71,33 +71,49 @@ type Overlay =
 const VEIL_MS = 200;
 
 /**
- * Where the app opens.
+ * Where the app opens. Always the game.
  *
- * The profile, once there is a profile worth opening on. It is the screen that
- * says what your library amounts to rather than enumerating it — and with the
- * recap on it, it is now the one screen whose contents differ from the last time
- * you looked, which is what earns it the landing.
+ * ── What this used to be, and why it changed ───────────────────────────────
  *
- * But only once something has been placed. A library nobody has ranked has no
- * number one, therefore no hero, therefore no COLLECTIONS row at all — and no
- * recap either, since a first visit has nothing to compare against. A new user
- * would land on a page of empty sections instead of a playable duel.
- * `pickOpeningTier` already refuses to open on an empty tier because "an empty
- * screen is a poor first look"; this is that same rule one level up.
+ * It opened on the PROFILE once anything had been placed, and on the duel
+ * otherwise. The reasoning was that the profile says what your library amounts
+ * to rather than enumerating it, and the recap made it the one screen whose
+ * contents differ from last time.
  *
- * Derived rather than stored, so it answers to the library as it stands. Nothing
- * needs migrating, and someone who clears their ranking goes back to landing on
- * the duel — which is where they now have work to do.
+ * Cut on 21 Aug 2026, the user's call. The profile is a page ABOUT the ranking;
+ * the duel screen IS the ranking. Landing on the description rather than the
+ * thing is a detour on every single open, and the recap is still there for
+ * anyone who goes looking.
  *
- * ASKED ONCE, at load, and that is load-bearing. Its input is "has anything been
- * placed", which the act of playing CHANGES — so evaluated on every render it
- * re-fires mid-run, and confirming your first film throws you onto the profile
- * with the climb still running behind it. Where the app OPENS is a question
- * about opening; asking it continuously makes it a rule about where the app
- * should be, which is not this function's business.
+ * `RunStart` is what makes this safe now and did not exist when the old rule was
+ * written. Arriving at RNK no longer drops you into a climb nobody chose — it
+ * offers one. The old objection, that opening on the game demands a judgement
+ * before offering anything, was true then and is not true now.
+ *
+ * ── Still asked ONCE, at load, and that is still load-bearing ──────────────
+ *
+ * Kept as a function rather than inlined so this stays a question about OPENING.
+ * The previous version's input was "has anything been placed", which the act of
+ * playing changes — so evaluated on every render it re-fired mid-run and
+ * confirming your first film threw you onto the profile with the climb still
+ * going behind it. If this ever becomes conditional again, it must still be
+ * asked once.
  */
-function openingScreen(films: readonly Film[]): Screen {
-  return films.some(isPlaced) ? "profile" : "duel";
+function openingScreen(): Screen {
+  // Always the game. The user's call, 21 Aug 2026.
+  //
+  // It used to open on the profile once anything had been placed, on the
+  // reasoning that a returning reader wants their standing before their next
+  // move. In practice the profile is a page ABOUT the ranking and the duel
+  // screen is the ranking, and landing on the description of a thing rather
+  // than the thing is a detour every single time you open the app.
+  //
+  // `RunStart` makes that safe in a way it was not when this rule was written:
+  // arriving at RNK no longer drops you into a climb somebody else chose, it
+  // offers one. So the old worry — that opening on the game asks for a
+  // judgement before offering anything — no longer applies.
+  //
+  return "duel";
 }
 
 export default function AppShell() {
@@ -217,7 +233,7 @@ export default function AppShell() {
     // Decided here, on the library as it arrived, and never re-derived. Guests
     // cannot be in play yet — nothing has started a run — so `films` is already
     // the guest-free library the rule wants.
-    setScreen(openingScreen(films));
+    setScreen(openingScreen());
 
     // Catch up with the account, if there is one. `pull` reloads the page, so on
     // a new device this render is simply replaced by one holding the real
@@ -594,7 +610,7 @@ export default function AppShell() {
   // `state` arriving and the load effect committing its `setScreen`, so it can
   // no longer re-fire once something has been placed — which is what used to
   // throw a player onto the profile on their first confirm.
-  const current = screen ?? openingScreen(library);
+  const current = screen ?? openingScreen();
 
   // ── When a tour runs by itself ─────────────────────────────────────────────
   //

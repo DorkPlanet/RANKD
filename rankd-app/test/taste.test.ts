@@ -109,7 +109,7 @@ describe("Rankd's order, next to yours", () => {
   it("covers the same films as yours", () => {
     const films = [...run("Drama", 4, 900), ...run("Horror", 4, 300)];
     const axes = tasteAxes(films);
-    expect(Object.keys(rankdShape(films, [], axes)).sort()).toEqual(Object.keys(tasteShape(films, axes)).sort());
+    expect(Object.keys(rankdShape(films, new Map(), axes)).sort()).toEqual(Object.keys(tasteShape(films, axes)).sort());
   });
 
   // The trap the film card hit: belief means are not calibrated across tiers, so
@@ -117,7 +117,7 @@ describe("Rankd's order, next to yours", () => {
   // low tier must still land below a high one.
   it("never lets a low tier out-rank a high one", () => {
     const films = [...run("Horror", 3, 10, 1), ...run("Drama", 3, 9000, 5)];
-    const shape = rankdShape(films, [], tasteAxes(films));
+    const shape = rankdShape(films, new Map(), tasteAxes(films));
     expect(shape.Drama).toBeGreaterThan(shape.Horror);
   });
 
