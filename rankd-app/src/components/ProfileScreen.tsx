@@ -32,7 +32,18 @@ import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/li
 import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
-import { loadLog } from "@/lib/log";
+import { loadLog, type Judgement } from "@/lib/log";
+import {
+  changedYourMind,
+  countriesOf,
+  decadeClash,
+  leastRead,
+  longestSitting,
+  overruledYourStars,
+  runtimeBias,
+  timeWatched,
+  whenYouRank,
+} from "@/lib/watching";
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
@@ -160,6 +171,71 @@ export default function ProfileScreen({
   const autos = useMemo(() => autoCollections(ranked, print, people), [ranked, print, people]);
   const badges = useMemo(() => achievements(films), [films]);
   const taste = useMemo(() => tasteFor(films), [films]);
+
+  // The log-derived habits. Needs the log, so it arrives with `rankd` below
+  // rather than on the first paint — the section simply is not there until it
+  // does, which is the same answer a thin library gets.
+  const [logRows, setLogRows] = useState<Judgement[] | null>(null);
+  const habits = useMemo(() => {
+    const out: { label: string; value: string; note?: string }[] = [];
+    const time = timeWatched(films);
+    if (time.minutes > 0) {
+      const days = time.minutes / 60 / 24;
+      out.push({
+        label: "Time spent",
+        value: days >= 1 ? `${days.toFixed(1)} days` : `${Math.round(time.minutes / 60)} hours`,
+        // Said out loud, because the figure is only true of the films whose
+        // runtime the app actually knows.
+        note: time.known < time.total ? `${time.known.toLocaleString()} of ${time.total.toLocaleString()}` : undefined,
+      });
+    }
+    const where = countriesOf(films);
+    if (where.list.length > 1) {
+      const top = where.list[0];
+      out.push({
+        label: "Countries",
+        value: `${where.list.length}`,
+        note: `${Math.round((top.films / where.known) * 100)}% ${top.code}`,
+      });
+    }
+    if (!logRows) return out;
+    const bias = runtimeBias(films, logRows);
+    if (bias) {
+      out.push({
+        label: "You pick the longer film",
+        value: `${Math.round((bias.longer / bias.of) * 100)}%`,
+        note: `of ${bias.of} duels`,
+      });
+    }
+    const flipped = changedYourMind(logRows);
+    if (flipped > 0) out.push({ label: "Changed your mind about", value: `${flipped} pairs` });
+    const overruled = overruledYourStars(films, logRows);
+    if (overruled > 0) out.push({ label: "Overruled your own stars", value: `${overruled} times` });
+    const clash = decadeClash(films, logRows);
+    if (clash) {
+      out.push({
+        label: `${clash.won} vs ${clash.lost}`,
+        value: clash.won,
+        note: `${clash.wins} of ${clash.of}`,
+      });
+    }
+    const when = whenYouRank(logRows);
+    if (when) {
+      const h = when.hour % 12 === 0 ? 12 : when.hour % 12;
+      out.push({ label: "You rank at", value: `${h}${when.hour < 12 ? "am" : "pm"}` });
+    }
+    const streak = longestSitting(logRows);
+    if (streak > 1) out.push({ label: "Longest sitting", value: `${streak} duels` });
+    const unread = leastRead(films, logRows);
+    if (unread) {
+      out.push({
+        label: "Rankd could never read",
+        value: unread.film.title,
+        note: `${unread.duels} duels`,
+      });
+    }
+    return out;
+  }, [films, logRows]);
   // Rankd's own order over the same films, loaded off the interaction path.
   // `beliefsFor` fits the whole log, which is the expensive one — so this
   // resolves late and the chart draws your shape alone until it does, rather
@@ -169,7 +245,10 @@ export default function ProfileScreen({
     let dead = false;
     if (taste.length < 3) return;
     void loadLog()
-      .then((log) => beliefsWhenIdle(films, log))
+      .then((log) => {
+        if (!dead) setLogRows(log);
+        return beliefsWhenIdle(films, log);
+      })
       .then((beliefs) => {
         if (dead) return;
         setRankd(rankdShape(films, beliefs, taste.map((a) => a.genre)));
@@ -396,17 +475,38 @@ export default function ProfileScreen({
             )}
           </Section>
 
+          {/* Lines, not boxes.
+              A bordered box per fact made eight equal-weight panels with nothing
+              subordinate to anything, which is most of why this page read as a
+              stack of unrelated readouts. The app's own language is a hairline
+              rule and a tracked-caps label; these facts now use it like
+              everything else does. */}
           {facts.length > 0 && (
             <Section title="Odds and ends">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
                 {facts.map((f) => (
-                  <div key={f.label} className="rounded-xl border border-border px-3 py-2.5">
-                    <span className="block text-[9px] font-extrabold tracking-[0.16em] text-dim">
-                      {f.label.toUpperCase()}
-                    </span>
-                    <span className="mt-1 block truncate text-[13px] text-text-hi">{f.value}</span>
-                    {f.note && <span className="block text-[10px] text-gold">{f.note}</span>}
-                  </div>
+                  <Line key={f.label} label={f.label} value={f.value} note={f.note} />
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* ── How you watch, as opposed to what you own ────────────────────
+              Everything above this comes off the library, which means every
+              line of it could be computed by anyone holding the Letterboxd
+              export. These come off the DUEL LOG and the runtimes the app
+              fetched itself, so they are the first things on this page that are
+              about the reader rather than about their collection.
+
+              Each one returns null under its own floor rather than printing a
+              percentage off nine answers, so a thin library shows fewer lines
+              instead of worse ones. See `lib/watching.ts` for which of these
+              the matchmaker can bias and which it cannot. */}
+          {habits.length > 0 && (
+            <Section title="How you watch">
+              <div className="space-y-1.5">
+                {habits.map((h) => (
+                  <Line key={h.label} label={h.label} value={h.value} note={h.note} />
                 ))}
               </div>
             </Section>

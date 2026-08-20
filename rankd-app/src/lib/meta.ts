@@ -25,6 +25,8 @@ export interface FilmMeta {
   composer?: string;
   cast?: string[];
   keywords?: string[];
+  countries?: string[];
+  language?: string;
 }
 
 // One in-flight request per film, shared across callers, kept for the session.
@@ -70,7 +72,7 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch && !f.pinnedMeta;
 
 export const needsMeta = (f: Film): boolean =>
-  !f.noMatch && !f.pinnedMeta && (!f.poster || !f.director || !f.genres || !f.keywords);
+  !f.noMatch && !f.pinnedMeta && (!f.poster || !f.director || !f.genres || !f.keywords || !f.countries);
 
 // Who made it, and what kind of thing it is.
 //
@@ -79,7 +81,7 @@ export const needsMeta = (f: Film): boolean =>
 // no credits looks complete on the list screen and is invisible to every one of
 // those questions, which is why the gap went unnoticed for so long.
 export const needsCredits = (f: Film): boolean =>
-  !f.noMatch && !f.pinnedMeta && (!f.director || !f.genres);
+  !f.noMatch && !f.pinnedMeta && (!f.director || !f.genres || !f.countries);
 
 // Fold a fetched response into the stored film. Only the fields worth persisting
 // are taken — synopsis, runtime and genres stay derived, since they'd bloat
@@ -110,6 +112,8 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
       genres: meta.genres,
       keywords: meta.keywords,
       runtime: meta.runtime,
+      countries: meta.countries,
+      language: meta.language,
     };
   }
 
@@ -126,6 +130,8 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
     genres: meta.genres?.length ? meta.genres : film.genres,
     keywords: meta.keywords?.length ? meta.keywords : film.keywords,
     runtime: meta.runtime ?? film.runtime,
+    countries: meta.countries?.length ? meta.countries : film.countries,
+    language: meta.language ?? film.language,
   };
 }
 
@@ -193,6 +199,8 @@ function adds(film: Film, meta: FilmMeta): boolean {
     (!!meta.cast?.length && !film.cast?.length) ||
     (!!meta.genres?.length && !film.genres?.length) ||
     (!!meta.keywords?.length && !film.keywords?.length) ||
+    (!!meta.countries?.length && !film.countries?.length) ||
+    (!!meta.language && !film.language) ||
     (!!meta.runtime && !film.runtime) ||
     (!!meta.tmdbId && !film.tmdbId)
   );

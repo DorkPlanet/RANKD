@@ -25,6 +25,10 @@ export interface FilmMeta {
   composer?: string;
   cast?: string[];
   keywords?: string[];
+  /** ISO 3166-1 codes for where it was made. Usually one, sometimes a co-production. */
+  countries?: string[];
+  /** ISO 639-1 code for the language it was shot in. */
+  language?: string;
 }
 
 interface CrewMember {
@@ -67,6 +71,10 @@ async function detailOf(id: number, key: string): Promise<FilmMeta | null> {
     composer: byJob("Original Music Composer", "Music"),
     cast: (d.credits?.cast ?? []).slice(0, 10).map((c: { name: string }) => c.name),
     keywords: (d.keywords?.keywords ?? []).slice(0, 10).map((k: { name: string }) => k.name),
+    // Where it was made and what it was shot in. Both ride along on the same
+    // response as the poster, so this costs no extra request, only the bytes.
+    countries: (d.production_countries ?? []).map((c: { iso_3166_1: string }) => c.iso_3166_1),
+    language: d.original_language || undefined,
   };
 }
 

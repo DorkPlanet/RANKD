@@ -29,6 +29,18 @@ export interface Film {
   // footage" are keywords or they're nothing.
   keywords?: string[];
   runtime?: number;
+  // Where it was made, and what it was shot in.
+  //
+  // The same free ride as the credits: both arrive on the response that fetches
+  // the poster, so they cost no extra request, only the bytes. Kept because how
+  // much of what you watch was made somewhere else is a fact about YOU that no
+  // amount of ordering can say — and because a library that has never left one
+  // country is worth being told so.
+  //
+  // ISO codes, not names. Two letters each rather than "United States of
+  // America" 700 times over, in a store that shares one 5MB budget with the log.
+  countries?: string[];
+  language?: string;
   // TMDb had nothing under this title and year. Remembered so the fetch queue
   // stops retrying it every session — an unmatched film never becomes matched.
   noMatch?: boolean;
