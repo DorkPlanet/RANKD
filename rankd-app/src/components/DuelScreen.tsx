@@ -923,7 +923,24 @@ export default function DuelScreen({
   // Nothing running: chrome and a dark middle, because the choosing lives on a
   // LAYER over the game rather than in a page that replaces it. `overlay` is
   // what you actually see here.
-  if (!session && !runResult) {
+  // ── `!activeRun` is load-bearing. Do not drop it. ────────────────────────
+  //
+  // Fast Shuffle sets `shuffleRun` and starts no SESSION — it has no pile, no
+  // climb and no confirm, which is the whole point of it. So with nothing else
+  // running, choosing it used to set the run, close the sheet, and land right
+  // back on this screen, because this early return fires on `!session` alone and
+  // sits ABOVE the branch that renders `ShuffleDuel`.
+  //
+  // The symptom was precisely: Fast Shuffle does nothing, and then starts by
+  // itself the moment you pick a tier — because a King of the Hill run creates
+  // the session this return was waiting for, and the shuffle branch below was
+  // finally reached.
+  //
+  // Same shape as "Something else did nothing" and the sheets that had to be
+  // rendered by every branch: an early return swallowing a state nobody checked
+  // it against. Any new full-surface return above the shuffle branch needs this
+  // guard too.
+  if (!session && !runResult && !activeRun) {
     const placedNow = state.films.filter(isPlaced).length;
     // ── The screen a brand-new user actually lands on ────────────────────────
     //
@@ -994,20 +1011,19 @@ export default function DuelScreen({
                 </>
               ) : (
                 <>
-                  <button
-                    onClick={() => {
-                      fromOverlay.current = true;
-                      setTierOpen(true);
-                    }}
-                    className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
-                  >
-                    Pick a tier
-                  </button>
+                  {/* One way in, not two.
+                      "Pick a tier" sat here as the primary action and started a
+                      King of the Hill climb without ever naming it — so the
+                      choice of MODE was made for you by the button you pressed
+                      to choose a TIER, and the Play sheet underneath offers the
+                      same tier picker anyway. Every mode now begins the same
+                      way, which is also what stops this screen quietly deciding
+                      that the default game is the most expensive one. */}
                   <button
                     onClick={() => setModeOpen(true)}
-                    className="mt-2.5 w-full rounded-full border border-border py-3.5 text-center text-[13px] font-bold text-text-hi active:scale-[0.99]"
+                    className="w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
                   >
-                    Something else
+                    Start ranking
                   </button>
                 </>
               )}

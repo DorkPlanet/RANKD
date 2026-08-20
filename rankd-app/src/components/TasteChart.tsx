@@ -82,6 +82,14 @@ export function TasteChart({
         })}
       </g>
 
+      {/* ── Fill first, then EVERY outline on top of it. ──────────────────────
+          Rankd's line was drawn before the gold polygon and the gold polygon
+          carries a fill, so wherever Rankd's shape sat inside yours — which is
+          most of the chart — the fill painted over it and the blue vanished.
+          Reported as "I see the yellow but not the blue".
+          A fill can only ever hide a line. Lines last, always. */}
+      <polygon points={polygon(now)} fill="var(--gold)" fillOpacity="0.15" stroke="none" />
+
       {before && shifted && (
         <polygon
           points={polygon(before)}
@@ -93,24 +101,23 @@ export function TasteChart({
         />
       )}
 
-      {/* Rankd's shape UNDER yours, and as an outline only. Two filled polygons
-          would mix into a third colour where they overlap, which is most of the
-          chart. Blue because `--accent` is the structural colour here and gold
-          is the hero one: yours is the answer, this is the second opinion. */}
+      {/* Outline only, never a second fill: two translucent fills mix into a
+          third colour across the overlap, which is most of the chart. Blue
+          because `--accent` is the structural colour and gold is the hero one.
+          Yours is the answer; this is the second opinion. */}
       {theirs && (
         <polygon
           points={polygon(theirs)}
           fill="none"
           stroke="var(--accent)"
-          strokeWidth="1.5"
+          strokeWidth="1.75"
           strokeLinejoin="round"
         />
       )}
 
       <polygon
         points={polygon(now)}
-        fill="var(--gold)"
-        fillOpacity="0.17"
+        fill="none"
         stroke="var(--gold)"
         strokeWidth="1.75"
         strokeLinejoin="round"
