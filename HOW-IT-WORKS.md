@@ -1,7 +1,12 @@
-# How it works — the sheet, and what it has to cover
+# How it works — what the app never explains
 
-**This is register item H2: the list of things a user cannot work out on their own.**
-It is the outline the sheet (H1) gets written from. No sheet copy yet.
+**Register item H2: the list of things a user cannot work out on their own.**
+
+> **The sheet itself (H1) is PARKED.** User's call, 20 Aug. This document stands on its
+> own as the record of what is unexplained, and two entries turned out to be real work
+> rather than missing copy: **item 1** (an explanation hidden in a tooltip no phone can
+> trigger) and **item 3** (a rating can climb but never fall). Both are now register
+> items. Pick the sheet back up when there is something worth writing it against.
 
 Each entry was tested the same way: **does the app ever say it, and could you infer it
 from the screen on a phone.** File references are the evidence, not decoration.
@@ -53,15 +58,26 @@ person with a fully ranked tier never sees the idea explained at all**.
 
 This is the founding idea of the app. It should not depend on a divider existing.
 
-### 3. Your star rating can change through play, and only one way.
+### 3. A rating can go UP through play and can never come down. That is a gap, not a rule.
 
 `promotionTarget`, `promoteDirect`, `completePromotion` and the **GOING UP A TIER** header
-(`DuelScreen.tsx:1061`). A film can leave the rating you gave it and move up a tier.
+(`DuelScreen.tsx:1061`). A film can leave the rating you gave it and climb a tier.
 
-**Nothing anywhere prepares you for this.** The first time it happens, a rating you set
-yourself changes, which reads as the app overruling you rather than as a feature. The
-sheet needs to say it happens, that King of the Hill is the only route, and that you
-confirm it before it lands.
+**There is no demotion anywhere in `ladder.ts`.** Verified: nothing lowers a rating, and
+`promotionTarget` only fires when a film has beaten every other film at its own rating.
+
+**The user's call, 20 Aug: this should go both ways.** He is right, and the consequence is
+bigger than an inconsistency. A one-directional system can only inflate. A film you
+overrated on import can never find its real level through play, no matter how many duels
+it loses. The only route down is editing the rating by hand, which is register item B2 and
+is parked.
+
+**So demotion is the play-based half of the editable list.** It is now a register item in
+its own right, not something the sheet can paper over.
+
+Whatever the sheet eventually says: promotion happens, King of the Hill is the only route,
+and you confirm it before it lands. Nothing currently prepares you for a rating you set
+yourself changing on its own.
 
 ### 4. "Settled", "taking shape", "barely tested" are the app's confidence, not your progress.
 
@@ -74,14 +90,21 @@ already names the trap: whatever this readout says, it must read as **the app's 
 about your taste**, never as **your ranking**. Nothing on screen currently makes that
 distinction.
 
-### 5. Rough Cut places films without settling them.
+### 5. Rough Cut breaks a tier into smaller piles. It does not rank inside them.
 
-`applyRoughCut` writes `score` and deliberately writes **no lock**. Correct: dealing a
-film into a pile is not a commitment, and no pair was compared so no duel can be logged.
+*(Rewritten. The first version said Rough Cut "places films without settling them", which
+is the mechanism described from the code's point of view and reads badly. The user's
+framing is the right one and is what the sheet should use.)*
 
-The consequence nobody is told: **you can make 185 decisions and the list still shows
-every one of them as UN-RNKD.** That looks like the work was thrown away. It was not, and
-the list does now order them by your piles, but nothing says so.
+`applyRoughCut` writes `score` and deliberately writes **no lock**. Dealing a film into a
+pile is not a commitment, and no pair was compared, so no duel is logged.
+
+The part nobody is told: **after a Rough Cut your films still read UN-RNKD in the list.**
+Nothing was thrown away, and the list does order them by the piles you made, but if you
+were expecting the labels to change then it looks like the work vanished.
+
+Lower priority than 1 to 4. The piles are visible in the order, so the confusion is a
+label rather than lost work.
 
 ---
 

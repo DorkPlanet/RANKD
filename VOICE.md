@@ -49,10 +49,15 @@ renders last in the row, so it is on the right. Nobody had looked.
 > Tap the pile this film belongs in. ~~Once it's in smaller piles you finally get to
 > decide where your taste lies.~~
 
-**6. Let the lengths differ.**
+**6. Let the lengths differ, and don't overcorrect into clipped fragments.**
 "One tier at a time. Winner moves on." is a complete mode description. The Fast Shuffle
-blurb next to it is four sentences. That contrast is correct. When every block is
-25 to 45 words, it reads as generated.
+blurb beside it is four sentences and needs to be. That contrast is the point.
+
+Every block landing at 25 to 45 words reads as generated. **So does every block landing
+at three.** Length should follow what the line is doing: a label is short, an idea that
+genuinely needs explaining gets the room to explain itself. Conversational does not mean
+terse. Aim for how you would actually say it out loud, which is sometimes a fragment and
+sometimes a proper sentence with a clause in it.
 
 **7. Ask rather than assert**, where the reader already holds the question.
 > Everyone has a favourite. What's yours?
