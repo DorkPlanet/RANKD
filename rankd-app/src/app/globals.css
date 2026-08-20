@@ -748,3 +748,56 @@ button * {
   .rc-bar-pulse { animation: none; }
   .rc-target-armed { transform: none; }
 }
+
+/* ── Turning a profile page ──────────────────────────────────────────────────
+ *
+ * The panels swap instantly, which reads as the screen being replaced rather
+ * than as a page turning — and a swipe with no motion behind it feels like the
+ * gesture missed. This is the same easing the sheets use, at a shorter
+ * duration: long enough to see the direction, short enough that tapping the
+ * other label twice in a row is not a wait.
+ *
+ * Direction matters. Arriving from the right and arriving from the left are
+ * different journeys, and playing one animation for both would tell you the
+ * page moved without telling you which way. */
+@keyframes panel-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes panel-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
+.panel-in-left {
+  animation: panel-in-left 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.panel-in-right {
+  animation: panel-in-right 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* ── The section rule ────────────────────────────────────────────────────────
+ *
+ * Blocks of text with nothing between them run together, and a plain full-width
+ * hairline is what every app reaches for. This fades out at both ends instead,
+ * so it reads as a breath rather than a border — the same treatment the old
+ * zone heading used, which is where the app already had an answer to this.
+ *
+ * A mask rather than a gradient background, so it takes whatever `--border`
+ * happens to be and cannot drift from it. */
+.rule-fade {
+  height: 1px;
+  background: var(--border);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-in-left,
+  .panel-in-right {
+    animation: none;
+  }
+}

@@ -14,18 +14,14 @@
 //
 // But nineteen genres do not read as nineteen slices, and they do not read as a
 // nineteen-row legend under a ring either — that is a wall of swatches. So there
-// are two panes, one swipe apart: the ring is the glance, the ranked list is the
-// detail, and everything appears in both.
+// are two panes, one swipe apart: the ring with its five biggest named, and the
+// full ranked list. Everything appears in one or the other.
 //
 // ── This is NOT the shelf pattern the profile is being cured of ────────────
 //
 // A shelf is an unknown number of items scrolling off into the dark, and there
 // were four of them stacked. This is exactly two pages that say so, which is
 // what earns it snapping and dots.
-//
-// Scroll-snap rather than a gesture handler: the browser already knows how to do
-// this, and it keeps working with a trackpad, a keyboard and a screen reader,
-// none of which a hand-rolled swipe would.
 
 import { useState } from "react";
 
@@ -38,9 +34,44 @@ import type { Film } from "@/lib/types";
 // pane is what actually identifies them.
 const HUES = ["#e7b53e", "#4c93ff", "#7CC4A6", "#C9739B", "#8E7BD0", "#E08A5B", "#6FB2C9", "#B8894F"];
 
-const R = 44;
-const STROKE = 18;
-const CIRC = 2 * Math.PI * R;
+const R_OUT = 53;
+const R_IN = 35;
+const MID = 60;
+
+/**
+ * One donut segment, as an explicit path.
+ *
+ * ── Why not a dashed circle ────────────────────────────────────────────────
+ *
+ * The first version drew each slice as a circle with a dash array — one visible
+ * dash and the rest gap, which is the usual trick for this. It broke here.
+ *
+ * With nineteen genres the smallest dashes are shorter than the stroke is wide,
+ * and a dash that short does not render as a short segment of the band: it
+ * renders as a wedge spilling out of it. Reported as a visual bug, and clearly
+ * visible as coloured triangles pointing into the middle of the ring.
+ *
+ * An arc has no dash pattern to go wrong. Out along the outer edge, in, back
+ * along the inner edge, close.
+ */
+function slicePath(fromTurn: number, toTurn: number): string {
+  // Start at the top and run clockwise, which is where a reader expects a chart
+  // to begin. Clamped a hair under a full turn so a single dominant genre can
+  // never ask for a 360-degree arc — that draws nothing at all, because both
+  // ends land on the same point.
+  const a0 = (fromTurn * 360 - 90) * (Math.PI / 180);
+  const a1 = (Math.min(toTurn, 0.9999) * 360 - 90) * (Math.PI / 180);
+  const big = toTurn - fromTurn > 0.5 ? 1 : 0;
+  const at = (r: number, a: number) =>
+    `${(MID + Math.cos(a) * r).toFixed(2)},${(MID + Math.sin(a) * r).toFixed(2)}`;
+  return [
+    `M${at(R_OUT, a0)}`,
+    `A${R_OUT},${R_OUT} 0 ${big} 1 ${at(R_OUT, a1)}`,
+    `L${at(R_IN, a1)}`,
+    `A${R_IN},${R_IN} 0 ${big} 0 ${at(R_IN, a0)}`,
+    "Z",
+  ].join(" ");
+}
 
 export function GenreRing({ films }: { films: Film[] }) {
   const [pane, setPane] = useState(0);
@@ -51,17 +82,18 @@ export function GenreRing({ films }: { films: Film[] }) {
   if (tally.length < 3) return null;
 
   const total = tally.reduce((n, g) => n + g.count, 0);
-  const lengths = tally.map((g) => (g.count / total) * CIRC);
-  // Each slice starts where the ones before it end. Summed per slice rather than
-  // carried in a running variable, because reassigning one during render is a
-  // lint error here and a real hazard under concurrent rendering. Nineteen
-  // genres is the ceiling, so the quadratic cost is nothing.
-  const slices = tally.map((g, i) => ({
-    ...g,
-    len: lengths[i],
-    offset: lengths.slice(0, i).reduce((n, l) => n + l, 0),
-    colour: HUES[i % HUES.length],
-  }));
+  // Cumulative start per slice, summed rather than carried in a running
+  // variable: reassigning one during render is a lint error here and a real
+  // hazard under concurrent rendering. Nineteen genres is the ceiling.
+  const slices = tally.map((g, i) => {
+    const before = tally.slice(0, i).reduce((n, x) => n + x.count, 0);
+    return {
+      ...g,
+      from: before / total,
+      to: (before + g.count) / total,
+      colour: HUES[i % HUES.length],
+    };
+  });
 
   return (
     <div>
@@ -75,9 +107,9 @@ export function GenreRing({ films }: { films: Film[] }) {
         {/* Pane one — the shape.
             A horizontal scroller is as tall as its tallest child, and the list
             pane is taller than the ring. Left to itself the ring sat at the top
-            with a block of dead space under it, which read as a rendering
-            fault. Centring turns that into even breathing room above and below,
-            with no height measuring and no state to keep in sync. */}
+            with a block of dead space under it, which read as a fault. Centring
+            turns that into even breathing room, with no height measuring and no
+            state to keep in sync. */}
         <div className="flex w-full flex-shrink-0 snap-center flex-col justify-center">
           <svg
             viewBox="0 0 120 120"
@@ -85,32 +117,21 @@ export function GenreRing({ films }: { films: Film[] }) {
             role="img"
             aria-label={`Your library by genre. ${tally.map((g) => `${g.name} ${g.count}`).join(", ")}.`}
           >
-            <g transform="translate(60,60) rotate(-90)" fill="none" strokeWidth={STROKE}>
-              {slices.map((s) => (
-                <circle
-                  key={s.name}
-                  r={R}
-                  stroke={s.colour}
-                  // The dash IS the slice; the rest of the circumference is the
-                  // gap. A literal gap would let the backdrop show through.
-                  strokeDasharray={`${s.len} ${CIRC - s.len}`}
-                  strokeDashoffset={-s.offset}
-                />
-              ))}
-            </g>
-            <text x="60" y="58" textAnchor="middle" fill="var(--text-hi)" fontSize="19" fontWeight="700">
+            {slices.map((s) => (
+              <path key={s.name} d={slicePath(s.from, s.to)} fill={s.colour} />
+            ))}
+            <text x={MID} y="58" textAnchor="middle" fill="var(--text-hi)" fontSize="19" fontWeight="700">
               {films.length.toLocaleString()}
             </text>
-            <text x="60" y="71" textAnchor="middle" fill="var(--dim)" fontSize="7" letterSpacing="1.4">
+            <text x={MID} y="71" textAnchor="middle" fill="var(--dim)" fontSize="7" letterSpacing="1.4">
               FILMS
             </text>
           </svg>
-          {/* The five biggest, named, under the ring.
-              A ring on its own is a shape with no words on it, and pane one was
-              a chart floating in a column of nothing. This is the summary the
-              mock had, and the "N more" it ends on is honest here in a way it
-              was not before: the rest are one swipe away and the line under it
-              says so. */}
+
+          {/* The five biggest, named, under the ring. A ring on its own is a
+              shape with no words on it. The "N more" row is honest here in a way
+              it was not when this was the only view: the rest are one swipe away
+              and the line underneath says so. */}
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1">
             {slices.slice(0, 5).map((s) => (
               <div key={s.name} className="flex items-center gap-2 text-[10px]">

@@ -100,6 +100,15 @@ export default function ProfileScreen({
 }) {
   // Which of the three zones is showing. See the tab bar for why.
   const [tab, setTab] = useState<0 | 1>(0);
+  // Which way the last change went, so a panel arrives from the side it came
+  // from. A single animation for both directions says the page moved without
+  // saying which way, which is the half of the message that matters.
+  const [dir, setDir] = useState<"left" | "right">("left");
+  const goTo = (next: 0 | 1) => {
+    if (next === tab) return;
+    setDir(next > tab ? "left" : "right");
+    setTab(next);
+  };
   // Where a horizontal drag began, so a flick can turn the page.
   //
   // Handlers rather than a scroll-snapping container, because the second panel
@@ -285,7 +294,7 @@ export default function ProfileScreen({
           // Comfortably horizontal, and far enough to be meant. Anything else is
           // a scroll, and stealing those would make the page feel broken.
           if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-          setTab((p) => (dx < 0 ? (Math.min(1, p + 1) as 0 | 1) : (Math.max(0, p - 1) as 0 | 1)));
+          goTo((dx < 0 ? Math.min(1, tab + 1) : Math.max(0, tab - 1)) as 0 | 1);
         }}
       >
         {/* 16/9 is a TMDb backdrop's native shape. Forcing one into a shorter
@@ -429,7 +438,7 @@ export default function ProfileScreen({
             {PANELS.map((label, i) => (
               <button
                 key={label}
-                onClick={() => setTab(i as 0 | 1)}
+                onClick={() => goTo(i as 0 | 1)}
                 className="-mb-px pb-2.5 text-[13px] transition-colors"
                 style={{
                   color: tab === i ? "var(--text-hi)" : "var(--dim)",
@@ -442,7 +451,7 @@ export default function ProfileScreen({
           </div>
 
           {tab === 0 && (
-            <>
+            <div key="p0" className={`panel-in-${dir}`}>
           {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
               The thesis. Three blocks that were peers of everything else on the
               screen — the fingerprint, the odds and ends, the people — now sit
@@ -454,7 +463,7 @@ export default function ProfileScreen({
               those are wrong. Renders nothing below three axes, so a thin
               library is simply the four lines it always was. */}
           {taste.length >= 3 && (
-            <Section title="Your shape">
+            <Section title="Your shape" first>
               <TasteChart axes={taste} was={wasShape} rankd={rankd} />
               {/* A key, because three outlines need one. Only the ones actually
                   drawn appear: offering a legend entry for a line that is not
@@ -475,7 +484,7 @@ export default function ProfileScreen({
           )}
 
           {/* Who you are, in four lines that the ranking can't tell you. */}
-          <Section title="Your taste">
+          <Section title="Your taste" first>
             <div className="space-y-1.5">
               {print.homeTier !== undefined && (
                 <Line label="You live at" value={starsFor(print.homeTier)} gold />
@@ -604,12 +613,12 @@ export default function ProfileScreen({
               </p>
             </Section>
           </div>
-            </>
+            </div>
           )}
         </div>
 
         {tab === 1 && (
-          <>
+          <div key="p1" className={`panel-in-${dir}`}>
         {/* The people, moved out of What you like.
             They sat with the taste data, which is where they came from, but
             they read as one more derived readout there. Here they are what
@@ -617,7 +626,7 @@ export default function ProfileScreen({
             would show somebody, which is what everything else on this panel
             is too. Renamed to cover both halves of that. */}
         {(people.director || people.actors.length > 0) && (
-          <Section title="Who you rate highest">
+          <Section title="Who you rate highest" first>
             {people.director && (
               <div className="mb-2 flex">
                 <PersonCard
@@ -826,7 +835,7 @@ export default function ProfileScreen({
           </section>
         )}
 
-          </>
+          </div>
         )}
 
       </div>
@@ -1381,9 +1390,34 @@ function Stat({ n, label, onClick }: { n: number; label: string; onClick: () => 
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * A block, with a rule above it.
+ *
+ * Sections used to be separated by space alone, which is why the page read as
+ * one long run of text: eight headings all the same size with nothing between
+ * them, so the eye had no edge to catch on.
+ *
+ * The rule fades out at both ends rather than running the full width. A hard
+ * line is a border and says "these are different things"; a fading one is a
+ * breath and says "same page, next idea", which is what these actually are. It
+ * is also the treatment the old zone heading used, so the app already had an
+ * answer to this before the zone headings were removed.
+ *
+ * `first` omits it. A rule under a tab bar that already has a line under it
+ * would be two rules a few pixels apart.
+ */
+function Section({
+  title,
+  first,
+  children,
+}: {
+  title: string;
+  first?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mt-7">
+    <section className={first ? "mt-6" : "mt-7"}>
+      {!first && <div className="rule-fade mb-6" />}
       <div className="mb-2.5 text-[10px] font-extrabold tracking-[0.18em] text-dim">{title.toUpperCase()}</div>
       {children}
     </section>
