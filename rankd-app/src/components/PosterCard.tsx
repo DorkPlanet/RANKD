@@ -41,13 +41,22 @@ export const TILT = 2;
  * mid-flight never fires either. Any of those leaks the clone permanently, with
  * its bitmap.
  *
- * One leak is invisible. A few hundred, which is what a long Fast Shuffle
- * session produces, is hundreds of megabytes of graphics memory held by a tab —
- * enough to take a phone down rather than just the page, which is exactly the
- * symptom reported on 21 Aug 2026: the whole handset locking up, screenshots
- * included, while the JS heap sat at 22MB.
+ * One leak is invisible. A few hundred would be hundreds of megabytes of
+ * graphics memory held by a tab, which is enough to take a phone down rather
+ * than just the page.
  *
- * So removal is unconditional now: `finish`, `cancel`, and a hard timer past the
+ * **This was NOT the cause of the Fast Shuffle lockup**, and the correction is
+ * worth keeping. It was written as the fix for it and the next reading disproved
+ * it outright: the DOM sat at 121 nodes during a freeze, against 680 in King of
+ * the Hill, which was working fine. Nothing was accumulating. The real cause was
+ * an unpaced backfill rewriting the whole library once per film — see
+ * `backfillPosters` in `lib/meta.ts`.
+ *
+ * Kept anyway, because removal that depends on an event which is not guaranteed
+ * to fire is wrong on its own terms. It just does not explain anything that has
+ * actually happened.
+ *
+ * Removal is unconditional now: `finish`, `cancel`, and a hard timer past the
  * animation's own length. `remove()` on an already-removed node does nothing, so
  * firing three times is free.
  */

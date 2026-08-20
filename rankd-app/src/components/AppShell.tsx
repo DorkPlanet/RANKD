@@ -32,7 +32,6 @@ import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
 import Coach from "./Coach";
 import { InstallPrompt } from "./InstallPrompt";
-import { Diag, useDiagFlag } from "./Diag";
 import SignInGate from "./SignInGate";
 import { fetchSession, hasSignedInBefore } from "@/lib/account";
 import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
@@ -118,7 +117,6 @@ function openingScreen(): Screen {
 }
 
 export default function AppShell() {
-  const diag = useDiagFlag();
   const [state, setState] = useState<RankState | null>(null);
   // `null` until the library lands, because the opening rule needs it and it is
   // not loaded on the first render — that is what keeps this component's first
@@ -929,9 +927,6 @@ export default function AppShell() {
           an invitation, and it must not be the first thing a new user meets or
           land on top of a coach mark explaining something else. */}
       {splashGone && !showCoach && <InstallPrompt />}
-      {/* Temporary. See the header of Diag.tsx; delete the file when the Fast
-          Shuffle freeze is understood. */}
-      {diag && <Diag />}
 
       {/* Last, so it is over everything — including any sheet that a restored
           screen might already have open. */}

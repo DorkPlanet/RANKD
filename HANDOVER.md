@@ -1265,6 +1265,39 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Gotchas that have already cost time
 
+- **A cache hit that skips the yield turns a paced loop into a blocking one
+  (Session M).** `backfillPosters` slept `gapMs` between films but skipped the
+  sleep entirely when the film was already cached — correct about network pacing,
+  wrong about the event loop. With a warm cache it awaited nothing real, so it
+  ran as one uninterrupted block over the whole queue.
+  - Compounded by the second half: it called `onFound` whenever the response
+    contained anything at all, which is true of every film that already has its
+    artwork. `onFound` lands in a `setState` that calls `saveFilms` — a full
+    stringify and synchronous `localStorage.setItem` of the entire library,
+    around half a megabyte. **So it rewrote the whole library once per film and
+    changed nothing each time.**
+  - Fast Shuffle is where it bit, because its queue is the whole POOL where King
+    of the Hill only ever walks the pile it is playing. **It locked the phone,
+    not the tab** — screenshots included.
+  - **The lesson for any paced walk: yield on every iteration, not only on the
+    slow ones, and never report a change that is not one.**
+- **`performance.memory.usedJSHeapSize` measures the JS heap and nothing else
+  (Session M).** Decoded images, canvas backing stores and graphics memory are
+  all invisible to it. A reading of 22MB while a phone is dying is not evidence
+  of health.
+- **An instrument that stops when the thing it measures stops is not an
+  instrument (Session M).** The first diagnostic overlay reported the worst frame
+  gap — but if the main thread blocks, the frame loop and the interval both stop,
+  so every figure freezes at its last good value. The mid-freeze screenshot read
+  46ms and looked perfect. **Any freeze detector needs a monotonic counter and an
+  input counter that a blocked thread cannot fake.**
+- **Three theories died before the right one, and the reading that killed each
+  came from the phone (Session M).** Engine cost was measured flat at 0.6ms over
+  300 duels; the clone-leak theory was disproved by a DOM count of 121 during a
+  freeze against 680 in a mode that was working. **Measure before fixing, and
+  when a fix does not land, suspect the theory rather than reaching for a
+  second patch.**
+
 - **A reload does not stop the page (Session K).** `location.reload()` leaves timers
   firing and fetches resolving until the navigation actually commits, and effect cleanups
   never run at all. "Delete everything" cleared storage and watched the credits sweep
