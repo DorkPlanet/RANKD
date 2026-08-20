@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+
+import { biggestMove, MIN_FOR_AXIS, tasteAxes, tasteFor, tasteShape } from "@/lib/taste";
+import { seedScore } from "@/lib/tiers";
+import type { Film } from "@/lib/types";
+
+const film = (id: string, over: Partial<Film> = {}): Film => ({
+  id,
+  title: id,
+  rating: 4,
+  score: seedScore(4),
+  ...over,
+});
+
+/** n placed films of one genre, scored down from `top`. */
+const run = (genre: string, n: number, top: number, rating: Film["rating"] = 4): Film[] =>
+  Array.from({ length: n }, (_, i) =>
+    film(`${genre}-${i}`, { rating, score: top - i, genres: [genre], lock: "hard" }),
+  );
+
+describe("what the axes measure", () => {
+  it("puts a genre you rank highly above one you rank low", () => {
+    const films = [...run("Drama", 3, 900), ...run("Horror", 3, 100)];
+    const shape = tasteShape(films, ["Drama", "Horror"]);
+    expect(shape.Drama).toBeGreaterThan(shape.Horror);
+  });
+
+  it("is about position, not how many you own", () => {
+    // Horror is the bigger pile and still sits lower, because its films are
+    // lower in the order. A library-share chart would say the opposite.
+    const films = [...run("Drama", 3, 900), ...run("Horror", 30, 200)];
+    const shape = tasteShape(films, ["Drama", "Horror"]);
+    expect(shape.Drama).toBeGreaterThan(shape.Horror);
+  });
+
+  it("ignores films nothing has placed", () => {
+    const placed = run("Drama", 3, 900);
+    const unplaced = Array.from({ length: 20 }, (_, i) =>
+      film(`d-un-${i}`, { score: 50 + i, genres: ["Drama"] }),
+    );
+    const withGhosts = tasteShape([...placed, ...unplaced], ["Drama"]);
+    // The 20 unplaced films sit at the bottom of the order and would drag the
+    // axis down if they counted. They must not.
+    expect(withGhosts.Drama).toBeGreaterThan(0.5);
+  });
+
+  it("drops a genre with too little behind it", () => {
+    const films = [...run("Drama", 3, 900), ...run("Western", MIN_FOR_AXIS - 1, 800)];
+    expect(Object.keys(tasteShape(films, ["Drama", "Western"]))).toEqual(["Drama"]);
+    expect(tasteAxes(films)).not.toContain("Western");
+  });
+
+  it("never invents an axis for a library with nothing placed", () => {
+    const films = Array.from({ length: 10 }, (_, i) => film(`u-${i}`, { genres: ["Drama"] }));
+    expect(tasteAxes(films)).toEqual([]);
+    expect(tasteFor(films)).toEqual([]);
+  });
+});
+
+describe("the shape is tier-correct without doing anything about tiers", () => {
+  // The film card had to scope its "Rankd says" number to a tier, because belief
+  // means are not calibrated across tiers. A rank needs no such treatment: tier
+  // bands never overlap, so a score sort is already a tier sort. This pins that.
+  it("ranks a whole low tier below a whole high tier", () => {
+    const films = [
+      ...run("Drama", 3, seedScore(5) + 2, 5),
+      ...run("Horror", 3, seedScore(1) + 2, 1),
+    ];
+    const shape = tasteShape(films, ["Drama", "Horror"]);
+    expect(shape.Drama).toBeGreaterThan(0.5);
+    expect(shape.Horror).toBeLessThan(0.5);
+  });
+});
+
+describe("what moved", () => {
+  it("names the genre that shifted most", () => {
+    const was = { Drama: 0.5, Horror: 0.5 };
+    const now = { Drama: 0.55, Horror: 0.9 };
+    expect(biggestMove(was, now)?.genre).toBe("Horror");
+  });
+
+  it("says nothing when nothing moved", () => {
+    const shape = { Drama: 0.5, Horror: 0.42 };
+    expect(biggestMove(shape, shape)).toBeNull();
+  });
+
+  it("ignores a hair of drift", () => {
+    // One placement in a big library nudges every axis. That is not news.
+    expect(biggestMove({ Drama: 0.5 }, { Drama: 0.502 })).toBeNull();
+  });
+
+  it("skips an axis the earlier shape never had", () => {
+    expect(biggestMove({}, { Drama: 0.9 })).toBeNull();
+  });
+});

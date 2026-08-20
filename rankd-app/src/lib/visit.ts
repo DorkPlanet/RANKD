@@ -25,6 +25,7 @@
 
 import { achievements } from "./achievements";
 import { isHard } from "./lock";
+import { tasteAxes, tasteShape } from "./taste";
 import type { Film } from "./types";
 
 const KEY = "rankd-visit-v1";
@@ -38,6 +39,19 @@ export interface Snapshot {
   settled: number;
   duels: number;
   badges: number;
+  /**
+   * The taste shape when this sitting began, for the chart's before/after.
+   *
+   * OPTIONAL, and every reader must cope without it. Records written before this
+   * field existed have no shape, and so does a first sitting — in both cases the
+   * chart simply draws one polygon instead of two, which is the correct answer
+   * to "compared with what?" rather than a degraded one.
+   *
+   * A snapshot, not a running total, so it advances once per sitting like
+   * everything else here. That is what makes "what tonight's ranking did" a
+   * question with an answer.
+   */
+  shape?: Record<string, number>;
 }
 
 export interface VisitRecord {
@@ -102,6 +116,9 @@ export function snapshotOf(films: readonly Film[], logRows: number): Omit<Snapsh
     settled: films.filter(isHard).length,
     duels: logRows,
     badges: achievements(films as Film[]).filter((b) => b.got).length,
+    // Axes come from the library rather than from this snapshot, so a shape
+    // taken now stays comparable with one taken later even as films are placed.
+    shape: tasteShape(films, tasteAxes(films)),
   };
 }
 

@@ -165,6 +165,9 @@ export default function AppShell() {
   const [runRequest, setRunRequest] = useState<RunRequest | null>(null);
   // What the last sitting amounted to. Read once, here, for the reason below.
   const [recap, setRecap] = useState<VisitDelta | null>(null);
+  // The taste shape as this sitting began, for the chart's before/after. Taken
+  // from the same snapshot the recap is, so both describe the same moment.
+  const [wasShape, setWasShape] = useState<Record<string, number> | undefined>(undefined);
   // ── The splash, in two flags ───────────────────────────────────────────────
   //
   // `held` is the deliberate part elapsing; `splashGone` is the fade having
@@ -276,6 +279,7 @@ export default function AppShell() {
     void loadLog().then((log) => {
       const record = openVisit(snapshotOf(films, log.length));
       setRecap(record ? deltaOf(record) : null);
+      setWasShape(record?.current.shape);
     });
   }, []);
 
@@ -793,6 +797,7 @@ export default function AppShell() {
           films={library}
           profile={profile}
           recap={recap}
+          wasShape={wasShape}
           onProfile={changeProfile}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}
           onSettings={() => setOverlay({ kind: "settings" })}

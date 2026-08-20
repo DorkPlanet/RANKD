@@ -31,6 +31,8 @@ import { liveViews } from "@/lib/card/live";
 import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
 import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
+import { biggestMove, tasteFor, tasteShape } from "@/lib/taste";
+import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
 
 /**
@@ -54,6 +56,7 @@ export default function ProfileScreen({
   films,
   profile,
   recap,
+  wasShape,
   onProfile,
   onInfo,
   onSettings,
@@ -67,6 +70,8 @@ export default function ProfileScreen({
   profile: Profile;
   /** What the previous sitting amounted to, or null when there is nothing to say. */
   recap?: VisitDelta | null;
+  /** The taste shape when this sitting began. Absent on a first sitting. */
+  wasShape?: Record<string, number>;
   onProfile: (p: Profile) => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
@@ -152,6 +157,13 @@ export default function ProfileScreen({
   const facts = useMemo(() => superlatives(films), [films]);
   const autos = useMemo(() => autoCollections(ranked, print, people), [ranked, print, people]);
   const badges = useMemo(() => achievements(films), [films]);
+  const taste = useMemo(() => tasteFor(films), [films]);
+  // What shifted since the sitting began. Null when nothing did, so the caption
+  // falls back to explaining the chart rather than announcing a non-event.
+  const moved = useMemo(
+    () => (wasShape ? biggestMove(wasShape, tasteShape(films, taste.map((a) => a.genre))) : null),
+    [wasShape, films, taste],
+  );
   const earned = badges.filter((b) => b.got).length;
 
   const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
@@ -306,6 +318,22 @@ export default function ProfileScreen({
               under one heading, because they are one argument made three ways
               and the page never said so. */}
           <Zone title="What you like" />
+
+          {/* The shape, above the lines that describe it in words.
+              It plots mean POSITION per genre, never win rate and never how much
+              of a genre you own — see the header of `taste.ts` for why both of
+              those are wrong. Renders nothing below three axes, so a thin
+              library is simply the four lines it always was. */}
+          {taste.length >= 3 && (
+            <Section title="Your shape">
+              <TasteChart axes={taste} was={wasShape} />
+              <p className="mt-1 text-center text-[10px] leading-snug text-dim">
+                {moved
+                  ? `${moved.genre} moved this sitting. Dashed is where you started.`
+                  : "How high each genre sits in your order."}
+              </p>
+            </Section>
+          )}
 
           {/* Who you are, in four lines that the ranking can't tell you. */}
           <Section title="Your taste">
