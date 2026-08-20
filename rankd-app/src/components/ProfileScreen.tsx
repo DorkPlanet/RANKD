@@ -13,7 +13,7 @@
 // goes stale. There's no circular avatar straddling a cover either — that shape
 // belongs to every social network, and this isn't one.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { FilmPicker } from "./FilmPicker";
 import { rankedFilms } from "@/lib/ladder";
@@ -35,6 +35,7 @@ import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, typ
 import { loadLog, type Judgement } from "@/lib/log";
 import { notesFor } from "@/lib/notes";
 import { GenreRing } from "./GenreRing";
+import { Passport } from "./Passport";
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
@@ -48,6 +49,17 @@ import type { Film } from "@/lib/types";
  * can be honest about the crop while you are still choosing.
  */
 type StillTarget = "banner" | "avatar";
+
+/**
+ * The two halves of a profile, in order.
+ *
+ * Three was one too many: "Where it stands" held a single tier chart, which is
+ * the detailed version of the counts already in the band at the top, so it read
+ * as an empty page you had to visit to find out was empty. It moved in with the
+ * rest of what the library is, and the page lost a tab rather than gaining
+ * filler to justify one.
+ */
+const PANELS = ["What you like", "What you've made"] as const;
 
 interface Collection {
   title: string;
@@ -87,7 +99,15 @@ export default function ProfileScreen({
   onToggleLog?: () => void;
 }) {
   // Which of the three zones is showing. See the tab bar for why.
-  const [tab, setTab] = useState<0 | 1 | 2>(0);
+  const [tab, setTab] = useState<0 | 1>(0);
+  // Where a horizontal drag began, so a flick can turn the page.
+  //
+  // Handlers rather than a scroll-snapping container, because the second panel
+  // is full of shelves that scroll sideways themselves — nesting one horizontal
+  // scroller inside another means every flick has to decide which of them it
+  // belongs to, and the answer at the end of a shelf is genuinely ambiguous.
+  // A gesture that ignores anything starting inside a shelf has no such problem.
+  const touch = useRef<{ x: number; y: number; inShelf: boolean } | null>(null);
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
   // ── One film-picking flow, two things it can be picking FOR ────────────────
@@ -247,7 +267,27 @@ export default function ProfileScreen({
     <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto pb-6"
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          // A drag that starts on a shelf belongs to the shelf.
+          const inShelf = !!(e.target as HTMLElement).closest?.(".overflow-x-auto");
+          touch.current = { x: t.clientX, y: t.clientY, inShelf };
+        }}
+        onTouchEnd={(e) => {
+          const start = touch.current;
+          touch.current = null;
+          if (!start || start.inShelf) return;
+          const t = e.changedTouches[0];
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          // Comfortably horizontal, and far enough to be meant. Anything else is
+          // a scroll, and stealing those would make the page feel broken.
+          if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+          setTab((p) => (dx < 0 ? (Math.min(1, p + 1) as 0 | 1) : (Math.max(0, p - 1) as 0 | 1)));
+        }}
+      >
         {/* 16/9 is a TMDb backdrop's native shape. Forcing one into a shorter
             box and letting object-cover crop it threw away 40% of the frame —
             which rather defeats choosing a particular scene. */}
@@ -336,7 +376,12 @@ export default function ProfileScreen({
               line on the screen about a particular afternoon; the button is what
               you do about either. Read as a unit they say something. Read as
               three they were a header, an orphan line, and no exit at all. */}
-          <div className="mt-4 rounded-2xl border border-border px-4 py-3.5">
+          {/* Rules, not a box.
+              A rounded panel round four numbers made them look like a widget
+              embedded in the page rather than part of it, and it was the last
+              bordered thing left up here after the rest of the de-boxing. The
+              app says this with a hairline everywhere else. */}
+          <div className="mt-5 border-y border-border py-3.5">
             <div className="flex gap-7">
               <Stat n={model.total} label="Films" onClick={onList} />
               <Stat n={model.placedCount} label="Settled" onClick={onList} />
@@ -370,16 +415,28 @@ export default function ProfileScreen({
 
               The identity block above stays put on all three: it is who this is,
               not one of the three things being said about them. */}
-          <div className="mt-6 flex gap-1.5">
-            {(["What you like", "What you've made", "Where it stands"] as const).map((label, i) => (
+          {/* Underlined text, tapped or swiped.
+              Pills read as buttons for something that should be flickable, and
+              a heading with dots beside it never said the other page existed.
+              A label that dims when it is not the one you are on says both: it
+              is a control and a position at once, which is why every app that
+              pages sideways ends up here.
+
+              The rule stands under the WORD, not the cell, so the mark is the
+              width of the thing it belongs to rather than of a column nobody
+              drew. */}
+          <div className="mt-6 flex gap-6 border-b border-border">
+            {PANELS.map((label, i) => (
               <button
                 key={label}
-                onClick={() => setTab(i as 0 | 1 | 2)}
-                className={`flex-1 rounded-full border py-2 text-[10px] font-extrabold tracking-[0.1em] transition-colors ${
-                  tab === i ? "border-gold bg-gold text-[#1c1405]" : "border-border text-dim"
-                }`}
+                onClick={() => setTab(i as 0 | 1)}
+                className="-mb-px pb-2.5 text-[13px] transition-colors"
+                style={{
+                  color: tab === i ? "var(--text-hi)" : "var(--dim)",
+                  borderBottom: `2px solid ${tab === i ? "var(--gold)" : "transparent"}`,
+                }}
               >
-                {label.toUpperCase()}
+                {label}
               </button>
             ))}
           </div>
@@ -499,49 +556,104 @@ export default function ProfileScreen({
             <GenreRing films={films} />
           </Section>
 
-          {(people.director || people.actors.length > 0) && (
-            <Section title="Your highest rated">
-              {people.director && (
-                <div className="mb-2 flex">
-                  <PersonCard
-                    role="Director"
-                    p={people.director}
-                    onClick={() =>
-                      setOpen({
-                        title: people.director!.name,
-                        blurb: "Every film of theirs in your library, your favourite first.",
-                        films: filmsOf(people.director!.name, true),
-                      })
-                    }
-                  />
-                </div>
-              )}
-              {/* Four, not one — a single actor says almost nothing about taste,
-                  and the fourth name is usually the interesting one. */}
-              <div className="grid grid-cols-2 gap-2">
-                {people.actors.map((a) => (
-                  <PersonCard
-                    key={a.name}
-                    role="Actor"
-                    p={a}
-                    onClick={() =>
-                      setOpen({
-                        title: a.name,
-                        blurb: "Every film of theirs in your library, your favourite first.",
-                        films: filmsOf(a.name, false),
-                      })
-                    }
-                  />
+          {/* Where they were made. Renders nothing until the credits sweep has
+              been round, so it appears by itself rather than needing anybody to
+              do something. See the header of Passport for why it is not yet a
+              map. */}
+          <Section title="Your world">
+            <Passport films={films} />
+          </Section>
+
+          {/* ── THE LEDGER ───────────────────────────────────────────────────
+              Last, and deliberately. This is the most detailed thing on the page
+              and the least likely to be why anyone opened it — so it is what you
+              arrive at by scrolling to the end, not what you wade through.
+
+              One chart doing two jobs. The bar's length is how many films are in
+              the tier — the shape of your taste — and the solid part is how many
+              you've settled. Two separate charts of the same ten tiers was one
+              chart too many, and no other app can draw this one because no other
+              app knows the difference between owning a film and placing it. */}
+          <div className="px-6">
+            <Section title="Your tiers">
+              <div className="space-y-2">
+                {tiers.map((t) => (
+                  <button key={t.tier} onClick={onList} className="flex w-full items-center gap-3 active:scale-[0.99]">
+                    <span className="w-[46px] flex-shrink-0 text-left text-[11px] text-gold">
+                      {starsFor(t.tier as Rating)}
+                    </span>
+                    <span className="flex h-3 flex-1 items-center">
+                      <span
+                        className="flex h-full overflow-hidden rounded-sm"
+                        style={{ width: `${(t.total / widest) * 100}%`, background: "var(--border)" }}
+                      >
+                        <span
+                          className="h-full transition-[width] duration-500"
+                          style={{ width: `${(t.placed / t.total) * 100}%`, background: "var(--gold)" }}
+                        />
+                      </span>
+                    </span>
+                    <span className="w-[58px] flex-shrink-0 text-right text-[10px] text-dim tabular-nums">
+                      {t.placed}/{t.total}
+                    </span>
+                  </button>
                 ))}
               </div>
+              <p className="mt-2 text-[10px] leading-snug text-dim">
+                Bar length is how many films you own at that rating. The gold is how many you&rsquo;ve settled.
+              </p>
             </Section>
-          )}
+          </div>
             </>
           )}
         </div>
 
         {tab === 1 && (
           <>
+        {/* The people, moved out of What you like.
+            They sat with the taste data, which is where they came from, but
+            they read as one more derived readout there. Here they are what
+            they actually are: a thing with a name and a face on it that you
+            would show somebody, which is what everything else on this panel
+            is too. Renamed to cover both halves of that. */}
+        {(people.director || people.actors.length > 0) && (
+          <Section title="Who you rate highest">
+            {people.director && (
+              <div className="mb-2 flex">
+                <PersonCard
+                  role="Director"
+                  p={people.director}
+                  onClick={() =>
+                    setOpen({
+                      title: people.director!.name,
+                      blurb: "Every film of theirs in your library, your favourite first.",
+                      films: filmsOf(people.director!.name, true),
+                    })
+                  }
+                />
+              </div>
+            )}
+            {/* Four, not one — a single actor says almost nothing about taste,
+                and the fourth name is usually the interesting one. */}
+            <div className="grid grid-cols-2 gap-2">
+              {people.actors.map((a) => (
+                <PersonCard
+                  key={a.name}
+                  role="Actor"
+                  p={a}
+                  onClick={() =>
+                    setOpen({
+                      title: a.name,
+                      blurb: "Every film of theirs in your library, your favourite first.",
+                      films: filmsOf(a.name, false),
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </Section>
+        )}
+
         {/* ── WHAT YOU'VE MADE ─────────────────────────────────────────────
             Both shelves under one heading. They are the same kind of object —
             a set of films with a name — and the only difference is whether the
@@ -716,50 +828,7 @@ export default function ProfileScreen({
 
           </>
         )}
-        {tab === 2 && (
-          <>
-        {/* ── THE LEDGER ───────────────────────────────────────────────────
-            Last, and deliberately. This is the most detailed thing on the page
-            and the least likely to be why anyone opened it — so it is what you
-            arrive at by scrolling to the end, not what you wade through.
 
-            One chart doing two jobs. The bar's length is how many films are in
-            the tier — the shape of your taste — and the solid part is how many
-            you've settled. Two separate charts of the same ten tiers was one
-            chart too many, and no other app can draw this one because no other
-            app knows the difference between owning a film and placing it. */}
-        <div className="px-6">
-          <Section title="Your tiers">
-            <div className="space-y-2">
-              {tiers.map((t) => (
-                <button key={t.tier} onClick={onList} className="flex w-full items-center gap-3 active:scale-[0.99]">
-                  <span className="w-[46px] flex-shrink-0 text-left text-[11px] text-gold">
-                    {starsFor(t.tier as Rating)}
-                  </span>
-                  <span className="flex h-3 flex-1 items-center">
-                    <span
-                      className="flex h-full overflow-hidden rounded-sm"
-                      style={{ width: `${(t.total / widest) * 100}%`, background: "var(--border)" }}
-                    >
-                      <span
-                        className="h-full transition-[width] duration-500"
-                        style={{ width: `${(t.placed / t.total) * 100}%`, background: "var(--gold)" }}
-                      />
-                    </span>
-                  </span>
-                  <span className="w-[58px] flex-shrink-0 text-right text-[10px] text-dim tabular-nums">
-                    {t.placed}/{t.total}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[10px] leading-snug text-dim">
-              Bar length is how many films you own at that rating. The gold is how many you&rsquo;ve settled.
-            </p>
-          </Section>
-        </div>
-          </>
-        )}
       </div>
 
       <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} logging={logging} onToggleLog={onToggleLog} />
