@@ -64,7 +64,7 @@ const DUEL_STEPS: readonly TourStep[] = [
     id: "pick",
     target: "card",
     title: "Tap the one you prefer",
-    body: "These two have the same star rating from you. That group is a tier, and Rankd puts it in order. Which would you rather watch? Tap it.",
+    body: "These two have the same star rating from you. That group is a tier, and Rankd puts it in order. Not which is better, but which you'd rather watch. Tap it.",
   },
   {
     id: "flick",

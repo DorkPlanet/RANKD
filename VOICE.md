@@ -79,7 +79,7 @@ The problem was never bad sentences. It was **uniformity**. Watch for:
 
 | | Tell | Example that was cut |
 |---|---|---|
-| 1 | **Antithesis** — deny one thing to affirm another | "Not which film is better, but which you'd rather watch" |
+| 1 | **Antithesis, repeated** — deny one thing to affirm another, over and over | four of them in one tour |
 | 2 | Every block the same length | every tour body, 25 to 45 words |
 | 3 | Instructions justifying themselves | "which is the point of doing it this way" |
 | 4 | Fragment-for-emphasis as a beat | "No duels." "Tap it." "It lives under RNK." |
@@ -87,8 +87,11 @@ The problem was never bad sentences. It was **uniformity**. Watch for:
 | 6 | Nothing plain, funny or throwaway | the relentless quality is itself the tell |
 | 7 | **Explaining, never recognising** | the root of the other six |
 
-Tell 1 is the loudest. Four of them sat in one tour. A person writing on four different
-days would not reach for the same construction four times.
+**Tell 1 is about repetition, not the construction.** The user's call, and he is right:
+*"Not which is better, but which you prefer"* is good copy and it stays on the duel
+screen. What was wrong was four of them in one tour, each running long. A person writing
+on four different days would not reach for the same shape four times. **Use it once, keep
+it short, then find another way to say the next thing.**
 
 ---
 
@@ -108,7 +111,7 @@ days would not reach for the same construction four times.
 | Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work. | Large libraries can be daunting. Start dividing them into smaller groups, then compare from there. |
 | Rank a whole tier. Each winner keeps climbing until something beats it. | One tier at a time. Winner moves on. |
 | A director, an actor or a genre — just for the list and the picture. Changes nothing in your rankings. | A director, an actor or genre. Everyone has their favourite. Your rankings don't move. |
-| Not which film is better, but which you'd rather watch. Tap it. | Which would you rather watch? Tap it. |
+| Not which film is better, but which you'd rather watch. Tap it. | Not which is better, but which you'd rather watch. Tap it. |
 | That could not be uploaded. | Couldn't be uploaded. |
 | Once it's in smaller piles you finally get to decide where your taste lies. Tap the pile this film belongs in, and the count above it goes up. | Tap the pile this film belongs in. The count above it goes up. |
 
