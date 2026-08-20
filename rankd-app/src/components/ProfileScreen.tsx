@@ -53,13 +53,28 @@ type StillTarget = "banner" | "avatar";
 /**
  * The two halves of a profile, in order.
  *
- * Three was one too many: "Where it stands" held a single tier chart, which is
+ * The names are the user's and they draw the real line: **taste is what the data
+ * says about you, results are what you chose.** The shape, the genres, the
+ * countries, the tiers — none of those were decided, they were measured. The
+ * cards, the saved rankings, the people you rate highest and the badges are all
+ * things you sat through duels to produce.
+ *
+ * "What you like" and "What you've made" missed that, and the second one got
+ * worse when the people moved in: nobody MADE a favourite director.
+ *
+ * Three was one too many. "Where it stands" held a single tier chart, which is
  * the detailed version of the counts already in the band at the top, so it read
  * as an empty page you had to visit to find out was empty. It moved in with the
- * rest of what the library is, and the page lost a tab rather than gaining
- * filler to justify one.
+ * rest of what is measured, and the page lost a tab rather than gaining filler
+ * to justify one.
  */
-const PANELS = ["What you like", "What you've made"] as const;
+const PANELS = ["Your taste", "Your results"] as const;
+
+/** Matches the sheets. One easing across the app or the motion reads as two apps. */
+const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
+
+/** Past this fraction of the width, letting go turns the page rather than snapping back. */
+const TURN_AT = 0.22;
 
 interface Collection {
   title: string;
@@ -100,23 +115,27 @@ export default function ProfileScreen({
 }) {
   // Which of the three zones is showing. See the tab bar for why.
   const [tab, setTab] = useState<0 | 1>(0);
-  // Which way the last change went, so a panel arrives from the side it came
-  // from. A single animation for both directions says the page moved without
-  // saying which way, which is the half of the message that matters.
-  const [dir, setDir] = useState<"left" | "right">("left");
-  const goTo = (next: 0 | 1) => {
-    if (next === tab) return;
-    setDir(next > tab ? "left" : "right");
-    setTab(next);
-  };
-  // Where a horizontal drag began, so a flick can turn the page.
+  const trackRef = useRef<HTMLDivElement>(null);
+  const goTo = (next: 0 | 1) => setTab(next);
+
+  // ── The drag ───────────────────────────────────────────────────────────────
   //
-  // Handlers rather than a scroll-snapping container, because the second panel
-  // is full of shelves that scroll sideways themselves — nesting one horizontal
-  // scroller inside another means every flick has to decide which of them it
-  // belongs to, and the answer at the end of a shelf is genuinely ambiguous.
-  // A gesture that ignores anything starting inside a shelf has no such problem.
-  const touch = useRef<{ x: number; y: number; inShelf: boolean } | null>(null);
+  // A gesture that starts inside a shelf belongs to the shelf. Panel two scrolls
+  // sideways in places, and without this every flick at the end of a shelf would
+  // be ambiguous — the reader would have no way to know whether they were about
+  // to reach the next poster or the next page.
+  //
+  // `axis` is decided ONCE, on the first few pixels of movement, and then held.
+  // Deciding per-frame lets a diagonal drag flicker between scrolling the page
+  // and turning it, which feels broken in a way that is hard to name.
+  const touch = useRef<{ x: number; y: number; inShelf: boolean; axis: null | "x" | "y" } | null>(null);
+
+  const slideTo = (px: number, animate: boolean) => {
+    const el = trackRef.current;
+    if (!el) return;
+    el.style.transition = animate ? `transform 0.3s ${EASE}` : "none";
+    el.style.transform = `translateX(calc(${tab * -100}% + ${px}px))`;
+  };
   const [open, setOpen] = useState<Collection | null>(null);
   const [editing, setEditing] = useState(false);
   // ── One film-picking flow, two things it can be picking FOR ────────────────
@@ -277,24 +296,49 @@ export default function ProfileScreen({
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto pb-6"
+        // overflow-x hidden as well as y: setting one axis to auto makes the
+        // other compute to auto rather than visible, so the off-screen pane
+        // could be scrolled to sideways and the page would drift off its own
+        // gutter. The track is what moves; the scroller must not.
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6"
         onTouchStart={(e) => {
           const t = e.touches[0];
-          // A drag that starts on a shelf belongs to the shelf.
-          const inShelf = !!(e.target as HTMLElement).closest?.(".overflow-x-auto");
-          touch.current = { x: t.clientX, y: t.clientY, inShelf };
+          touch.current = {
+            x: t.clientX,
+            y: t.clientY,
+            inShelf: !!(e.target as HTMLElement).closest?.(".overflow-x-auto"),
+            axis: null,
+          };
+        }}
+        onTouchMove={(e) => {
+          const start = touch.current;
+          if (!start || start.inShelf) return;
+          const t = e.touches[0];
+          const dx = t.clientX - start.x;
+          const dy = t.clientY - start.y;
+          if (start.axis === null) {
+            // Not enough movement to tell yet. Waiting costs nothing and
+            // guessing costs the gesture.
+            if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+            start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+          }
+          if (start.axis !== "x") return;
+          // Resist at the ends rather than refusing, so the edge is felt.
+          const off = (tab === 0 && dx > 0) || (tab === 1 && dx < 0) ? dx * 0.25 : dx;
+          slideTo(off, false);
         }}
         onTouchEnd={(e) => {
           const start = touch.current;
           touch.current = null;
-          if (!start || start.inShelf) return;
-          const t = e.changedTouches[0];
-          const dx = t.clientX - start.x;
-          const dy = t.clientY - start.y;
-          // Comfortably horizontal, and far enough to be meant. Anything else is
-          // a scroll, and stealing those would make the page feel broken.
-          if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-          goTo((dx < 0 ? Math.min(1, tab + 1) : Math.max(0, tab - 1)) as 0 | 1);
+          if (!start || start.inShelf || start.axis !== "x") return;
+          const dx = e.changedTouches[0].clientX - start.x;
+          const width = trackRef.current?.clientWidth ?? 1;
+          const turn = Math.abs(dx) > width * TURN_AT;
+          const next = (turn ? (dx < 0 ? Math.min(1, tab + 1) : Math.max(0, tab - 1)) : tab) as 0 | 1;
+          // Always animate back to a whole page, whether that is the next one or
+          // the one it started on.
+          slideTo(0, true);
+          if (next !== tab) setTab(next);
         }}
       >
         {/* 16/9 is a TMDb backdrop's native shape. Forcing one into a shorter
@@ -450,8 +494,29 @@ export default function ProfileScreen({
             ))}
           </div>
 
-          {tab === 0 && (
-            <div key="p0" className={`panel-in-${dir}`}>
+          </div>
+
+          {/* ── One track, two panes, dragged ────────────────────────────────
+              Both panels are mounted and sitting side by side, and the track
+              slides. That is the only way a swipe can FOLLOW the finger:
+              rendering one panel at a time means there is nothing to the right
+              of the screen to pull into view, so the best it can do is play an
+              animation after you let go — which is what it did, and what read
+              as a jump.
+
+              The transform is written straight to the node while dragging
+              rather than held in state. A state update per touchmove is sixty
+              re-renders a second of a page this size, and the value is a
+              property of the DOM for the duration of the gesture anyway.
+
+              Panel one keeps the gutter it used to inherit; panel two does not
+              want one, because its shelves run full-bleed on purpose. */}
+          <div
+            ref={trackRef}
+            className="flex"
+            style={{ transform: `translateX(${tab * -100}%)`, transition: `transform 0.3s ${EASE}` }}
+          >
+            <div className="w-full flex-shrink-0 px-6">
           {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
               The thesis. Three blocks that were peers of everything else on the
               screen — the fingerprint, the odds and ends, the people — now sit
@@ -614,11 +679,8 @@ export default function ProfileScreen({
             </Section>
           </div>
             </div>
-          )}
-        </div>
-
-        {tab === 1 && (
-          <div key="p1" className={`panel-in-${dir}`}>
+            <div className="w-full flex-shrink-0">
+        <div className="px-6">
         {/* The people, moved out of What you like.
             They sat with the taste data, which is where they came from, but
             they read as one more derived readout there. Here they are what
@@ -628,7 +690,7 @@ export default function ProfileScreen({
         {(people.director || people.actors.length > 0) && (
           <Section title="Who you rate highest" first>
             {people.director && (
-              <div className="mb-2 flex">
+              <>
                 <PersonCard
                   role="Director"
                   p={people.director}
@@ -640,11 +702,11 @@ export default function ProfileScreen({
                     })
                   }
                 />
-              </div>
+              </>
             )}
             {/* Four, not one — a single actor says almost nothing about taste,
                 and the fourth name is usually the interesting one. */}
-            <div className="grid grid-cols-2 gap-2">
+            <div>
               {people.actors.map((a) => (
                 <PersonCard
                   key={a.name}
@@ -662,6 +724,7 @@ export default function ProfileScreen({
             </div>
           </Section>
         )}
+        </div>
 
         {/* ── WHAT YOU'VE MADE ─────────────────────────────────────────────
             Both shelves under one heading. They are the same kind of object —
@@ -835,8 +898,8 @@ export default function ProfileScreen({
           </section>
         )}
 
+            </div>
           </div>
-        )}
 
       </div>
 
@@ -1358,6 +1421,26 @@ function CollectionSheet({
   );
 }
 
+/**
+ * One person you rate highly, as a row.
+ *
+ * ── Why this stopped being a card ──────────────────────────────────────────
+ *
+ * It was a bordered tile in a two-up grid, and there is exactly one director.
+ * So the top row held a director and a hole, every time, for everybody — a gap
+ * that could never be filled because the data has one of the first thing and
+ * several of the second. A grid was the wrong container for a list that is
+ * 1-then-N by construction.
+ *
+ * Rows do not care how many there are. They also drop the border, which is the
+ * same de-boxing the stats band and the odds and ends have already had: the
+ * duel and list screens say everything with type and a hairline, and four
+ * different rounded rectangles on one page was most of why this one read as
+ * belonging to a different app.
+ *
+ * The rating sits right, tabular, so the column lines up down the page and can
+ * be compared without reading — which is the only reason the number is there.
+ */
 function PersonCard({
   role,
   p,
@@ -1370,12 +1453,15 @@ function PersonCard({
   return (
     <button
       onClick={onClick}
-      className="min-w-0 flex-1 rounded-xl border border-border px-3 py-2.5 text-left active:scale-[0.98]"
+      className="flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 active:opacity-70"
     >
-      <span className="block text-[9px] font-extrabold tracking-[0.16em] text-dim">{role.toUpperCase()}</span>
-      <span className="mt-1 block truncate text-sm text-text-hi">{p.name}</span>
-      <span className="block text-[10px] text-gold">
-        {p.avg.toFixed(1)}★ across {p.count}
+      <span className="w-[52px] flex-shrink-0 text-[9px] font-extrabold tracking-[0.14em] text-dim">
+        {role.toUpperCase()}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[15px] text-text-hi">{p.name}</span>
+      <span className="flex-shrink-0 text-[11px] tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
+      <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-[10px] tabular-nums text-dim">
+        {p.count} film{p.count === 1 ? "" : "s"}
       </span>
     </button>
   );
