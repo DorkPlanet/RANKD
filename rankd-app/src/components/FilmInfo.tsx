@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { beliefsWhenIdle } from "@/lib/beliefs";
+import { beliefsWhenIdle, seedOf } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { FixMatch } from "./FixMatch";
@@ -93,16 +93,32 @@ export function FilmInfo({
       // BOTH a position you chose and a position the duels imply, and until now
       // only one of them was ever visible.
       //
-      // Ranked over every film, like the list, so the two numbers are on the
-      // same scale and can be read against each other.
-      const order = [...pool].sort(
-        (a, b) => (beliefs.get(b.id)?.mean ?? 0) - (beliefs.get(a.id)?.mean ?? 0),
-      );
-      const at = order.findIndex((f) => f.id === film.id);
+      // ── Why this is tier-scoped, and why the obvious version was wrong ──────
+      //
+      // The first version sorted the whole library by belief mean. That prints a
+      // number the app would never act on. Beliefs live on the star scale where
+      // `PRIOR_SPREAD` is deliberately wide — "a soft starting point a handful of
+      // duels can move well past, not a cap" (`bayes.ts`) — so a much-duelled
+      // film really can out-mean a whole tier above it. But `shuffle.ts` projects
+      // beliefs back into the score bands by RE-SPREADING A TIER IN BELIEF ORDER,
+      // so a band is never escaped. Cross-tier means are not calibrated against
+      // each other; nothing ever compares a 1.5★ with a 4★.
+      //
+      // Shipped briefly and caught on a phone: a 1.5★ film read "app says #391".
+      //
+      // So order within the tier by belief, then offset by everything rated
+      // higher — the same shape `shuffle.ts` would produce. The number stays
+      // comparable with the list's because both count every film.
+      const above = pool.filter((f) => f.rating > film.rating).length;
+      const meanOf = (f: Film) => beliefs.get(f.id)?.mean ?? seedOf(f);
+      const within = pool
+        .filter((f) => f.rating === film.rating)
+        .sort((a, b) => meanOf(b) - meanOf(a) || a.title.localeCompare(b.title))
+        .findIndex((f) => f.id === film.id);
       setEvidence({
         duels: mine.length,
         confidence: confidenceOf(film, beliefs),
-        appRank: at >= 0 ? at + 1 : undefined,
+        appRank: within >= 0 ? above + within + 1 : undefined,
       });
     })();
     return () => {
@@ -158,19 +174,21 @@ export function FilmInfo({
                 Here rather than on a list row for the same reason the evidence
                 line is: rows are height-locked. `rankMap` rather than
                 `overallRank` so this number cannot disagree with the list. */}
+            {/* Two claims, so two lines. Run together they wrapped mid-phrase on
+                a phone and read as one confused sentence. */}
             <div className="mt-1.5 text-[11px] leading-snug">
               {rank === undefined ? (
-                <span className="text-dim">Not ranked yet</span>
+                <div className="text-dim">Not ranked yet</div>
               ) : (
                 <>
-                  <span className={isHard(film) ? "text-gold" : "text-dim"}>
+                  <div className={isHard(film) ? "text-gold" : "text-dim"}>
                     #{rank}, {isHard(film) ? "you placed it" : "the app placed it"}
-                  </span>
-                  {/* Both answers, side by side. Only worth printing for a film
+                  </div>
+                  {/* Both answers, one per line. Only worth printing for a film
                       YOU pinned: a soft lock's position IS the app's opinion, so
                       repeating it there would be the same number twice. */}
                   {isHard(film) && evidence?.appRank !== undefined && (
-                    <span className="text-dim"> · app says #{evidence.appRank}</span>
+                    <div className="text-dim">App says #{evidence.appRank}</div>
                   )}
                 </>
               )}
