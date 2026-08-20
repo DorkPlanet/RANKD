@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildList } from "@/lib/list";
+import { buildList, rankMap } from "@/lib/list";
 import { applyRoughCut, type Bucket } from "@/lib/roughCut";
 import { seedScore } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
@@ -100,5 +100,35 @@ describe("a tier nobody has touched", () => {
   it("orders equal scores the same way on every build, so rows cannot swap", () => {
     const films = [film("b", { title: "Brazil" }), film("a", { title: "Akira" })];
     expect(unplacedTitles(films)).toEqual(unplacedTitles([...films].reverse()));
+  });
+});
+
+// The film card shows a rank too, and it must be the SAME number the list drew.
+//
+// `overallRank` in ladder.ts looks like the helper for this and is not: it has
+// no title tiebreak and it numbers unplaced films as well, so a card built on
+// it would disagree with the list on ties and contradict the screen the reader
+// just came from. `rankMap` exists so both surfaces read one source.
+describe("rankMap", () => {
+  it("agrees with every number buildList draws", () => {
+    const films = [
+      film("a", { score: 8.5, lock: "hard" }),
+      film("b", { score: 8.1, lock: "soft" }),
+      film("c", { score: 7.4 }),
+      film("d", { rating: 3, score: 6.2, lock: "hard" }),
+      film("e", { rating: 3, score: 6.2, lock: "soft" }),
+      film("f", { rating: 3, score: 5.0 }),
+    ];
+    const map = rankMap(films);
+    for (const section of buildList(films).sections) {
+      for (const { film: f, rank } of section.placed) {
+        expect(map.get(f.id)).toBe(rank);
+      }
+    }
+  });
+
+  it("gives no number to a film nothing has placed", () => {
+    const films = [film("a", { score: 8.5, lock: "hard" }), film("b", { score: 7.0 })];
+    expect(rankMap(films).get("b")).toBeUndefined();
   });
 });

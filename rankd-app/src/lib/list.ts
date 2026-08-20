@@ -41,7 +41,16 @@ export interface ListModel {
 // placed films show one), and each gap is an unplaced film you can see sitting
 // right there. Tier bands never overlap, so a plain score sort is already
 // tier-correct: every 4★ outranks every 3.5★ without special-casing.
-export function buildList(films: Film[]): ListModel {
+/**
+ * Every placed film's number in the master order, exactly as the list draws it.
+ *
+ * Exported so the film card can show the SAME number rather than working out its
+ * own. `overallRank` in `ladder.ts` is NOT this number: it has no title
+ * tiebreak and it numbers unplaced films too, so a card using that helper would
+ * disagree with the list on ties and confidently contradict the screen the
+ * reader just came from.
+ */
+export function rankMap(films: Film[]): Map<string, number> {
   const ranks = new Map<string, number>();
   rankedFilms(films)
     // Equal scores would otherwise swap places between renders; title is stable.
@@ -49,6 +58,11 @@ export function buildList(films: Film[]): ListModel {
     .forEach((f, i) => {
       if (isPlaced(f)) ranks.set(f.id, i + 1);
     });
+  return ranks;
+}
+
+export function buildList(films: Film[]): ListModel {
+  const ranks = rankMap(films);
 
   const byTier = new Map<Rating, Film[]>();
   for (const f of films) {

@@ -7,13 +7,15 @@
 // carries the one honest statement about how much a placement rests on, which
 // lives here rather than on a list row because rows are height-locked.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { FixMatch } from "./FixMatch";
 import { confidenceOf } from "@/lib/shuffle";
+import { isHard } from "@/lib/lock";
+import { rankMap } from "@/lib/list";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 
@@ -84,6 +86,10 @@ export function FilmInfo({
     };
   }, [film, films]);
 
+  // The list's own numbering, not a second opinion about it. A guest is not in
+  // the library, so it has no rank and correctly reads as unranked.
+  const rank = useMemo(() => (films ? rankMap(films).get(film.id) : undefined), [films, film.id]);
+
   const crew = meta
     ? ([
         ["Director", meta.director],
@@ -115,6 +121,31 @@ export function FilmInfo({
             <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
             <div className="mt-1.5 text-[11px] font-bold tracking-[0.1em] text-gold">
               {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
+            </div>
+            {/* Where it sits, and WHO PUT IT THERE.
+                The list draws that difference in colour alone — gold and bold
+                for a hard lock, dim for a soft one — and carries the words in a
+                `title` attribute, which is a hover tooltip. There is no hover on
+                a phone, so on the only device this app is really used on the
+                distinction the whole product rests on had no label anywhere.
+                It also made Settings' "Drop the N the app placed" unreadable to
+                anyone who never learned the app places films at all.
+
+                Here rather than on a list row for the same reason the evidence
+                line is: rows are height-locked. `rankMap` rather than
+                `overallRank` so this number cannot disagree with the list. */}
+            <div className="mt-1.5 text-[11px] leading-snug">
+              {rank === undefined ? (
+                <span className="text-dim">Not ranked yet</span>
+              ) : isHard(film) ? (
+                <span className="text-gold">
+                  #{rank} in your list. You put it there.
+                </span>
+              ) : (
+                <span className="text-dim">
+                  #{rank} in your list. The app placed this one, so it can still move.
+                </span>
+              )}
             </div>
             {evidence && (
               <div className="mt-1.5 text-[11px] leading-snug text-dim">
