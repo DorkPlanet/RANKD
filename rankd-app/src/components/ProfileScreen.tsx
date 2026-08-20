@@ -33,17 +33,8 @@ import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
 import { loadLog, type Judgement } from "@/lib/log";
-import {
-  changedYourMind,
-  countriesOf,
-  decadeClash,
-  leastRead,
-  longestSitting,
-  overruledYourStars,
-  runtimeBias,
-  timeWatched,
-  whenYouRank,
-} from "@/lib/watching";
+import { notesFor } from "@/lib/notes";
+import { GenreRing } from "./GenreRing";
 import { beliefsWhenIdle } from "@/lib/beliefs";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
@@ -172,70 +163,18 @@ export default function ProfileScreen({
   const badges = useMemo(() => achievements(films), [films]);
   const taste = useMemo(() => tasteFor(films), [films]);
 
-  // The log-derived habits. Needs the log, so it arrives with `rankd` below
-  // rather than on the first paint — the section simply is not there until it
-  // does, which is the same answer a thin library gets.
+  // Named observations, not measurements.
+  //
+  // The first version of this reported percentages and was inert: a tendency
+  // with nothing in it to picture and nothing to disagree with. `notes.ts`
+  // holds the rule these follow now — a note must NAME something, and it must
+  // be able to be wrong about you.
+  //
+  // Needs the log, so it arrives with `rankd` below rather than on the first
+  // paint. Until it does the section simply is not there, which is the same
+  // answer a library too thin to say anything about gets.
   const [logRows, setLogRows] = useState<Judgement[] | null>(null);
-  const habits = useMemo(() => {
-    const out: { label: string; value: string; note?: string }[] = [];
-    const time = timeWatched(films);
-    if (time.minutes > 0) {
-      const days = time.minutes / 60 / 24;
-      out.push({
-        label: "Time spent",
-        value: days >= 1 ? `${days.toFixed(1)} days` : `${Math.round(time.minutes / 60)} hours`,
-        // Said out loud, because the figure is only true of the films whose
-        // runtime the app actually knows.
-        note: time.known < time.total ? `${time.known.toLocaleString()} of ${time.total.toLocaleString()}` : undefined,
-      });
-    }
-    const where = countriesOf(films);
-    if (where.list.length > 1) {
-      const top = where.list[0];
-      out.push({
-        label: "Countries",
-        value: `${where.list.length}`,
-        note: `${Math.round((top.films / where.known) * 100)}% ${top.code}`,
-      });
-    }
-    if (!logRows) return out;
-    const bias = runtimeBias(films, logRows);
-    if (bias) {
-      out.push({
-        label: "You pick the longer film",
-        value: `${Math.round((bias.longer / bias.of) * 100)}%`,
-        note: `of ${bias.of} duels`,
-      });
-    }
-    const flipped = changedYourMind(logRows);
-    if (flipped > 0) out.push({ label: "Changed your mind about", value: `${flipped} pairs` });
-    const overruled = overruledYourStars(films, logRows);
-    if (overruled > 0) out.push({ label: "Overruled your own stars", value: `${overruled} times` });
-    const clash = decadeClash(films, logRows);
-    if (clash) {
-      out.push({
-        label: `${clash.won} vs ${clash.lost}`,
-        value: clash.won,
-        note: `${clash.wins} of ${clash.of}`,
-      });
-    }
-    const when = whenYouRank(logRows);
-    if (when) {
-      const h = when.hour % 12 === 0 ? 12 : when.hour % 12;
-      out.push({ label: "You rank at", value: `${h}${when.hour < 12 ? "am" : "pm"}` });
-    }
-    const streak = longestSitting(logRows);
-    if (streak > 1) out.push({ label: "Longest sitting", value: `${streak} duels` });
-    const unread = leastRead(films, logRows);
-    if (unread) {
-      out.push({
-        label: "Rankd could never read",
-        value: unread.film.title,
-        note: `${unread.duels} duels`,
-      });
-    }
-    return out;
-  }, [films, logRows]);
+  const notes = useMemo(() => notesFor(films, logRows ?? []), [films, logRows]);
   // Rankd's own order over the same films, loaded off the interaction path.
   // `beliefsFor` fits the whole log, which is the expensive one — so this
   // resolves late and the chart draws your shape alone until it does, rather
@@ -481,36 +420,55 @@ export default function ProfileScreen({
               stack of unrelated readouts. The app's own language is a hairline
               rule and a tracked-caps label; these facts now use it like
               everything else does. */}
+          {/* Wrapping, not truncating. `Line` clips its value to one row, which
+              is right for "even-handed" and wrong for a film title — the live
+              page read "Cannibal Corpse: Centuries of Torme…". These values are
+              titles, so they take the same treatment as the notes below and the
+              page ends up at one weight throughout. */}
           {facts.length > 0 && (
             <Section title="Odds and ends">
-              <div className="space-y-1.5">
+              <div className="space-y-2.5">
                 {facts.map((f) => (
-                  <Line key={f.label} label={f.label} value={f.value} note={f.note} />
+                  <p key={f.label} className="text-[13px] leading-snug text-dim">
+                    {f.label} <span className="text-text-hi">{f.value}</span>
+                    {f.note ? <span className="text-dim"> · {f.note}</span> : null}
+                  </p>
                 ))}
               </div>
             </Section>
           )}
 
-          {/* ── How you watch, as opposed to what you own ────────────────────
-              Everything above this comes off the library, which means every
-              line of it could be computed by anyone holding the Letterboxd
-              export. These come off the DUEL LOG and the runtimes the app
-              fetched itself, so they are the first things on this page that are
-              about the reader rather than about their collection.
+          {/* ── What your list says about you ────────────────────────────
+              Everything above this comes off the library, which means anyone
+              holding the Letterboxd export could compute it. These come off the
+              ORDER and the duel log, so they are the first things on this page
+              about the reader rather than their collection.
 
-              Each one returns null under its own floor rather than printing a
-              percentage off nine answers, so a thin library shows fewer lines
-              instead of worse ones. See `lib/watching.ts` for which of these
-              the matchmaker can bias and which it cannot. */}
-          {habits.length > 0 && (
-            <Section title="How you watch">
-              <div className="space-y-1.5">
-                {habits.map((h) => (
-                  <Line key={h.label} label={h.label} value={h.value} note={h.note} />
+              Sentences, not a label-and-value row. The subjects are film titles,
+              and a title in a value column truncates — "Cannibal Corpse:
+              Centuries of Torme…" was the live version of that. Wrapping prose
+              with the named thing set brighter reads at one weight the whole way
+              down, which three type sizes per row never did. */}
+          {notes.length > 0 && (
+            <Section title="What your list says">
+              <div className="space-y-2.5">
+                {notes.map((n) => (
+                  <p key={n.id} className="text-[13px] leading-snug text-dim">
+                    {n.before} <span className="text-text-hi">{n.subject}</span>
+                    {/* No space before a full stop or a comma. A note whose tail
+                        begins with punctuation would otherwise read "the 2020s ."
+                        — which it did, on the first render of this. */}
+                    {/^[.,;:!?]/.test(n.after) ? n.after : ` ${n.after}`}
+                  </p>
                 ))}
               </div>
             </Section>
           )}
+
+          {/* Two panes, one swipe apart. See the header of GenreRing. */}
+          <Section title="Your library">
+            <GenreRing films={films} />
+          </Section>
 
           {(people.director || people.actors.length > 0) && (
             <Section title="Your highest rated">
