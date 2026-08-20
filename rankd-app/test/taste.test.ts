@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { biggestMove, MIN_FOR_AXIS, tasteAxes, tasteFor, tasteShape } from "@/lib/taste";
+import {
+  axisLabel,
+  biggestDisagreement,
+  biggestMove,
+  MIN_FOR_AXIS,
+  rankdShape,
+  tasteAxes,
+  tasteFor,
+  tasteShape,
+} from "@/lib/taste";
 import { seedScore } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
@@ -38,10 +47,10 @@ describe("what the axes measure", () => {
     const unplaced = Array.from({ length: 20 }, (_, i) =>
       film(`d-un-${i}`, { score: 50 + i, genres: ["Drama"] }),
     );
-    const withGhosts = tasteShape([...placed, ...unplaced], ["Drama"]);
-    // The 20 unplaced films sit at the bottom of the order and would drag the
-    // axis down if they counted. They must not.
-    expect(withGhosts.Drama).toBeGreaterThan(0.5);
+    // The 20 unplaced films would drag the axis down if they counted, and would
+    // change the denominator even if they sat at the top. Adding them must do
+    // nothing at all.
+    expect(tasteShape([...placed, ...unplaced], ["Drama"])).toEqual(tasteShape(placed, ["Drama"]));
   });
 
   it("drops a genre with too little behind it", () => {
@@ -91,5 +100,41 @@ describe("what moved", () => {
 
   it("skips an axis the earlier shape never had", () => {
     expect(biggestMove({}, { Drama: 0.9 })).toBeNull();
+  });
+});
+
+describe("Rankd's order, next to yours", () => {
+  // The two shapes must describe the SAME films, differing only in the ordering.
+  // Anything else compares two populations and calls the difference taste.
+  it("covers the same films as yours", () => {
+    const films = [...run("Drama", 4, 900), ...run("Horror", 4, 300)];
+    const axes = tasteAxes(films);
+    expect(Object.keys(rankdShape(films, [], axes)).sort()).toEqual(Object.keys(tasteShape(films, axes)).sort());
+  });
+
+  // The trap the film card hit: belief means are not calibrated across tiers, so
+  // rating has to lead. With no log at all every belief sits at its seed, and a
+  // low tier must still land below a high one.
+  it("never lets a low tier out-rank a high one", () => {
+    const films = [...run("Horror", 3, 10, 1), ...run("Drama", 3, 9000, 5)];
+    const shape = rankdShape(films, [], tasteAxes(films));
+    expect(shape.Drama).toBeGreaterThan(shape.Horror);
+  });
+
+  it("names the genre you and Rankd disagree about most", () => {
+    expect(biggestDisagreement({ Drama: 0.9, Horror: 0.5 }, { Drama: 0.4, Horror: 0.48 })?.genre).toBe("Drama");
+    expect(biggestDisagreement({ Drama: 0.9 }, { Drama: 0.4 })?.youHigher).toBe(true);
+  });
+
+  it("says nothing when you agree", () => {
+    const shape = { Drama: 0.7, Horror: 0.3 };
+    expect(biggestDisagreement(shape, shape)).toBeNull();
+  });
+});
+
+describe("axis labels", () => {
+  it("shortens the genre names that ran off the chart", () => {
+    expect(axisLabel("Science Fiction")).toBe("Sci-Fi");
+    expect(axisLabel("Drama")).toBe("Drama");
   });
 });

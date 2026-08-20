@@ -19,20 +19,28 @@
 // your order, not how it got there. Every bias above disappears, because a
 // position is the product of decisions you actually kept.
 //
-// ── Why positions rather than beliefs ──────────────────────────────────────
+// ── Two orders, one population ─────────────────────────────────────────────
 //
-// `bayes.ts` holds a mean per film and it is tempting to average those instead.
-// It is the same trap the film card hit: `PRIOR_SPREAD` is deliberately wide, so
-// a much-duelled film can out-mean a whole tier above it, while `shuffle.ts`
-// re-spreads within a band and never lets one be escaped. Cross-tier means are
-// not calibrated against each other; nothing ever duels a 1.5-star against a
-// 4-star.
+// There are two answers to "where does this film belong": the one you committed
+// to, and the one the evidence implies. Both are drawn, over the SAME set of
+// placed films and the same denominator, so the only difference between the two
+// shapes is the ordering. Anything else would be comparing two populations and
+// calling the difference taste.
 //
-// A rank is already tier-correct, because tier bands never overlap and a score
-// sort is therefore a tier sort. Using positions sidesteps the whole problem.
+// Rankd's order is tier-scoped, and that is not a detail. `PRIOR_SPREAD` is
+// deliberately wide, so a much-duelled film can out-mean a whole tier above it,
+// while `shuffle.ts` re-spreads within a band and never lets one be escaped.
+// Sorting the library by raw belief mean produces a position Rankd would never
+// act on — it shipped on the film card for one afternoon and printed a 1.5-star
+// film at #391. Rating first, belief second, is the order Rankd would actually
+// apply.
 
+import { beliefsFor } from "./beliefs";
+import type { Belief } from "./bayes";
+import { seedOf } from "./beliefs";
 import { genresIn } from "./genres";
-import { rankMap } from "./list";
+import { isPlaced } from "./lock";
+import type { Judgement } from "./log";
 import type { Film } from "./types";
 
 /** Below this a genre has nothing to say and is left off the chart entirely. */
@@ -41,10 +49,27 @@ export const MIN_FOR_AXIS = 3;
 /** How many axes a radar can carry before it stops being readable. */
 export const MAX_AXES = 8;
 
-/** A genre, and how high its films sit in your order. */
+/**
+ * Display names for the genres TMDb spells out at length.
+ *
+ * "Science Fiction" is fifteen characters and it ran off the right edge of the
+ * chart the first time this shipped — caught on a phone, and missed here because
+ * the geometry was checked against invented names rather than the real ones.
+ * Shortening beats shrinking the type or widening the dial, and "Sci-Fi" is what
+ * everybody calls it anyway.
+ */
+const SHORT: Record<string, string> = {
+  "Science Fiction": "Sci-Fi",
+  Documentary: "Docs",
+  "TV Movie": "TV",
+};
+
+export const axisLabel = (genre: string): string => SHORT[genre] ?? genre;
+
+/** A genre, and how high its films sit in an order. */
 export interface TasteAxis {
   genre: string;
-  /** 0 at the bottom of your order, 1 at the top. */
+  /** 0 at the bottom of the order, 1 at the top. */
   standing: number;
   /** Placed films behind this number. Never below `MIN_FOR_AXIS`. */
   count: number;
@@ -53,20 +78,34 @@ export interface TasteAxis {
 /** A whole shape, keyed by genre so two of them can be compared axis by axis. */
 export type TasteShape = Record<string, number>;
 
-/**
- * Where a film sits, as 0 to 1, with 1 the top of the list.
- *
- * Ranked against EVERY film, the same scope `buildList` numbers against, so a
- * standing here and a number on the list screen mean the same thing. Only placed
- * films have one.
- */
-function standings(films: readonly Film[]): Map<string, number> {
-  const ranks = rankMap(films as Film[]);
+/** Only films something has placed. Both orders run over exactly this set. */
+const placedOf = (films: readonly Film[]): Film[] => films.filter(isPlaced);
+
+/** An order turned into 0-to-1 standings, 1 being the top. */
+function standingsFrom(order: readonly Film[]): Map<string, number> {
+  // One film cannot be high or low relative to anything, so it sits at the top
+  // rather than dividing by zero.
+  const span = Math.max(1, order.length - 1);
   const out = new Map<string, number>();
-  // One film cannot be high or low relative to anything, so it sits mid.
-  const span = Math.max(1, films.length - 1);
-  for (const [id, rank] of ranks) out.set(id, 1 - (rank - 1) / span);
+  order.forEach((f, i) => out.set(f.id, 1 - i / span));
   return out;
+}
+
+/** Your order: the scores you committed to, best first. */
+export function yourOrder(films: readonly Film[]): Film[] {
+  return placedOf(films).sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+}
+
+/**
+ * Rankd's order: your star rating first, then what the duels imply inside it.
+ *
+ * Rating leads because a tier band is never escaped. See the header.
+ */
+export function rankdOrder(films: readonly Film[], beliefs: Map<string, Belief>): Film[] {
+  const meanOf = (f: Film) => beliefs.get(f.id)?.mean ?? seedOf(f);
+  return placedOf(films).sort(
+    (a, b) => b.rating - a.rating || meanOf(b) - meanOf(a) || a.title.localeCompare(b.title),
+  );
 }
 
 /**
@@ -74,42 +113,60 @@ function standings(films: readonly Film[]): Map<string, number> {
  *
  * Fixed from the library rather than from whatever happens to be placed, so the
  * chart keeps the same axes as you rank more and a shape taken an hour ago is
- * still comparable with one taken now. An axis that later falls below
- * `MIN_FOR_AXIS` simply has no value, rather than the chart changing shape
- * underneath the reader.
+ * still comparable with one taken now.
  */
 export function tasteAxes(films: readonly Film[]): string[] {
-  const placed = standings(films);
+  const placed = new Set(placedOf(films).map((f) => f.id));
   return genresIn(films)
-    .filter((g) => films.filter((f) => f.genres?.includes(g.name) && placed.has(f.id)).length >= MIN_FOR_AXIS)
+    .filter(
+      (g) => films.filter((f) => f.genres?.includes(g.name) && placed.has(f.id)).length >= MIN_FOR_AXIS,
+    )
     .slice(0, MAX_AXES)
     .map((g) => g.name);
 }
 
 /**
- * Each genre's mean standing, over the films you have actually placed.
+ * Each genre's mean standing within a given order.
  *
- * A genre sitting above 0.5 is one whose films you tend to rank above the middle
- * of your library. That is a claim about your order, which you made, rather than
- * about how much of the genre you own, which is what every competitor's version
- * of this chart plots and what a Letterboxd export alone can answer.
+ * A genre above 0.5 is one whose films sit above the middle. That is a claim
+ * about an order, which somebody made, rather than about how much of the genre
+ * you own, which is what every competitor's version plots and what a Letterboxd
+ * export alone can answer.
  */
-export function tasteShape(films: readonly Film[], axes: readonly string[]): TasteShape {
-  const placed = standings(films);
+export function shapeFrom(
+  films: readonly Film[],
+  order: readonly Film[],
+  axes: readonly string[],
+): TasteShape {
+  const standing = standingsFrom(order);
   const shape: TasteShape = {};
   for (const genre of axes) {
-    const mine = films.filter((f) => f.genres?.includes(genre) && placed.has(f.id));
+    const mine = films.filter((f) => f.genres?.includes(genre) && standing.has(f.id));
     if (mine.length < MIN_FOR_AXIS) continue;
-    shape[genre] = mine.reduce((sum, f) => sum + placed.get(f.id)!, 0) / mine.length;
+    shape[genre] = mine.reduce((sum, f) => sum + standing.get(f.id)!, 0) / mine.length;
   }
   return shape;
+}
+
+/** Your shape, which is what the profile draws in gold. */
+export function tasteShape(films: readonly Film[], axes: readonly string[]): TasteShape {
+  return shapeFrom(films, yourOrder(films), axes);
+}
+
+/** Rankd's shape over the same films, drawn alongside yours. */
+export function rankdShape(
+  films: readonly Film[],
+  log: readonly Judgement[],
+  axes: readonly string[],
+): TasteShape {
+  return shapeFrom(films, rankdOrder(films, beliefsFor(films, log)), axes);
 }
 
 /** Axes and values together, for a caller that wants to draw one shape. */
 export function tasteFor(films: readonly Film[]): TasteAxis[] {
   const axes = tasteAxes(films);
   const shape = tasteShape(films, axes);
-  const placed = standings(films);
+  const placed = new Set(placedOf(films).map((f) => f.id));
   return axes
     .filter((g) => shape[g] !== undefined)
     .map((genre) => ({
@@ -140,6 +197,22 @@ export function biggestMove(
     const move = Math.abs(now[genre] - from);
     if (move < MOVED) continue;
     if (!best || move > Math.abs(best.to - best.from)) best = { genre, from, to: now[genre] };
+  }
+  return best;
+}
+
+/** The genre you and Rankd disagree about most, for the caption under the chart. */
+export function biggestDisagreement(
+  yours: TasteShape,
+  theirs: TasteShape,
+): { genre: string; gap: number; youHigher: boolean } | null {
+  let best: { genre: string; gap: number; youHigher: boolean } | null = null;
+  for (const genre of Object.keys(yours)) {
+    const other = theirs[genre];
+    if (other === undefined) continue;
+    const gap = Math.abs(yours[genre] - other);
+    if (gap < MOVED) continue;
+    if (!best || gap > best.gap) best = { genre, gap, youHigher: yours[genre] > other };
   }
   return best;
 }

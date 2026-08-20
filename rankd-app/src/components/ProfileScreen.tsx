@@ -31,7 +31,8 @@ import { liveViews } from "@/lib/card/live";
 import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
 import { achievements } from "@/lib/achievements";
 import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
-import { biggestMove, tasteFor, tasteShape } from "@/lib/taste";
+import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
+import { loadLog } from "@/lib/log";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
 
@@ -158,6 +159,27 @@ export default function ProfileScreen({
   const autos = useMemo(() => autoCollections(ranked, print, people), [ranked, print, people]);
   const badges = useMemo(() => achievements(films), [films]);
   const taste = useMemo(() => tasteFor(films), [films]);
+  // Rankd's own order over the same films, loaded off the interaction path.
+  // `beliefsFor` fits the whole log, which is the expensive one — so this
+  // resolves late and the chart draws your shape alone until it does, rather
+  // than holding the screen for a second opinion.
+  const [rankd, setRankd] = useState<TasteShape | undefined>(undefined);
+  useEffect(() => {
+    let dead = false;
+    if (taste.length < 3) return;
+    void loadLog().then((log) => {
+      if (dead) return;
+      setRankd(rankdShape(films, log, taste.map((a) => a.genre)));
+    });
+    return () => {
+      dead = true;
+    };
+  }, [films, taste]);
+  // Where you and Rankd part company, for the caption.
+  const disagree = useMemo(
+    () => (rankd ? biggestDisagreement(tasteShape(films, taste.map((a) => a.genre)), rankd) : null),
+    [rankd, films, taste],
+  );
   // What shifted since the sitting began. Null when nothing did, so the caption
   // falls back to explaining the chart rather than announcing a non-event.
   const moved = useMemo(
@@ -326,11 +348,21 @@ export default function ProfileScreen({
               library is simply the four lines it always was. */}
           {taste.length >= 3 && (
             <Section title="Your shape">
-              <TasteChart axes={taste} was={wasShape} />
-              <p className="mt-1 text-center text-[10px] leading-snug text-dim">
+              <TasteChart axes={taste} was={wasShape} rankd={rankd} />
+              {/* A key, because three outlines need one. Only the ones actually
+                  drawn appear: offering a legend entry for a line that is not
+                  on the chart is how a reader starts hunting for it. */}
+              <div className="mt-1 flex justify-center gap-3 text-[9px] tracking-[0.08em] text-dim">
+                <span className="text-gold">● YOURS</span>
+                {rankd && <span className="text-accent">● RANKD</span>}
+                {moved && <span>◌ WHERE YOU STARTED</span>}
+              </div>
+              <p className="mt-1.5 text-center text-[10px] leading-snug text-dim">
                 {moved
-                  ? `${moved.genre} moved this sitting. Dashed is where you started.`
-                  : "How high each genre sits in your order."}
+                  ? `${moved.genre} moved this sitting.`
+                  : disagree
+                    ? `You rate ${disagree.genre} ${disagree.youHigher ? "higher" : "lower"} than your duels do.`
+                    : "How high each genre sits in your order."}
               </p>
             </Section>
           )}
