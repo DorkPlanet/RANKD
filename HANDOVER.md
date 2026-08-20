@@ -18,8 +18,7 @@ Claude** — self-granting is refused, correctly — so any change to that list 
 
 **State (17 Aug 2026):** Session L, closed. Everything is committed, pushed to
 `origin/master`, and deployed to production. There is no side branch — `master` is what is
-live. Deploy verified by grepping the live bundle for four strings added this session, not
-by a 200.
+live. Deploy verified against the live bundle and the deployed commit, never by a 200.
 
 **THE APP IS NOW GATED BEHIND SIGN-IN.** `SignInGate.tsx`, rendered by `AppShell` before
 any screen. This reverses the oldest assumption in the codebase — that the app works fully
@@ -28,7 +27,7 @@ signed-out was deleted**, deliberately: the gate is one line, and lifting it sta
 line. Read `SignInGate.tsx`'s header before arguing with it, and
 "Remove the signed-out code paths" in `POTENTIAL-FEATURES.md` before deleting anything.
 
-**472 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
+**476 tests, typecheck clean, `next build` clean, lint at 2 problems in `src`** — both are
 `AppShell` set-state-in-effect errors. **That is the baseline. Do not "fix" them, and do
 not add a third.** They read `localStorage`, which does not exist on the server, so moving
 them into `useState` initialisers passes lint and silently tears hydration. The comment
@@ -330,6 +329,33 @@ Seven user reports, four root causes. Plan at
   recommendation to wait until an account buys something beyond sync — and with the note
   that two of the four items should probably survive regardless, because making sign-in
   mandatory makes the offline problem worse, not better.
+
+**Session L, part two — Rough Cut gets a range, and two bugs that came with it.**
+
+- **Rough Cut was the one mode locked to a single tier.** The climb and Fast Shuffle both
+  had a range; Rough Cut did not, which made it useless for the case it is best at — two
+  thin neighbouring tiers that together are worth one pass. Same `RangeSlider`.
+- **`applyRoughCut` had to change first, and this is the part worth reading.** It took ONE
+  tier's band bounds (`tierMin(tier)`/`tierMax(tier)`) and scored every film against them.
+  Correct while a pass could only cover one tier; **silently re-rating the moment it
+  cannot**, because a score inside a band IS the star rating to everything downstream — a
+  3★ film sorted during a 4★-anchored pass would have been written a 4★ score. It now
+  bands each film by its OWN rating, grouped by (rating, bucket). A single-tier pass is
+  byte-identical, which is what the existing tests prove.
+- **Rough Cut had no artwork fetch of its own.** The duel screen's backfill is gated on
+  `state.session`, and Rough Cut deliberately has none — no pile, no climb, no confirm. So
+  it was the only mode left waiting on the credits sweep, which walks the whole library at
+  one film per 400ms. On an unswept library that is a placeholder on every card, on the
+  screen most exposed to it: one film at a time, and you are asked to judge it. The range
+  made it visible rather than causing it. It now runs the same fetch, in view order,
+  scoped to the pass's pool.
+- **And that fix was still only half of it.** The posters were arriving and landing in
+  `state.films` — but `RoughCut` captures its pool once when the pass starts and drew the
+  card straight out of that snapshot, so **every card kept the placeholder it was born
+  with** however many posters turned up behind it. The queue still decides which film and
+  in what order; the card is now looked up in the live library by id. **Two symptoms, two
+  causes, and fixing the first one alone looked like the fix had failed** — a pattern this
+  file has now recorded three times.
 
 **Session L — sync was barely running, and the chooser was answering the wrong question.**
 Plan at `C:\Users\jarra\.claude\plans\okay-good-now-linked-hanrahan.md`.
@@ -918,11 +944,18 @@ at `distributed-conjuring-oasis.md` still holds for item 3 below.
 **Session K took a bug block ahead of all of this and cleared it** — the wipe, the overlay
 stacking, the Log drawer's layering, the bottom seam and the drawer gap. Nothing was
 renumbered for it; those were fixes to shipped behaviour rather than new items, and they
-are written up under Landed. **Session K then took item 3 as well**, so with 1 and 4
-landed in Session G and 2 parked by the user's own decision, and 6 landed too, the top of
-this list is now **item 5 (profile visual pass)**, with **7 (resume a curated run)** the
-other live option — and 7 is now cheaper than it was, because `RunRequest` is the shape a
-resumed run should be rebuilt into.
+are written up under Landed.
+
+**Session L took no numbered item at all** — it went at sync (which turned out not to be
+running), the conflict chooser, and Rough Cut's range. All fixes and additions to shipped
+behaviour, written up under Landed. **The numbering below is unchanged since Session K.**
+
+**Where to start, as of 17 Aug 2026:** 1, 3, 4 and 6 have landed; 2 is parked by the
+user's own decision. That leaves **5 (profile visual pass)** and **7 (resume a curated
+run)** as the two live options, and **7 is the better first move** — it is contained, it
+finishes something half-built, and it got cheaper in Session K because `RunRequest` is now
+exactly the shape a resumed run rebuilds into. 5 needs a steer on visual direction before
+much can be done with it.
 
 1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
    per screen, revisitable from Settings. See the decision block above. The original entry

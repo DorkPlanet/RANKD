@@ -5,6 +5,9 @@ why it is parked, and what would have to be true first.
 
 This is a holding pen, not a roadmap. Nothing here is committed.
 
+**The ordered, scheduled work lives in `HANDOVER.md` under "Next, in order".** This file is
+what that list deliberately does not contain.
+
 ---
 
 ## The editable list
@@ -322,6 +325,40 @@ Smaller than it looks. Most of the app never knew about accounts:
 **Recommendation: leave this alone until 3 is true.** The cleanup buys a modest amount of
 code clarity and costs the ability to change your mind, and right now the ability to
 change your mind is worth more.
+
+---
+
+## Rescued from the prototype spec
+
+Reconciled out of `rankd-spec.md` on 17 Aug 2026. That document is a frozen
+archive of the single-file prototype and its backlog was never reconciled — most
+of it turned out to be built, dead, or answered differently. These four were the
+only items with no equivalent in the live app, so they are recorded here rather
+than left stranded in a file nobody should be picking work from.
+
+None are scheduled. Each is small enough to do in an afternoon except the last.
+
+- **Log a film is still a multi-step flow** for what is usually "I watched a
+  thing, give it stars". Worth tracing `LogFilm.tsx` for whether the common case
+  can be one screen, with the rest behind a "more" affordance. The prototype note
+  said the same thing about a six-step version and it was never actioned.
+- **The profile shows full density from film two.** Zones, trophy case, live
+  cards, collections and the recap all render whether you have ranked 2 films or
+  200. Every screen has a zero state; nothing has a *thin* state. Worth a pass on
+  what a profile with ten placed films should actually show. Overlaps item 5 in
+  the handover's ordered list (the profile visual pass) and should probably be
+  folded into it rather than done separately.
+- **The film strip's "up next" is an approximation.** It grabs same-tier films
+  directly rather than asking the matchmaker what the next pair will really be.
+  A true lookahead means pre-computing one pair ahead instead of re-rolling on
+  each call — which is a real change to `matchmaker.ts`, and the reason it was
+  deferred in the prototype too.
+- **Multi-medium support — books, music.** Explicitly minimal priority then and
+  now. Recorded because the north star ("throw it where it belongs in the long
+  list of everything you've seen") is medium-agnostic, and because the engine
+  genuinely is: `ladder.ts` and `bayes.ts` know about ids and ratings, not films.
+  What is film-specific is TMDb, the poster path, and every piece of copy. That
+  is the honest scope: not the ranking, all the furniture.
 
 ---
 

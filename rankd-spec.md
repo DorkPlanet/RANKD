@@ -1,20 +1,35 @@
-# Rankd — Product Spec & Handoff
+# Rankd — Product Spec & Handoff (ARCHIVE)
 
-> **Read this first.** This document describes the **original single-file
-> prototype**, which has been replaced by the app in `rankd-app/`. Its function
-> names, CSS classes and screen structure no longer exist anywhere in the
-> codebase — don't go looking for them.
+> **Read this first, then mostly read something else.**
 >
-> It's kept for two reasons. The ranking mechanic it describes is the **direct
-> ancestor of the live engine**: the floor/cap window that collapses onto a
-> single placement is what `spotLo`/`spotHi` do in `rankd-app/src/lib/ladder.ts`
-> today, arrived at independently and for the same reasons. And the backlog
-> section still holds items that haven't been built. Read this for *why* the
-> ranking works the way it does; read the code for *how* it does it.
+> This document describes the **original single-file HTML prototype**. That
+> prototype is gone. Its function names, CSS classes, storage keys, colour
+> variables and screen structure exist nowhere in the codebase — do not go
+> looking for `loadFilmData`, `persist`, `pickPair`, `--card2`, `rankd-v1` or
+> `ranking-screen`. They were real once and they are not now.
+>
+> **Where the live truth lives, as of 17 Aug 2026:**
+>
+> | Question | File |
+> |---|---|
+> | What is built, what broke, what not to touch | `HANDOVER.md` |
+> | What is deliberately NOT built, and why | `POTENTIAL-FEATURES.md` |
+> | How the ranking actually works | `rankd-app/src/lib/ladder.ts` (61 tests) |
+> | What a duel is evidence of | `rankd-app/src/lib/log.ts`, `bayes.ts` |
+> | How to work on this | `CLAUDE.md` |
+>
+> **Why this file is kept.** The ranking mechanic it describes is the direct
+> ancestor of the live engine: the floor/cap window collapsing onto a single
+> placement is what `spotLo`/`spotHi` do in `ladder.ts` today, arrived at
+> independently and for the same reasons. Read it for *why* the ranking works
+> the way it does. Read the code for *how*.
+>
+> **The backlog below is prototype-era and has been reconciled** — see
+> "What happened to the old backlog" at the bottom. Nothing in it should be
+> picked up without checking there first; most of it is either built,
+> impossible against the current code, or answered differently.
 
-*Living document. Last updated: v125.*
-*This version written explicitly as a handoff — the project is moving from a single long chat conversation to Claude Code. See "Handoff notes" at the bottom for what a fresh session needs to know.*
-
+*Frozen as an archive on 17 Aug 2026. Last live update: v125.*
 ---
 
 ## Vision
@@ -177,3 +192,44 @@ Two specific failure patterns recurred enough to be worth naming explicitly:
 2. **Automated dead-code scanning is unreliable without real tooling.** A hand-rolled regex script found 101 false positives out of 103 "orphan" candidates in one pass this session, for reasons that weren't fully diagnosed — grep-based direct verification of each candidate was the only thing that actually worked. A real linter/dead-code-analysis tool (ESLint, ts-prune-equivalent, whatever fits) would do this far more reliably than anything hand-rolled in a chat.
 
 **Standing process that worked well and is worth keeping:** confirm scope before building anything nontrivial, show visual mockups for design decisions rather than guessing, verify every fix (syntax check, brace-balance check, direct grep for what changed) before shipping, and — most importantly — when a fix doesn't land correctly on the first or second try, stop patching the same spot and look for a structural cause shared across multiple symptoms instead.
+
+---
+
+## What happened to the old backlog
+
+Reconciled 17 Aug 2026, item by item, against the live app. Recorded because an
+un-reconciled backlog is worse than no backlog: it looks like work waiting to be
+done and is mostly work that is finished, impossible, or was answered
+differently. **Nothing above should be picked up without reading this.**
+
+### Built, differently and better
+
+| Old item | What actually happened |
+|---|---|
+| 1. Compare screen becomes the landing screen | Answered the other way. The **profile** is the landing screen once anything is placed (`openingScreen` in `AppShell.tsx`); the duel is where a new library lands. The popup button menu became the Play sheet. |
+| 4. Director/Actor/Genre as a true "best of", tier-scoped | Built as **curated runs** — a King of the Hill climb over an explicit pile, `crossTier`, writing no score and no lock. Not tier-scoped: it spans tiers deliberately, which is the whole point of ranking a director against themselves. `lib/curated.ts`. |
+| 8. Achievements are stale | Rebuilt. `lib/achievements.ts`, 34 badges, with a trophy case on the profile. |
+| 9. Empty stars should never render | Done. `starsFor` in `tiers.ts` emits filled stars and a half, never hollow. The one remaining `☆` is the *locked badge* marker in `Trophies.tsx`, which is deliberate. |
+| 12. Tutorial for first-time users | Built as **coach marks** over the live UI, per screen, revisitable from Settings. `lib/tour.ts`, `Coach.tsx`. |
+| No feedback after a choice | Answered with motion rather than numbers: the card follows the thumb, the loser fades, the winner flies, the rank face lifts. Deliberately not a score readout — see the decision block in `HANDOVER.md`. |
+| Palette too dark | Superseded entirely. The purple prototype palette is gone; the app is navy `#040c1a` with a brightness slider the user controls. |
+
+### Dead — the code it describes no longer exists
+
+- **3. Core ranking mechanic re-examination / `clampScore` / `confidencePct`.** The mechanic was rebuilt around an evidence log and a Bayesian fit (`log.ts`, `bayes.ts`, `beliefs.ts`). Cross-tier comparison now exists on purpose, via curated runs. Confidence is `confidenceFromSpread`, computed from belief spread rather than pair counts.
+- **5, 6.** VS badge and recent-picks timeline — both resolved in the prototype.
+- **7. "NEW" badge scoping.** That badge does not exist. The duel screen shows `UN-RNKD` / `CLIMBING` pills, which are about the run, not a global count.
+- **10. Orphaned `ranking-screen`.** Deleted with the prototype.
+- **11. Performance pass.** Superseded by specific, measured work: interned log rows, `content-visibility` on list rows, a content hash so an unchanged library is never re-uploaded, batched sweep writes.
+- **Known technical debt** (`layout:'v'`, the orphan screen) — both gone with the prototype.
+
+### Still genuinely open, and now tracked properly
+
+These were the only ideas here with nothing equivalent in the live app. They have
+been **moved into `POTENTIAL-FEATURES.md`** so they are tracked where the rest of
+the unbuilt work is, rather than stranded in an archive:
+
+- Log a film is still a multi-step flow for "I watched a thing, rate it".
+- The profile shows full density whether you have ranked 2 films or 200.
+- The film strip's "up next" is still an approximation rather than a real lookahead.
+- Multi-medium support (books, music).
