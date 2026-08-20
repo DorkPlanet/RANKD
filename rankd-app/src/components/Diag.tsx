@@ -80,9 +80,34 @@ const bytesOf = (): number => {
 };
 
 export function Diag() {
-  const [row, setRow] = useState({ stall: 0, store: 0, nodes: 0, heap: 0 });
+  const [row, setRow] = useState({ stall: 0, store: 0, nodes: 0, heap: 0, taps: 0, secs: 0 });
 
   useEffect(() => {
+    // ── The decisive pair of numbers ────────────────────────────────────────
+    //
+    // The first version of this readout could not measure its own death: if the
+    // main thread blocks, the frame loop stops and every figure freezes at its
+    // last healthy value. A screenshot taken mid-freeze therefore showed STALL
+    // 46ms and looked fine, which is exactly what happened.
+    //
+    // TAPS counts pointerdown on the window, in the capture phase, so nothing in
+    // the app can stop it. SECS is a plain wall-clock second counter.
+    //
+    //   · SECS stops advancing            → the main thread is genuinely blocked
+    //   · SECS advances, TAPS advances,
+    //     but the game does not respond   → the thread is alive and a handler is
+    //                                       dead, which is a completely different
+    //                                       bug in a completely different place
+    //
+    // Both are written by the same interval that writes the rest, so if the
+    // display is stale everything is stale together and there is no way to read
+    // a frozen figure as a live one.
+    let taps = 0;
+    const onTap = () => {
+      taps += 1;
+    };
+    window.addEventListener("pointerdown", onTap, true);
+    const started = Date.now();
     // Worst frame gap seen since the last readout. A main thread that is blocked
     // cannot paint, so this is the number that actually detects a freeze — and
     // it keeps its peak rather than averaging it away.
@@ -105,11 +130,14 @@ export function Diag() {
         store: bytesOf(),
         nodes: document.getElementsByTagName("*").length,
         heap: mem ? Math.round(mem.usedJSHeapSize / 1_048_576) : 0,
+        taps,
+        secs: Math.round((Date.now() - started) / 1000),
       });
       worst = 0;
     }, 1000);
 
     return () => {
+      window.removeEventListener("pointerdown", onTap, true);
       cancelAnimationFrame(raf);
       clearInterval(timer);
     };
@@ -131,7 +159,9 @@ export function Diag() {
         whiteSpace: "pre",
       }}
     >
-      {`STALL ${row.stall}ms\nSTORE ${(row.store / 1024).toFixed(0)}KB\nNODES ${row.nodes}\nHEAP  ${row.heap || "-"}MB`}
+      {`SECS  ${row.secs}
+TAPS  ${row.taps}
+STALL ${row.stall}ms\nSTORE ${(row.store / 1024).toFixed(0)}KB\nNODES ${row.nodes}\nHEAP  ${row.heap || "-"}MB`}
     </div>
   );
 }
