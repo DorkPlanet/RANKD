@@ -729,8 +729,9 @@ this is what you have left kinda idea."
   backdrop arrives dim, so the banner's gradient left it blazing directly under the header,
   fighting the wordmark. The new scrim is heavy at the top, open through the middle where
   the artwork earns its place, and solid at the foot so the offer reads at a glance.
-- **It draws no chart, deliberately.** A tier map was built for this app twice and
-  rejected twice as "chunky". The counts ARE the readout: `13 of 14 still to rank`.
+- **It draws no chart.** The counts ARE the readout here: `13 of 14 still to rank`.
+  This is about THIS screen, where the fact is a number. The blanket "no charts anywhere"
+  rule that used to sit behind it was lifted on 20 Aug 2026 — see the Motion section.
 - **The standing line is allowed to be static**, unlike the library bars `RunStatus` had
   to drop. Nothing is happening on this screen — it is a position, not a progress bar.
 - **`lastTier` derives the resume from the newest row in the LOG,** not from stored state,
@@ -892,13 +893,18 @@ of order from what I picked".
 
 ### The duel screen's top zone (Session F)
 
-- **This app speaks in TYPE, not graphics.** A tier map was built twice — ten rounded
-  columns, then a 2px segmented hairline — and rejected both times ("chunky", "the app
-  is eloquent film not Chungo bar"). The only non-type elements here are hairline
-  SEPARATORS and the brand rules, and neither carries data. **Before drawing a chart in
-  this app, check whether a number in an existing control would do.** It did: tier
-  progress now reads `77/134` in the Jump menu, which is zero new furniture and appears
-  exactly when you are choosing where to go.
+- ~~**This app speaks in TYPE, not graphics.**~~ **LIFTED by the user, 20 Aug 2026.**
+  The entry said a tier map had been built twice and rejected both times ("chunky", "the
+  app is eloquent film not Chungo bar"), and concluded that a chart should never be drawn
+  without first checking whether a number in an existing control would do.
+  **It is no longer a rule. Do not reinstate it from git history.**
+  - What was true stays true: those two tier maps were about PROGRESS, on the duel
+    screen, and a number did the job better. Tier progress still reads `77/134` in the
+    Jump menu and should stay that way.
+  - What was wrong was generalising from that to every chart in the app. A taste chart is
+    a different object with a different job, and the user has asked for one.
+  - The rule this replaces it with is narrower and still worth keeping: **a graphic has
+    to say something a number cannot.** Progress is a number. A shape is not.
 - **`tierProgress` / `leastRanked` in `progress.ts` are kept and tested.** `leastRanked`
   currently has no caller — deliberate, it is the ingredient an opening/resume selector
   (#10) would want.
