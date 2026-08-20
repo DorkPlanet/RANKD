@@ -66,7 +66,12 @@ export function FilmInfo({
   // it obviously beats has been asked a lot and told us very little. Shown here
   // rather than on a list row because list rows are height-locked (their heights
   // drive the section spacers and the tier jump) and this sheet is not.
-  const [evidence, setEvidence] = useState<{ duels: number; confidence: number } | null>(null);
+  const [evidence, setEvidence] = useState<{
+    duels: number;
+    confidence: number;
+    /** Where the evidence alone would put it, ignoring what you pinned. */
+    appRank?: number;
+  } | null>(null);
   useEffect(() => {
     let live = true;
     void (async () => {
@@ -77,9 +82,28 @@ export function FilmInfo({
         setEvidence({ duels: 0, confidence: 0 });
         return;
       }
-      const beliefs = await beliefsWhenIdle(films ?? [film], log);
+      const pool = films ?? [film];
+      const beliefs = await beliefsWhenIdle(pool, log);
       if (!live) return;
-      setEvidence({ duels: mine.length, confidence: confidenceOf(film, beliefs) });
+      // The app's own answer, kept separate from yours.
+      //
+      // A hard lock pins `score` and the model may never touch it, but the
+      // evidence keeps forming an opinion underneath regardless — `beliefs` is
+      // fitted from the log, not from the locks. So a film you placed carries
+      // BOTH a position you chose and a position the duels imply, and until now
+      // only one of them was ever visible.
+      //
+      // Ranked over every film, like the list, so the two numbers are on the
+      // same scale and can be read against each other.
+      const order = [...pool].sort(
+        (a, b) => (beliefs.get(b.id)?.mean ?? 0) - (beliefs.get(a.id)?.mean ?? 0),
+      );
+      const at = order.findIndex((f) => f.id === film.id);
+      setEvidence({
+        duels: mine.length,
+        confidence: confidenceOf(film, beliefs),
+        appRank: at >= 0 ? at + 1 : undefined,
+      });
     })();
     return () => {
       live = false;
@@ -137,14 +161,18 @@ export function FilmInfo({
             <div className="mt-1.5 text-[11px] leading-snug">
               {rank === undefined ? (
                 <span className="text-dim">Not ranked yet</span>
-              ) : isHard(film) ? (
-                <span className="text-gold">
-                  #{rank} in your list. You put it there.
-                </span>
               ) : (
-                <span className="text-dim">
-                  #{rank} in your list. The app placed this one, so it can still move.
-                </span>
+                <>
+                  <span className={isHard(film) ? "text-gold" : "text-dim"}>
+                    #{rank}, {isHard(film) ? "you placed it" : "the app placed it"}
+                  </span>
+                  {/* Both answers, side by side. Only worth printing for a film
+                      YOU pinned: a soft lock's position IS the app's opinion, so
+                      repeating it there would be the same number twice. */}
+                  {isHard(film) && evidence?.appRank !== undefined && (
+                    <span className="text-dim"> · app says #{evidence.appRank}</span>
+                  )}
+                </>
               )}
             </div>
             {evidence && (
