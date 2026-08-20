@@ -72,7 +72,18 @@ sometimes a proper sentence with a clause in it.
 place Rankd's copy already beats every competitor. It survives everything else on this
 page.
 
-**11. Don't say what the screen is already showing.**
+**11. It is called Rankd. Never "the app".**
+"App says #391" was shipped and cut the same day. The product has a name, and using it is
+the difference between a tool talking about itself in the third person and a thing with
+an opinion. Three surfaces had three vocabularies for one idea — "the app placed it",
+"Placed by the evidence", "Drop the N the app placed" — and they are now all Rankd.
+
+**12. A symbol you already taught beats a sentence.**
+The padlock means "settled, and you settled it" on the film strip. Reusing it on the film
+card cost no words at all and taught the same symbol twice. Look for one before writing a
+label.
+
+**13. Don't say what the screen is already showing.**
 The Rough Cut coach mark pointing at the RNK cell does not need to end "It's under RNK".
 The spotlight is doing it.
 

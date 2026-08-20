@@ -13,6 +13,7 @@ import { beliefsWhenIdle, seedOf } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { FixMatch } from "./FixMatch";
+import { LockIcon } from "./Icons";
 import { confidenceOf } from "@/lib/shuffle";
 import { isHard } from "@/lib/lock";
 import { rankMap } from "@/lib/list";
@@ -168,7 +169,7 @@ export function FilmInfo({
                 `title` attribute, which is a hover tooltip. There is no hover on
                 a phone, so on the only device this app is really used on the
                 distinction the whole product rests on had no label anywhere.
-                It also made Settings' "Drop the N the app placed" unreadable to
+                It also made Settings' "Drop the N Rankd placed" unreadable to
                 anyone who never learned the app places films at all.
 
                 Here rather than on a list row for the same reason the evidence
@@ -179,18 +180,26 @@ export function FilmInfo({
             <div className="mt-1.5 text-[11px] leading-snug">
               {rank === undefined ? (
                 <div className="text-dim">Not ranked yet</div>
-              ) : (
+              ) : isHard(film) ? (
                 <>
-                  <div className={isHard(film) ? "text-gold" : "text-dim"}>
-                    #{rank}, {isHard(film) ? "you placed it" : "the app placed it"}
+                  {/* A padlock rather than the words. It already means "settled,
+                      and you settled it" on the film strip (`Rolodex`), so
+                      reusing it teaches one symbol twice instead of inventing a
+                      second vocabulary for the same idea. The gold does the
+                      rest, and it is the same gold the list row uses. */}
+                  <div className="flex items-center gap-1.5 text-gold">
+                    <LockIcon />
+                    <span>#{rank}</span>
                   </div>
                   {/* Both answers, one per line. Only worth printing for a film
-                      YOU pinned: a soft lock's position IS the app's opinion, so
+                      YOU pinned: a soft lock's position IS Rankd's opinion, so
                       repeating it there would be the same number twice. */}
-                  {isHard(film) && evidence?.appRank !== undefined && (
-                    <div className="text-dim">App says #{evidence.appRank}</div>
+                  {evidence?.appRank !== undefined && (
+                    <div className="text-dim">Rankd says #{evidence.appRank}</div>
                   )}
                 </>
+              ) : (
+                <div className="text-dim">Rankd placed it at #{rank}</div>
               )}
             </div>
             {evidence && (

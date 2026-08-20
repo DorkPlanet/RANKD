@@ -348,7 +348,7 @@ function Row({
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
             isHard(film) ? "font-bold text-gold" : "font-normal text-dim"
           }`}
-          title={isHard(film) ? "You placed this" : "Placed by the evidence"}
+          title={isHard(film) ? "You placed this" : "Rankd placed this"}
         >
           {rank}
         </span>

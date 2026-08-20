@@ -341,7 +341,7 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           }}
           className={`${BTN} mb-2 w-full`}
         >
-          Drop the {soft.toLocaleString()} the app placed
+          Drop the {soft.toLocaleString()} Rankd placed
         </button>
       )}
 
