@@ -25,6 +25,48 @@ export const TILT = 2;
 // leaving rather than simply being replaced. Positioned from the element's
 // CENTRE and its untransformed size — a rotated element's bounding rect is the
 // axis-aligned box around it, which is bigger than the poster itself.
+/**
+ * Play a clone's animation and ALWAYS take the clone away afterwards.
+ *
+ * ── Why this is not just `addEventListener("finish")` ──────────────────────
+ *
+ * Every one of these clones is a `position: fixed` div holding a full-size
+ * poster, and a poster is a decoded bitmap — roughly a megabyte and a half of
+ * graphics memory that does NOT appear in `performance.memory.usedJSHeapSize`,
+ * because that measures the JS heap and nothing else.
+ *
+ * All four call sites used to remove the clone on the `finish` event alone. That
+ * event is not guaranteed: an animation on a backgrounded tab does not run, a
+ * cancelled animation fires `cancel` instead, and a page frozen or discarded
+ * mid-flight never fires either. Any of those leaks the clone permanently, with
+ * its bitmap.
+ *
+ * One leak is invisible. A few hundred, which is what a long Fast Shuffle
+ * session produces, is hundreds of megabytes of graphics memory held by a tab —
+ * enough to take a phone down rather than just the page, which is exactly the
+ * symptom reported on 21 Aug 2026: the whole handset locking up, screenshots
+ * included, while the JS heap sat at 22MB.
+ *
+ * So removal is unconditional now: `finish`, `cancel`, and a hard timer past the
+ * animation's own length. `remove()` on an already-removed node does nothing, so
+ * firing three times is free.
+ */
+function playOnce(clone: HTMLElement, keyframes: Keyframe[], options: KeyframeAnimationOptions): void {
+  const done = () => clone.remove();
+  try {
+    const anim = clone.animate(keyframes, options);
+    anim.addEventListener("finish", done);
+    anim.addEventListener("cancel", done);
+  } catch {
+    // No Web Animations, or animating threw. The clone must still go.
+  }
+  const ms = typeof options.duration === "number" ? options.duration : 0;
+  const delay = typeof options.delay === "number" ? options.delay : 0;
+  // Generous, so it never races a real finish and never becomes the thing that
+  // makes an animation look cut short.
+  setTimeout(done, ms + delay + 600);
+}
+
 function posterClone(el: HTMLElement, poster: string, ring: string): HTMLElement {
   const r = el.getBoundingClientRect();
   const w = el.offsetWidth || r.width;
@@ -104,9 +146,7 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
   const travel = Math.max(window.innerWidth, window.innerHeight);
   const spin = tilt + ux * 22; // start from the card's lean, then lean into the throw
   const clone = posterClone(el, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
-  clone
-    .animate(
-      [
+  playOnce(clone, [
         { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1, offset: 0 },
         {
           transform: `translate(${ux * travel * 0.3}px,${uy * travel * 0.3}px) rotate(${tilt + (spin - tilt) * 0.4}deg) scale(0.94)`,
@@ -118,10 +158,7 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
           opacity: 0,
           offset: 1,
         },
-      ],
-      { duration: 520, easing: "cubic-bezier(.2,.7,.3,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
+      ], { duration: 520, easing: "cubic-bezier(.2,.7,.3,1)" });
 }
 
 // The beaten challenger sinks and fades, revealing its replacement underneath,
@@ -131,15 +168,10 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
 // left-hand card in Fast Shuffle.
 export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TILT) {
   const clone = posterClone(el, poster, "0 8px 26px rgba(0,0,0,0.55)");
-  clone
-    .animate(
-      [
+  playOnce(clone, [
         { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1 },
         { transform: `translate(0,18px) rotate(${tilt}deg) scale(0.94)`, opacity: 0 },
-      ],
-      { duration: 320, easing: "cubic-bezier(.4,0,1,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
+      ], { duration: 320, easing: "cubic-bezier(.4,0,1,1)" });
 }
 
 // A `liftWinner` lived here — the chosen card swelling and fading in place, to
@@ -171,9 +203,7 @@ export function flyPosterTo(fromEl: HTMLElement, toEl: HTMLElement, poster: stri
   const a = centreOf(fromEl);
   const b = centreOf(toEl);
   const clone = posterClone(fromEl, poster, "0 10px 30px rgba(0,0,0,0.55)");
-  clone
-    .animate(
-      [
+  playOnce(clone, [
         { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
         // Lifts slightly on the way, so the path is an arc rather than a slide.
         {
@@ -182,10 +212,7 @@ export function flyPosterTo(fromEl: HTMLElement, toEl: HTMLElement, poster: stri
           offset: 0.55,
         },
         { transform: `translate(${b.x - a.x}px,${b.y - a.y}px) scale(0.12)`, opacity: 0, offset: 1 },
-      ],
-      { duration: 380, easing: "cubic-bezier(.35,.8,.4,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
+      ], { duration: 380, easing: "cubic-bezier(.35,.8,.4,1)" });
 }
 
 export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster: string) {
@@ -194,18 +221,13 @@ export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)");
-  clone
-    .animate(
-      [
+  playOnce(clone, [
         // Leaves at the challenger's lean and arrives at the climber's, so it
         // settles flush against the card it is replacing rather than crooked.
         { transform: `translate(0,0) rotate(${TILT}deg) scale(1)`, offset: 0 },
         { transform: `translate(${dx * 0.5}px,${dy * 0.5 - 14}px) rotate(0deg) scale(1.04)`, offset: 0.5 },
         { transform: `translate(${dx}px,${dy}px) rotate(${-TILT}deg) scale(1)`, offset: 1 },
-      ],
-      { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" },
-    )
-    .addEventListener("finish", () => clone.remove());
+      ], { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" });
 }
 
 export function PosterCard({
