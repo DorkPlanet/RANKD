@@ -122,7 +122,7 @@ export function CuratedPicker({
                 ? "Nothing by that name."
                 : // The honest empty state: genres and credits arrive with a
                   // film's artwork, so a young library genuinely knows little.
-                  "Nothing here yet — this fills in as your library learns who made each film."}
+                  "Nothing here yet. This fills in as your library learns who made each film."}
             </p>
           )}
           {/* Split on the tab rather than sniffing a property off the row: the

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     // Said out loud rather than failing obscurely inside `put`. Same reasoning
     // as the feedback route: a deployment that cannot do the thing should say
     // so, not throw a stack trace that reads like a bug.
-    return Response.json({ error: "Uploads are not configured on this deployment." }, { status: 503 });
+    return Response.json({ error: "Uploads aren't configured on this deployment." }, { status: 503 });
   }
 
   const user = await requireUser();
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
 
   const type = req.headers.get("content-type") ?? "";
   if (!ALLOWED.has(type)) {
-    return Response.json({ error: "That file type is not supported." }, { status: 415 });
+    return Response.json({ error: "That file type isn't supported." }, { status: 415 });
   }
 
   const blob = await req.blob();
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
     // reaches nobody but this log.
     console.error("avatar: blob upload failed", e);
     return Response.json(
-      { error: "That could not be uploaded. Try again shortly." },
+      { error: "Couldn't be uploaded. Try again shortly." },
       { status: 502 },
     );
   }

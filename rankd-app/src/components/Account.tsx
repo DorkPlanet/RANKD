@@ -206,7 +206,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
             setBusy(true);
             try {
               await syncNow();
-              setNote(isDirty() ? "Couldn't reach your account — it'll retry." : "Backed up.");
+              setNote(isDirty() ? "Couldn't reach your account. It'll retry." : "Backed up.");
             } finally {
               setBusy(false);
             }

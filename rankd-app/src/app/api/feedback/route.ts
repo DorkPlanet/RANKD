@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   // user would stop reporting things and never learn nothing arrived.
   if (!to || !key) {
     return Response.json(
-      { error: "Feedback is not configured on this deployment." },
+      { error: "Feedback isn't configured on this deployment." },
       { status: 503 },
     );
   }
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     // The provider's own message is not shown to the user — it can name the
     // account and the sending domain — but it is worth having in the log.
     console.error("feedback: resend rejected", res.status, await res.text().catch(() => ""));
-    return Response.json({ error: "That could not be sent. Try again shortly." }, { status: 502 });
+    return Response.json({ error: "Couldn't be sent. Try again shortly." }, { status: 502 });
   }
 
   return Response.json({ ok: true });

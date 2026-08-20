@@ -929,7 +929,7 @@ export default function DuelScreen({
     //
     // A new library is now EMPTY rather than pre-seeded, which makes this the
     // first screen anyone sees — and it was written for a library that had
-    // films in it. "Nothing on the table" over "0 films" reads as a fault, and
+    // films in it. A headline over "0 films" reads as a fault, and
     // the gold button under it offered to pick a tier when there are no tiers
     // to pick: a dead end presented as the primary action.
     //
@@ -948,7 +948,7 @@ export default function DuelScreen({
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
                 <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
-                  {empty ? "No films yet" : "Nothing on the table"}
+                  {empty ? "No films yet" : "Everyone has a favourite. What's yours?"}
                 </p>
                 {empty ? (
                   <>
@@ -1530,19 +1530,19 @@ function ModePanel({
             in, rather than the order the modes were built in. */}
         <ModeRow
           title="Rough Cut"
-          blurb="Deal a whole tier into three piles — upper, middle, lower. No duels. Makes ranking it afterwards a fraction of the work."
+          blurb="Large libraries can be daunting. Start dividing them into smaller groups, then compare from there."
           onClick={() => setChosen("roughcut")}
         />
         <ModeRow
           title="King of the Hill"
-          blurb="Rank a whole tier. Each winner keeps climbing until something beats it."
+          blurb="One tier at a time. Winner moves on."
           onClick={() => setChosen("koth")}
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
         <ModeRow
           title="Fast Shuffle"
-          blurb="No climbing, no confirming. It picks whatever teaches it the most and keeps going."
+          blurb="Your provisional rating. Compare films to establish an initial ranking. It's much easier than ranking every film against every other. 50 films alone would mean 1,225 comparisons. Use the other modes for your hard locks."
           onClick={() => setChosen("shuffle")}
         />
         {/* Curated lists sit with the modes rather than behind a film's info
@@ -1551,7 +1551,7 @@ function ModePanel({
             so the blurb has to say so, or it reads as a fourth way to rank. */}
         <ModeRow
           title="Curator"
-          blurb="A director, an actor or a genre — just for the list and the picture. Changes nothing in your rankings."
+          blurb="A director, an actor or genre. Everyone has their favourite. Your rankings don't move."
           onClick={onCurated}
         />
       </Sheet>
@@ -1945,7 +1945,7 @@ function TierPicker({
               <span className="text-base text-gold">{starsFor(t)}</span>
               <span className="flex items-center gap-2 text-[11px] text-dim">
                 {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
-                {n === 1 && " — needs 2"}
+                {n === 1 && ", needs 2"}
                 {t === current && <span className="text-gold">✓</span>}
               </span>
             </span>
@@ -2385,7 +2385,7 @@ const TIPS = [
   // "Tap the one you like more" is gone — the question under the posters now
   // says that, and a tip repeating it wastes a turn of the cycle.
   "Whichever film wins keeps climbing",
-  "Can't separate two? Say so — it counts",
+  "Can't separate two? Say so, it counts",
   "Flick a film up to send it straight to the top",
   "Flick a film down to send it to the bottom",
   "Hold a film to see who's in it and what it's about",

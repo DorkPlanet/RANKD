@@ -61,7 +61,7 @@ export default function SignInGate() {
       </span>
 
       <p className="mt-7 max-w-[300px] font-serif text-[15px] italic leading-snug text-text-hi">
-        Your films, in the order you actually like them.
+        Everyone has a favourite. What&rsquo;s yours?
       </p>
       {/* Says what the account is FOR. "Sign in to continue" is a demand; this
           is the reason, and it is the true one. */}

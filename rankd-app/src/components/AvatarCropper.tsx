@@ -94,7 +94,7 @@ export function AvatarCropper({
           clamp({ s, tx: (VIEWPORT - bm.width * s) / 2, ty: (VIEWPORT - bm.height * s) / 2 }, bm.width, bm.height),
         );
       })
-      .catch(() => !dead && setError("That image could not be read."));
+      .catch(() => !dead && setError("Couldn't read that image."));
     return () => {
       dead = true;
       made?.close();
@@ -170,7 +170,7 @@ export function AvatarCropper({
       const { blob, type } = await cropAvatar(bitmap, boxOf(view));
       onUploaded(await uploadAvatar(blob, type));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That could not be uploaded.");
+      setError(err instanceof Error ? err.message : "Couldn't be uploaded.");
       setBusy(false);
     }
   };

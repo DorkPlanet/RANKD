@@ -64,31 +64,31 @@ const DUEL_STEPS: readonly TourStep[] = [
     id: "pick",
     target: "card",
     title: "Tap the one you prefer",
-    body: "These two films have the same star rating from you. Films sharing a rating are called a tier, and this app puts your tier in order. Not which film is better, but which you'd rather watch. Tap it.",
+    body: "These two have the same star rating from you. That group is a tier, and Rankd puts it in order. Which would you rather watch? Tap it.",
   },
   {
     id: "flick",
     target: "card",
     title: "Flick when you already know",
-    body: "Sure it's your favourite in the tier? Flick the card up and it parks at the top. Flick down sends it to the bottom. No duel is recorded, because you're skipping the argument rather than winning it.",
+    body: "Decide if a film belongs at the top or bottom of your tier. Flick up and it parks at the top. Flick down sends it to the bottom. No duel gets recorded, you're skipping the argument.",
   },
   {
     id: "hold",
     target: "card",
     title: "Hold for the details",
-    body: "Press and hold a poster to open the film: year, director, cast, and where it sits in your order.",
+    body: "Press and hold a poster for the year, director, cast, and where it sits in your order.",
   },
   {
     id: "strip",
     target: "strip",
     title: "The rest of the tier",
-    body: "Pull this up to see every film you're working through, and tap any of them to jump straight there.",
+    body: "Pull this up to see everything you're working through. Tap any of them to jump straight there.",
   },
   {
     id: "roughcut",
     target: "rank",
-    title: "Got a big library? Start with a Rough Cut",
-    body: "A tier of 100 films is 4,950 duels this way, which is hours. Rough Cut is 100 taps, which is about two minutes, and it leaves every pile small enough to duel properly afterwards. It lives under RNK.",
+    title: "Big library? Start with a Rough Cut",
+    body: "A tier of 100 films is 4,950 duels. That's hours. Rough Cut breaks a tier into piles small enough. You'll instinctually know which you enjoy more.",
   },
 ];
 
@@ -105,19 +105,19 @@ const LIST_STEPS: readonly TourStep[] = [
     id: "row",
     target: "list-row",
     title: "Your ranking, in order",
-    body: "One tier at a time, your favourite first. Nothing here says a film is better than another, only that you'd reach for it sooner. The number on the left is where it sits across everything. Tap any row to open it.",
+    body: "One tier at a time, your favourite first. The numbers on the right show where each film sits across everything you've ranked. Tap any row to open it.",
   },
   {
     id: "unrnkd",
     target: "list-unrnkd",
     title: "UN-RNKD is not unrated",
-    body: "Each tier holds the films you rated the same. Inside it, the ones marked UN-RNKD are imported films that have never been through the ranking system, so they have no position yet. Giving one a position is what the duels are for.",
+    body: "Each tier holds films you rated the same. The ones marked UN-RNKD came in from your import and have never been ranked, so they've got no position yet. That's what the duels are for.",
   },
   {
     id: "jump",
     target: "list-jump",
     title: "Jump to a tier",
-    body: "Straight to any star rating, with a count of how many you've settled there. It's the quickest way to find where there's still work.",
+    body: "Straight to any star rating, with a count of how many you've settled there. Quickest way to find where there's work left.",
   },
 ];
 
@@ -144,37 +144,37 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
     id: "rc-card",
     target: "rc-card",
     title: "One at a time",
-    body: "One tier for you to break into smaller piles: upper, middle, lower. This is the film you're placing, and there is nothing to compare it against.",
+    body: "One tier, broken into three piles: upper, middle, lower. This is the film you're placing. There's nothing to compare it against, so go with your gut.",
   },
   {
     id: "rc-targets",
     target: "rc-targets",
     title: "Upper, middle or lower",
-    body: "Once it's in smaller piles you finally get to decide where your taste lies. Tap the pile this film belongs in, and the count above it goes up.",
+    body: "Tap the pile this film belongs in. The count above it goes up.",
   },
   {
     id: "rc-flick",
     target: "rc-card",
     title: "Or flick it",
-    body: "Flick the card up for upper, down for lower. Drag it a little first and the target you're aimed at lifts, so you can see where it will land before you let go. Middle has no flick: tap it.",
+    body: "Flick up for upper, down for lower. Drag a little first and the target you're aimed at lifts, so you can see where it'll land. Middle has no flick, tap it.",
   },
   {
     id: "rc-hold",
     target: "rc-card",
     title: "Hold for the details",
-    body: "Press and hold the poster to open the film: year, director, cast, and where it sits in your order.",
+    body: "Press and hold the poster for the year, director, cast, and where it sits in your order.",
   },
   {
     id: "rc-count",
     target: "rc-count",
     title: "How many are left",
-    body: "This counts down as you go. A big tier is a few minutes at one a second, which is the point of doing it this way.",
+    body: "This counts down as you go.",
   },
   {
     id: "rc-out",
     target: "rc-out",
     title: "Skip, undo, stop",
-    body: "Not sure about a film? Skip sends it to the back and brings it round once you've seen the rest. Undo takes back the last one. Done saves everything you placed and picks up where you stopped next time.",
+    body: "Not sure? Skip sends it to the back and brings it round later. Undo takes back the last one. Done saves everything and picks up where you left off.",
   },
 ];
 
@@ -196,7 +196,7 @@ const LOG_STEPS: readonly TourStep[] = [
     id: "log-search",
     target: "log-search",
     title: "Just watched something?",
-    body: "Search for it, give it a rating, and it joins that tier as UN-RNKD. It is then in the queue like everything else, waiting to be put in order.",
+    body: "Search for it, give it a rating, and it joins that tier as UN-RNKD. It's in the queue with everything else now.",
   },
 ];
 

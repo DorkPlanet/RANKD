@@ -54,7 +54,7 @@ describe("the tours", () => {
     const flick = TOURS.duel.find((s) => s.id === "flick")!;
     expect(flick.body).toMatch(/top/i);
     expect(flick.body).toMatch(/bottom/i);
-    expect(flick.body).toMatch(/no duel is recorded/i);
+    expect(flick.body).toMatch(/no duel .{0,8}recorded/i);
   });
 
   // The list tour exists for exactly one idea: a rating is not a position.

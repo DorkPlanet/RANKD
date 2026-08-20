@@ -103,7 +103,7 @@ export async function wipeAccount(): Promise<void> {
   // 401 is a success here, not a failure: it means nobody is signed in, so
   // there is no account copy to delete and the local wipe is the whole job.
   for (const res of [library, lists]) {
-    if (!res.ok && res.status !== 401) throw new Error("The account copy could not be deleted.");
+    if (!res.ok && res.status !== 401) throw new Error("The account copy couldn't be deleted.");
   }
 }
 

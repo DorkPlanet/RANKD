@@ -282,7 +282,7 @@ export function drawCircleImage(
 export function encode(canvas: HTMLCanvasElement, quality = 0.92): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error("Could not encode the card"))),
+      (blob) => (blob ? resolve(blob) : reject(new Error("Couldn't encode the card"))),
       "image/jpeg",
       quality,
     );

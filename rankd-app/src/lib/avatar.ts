@@ -48,7 +48,7 @@ export async function cropAvatar(bitmap: ImageBitmap, box: CropBox): Promise<{ b
   canvas.width = AVATAR_SIZE;
   canvas.height = AVATAR_SIZE;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not read that image.");
+  if (!ctx) throw new Error("Couldn't read that image.");
   // Downscaling by a large factor in one step aliases badly; the browser's own
   // smoothing is what keeps a shrunk face from going crunchy.
   ctx.imageSmoothingEnabled = true;
@@ -64,7 +64,7 @@ export async function cropAvatar(bitmap: ImageBitmap, box: CropBox): Promise<{ b
   ctx.drawImage(bitmap, x, y, size, size, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", QUALITY));
-  if (!blob) throw new Error("Could not process that image.");
+  if (!blob) throw new Error("Couldn't process that image.");
   return { blob, type: blob.type || "image/webp" };
 }
 
@@ -76,6 +76,6 @@ export async function uploadAvatar(blob: Blob, type: string): Promise<string> {
     body: blob,
   });
   const body = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
-  if (!res.ok || !body?.url) throw new Error(body?.error ?? "That could not be uploaded.");
+  if (!res.ok || !body?.url) throw new Error(body?.error ?? "Couldn't be uploaded.");
   return body.url;
 }

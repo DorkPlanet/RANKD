@@ -165,7 +165,7 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
   // ── Decade ───────────────────────────────────────────────────────────────
   const print = fingerprint(mine);
   if (print.decade && print.decade.count >= MIN_DECADE && pct(print.decade.count, mine.length) >= GENRE_SHARE) {
-    add("decade", `Mostly a ${print.decade.label} list — ${print.decade.count} of them.`, 0.4);
+    add("decade", `Mostly a ${print.decade.label} list. ${print.decade.count} of them.`, 0.4);
   }
 
   // ── Ratings ──────────────────────────────────────────────────────────────
@@ -179,7 +179,7 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
     if (ratings.size === 1) {
       add(
         "flat",
-        `Every one of these is ${starsFor(mine[0].rating!)} — the order was all you.`,
+        `Every one of these is ${starsFor(mine[0].rating!)}. The order was all you.`,
         0.85,
       );
     }

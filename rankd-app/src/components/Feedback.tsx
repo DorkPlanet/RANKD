@@ -70,7 +70,7 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(body?.error ?? "That could not be sent.");
+        setError(body?.error ?? "Couldn't be sent.");
         setStatus("error");
         return;
       }
@@ -79,7 +79,7 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
     } catch {
       // Almost always offline. Said plainly, because the one thing worse than a
       // failed send is a failed send the user thinks succeeded.
-      setError("No connection. Your message has not been sent.");
+      setError("No connection. Your message hasn't been sent.");
       setStatus("error");
     }
   };

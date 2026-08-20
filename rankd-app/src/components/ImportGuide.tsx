@@ -25,7 +25,7 @@
 const STEPS: readonly { do: string; note?: string }[] = [
   {
     do: "Open letterboxd.com in a browser",
-    note: "The export lives on the website. The phone apps do not have it.",
+    note: "The export lives on the website. The phone apps don't have it.",
   },
   { do: "Your name, then Settings, then Import & Export" },
   { do: "Tap Export Your Data", note: "It downloads a .zip." },
