@@ -21,7 +21,17 @@ import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
-import { autoCollections, avatarOf, fingerprint, MAX_PINNED, superlatives, topPeople, type Profile } from "@/lib/profile";
+import {
+  autoCollections,
+  avatarOf,
+  fingerprint,
+  MAX_PINNED,
+  MAX_PINNED_PEOPLE,
+  personKey,
+  superlatives,
+  topPeople,
+  type Profile,
+} from "@/lib/profile";
 import { fetchAccount } from "@/lib/account";
 import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
@@ -213,7 +223,23 @@ export default function ProfileScreen({
   const ranked = useMemo(() => rankedFilms(films), [films]);
   const model = useMemo(() => buildList(films), [films]);
   const counts = useMemo(() => tierCounts(films), [films]);
-  const people = useMemo(() => topPeople(films), [films]);
+  // ── The people, and the ones you chose ──────────────────────────────────
+  //
+  // `topPeople` takes the pins so somebody outside the computed top few still
+  // appears and floats — the widening lives in `profile.ts` beside the ranking
+  // it overrides, rather than being re-applied here.
+  const pinnedPeople = useMemo(() => profile.pinnedPeople ?? [], [profile.pinnedPeople]);
+  const people = useMemo(() => topPeople(films, pinnedPeople), [films, pinnedPeople]);
+  // Newest pin last and the cap enforced on WRITE, not by disabling the button.
+  // The profile is what the rule is about, so the rule lives where the profile
+  // is written — the same reasoning as the saved-ranking pins further down.
+  const togglePerson = (role: "director" | "actor", name: string) => {
+    const key = personKey(role, name);
+    const next = pinnedPeople.includes(key)
+      ? pinnedPeople.filter((k) => k !== key)
+      : [...pinnedPeople, key].slice(-MAX_PINNED_PEOPLE);
+    onProfile({ ...profile, pinnedPeople: next });
+  };
   const print = useMemo(() => fingerprint(films), [films]);
   const facts = useMemo(() => superlatives(films), [films]);
   const autos = useMemo(() => autoCollections(ranked, print, people), [ranked, print, people]);
@@ -574,6 +600,9 @@ export default function ProfileScreen({
                     <PersonCard
                       key={d.name}
                       p={d}
+                      pinned={pinnedPeople.includes(personKey("director", d.name))}
+                      canPin={pinnedPeople.length < MAX_PINNED_PEOPLE}
+                      onPin={() => togglePerson("director", d.name)}
                       onClick={() =>
                         setOpen({
                           title: d.name,
@@ -594,6 +623,9 @@ export default function ProfileScreen({
                     <PersonCard
                       key={a.name}
                       p={a}
+                      pinned={pinnedPeople.includes(personKey("actor", a.name))}
+                      canPin={pinnedPeople.length < MAX_PINNED_PEOPLE}
+                      onPin={() => togglePerson("actor", a.name)}
                       onClick={() =>
                         setOpen({
                           title: a.name,
@@ -1599,24 +1631,59 @@ function CollectionSheet({
  * The rating sits right, tabular, so the column lines up down the page and can
  * be compared without reading — which is the only reason the number is there.
  */
+// ── The row, and the star that makes it yours ──────────────────────────────
+//
+// This list is COMPUTED — whose films you rate highest, worked out from your
+// ratings — and until now that was all it could ever be. The star is the option
+// to disagree, and the reason it sits on every row rather than behind an empty
+// "pin somebody" block is the brief it came from: it should "generate through
+// the data with the option to change it built in".
+//
+// So there is no empty state to fill. The list is useful the moment you have
+// credits; the outline star only says it could be yours. That outline IS the
+// prompt, which is why it is drawn on every row and not just on pinned ones.
+//
+// A `<button>` inside a `<button>` is invalid, so the row is a div with two
+// controls in it: the name opens their films, the star pins. They need separate
+// hit areas anyway — a single tap target that did both would do the wrong one
+// half the time.
 function PersonCard({
   p,
+  pinned,
+  canPin,
+  onPin,
   onClick,
 }: {
   p: { name: string; count: number; avg: number };
+  pinned: boolean;
+  /** False at the cap. The star stays, dimmer and inert — see below. */
+  canPin: boolean;
+  onPin: () => void;
   onClick: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 active:opacity-70"
-    >
-      <span className="min-w-0 flex-1 truncate text-body text-text-hi">{p.name}</span>
-      <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
-      <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
-        {p.count} film{p.count === 1 ? "" : "s"}
-      </span>
-    </button>
+    <div className="flex w-full items-baseline gap-2.5 border-b border-border/60 py-2.5 last:border-0">
+      {/* Inert rather than hidden at the cap. A control that disappears when you
+          reach a limit teaches nothing about the limit; one that stays and stops
+          responding at least says there IS one. */}
+      <button
+        onClick={pinned || canPin ? onPin : undefined}
+        aria-label={pinned ? `Unpin ${p.name}` : `Pin ${p.name}`}
+        aria-pressed={pinned}
+        className={`flex-shrink-0 text-sub leading-none active:scale-90 ${
+          pinned ? "text-gold" : canPin ? "text-dim" : "text-dim/30"
+        }`}
+      >
+        {pinned ? "★" : "☆"}
+      </button>
+      <button onClick={onClick} className="flex min-w-0 flex-1 items-baseline gap-3 text-left active:opacity-70">
+        <span className="min-w-0 flex-1 truncate text-body text-text-hi">{p.name}</span>
+        <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
+        <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
+          {p.count} film{p.count === 1 ? "" : "s"}
+        </span>
+      </button>
+    </div>
   );
 }
 

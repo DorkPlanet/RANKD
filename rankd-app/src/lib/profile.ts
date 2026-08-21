@@ -37,10 +37,38 @@ export interface Profile {
    * which is why nothing needs to clean up after `deleteList`.
    */
   pinnedListIds?: string[];
+  /**
+   * Directors and actors you chose to keep at the top, newest pin last.
+   *
+   * ── Why the role is part of the id ──────────────────────────────────────
+   *
+   * Stored as `"director:Name"` and `"actor:Name"` rather than a bare name,
+   * because plenty of people are both — Eastwood, Gerwig, Affleck, Wong. A bare
+   * name would pin somebody in a group they were never pinned in, or in both at
+   * once, and there would be no way to say which you meant.
+   *
+   * Same self-cleaning property as `pinnedListIds`: a pin naming somebody whose
+   * films have since gone is skipped when the list is built, so nothing has to
+   * tidy up after a removal.
+   */
+  pinnedPeople?: string[];
 }
+
+/** How a pinned person is identified. The role is part of it — see above. */
+export const personKey = (role: "director" | "actor", name: string): string => `${role}:${name}`;
 
 /** Three is "a couple" with room to breathe, and it keeps the row one line. */
 export const MAX_PINNED = 3;
+
+/**
+ * Its own number rather than `MAX_PINNED`, and deliberately larger.
+ *
+ * Three is right for saved rankings because they share a single row. This is
+ * two groups — directors and actors — and three each is the natural read, so
+ * reusing the rankings' number would quietly halve it for a different shape of
+ * thing. Numbers that mean different things get different names.
+ */
+export const MAX_PINNED_PEOPLE = 6;
 
 export const EMPTY_PROFILE: Profile = { name: "You", bio: "" };
 
@@ -129,7 +157,7 @@ export interface TopThings {
 const DIRECTOR_SLOTS = 3;
 const ACTOR_SLOTS = 4;
 
-export function topPeople(films: Film[]): TopThings {
+export function topPeople(films: Film[], pinned: readonly string[] = []): TopThings {
   const directors = new Map<string, number[]>();
   const actors = new Map<string, number[]>();
   const genres = new Map<string, number[]>();
@@ -157,9 +185,26 @@ export function topPeople(films: Film[]): TopThings {
       .map(([name, rs]) => ({ name, count: rs.length, avg: rs.reduce((a, b) => a + b, 0) / rs.length }))
       .sort((a, b) => b.avg - a.avg || b.count - a.count);
 
+  // ── Pins beat slots ─────────────────────────────────────────────────────
+  //
+  // `rank` sorts by average and the slice keeps the top few, so somebody you
+  // pinned who sits outside that would simply vanish from a list they are
+  // supposed to be at the top of. `withPins` puts them back and floats them,
+  // and it lives here rather than in the component because the rule about who
+  // APPEARS belongs with the rule about who is computed.
+  const withPins = (all: PersonStat[], slots: number, role: "director" | "actor"): PersonStat[] => {
+    const isPinned = (p: PersonStat) => pinned.includes(personKey(role, p.name));
+    const kept = all.slice(0, slots);
+    // Anyone pinned but sliced off comes back. `all` is already filtered by
+    // MIN_FILMS, so a pin for somebody whose films have gone finds nothing here
+    // and is skipped — which is the self-cleaning half of the contract.
+    const rescued = all.filter((p) => isPinned(p) && !kept.includes(p));
+    return [...kept, ...rescued].sort((a, b) => Number(isPinned(b)) - Number(isPinned(a)));
+  };
+
   return {
-    directors: rank(directors).slice(0, DIRECTOR_SLOTS),
-    actors: rank(actors).slice(0, ACTOR_SLOTS),
+    directors: withPins(rank(directors), DIRECTOR_SLOTS, "director"),
+    actors: withPins(rank(actors), ACTOR_SLOTS, "actor"),
     genre: rank(genres)[0],
     // A keyword on more than a fifth of the library is a label, not a taste.
     subgenre: rank(keywords, 3, Math.max(3, Math.round(films.length / 5)))[0],
