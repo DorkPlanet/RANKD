@@ -93,6 +93,82 @@ import type { Film } from "./types";
  */
 export const PLACE_CONFIDENCE = 0.55;
 
+/**
+ * How many duels a film needs before Fast Shuffle gives it a provisional number.
+ *
+ * ── Why a COUNT and not a confidence ───────────────────────────────────────
+ *
+ * The two stages answer two different questions, and only one of them is about
+ * precision:
+ *
+ *   PROVISIONAL — "have we asked enough to have an opinion?"  A count.
+ *   SETTLED     — "has the evidence actually located it?"     Confidence.
+ *
+ * A count is the right gate for the first because it ARRIVES. Confidence is a
+ * continuous quantity that a film reaches on the matchmaker's schedule, not the
+ * user's, so gating the first number on it meant a session where nothing
+ * happened for hundreds of duels. Five duels is a bar you can watch a film
+ * cross, and the state is labelled provisional precisely so that an early,
+ * roughly-right number is an honest thing to show.
+ *
+ * A count would be the WRONG gate for the second, for the reason the note on
+ * PLACE_CONFIDENCE gives: five duels against films a title obviously beats
+ * locate it barely better than none. That is what confidence is for, and it
+ * keeps that job.
+ */
+export const PLACE_DUELS = 5;
+
+// ── Stage two: how settled a film is, on a scale that can actually reach 1 ──
+//
+// Raw confidence CANNOT reach 1. `confidenceFromSpread` is 1 - spread/PRIOR,
+// spread only approaches zero asymptotically, and the matchmaker stops asking
+// about films it has settled so their spread stops tightening at all.
+//
+// The first instinct was to treat that as a reason not to show a percentage.
+// The user's call was better: **if a bar sits at 80% forever then 80% is what
+// finished looks like, and the goal should be measured against the ceiling that
+// exists rather than one that does not.** We make the app; we set the goal.
+//
+// MEASURED before being chosen, with the anchor held and refits running, over
+// simulated sessions:
+//
+//   86 films   ~3.5 duels/film   median 0.707   p90 0.744   max 0.786
+//   865 films  ~9 duels/film     median 0.731   p90 0.766   max 0.816
+//   86 films   20 duels/film     median 0.796   p90 0.810   max 0.831
+//   400 films  20 duels/film     median 0.797   p90 0.811   max 0.838
+//
+// Strikingly stable across pool sizes, which is what makes a fixed ceiling
+// defensible at all.
+//
+// ── Why it does not start from zero ────────────────────────────────────────
+//
+// A film that has just earned its provisional number already sits around 0.65.
+// Scaled from 0 that would read "75% settled" the instant the number appeared,
+// which is an anticlimax and an overclaim in one. So the scale starts where the
+// provisional ends: the bar is empty when a film is first placed and full when
+// it has had roughly twenty duels, which is what the second stage is for.
+
+/** Confidence a film has roughly earned by the time it is first placed. */
+export const SETTLE_FROM = 0.65;
+
+/** The achievable ceiling — what "fully settled" means here. */
+export const SETTLE_AT = 0.8;
+
+/**
+ * How far a film has come between its provisional number and being as settled
+ * as this system can make it. 0 at placement, 1 at the ceiling, never outside.
+ */
+export function settledness(confidence: number): number {
+  const span = SETTLE_AT - SETTLE_FROM;
+  return Math.min(1, Math.max(0, (confidence - SETTLE_FROM) / span));
+}
+
+/** The same thing for a film, straight from the belief map. */
+export function settlednessOf(film: Film, beliefs: Map<string, Belief>): number {
+  const belief = beliefs.get(film.id);
+  return belief ? settledness(confidenceFromSpread(belief.spread)) : 0;
+}
+
 const meanOf = (film: Film, beliefs: Map<string, Belief>): number =>
   beliefs.get(film.id)?.mean ?? seedOf(film);
 
@@ -173,6 +249,30 @@ export function respreadFor(
 }
 
 /**
+ * Add one to the duel count of each film in a pair.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * `Film.duels` describes itself as "the only record of how much evidence sits
+ * behind a placement", and until now **Fast Shuffle never wrote it**. The only
+ * increment in the app was `ladder.ts`'s, on the climb. So a film compared
+ * fifty times in Fast Shuffle still read "Never duelled" on its info card, and
+ * every badge counting duels undercounted by however much shuffling the user
+ * had done.
+ *
+ * Cross-tier runs are excluded for the same reason the climb excludes them: a
+ * person run compares films across star ratings, writes no scores, and is not
+ * evidence about either film's position within its own tier.
+ *
+ * `mergeLibrary.rederive` recounts this from the log and is the authority; this
+ * keeps the number right between merges rather than replacing it.
+ */
+export function countDuel(films: readonly Film[], pair: readonly [Film, Film]): Film[] {
+  const ids = new Set([pair[0].id, pair[1].id]);
+  return films.map((f) => (ids.has(f.id) ? { ...f, duels: (f.duels ?? 0) + 1 } : f));
+}
+
+/**
  * Grant a SOFT lock to any film the evidence has settled — a number in the list
  * that says "the model worked this one out", as distinct from one the user
  * committed to.
@@ -190,9 +290,21 @@ export function placeSettled(
   films: readonly Film[],
   beliefs: Map<string, Belief>,
   threshold = PLACE_CONFIDENCE,
+  minDuels = PLACE_DUELS,
 ): Film[] {
   return films.map((f) => {
     if (isPlaced(f)) return f;
+    // Either gate is enough, and they catch different films.
+    //
+    // The count is what makes the mode feel like it is doing something: a film
+    // you have answered about five times gets its number, visibly, while you
+    // are still playing.
+    //
+    // Confidence is kept as the second route because it catches films the count
+    // misses — one that has been compared only three times but against very
+    // well-known neighbours is genuinely located, and refusing it a number on a
+    // technicality would be pedantry rather than rigour.
+    if ((f.duels ?? 0) >= minDuels) return { ...f, lock: "soft" as const };
     const belief = beliefs.get(f.id);
     if (!belief) return f;
     return confidenceFromSpread(belief.spread) >= threshold ? { ...f, lock: "soft" as const } : f;

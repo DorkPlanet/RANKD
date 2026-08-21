@@ -177,6 +177,24 @@ export default function ListScreen({
             number came from AND where to go to change it, which "Rankd placed"
             did not.
 
+            ── Three states, three colours ──
+            It said three things in two colours: hard was gold and BOTH soft and
+            un-rnkd were `--dim`. So the distinction this key exists to explain
+            was carried by a colour two of its three states shared, which is a
+            strange way to build a key.
+
+            Gold for locked, `--accent` for shuffled, `--dim` for un-rnkd. The
+            accent is not a new colour — it is the token the profile already
+            uses for its RANKD marker, which is the same idea (this came from
+            the model, not from you) wearing the same paint.
+
+            Centred, because it is a caption for the whole list rather than a
+            label on the name above it, and it now sits over the search bar it
+            shares a width with.
+
+            The row numerals below use the same three, or this is a key to
+            nothing.
+
             If another mode is ever given the right to place films, this label
             stops being true and has to go back to something generic. That is a
             real constraint, so it is written down rather than left to be
@@ -207,26 +225,20 @@ export default function ListScreen({
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
         {model.total > 0 && (
-          <p className="mb-2.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+          <p className="mb-2.5 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
             {[
-              { n: model.settledCount, label: "you settled", gold: true },
-              { n: model.placedCount - model.settledCount, label: "shuffled", gold: false },
-              { n: model.total - model.placedCount, label: "un-rnkd", gold: false },
+              { n: model.settledCount, label: "locked", tone: "text-gold" },
+              { n: model.placedCount - model.settledCount, label: "shuffled", tone: "text-accent" },
+              { n: model.total - model.placedCount, label: "un-rnkd", tone: "text-dim" },
             ]
               // A segment reading zero is not information, it is a state you are
               // not in. Dropping them is also what lets this line work on day
               // one, when everything is un-rnkd and the other two would be 0.
               .filter((seg) => seg.n > 0)
               .map((seg, i) => (
-                <span key={seg.label} className="flex items-baseline gap-1.5">
-                  {i > 0 && <span className="opacity-40">·</span>}
-                  <span
-                    className={`font-display text-[13px] tracking-normal ${
-                      seg.gold ? "font-bold text-gold" : "font-normal"
-                    }`}
-                  >
-                    {seg.n}
-                  </span>
+                <span key={seg.label} className={`flex items-baseline gap-1.5 ${seg.tone}`}>
+                  {i > 0 && <span className="text-dim opacity-40">·</span>}
+                  <span className="font-display text-[13px] font-bold tracking-normal">{seg.n}</span>
                   <span>{seg.label}</span>
                 </span>
               ))}
@@ -419,10 +431,14 @@ function Row({
           would change the row's height — ROW_H is load-bearing, since the
           section spacers and the tier jumps are computed from it.
 
-          Gold and solid  = you committed to this position.
-          Quiet           = the evidence placed it; it counts, but the model is
-                            still free to revise it.
-          UN-RNKD         = no position at all.
+          Gold and solid  = LOCKED. You committed to this position.
+          Accent blue     = SHUFFLED. Fast Shuffle placed it; it counts, but the
+                            model is still free to revise it.
+          Dim UN-RNKD     = no position at all.
+
+          These three match the legend in the header exactly. Change one and
+          change both — a key whose colours differ from the thing it keys is
+          worse than no key.
 
           The distinction has existed in the data since hard and soft locks
           landed. This is where it is DRAWN; the legend in the header block is
@@ -436,7 +452,7 @@ function Row({
            wording matches the legend on purpose. */
         <span
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
-            isHard(film) ? "font-bold text-gold" : "font-normal text-dim"
+            isHard(film) ? "font-bold text-gold" : "font-normal text-accent"
           }`}
           title={isHard(film) ? "You settled this" : "Fast Shuffle placed this, and it can still move"}
         >

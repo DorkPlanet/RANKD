@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { PRIOR_SPREAD, type Belief } from "@/lib/bayes";
-import { placeSettled, respreadFor, respreadTier, withdrawSoftLocks, PLACE_CONFIDENCE } from "@/lib/shuffle";
+import {
+  PLACE_CONFIDENCE,
+  PLACE_DUELS,
+  SETTLE_AT,
+  SETTLE_FROM,
+  countDuel,
+  placeSettled,
+  respreadFor,
+  respreadTier,
+  settledness,
+  withdrawSoftLocks,
+} from "@/lib/shuffle";
 import { ORDERED_TIERS, tierMax, tierMin, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 
@@ -277,5 +288,89 @@ describe("what the Fast Shuffle readout measures", () => {
     // broken rather than strict. Measured maxima were 0.798 (120 films) and
     // 0.845 (400), and 0.7 already fails to fill a small tier.
     expect(PLACE_CONFIDENCE).toBeLessThanOrEqual(0.65);
+  });
+});
+
+// ── The two stages ─────────────────────────────────────────────────────────
+//
+// Provisional is gated on a COUNT and settled on CONFIDENCE, because they
+// answer different questions: "have we asked enough to have an opinion" and
+// "has the evidence actually located it". Gating the first on confidence meant
+// a session where nothing visibly happened for hundreds of duels.
+describe("PLACE_DUELS: a provisional number arrives on evidence you can count", () => {
+  const nothingKnown = beliefs({ a: { spread: PRIOR_SPREAD } });
+
+  it("places a film once it has had enough duels, whatever the model thinks", () => {
+    const f = { ...film("a"), duels: PLACE_DUELS };
+    expect(placeSettled([f], nothingKnown)[0].lock).toBe("soft");
+  });
+
+  it("does not place it one duel short", () => {
+    const f = { ...film("a"), duels: PLACE_DUELS - 1 };
+    expect(placeSettled([f], nothingKnown)[0].lock).toBeUndefined();
+  });
+
+  it("still places a well-located film that has had fewer duels", () => {
+    // The confidence route survives: a film compared only a few times but
+    // against well-known neighbours is genuinely located.
+    const f = { ...film("a"), duels: 1 };
+    expect(placeSettled([f], beliefs({ a: { spread: 0.1 } }))[0].lock).toBe("soft");
+  });
+
+  it("never takes back a hard lock", () => {
+    const f = { ...film("a", 4, 7500, "hard"), duels: 99 };
+    expect(placeSettled([f], nothingKnown)[0].lock).toBe("hard");
+  });
+});
+
+describe("settledness: a scale that actually reaches 1", () => {
+  it("is 0 when a film has only just earned its number", () => {
+    expect(settledness(SETTLE_FROM)).toBe(0);
+  });
+
+  it("is exactly 1 at the measured ceiling", () => {
+    expect(settledness(SETTLE_AT)).toBe(1);
+  });
+
+  it("never exceeds 1, however settled the film gets", () => {
+    // Raw confidence can creep past the ceiling; the readout must not.
+    expect(settledness(0.95)).toBe(1);
+    expect(settledness(1)).toBe(1);
+  });
+
+  it("never goes negative for a film below the provisional bar", () => {
+    expect(settledness(0)).toBe(0);
+    expect(settledness(SETTLE_FROM - 0.2)).toBe(0);
+  });
+
+  it("climbs in between rather than jumping", () => {
+    const mid = (SETTLE_FROM + SETTLE_AT) / 2;
+    expect(settledness(mid)).toBeGreaterThan(0);
+    expect(settledness(mid)).toBeLessThan(1);
+  });
+
+  it("keeps the ceiling reachable — it must sit under what a film can measure", () => {
+    // Measured maxima with the anchor held: 0.831 (86 films) and 0.838 (400).
+    // A ceiling above those would be a goal nobody could ever reach.
+    expect(SETTLE_AT).toBeLessThan(0.83);
+    expect(SETTLE_AT).toBeGreaterThan(SETTLE_FROM);
+  });
+});
+
+describe("countDuel", () => {
+  it("counts both films in the pair and nothing else", () => {
+    const a = film("a");
+    const b = film("b");
+    const c = film("c");
+    const out = countDuel([a, b, c], [a, b]);
+    expect(out.find((f) => f.id === "a")!.duels).toBe(1);
+    expect(out.find((f) => f.id === "b")!.duels).toBe(1);
+    expect(out.find((f) => f.id === "c")!.duels).toBeUndefined();
+  });
+
+  it("adds to a count that is already there", () => {
+    const a = { ...film("a"), duels: 4 };
+    const b = film("b");
+    expect(countDuel([a, b], [a, b]).find((f) => f.id === "a")!.duels).toBe(5);
   });
 });

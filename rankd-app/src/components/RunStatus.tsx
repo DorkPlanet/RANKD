@@ -24,8 +24,8 @@
 // did — a progress bar that is physically incapable of moving is furniture. They
 // belong where you go to reflect, not where you play: `ListScreen`'s header
 // carries the library-scale figures, and as of 21 Aug it breaks them into the
-// three states rather than rolling them up — "1 you settled · 332 Rankd placed
-// · 532 un-rnkd" over a plain "865 films".
+// three states rather than rolling them up — "1 locked · 332 shuffled · 532
+// un-rnkd" over a plain "865 films", each in its own colour.
 //
 // What replaces them answers to the duel you just fought. See `sessionStats`.
 
@@ -42,7 +42,7 @@ import type { Film } from "@/lib/types";
 // exactly, and it is the only store with the right lifetime: module-level
 // variables are read during render (the React compiler rejects that, rightly),
 // and component state resets on remount — `RunStatus` unmounts every time you look
-// at your list, so a baseline in state would silently reset "6 settled" to "0"
+// at your list, so a baseline in state would silently reset "6 locked" to "0"
 // while the user watched.
 //
 // Read through a `useState` initialiser so it runs once per mount rather than
@@ -51,7 +51,7 @@ const SITTING_KEY = "rankd-sitting-v1";
 
 interface Sitting {
   start: number;
-  /** Hard locks at the moment the sitting began, so "settled" can be a delta. */
+  /** Hard locks at the moment the sitting began, so "locked" can be a delta. */
   hard: number;
 }
 
@@ -108,7 +108,7 @@ export function RunStatus({
       ? (idleLine ?? `${Math.max(0, run.total - run.done)} to rank`)
       : stats.settled === 0
         ? `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} this sitting`
-        : `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} · ${stats.settled} settled`;
+        : `${stats.duels} ${stats.duels === 1 ? "duel" : "duels"} · ${stats.settled} locked`;
 
   return (
     <div className="flex-shrink-0 px-5">

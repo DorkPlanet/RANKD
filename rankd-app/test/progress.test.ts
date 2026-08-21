@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { newJudgement } from "@/lib/log";
 import {
+  DEFAULT_PACE_S,
+  duelsInMinutes,
   libraryProgress,
+  paceSeconds,
   pct,
   sessionProgress,
   sessionStats,
@@ -200,5 +203,47 @@ describe("pct", () => {
   it("returns 0 rather than NaN on an empty total", () => {
     expect(pct(0, 0)).toBe(0);
     expect(Number.isNaN(pct(5, 0))).toBe(false);
+  });
+});
+
+// ── Reading the user's own pace ────────────────────────────────────────────
+//
+// This exists because the alternative was a constant and the constant was
+// wrong: the setup sheet estimated two seconds a duel, invented while writing
+// the label, when real use is about seven. A measured default cannot drift from
+// the truth because it is derived from it.
+describe("paceSeconds", () => {
+  const at = (...seconds: number[]) =>
+    seconds.map((s, i) => ({ id: "j" + i, a: "x", b: "y", o: "a" as const, m: "shuffle" as const, t: s * 1000 }));
+
+  it("falls back to the default with too little history to measure", () => {
+    expect(paceSeconds([])).toBe(DEFAULT_PACE_S);
+    expect(paceSeconds(at(0, 5, 10))).toBe(DEFAULT_PACE_S);
+  });
+
+  it("reads the typical gap between answers", () => {
+    expect(paceSeconds(at(0, 4, 8, 12, 16, 20, 24))).toBe(4);
+  });
+
+  it("ignores a break, which would otherwise dominate the median", () => {
+    // Six four-second answers, then a lunch hour, then six more. The lunch hour
+    // must not turn the estimate into minutes per duel.
+    const gaps = [0, 4, 8, 12, 16, 20, 24, 4000, 4004, 4008, 4012, 4016, 4020];
+    expect(paceSeconds(at(...gaps))).toBe(4);
+  });
+
+  it("is not dragged by one long deliberation, because it is a median", () => {
+    expect(paceSeconds(at(0, 3, 6, 9, 12, 15, 55))).toBe(3);
+  });
+});
+
+describe("duelsInMinutes", () => {
+  it("turns minutes into a count at the given pace", () => {
+    expect(duelsInMinutes(10, 6)).toBe(100);
+    expect(duelsInMinutes(5, DEFAULT_PACE_S)).toBe(43);
+  });
+
+  it("never returns zero, however slow the pace", () => {
+    expect(duelsInMinutes(1, 600)).toBe(1);
   });
 });

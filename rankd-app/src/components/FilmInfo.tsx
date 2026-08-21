@@ -14,18 +14,30 @@ import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { FixMatch } from "./FixMatch";
 import { LockIcon } from "./Icons";
-import { confidenceOf } from "@/lib/shuffle";
+import { confidenceOf, settledness } from "@/lib/shuffle";
 import { isHard } from "@/lib/lock";
 import { rankMap } from "@/lib/list";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 
-// Confidence as words rather than a percentage. "0.62" invites the question
-// "out of what?", which the number can't answer honestly — it saturates around
-// 0.73 in practice (see PLACE_CONFIDENCE), so a percentage would read as though
-// the app were permanently only two-thirds sure. Bands say the true thing.
-const settledness = (confidence: number): string =>
-  confidence >= 0.6 ? "settled" : confidence >= 0.35 ? "taking shape" : "barely tested";
+// ── Why this is a percentage now, when it deliberately was not ─────────────
+//
+// It used to be three words — "barely tested" / "taking shape" / "settled" —
+// and the reasoning was that a percentage could not be honest: confidence
+// saturates, so a bar would sit at two-thirds forever and read as an app that
+// is permanently unsure.
+//
+// That reasoning measured the number against a maximum that does not exist.
+// The user's call: **if a bar sits at 80% forever then 80% is what finished
+// looks like** — we make the app, so we set the goal. `settledness` in
+// `shuffle.ts` scales between the confidence a film has when it earns its
+// provisional number and the MEASURED ceiling, so it starts empty when the
+// number appears and genuinely reaches 100%.
+//
+// The words are kept alongside it. A percentage says how far along; a word says
+// what that means, and the pair reads better than either alone.
+const settledWord = (t: number): string =>
+  t >= 1 ? "fully settled" : t >= 0.5 ? "taking shape" : "barely tested";
 
 // Long-press card — for settling a "wait, which one is this?" mid-duel. Poster,
 // year and tagline are local and paint instantly; the TMDb detail streams in
@@ -206,7 +218,9 @@ export function FilmInfo({
               <div className="mt-1.5 text-[11px] leading-snug text-dim">
                 {evidence.duels === 0
                   ? "Never duelled"
-                  : `${evidence.duels} duel${evidence.duels === 1 ? "" : "s"} · ${settledness(evidence.confidence)}`}
+                  : `${evidence.duels} duel${evidence.duels === 1 ? "" : "s"} · ${Math.round(
+                      settledness(evidence.confidence) * 100,
+                    )}% ${settledWord(settledness(evidence.confidence))}`}
               </div>
             )}
             {meta?.genres?.length ? (

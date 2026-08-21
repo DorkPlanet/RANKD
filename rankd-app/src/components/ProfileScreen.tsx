@@ -647,8 +647,8 @@ export default function ProfileScreen({
 
               One chart doing two jobs. The bar's length is how many films are in
               the tier — the shape of your taste — and the solid part is how many
-              have a position. Deliberately NOT "settled": the gold counts hard and
-              soft locks alike (`isPlaced`), and "settled" is the app's word for
+              have a position. Deliberately NOT "locked": the gold counts hard and
+              soft locks alike (`isPlaced`), and "locked" is the app's word for
               the hard half alone. See the legend in `ListScreen`. Two separate charts of the same ten tiers was one
               chart too many, and no other app can draw this one because no other
               app knows the difference between owning a film and placing it. */}

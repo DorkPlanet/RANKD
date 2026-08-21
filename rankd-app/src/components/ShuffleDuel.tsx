@@ -28,7 +28,7 @@ import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/me
 import { isPlaced } from "@/lib/lock";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { RunStatus } from "./RunStatus";
-import { placeSettled, respreadFor } from "@/lib/shuffle";
+import { countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
 /**
@@ -108,6 +108,19 @@ export interface ShuffleOptions {
  */
 const REFIT_EVERY = 12;
 
+/**
+ * How many duels one film stays on the left before the next takes over.
+ *
+ * Six, which is one more than the five a film needs to earn its provisional
+ * number — so in the ordinary case the anchor is retired by being PLACED
+ * rather than by running out of turns, and the cap is only there so a film the
+ * matchmaker keeps failing to pair off cannot hold the screen forever.
+ *
+ * Rotation also happens early if the anchor gets placed sooner, which it can:
+ * it may already have had duels from an earlier sitting.
+ */
+const ANCHOR_HOLD = 6;
+
 /** How many films ahead the in-session artwork walk goes. See its use below. */
 const LOOKAHEAD = 80;
 
@@ -139,6 +152,13 @@ export default function ShuffleDuel({
   const [log, setLog] = useState<Judgement[] | null>(null);
   const [beliefs, setBeliefs] = useState<Map<string, Belief>>(new Map());
   const [pair, setPair] = useState<[Film, Film] | null>(null);
+  // The film held on the left, and how many duels it has served for.
+  //
+  // Kept HERE rather than derived from the pair, because the pair changes for
+  // reasons that have nothing to do with the anchor — artwork arriving, a
+  // re-serve after undo — and an anchor inferred from "whichever film is on the
+  // left" would silently reset whenever any of those happened.
+  const [anchor, setAnchor] = useState<{ id: string; held: number } | null>(null);
   // Whether the opening serve has run yet.
   //
   // `pair === null` meant two completely different things — "not served yet"
@@ -170,13 +190,26 @@ export default function ShuffleDuel({
   // information we already hold.
   // Serve a pair from whatever the model currently thinks.
   const serve = useCallback(
-    (currentFilms: Film[], currentLog: Judgement[], currentBeliefs: Map<string, Belief>) => {
-      setPair(
-        nextPair(currentFilms, currentLog, currentBeliefs, {
-          scope: options.scope,
-          includeConfirmed: options.includeConfirmed,
-        }),
-      );
+    (
+      currentFilms: Film[],
+      currentLog: Judgement[],
+      currentBeliefs: Map<string, Belief>,
+      holdId?: string,
+    ) => {
+      const next = nextPair(currentFilms, currentLog, currentBeliefs, {
+        scope: options.scope,
+        includeConfirmed: options.includeConfirmed,
+        anchorId: holdId,
+      });
+      // `nextPair` returns [anchor, opponent], but only as a PREFERENCE — it
+      // falls back to the least-settled film when every pair involving the held
+      // one is guarded. So the anchor is read back from what actually came out
+      // rather than assumed, or the label would claim a film is staying while
+      // the screen shows a different one.
+      setPair(next);
+      if (next) {
+        setAnchor((a) => (a && a.id === next[0].id ? a : { id: next[0].id, held: 0 }));
+      }
     },
     [options.scope, options.includeConfirmed],
   );
@@ -394,9 +427,14 @@ export default function ShuffleDuel({
     // from the beliefs (rankByBelief), which is where a cross-tier answer can
     // actually live.
     const crossTier = options.scope.kind === "person";
+    // The duel count first, so everything downstream sees it — including the
+    // placement gate, which now reads it. Skipped on a cross-tier run for the
+    // same reason the climb skips it: that comparison is not evidence about
+    // either film's position inside its own tier.
+    const counted = crossTier ? films : countDuel(films, [a, b]);
     const placed = crossTier
-      ? films
-      : placeSettled(respreadFor(films, [a, b], nextBeliefs, options.includeConfirmed), nextBeliefs);
+      ? counted
+      : placeSettled(respreadFor(counted, [a, b], nextBeliefs, options.includeConfirmed), nextBeliefs);
 
     setPending({ judgement, films, pair });
     undoTimer.current = setTimeout(flush, UNDO_MS);
@@ -405,7 +443,20 @@ export default function ShuffleDuel({
     setBeliefs(nextBeliefs);
     setCount((n) => n + 1);
     onFilms(placed);
-    serve(placed, nextLog, nextBeliefs);
+    // ── Does the anchor stay for another? ───────────────────────────────
+    //
+    // It is retired when it has earned its number, or when it has held for
+    // ANCHOR_HOLD duels. The first is the ordinary case and the second is only
+    // a backstop, since ANCHOR_HOLD is deliberately one more than the duels a
+    // placement needs.
+    //
+    // `placed` is post-answer, so this reads the film as it is NOW — including
+    // the placement this very duel may have just earned it.
+    const heldFilm = anchor ? placed.find((f) => f.id === anchor.id) : undefined;
+    const heldNow = anchor ? anchor.held + 1 : 0;
+    const retire = !anchor || !heldFilm || isPlaced(heldFilm) || heldNow >= ANCHOR_HOLD;
+    setAnchor(anchor && !retire ? { id: anchor.id, held: heldNow } : null);
+    serve(placed, nextLog, nextBeliefs, retire ? undefined : anchor?.id);
 
     // Every twelfth answer, re-derive the whole model from the whole log. See
     // REFIT_EVERY: without this the session learns nothing it can act on until
@@ -604,7 +655,25 @@ export default function ShuffleDuel({
             other the way the climb's does. Without it both fell through to the
             same lean and sat parallel, which is what made this mode look unlike
             the compare screen it deliberately reuses. */}
-        <PosterCard film={a} badge="" side="left" pairId={a.id} onPick={() => answer("a")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        {/* The anchor wears a badge, and only from its SECOND duel.
+            Without it, seeing the same film twice reads as the app repeating
+            itself rather than as a deliberate run — and the whole point of
+            holding it is that you are meant to notice.
+
+            Not on the first, because on the first there is nothing yet to have
+            stayed FROM: the badge would be labelling a fact that has not
+            happened. The badge slot is the climb's own, so this is the existing
+            mechanism rather than new furniture on a protected screen. */}
+        <PosterCard
+          film={a}
+          badge={anchor && anchor.id === a.id && anchor.held > 0 ? "STAYING" : ""}
+          side="left"
+          pairId={a.id}
+          onPick={() => answer("a")}
+          onFlick={noop}
+          onSink={noop}
+          onInfo={onInfo}
+        />
         <PosterCard film={b} badge="" side="right" pairId={a.id} onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
       </div>
       {/* Nearly all the slack above, matching the climb: the controls sit low,

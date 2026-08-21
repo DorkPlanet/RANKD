@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
+import { DEFAULT_PACE_S, duelsInMinutes, paceSeconds } from "@/lib/progress";
 import { saveFilms } from "@/lib/store";
 import { markDirty } from "@/lib/syncState";
 import {
@@ -1836,13 +1838,35 @@ function ShuffleSetup({
   // ── How long this sitting runs ──────────────────────────────────────────
   //
   // The mode's one real weakness was that it never ended: you played until you
-  // got bored, which is not a shape and gives nothing to finish. 250 is the
-  // default rather than 100 because 100 duels over any interesting scope
-  // settles almost nothing, and a session that ends having visibly done
-  // nothing is worse than one that runs long.
+  // got bored, which is not a shape and gives nothing to finish.
+  //
+  // In MINUTES, not duels. The first version offered 100/250/500 duels with a
+  // minutes estimate beside them, and the estimate was wrong by a factor of
+  // four because it came from a constant somebody invented rather than from
+  // anything measured. Minutes are what a person actually decides in — "I have
+  // ten minutes" — so they are what the buttons say, and the duel count is
+  // derived from THIS person's own pace out of the log. It cannot drift from
+  // the truth because it is computed from it.
   //
   // "No limit" stays, because it is what the mode was and somebody may want it.
-  const [target, setTarget] = useState<number | null>(250);
+  const [minutes, setMinutes] = useState<number | null>(10);
+  // This person's own seconds-per-duel, read from the log once when the sheet
+  // opens. Async because `loadLog` is, and `DEFAULT_PACE_S` until it lands — a
+  // sheet that showed no estimate for a beat would be worse than one that shows
+  // a reasonable default and then corrects itself.
+  const [paceS, setPaceS] = useState(DEFAULT_PACE_S);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const { loadLog } = await import("@/lib/log");
+      const rows = await loadLog();
+      if (alive) setPaceS(paceSeconds(rows));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const target = minutes === null ? null : duelsInMinutes(minutes, paceS);
 
   const scope: ShuffleOptions["scope"] =
     kind === "all"
@@ -1855,9 +1879,7 @@ function ShuffleSetup({
   // filter computed here would drift from it the first time either changed.
   const count = poolFor(films, { scope, includeConfirmed }).length;
   const playable = count >= 2;
-  // Rounded to something a person would say. At about one answer every two
-  // seconds this is honest for a thumb that is not racing.
-  const minutes = target ? Math.round((target * 2) / 60) : null;
+
 
   return (
     <Sheet title="Fast Shuffle" onClose={onClose}>
@@ -1906,15 +1928,22 @@ function ShuffleSetup({
       <div className="mb-3">
         <div className="mb-1.5 flex items-baseline justify-between">
           <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-dim">How long</span>
-          {minutes !== null && (
-            <span className="text-[11px] text-dim">about {minutes} min</span>
+          {target !== null && (
+            <span className="text-[11px] text-dim">
+              about {target} duels at your pace
+            </span>
           )}
         </div>
         <div className="flex gap-2">
-          {[100, 250, 500].map((t) => (
-            <ScopeTab key={t} label={String(t)} active={target === t} onClick={() => setTarget(t)} />
+          {[5, 10, 20].map((m) => (
+            <ScopeTab
+              key={m}
+              label={`${m} min`}
+              active={minutes === m}
+              onClick={() => setMinutes(m)}
+            />
           ))}
-          <ScopeTab label="No limit" active={target === null} onClick={() => setTarget(null)} />
+          <ScopeTab label="No limit" active={minutes === null} onClick={() => setMinutes(null)} />
         </div>
       </div>
 
@@ -1939,7 +1968,7 @@ function ShuffleSetup({
       </label>
 
       <StartButton
-        label={target ? `Start · ${target} duels` : `Start · ${count} films`}
+        label={minutes ? `Start · ${minutes} minutes` : `Start · ${count} films`}
         onClick={() => onStart({ scope, includeConfirmed, target: target ?? undefined })}
         disabled={!playable}
       />

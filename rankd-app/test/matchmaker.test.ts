@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PRIOR_SPREAD, type Belief } from "@/lib/bayes";
+import { beliefsFor } from "@/lib/beliefs";
 import { REPETITION_GUARD_WINDOW, nextPair, poolFor, inScope } from "@/lib/matchmaker";
 import { newJudgement, type Judgement } from "@/lib/log";
 import type { Rating } from "@/lib/tiers";
@@ -199,5 +200,53 @@ describe("nextPair", () => {
       shouldExplore: always,
     })!;
     expect(pair.map((f) => f.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+// ── Holding an anchor ──────────────────────────────────────────────────────
+//
+// `nextPair` already anchored on the least-settled film and picked its nearest
+// opponent; it just chose a new anchor every serve. Holding one is both easier
+// to read — one unfamiliar film at a time instead of two — and the thing that
+// makes placements happen at all, since a film earns its number from duels
+// about ITSELF and spreading them across a library means none accumulate.
+describe("anchorId", () => {
+  const pool = [film("a"), film("b"), film("c"), film("d")];
+  const flat = beliefsFor(pool, []);
+
+  it("keeps the requested film on the anchor side", () => {
+    const pair = nextPair(pool, [], flat, {
+      scope: { kind: "all" },
+      shouldExplore: () => false,
+      anchorId: "c",
+    });
+    expect(pair?.[0].id).toBe("c");
+  });
+
+  it("holds the same anchor across consecutive serves", () => {
+    for (const id of ["a", "b", "c", "d"]) {
+      const pair = nextPair(pool, [], flat, {
+        scope: { kind: "all" },
+        shouldExplore: () => false,
+        anchorId: id,
+      });
+      expect(pair?.[0].id).toBe(id);
+    }
+  });
+
+  it("falls back to the least-settled film when the anchor is not in the pool", () => {
+    // Placed, hard-locked, filtered out by scope, or simply gone. A stale id
+    // must degrade to normal behaviour rather than serve nothing.
+    const pair = nextPair(pool, [], flat, {
+      scope: { kind: "all" },
+      shouldExplore: () => false,
+      anchorId: "not-a-film",
+    });
+    expect(pair).not.toBeNull();
+    expect(pair![0].id).not.toBe("not-a-film");
+  });
+
+  it("still returns a pair when there is no anchor at all", () => {
+    expect(nextPair(pool, [], flat, { scope: { kind: "all" }, shouldExplore: () => false })).not.toBeNull();
   });
 });

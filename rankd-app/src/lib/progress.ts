@@ -173,3 +173,52 @@ export function sessionStats(
  * collapses instead of failing loudly.
  */
 export const pct = (n: number, total: number): number => (total > 0 ? (n / total) * 100 : 0);
+
+// ── How fast this person actually answers ──────────────────────────────────
+//
+// Written because the alternative was a constant, and the constant was wrong.
+// The Fast Shuffle setup sheet estimated a session at two seconds per duel — a
+// figure with no source, invented while writing the label. Measured against
+// real use it is about SEVEN, and that was somebody deliberately not
+// deliberating. So "250 duels · about 8 min" was off by a factor of four on a
+// screen whose whole job is to tell you how long this will take.
+//
+// `VOICE.md` rules 3 and 4 exist for exactly this: never invent a number, and
+// check a claim about the screen against the screen. A measured default is the
+// structural version of that rule — it cannot drift from the truth because it
+// is derived from it.
+
+/** Seconds per duel for somebody with no history to measure. */
+export const DEFAULT_PACE_S = 7;
+
+/**
+ * Gaps longer than this are breaks, not thinking, and are dropped.
+ *
+ * Without it a single overnight gap between two sittings would dominate the
+ * median and report a pace of several hours per duel.
+ */
+const BREAK_S = 60;
+
+/** How many recent duels to measure. Enough to be stable, recent enough to be true. */
+const WINDOW = 200;
+
+/**
+ * This person's typical seconds per duel, from the timestamps already in the
+ * log. The MEDIAN rather than the mean, so one long deliberation does not drag
+ * the estimate the way one break would.
+ */
+export function paceSeconds(log: readonly Judgement[]): number {
+  const recent = log.slice(-WINDOW);
+  const gaps: number[] = [];
+  for (let i = 1; i < recent.length; i++) {
+    const gap = (recent[i].t - recent[i - 1].t) / 1000;
+    if (gap > 0 && gap <= BREAK_S) gaps.push(gap);
+  }
+  if (gaps.length < 5) return DEFAULT_PACE_S;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
+
+/** How many duels fit in a session of this many minutes, at this person's pace. */
+export const duelsInMinutes = (minutes: number, paceS: number): number =>
+  Math.max(1, Math.round((minutes * 60) / paceS));

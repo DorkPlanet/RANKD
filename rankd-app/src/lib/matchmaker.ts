@@ -73,6 +73,30 @@ export interface MatchOptions {
   recentlyServed?: readonly (readonly [string, string])[];
   /** Injected so tests pin exploration on or off instead of hoping. */
   shouldExplore?: () => boolean;
+  /**
+   * Keep this film on one side across several serves, changing only its
+   * opponent — the King of the Hill shape, applied to a mode that had neither
+   * a contender nor a pile.
+   *
+   * ── Why ────────────────────────────────────────────────────────────────
+   *
+   * Two reasons, and the second is the load-bearing one.
+   *
+   * Reading it: two unfamiliar films at once is two things to weigh before you
+   * can answer. Holding one still means every answer after the first is a
+   * comparison against something you have already thought about.
+   *
+   * Evidence: a film earns a position from duels ABOUT ITSELF, and this
+   * function's default is to anchor on whichever film is least settled — a
+   * DIFFERENT one almost every serve. Over a big pool that spreads evidence so
+   * thin that nothing accumulates enough to be placed. Holding an anchor
+   * concentrates duels where a placement actually comes from.
+   *
+   * Ignored when the film is not in the pool — it was placed, hard-locked,
+   * filtered out by the scope, or removed — so a stale id degrades to the
+   * normal least-settled behaviour rather than serving nothing.
+   */
+  anchorId?: string;
 }
 
 /** The films a scope admits, before the confirmed filter. */
@@ -174,6 +198,15 @@ export function nextPair(
   const anchors = [...candidates].sort(
     (a, b) => b.spread - a.spread || (a.film.id < b.film.id ? -1 : 1),
   );
+
+  // A held anchor goes to the front rather than replacing the list. It is still
+  // only a PREFERENCE: if every pair involving it is inside the guard window,
+  // the loop below falls through to the least-settled ordering exactly as it
+  // always did, so holding an anchor can never be the thing that serves nothing.
+  if (opts.anchorId) {
+    const held = anchors.findIndex((c) => c.film.id === opts.anchorId);
+    if (held > 0) anchors.unshift(...anchors.splice(held, 1));
+  }
 
   // One explore/exploit decision per serve, so exploration is a property of the
   // run rather than something the caller has to remember to ask for.
