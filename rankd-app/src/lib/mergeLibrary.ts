@@ -17,13 +17,28 @@
 //
 // ── The one case this still refuses ────────────────────────────────────────
 //
-// A log that is empty on one side and not on the other. That is either a device
-// that has imported but never played — which `reconcile` routes to `pull`
-// before it ever reaches here — or somebody who deliberately used "Clear my
-// ranking", which throws the log away precisely so the model cannot re-place
-// everything from the same duels (see `reset.ts`). Merging would undo that
-// reset and hand back the ranking they asked to be rid of. So it is left to the
-// chooser, which is the one question actually worth asking.
+// A log that is empty BY INTENT while the other side has evidence. "Clear my
+// ranking" throws the log away precisely so the model cannot re-place
+// everything from the same duels (see `reset.ts`); merging would union that
+// evidence straight back in and hand over the ranking they asked to be rid of.
+// So it is left to the chooser, which is the one question actually worth
+// asking. `cleared.ts` is how intent is told from circumstance.
+//
+// ── What this used to refuse, wrongly (fixed 21 Aug 2026) ──────────────────
+//
+// The rule was simply "both logs must be non-empty", and the note here claimed
+// the innocent case — a device that imported but never played — was "routed to
+// `pull` before it ever reaches here". **It was not, and that is verified:**
+// `reconcile` only pulls when there is no local library, an imported device has
+// one, and `saveFilms` marks it dirty. So import-then-sync on a second device
+// landed in the chooser every time, over a situation with nothing at stake —
+// the union of an empty log and a real one is the real one.
+//
+// It also refused when NEITHER side had any evidence, which asks the user to
+// choose between two libraries that have nothing to disagree about.
+//
+// Both of those now merge. The symmetric question — was the SERVER's empty log
+// deliberate? — cannot be answered from this device, so it is still asked.
 
 import { beliefsFor } from "./beliefs";
 import { isHard } from "./lock";
@@ -96,10 +111,32 @@ export function mergeFilmLists(mine: readonly Film[], theirs: readonly Film[]): 
  * See the header: an empty log on one side only is the signature of a
  * deliberate reset, and merging would undo it.
  */
-export function canMerge(mineLog: string | null | undefined, theirsLog: string | null | undefined): boolean {
-  const a = parseLog(mineLog).judgements.length;
-  const b = parseLog(theirsLog).judgements.length;
-  return a > 0 && b > 0;
+export function canMerge(
+  mineLog: string | null | undefined,
+  theirsLog: string | null | undefined,
+  /**
+   * Whether THIS browser's empty log is the user's decision rather than its
+   * history. Defaults false, so a caller that does not know gets the cautious
+   * answer — which is the old behaviour for the case that matters.
+   */
+  mineWasCleared = false,
+): boolean {
+  const mine = parseLog(mineLog).judgements.length;
+  const theirs = parseLog(theirsLog).judgements.length;
+
+  // The one question worth asking. My log is empty because I emptied it, and
+  // theirs is not: a union hands back exactly what I threw away.
+  if (mine === 0 && theirs > 0 && mineWasCleared) return false;
+
+  // Their log is empty and mine is not. Merging keeps my evidence, which is
+  // real work — but if they cleared on purpose, it would resurrect a ranking on
+  // their device at the next sync, and nothing here can tell which it was.
+  // Left as a question, exactly as before.
+  if (theirs === 0 && mine > 0) return false;
+
+  // Everything else is a safe union: both sides have evidence, or the empty
+  // side is empty because nothing has happened on it, or neither side has any.
+  return true;
 }
 
 /**

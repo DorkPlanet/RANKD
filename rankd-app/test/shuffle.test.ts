@@ -267,13 +267,15 @@ describe("what the Fast Shuffle readout measures", () => {
   });
 
   it("demands real evidence: the threshold sits well above trivially touched", () => {
-    // Raised from 0.5 to 0.65 on 21 Aug after measuring what each value costs.
-    // The floor matters more than the exact number — a threshold down near the
-    // prior would place films nobody has an opinion about yet.
-    expect(PLACE_CONFIDENCE).toBeGreaterThanOrEqual(0.6);
-    // And the ceiling matters just as much: confidence saturates below 1, so a
-    // threshold set too high places nothing ever, which looks broken rather
-    // than strict. Measured maxima were 0.798 (120 films) and 0.845 (400).
-    expect(PLACE_CONFIDENCE).toBeLessThan(0.75);
+    // Settled at 0.55 on 21 Aug: 0.5 placed too readily, 0.65 was tried and
+    // felt like a different game. The BAND is what is worth guarding, not the
+    // exact value — where to sit inside it is a feel question, and the next
+    // person to tune it should be free to without a test arguing back.
+    expect(PLACE_CONFIDENCE).toBeGreaterThan(0.5);
+    // The ceiling matters more, and is a real cliff: confidence saturates well
+    // below 1, so a threshold set too high places nothing ever, which looks
+    // broken rather than strict. Measured maxima were 0.798 (120 films) and
+    // 0.845 (400), and 0.7 already fails to fill a small tier.
+    expect(PLACE_CONFIDENCE).toBeLessThanOrEqual(0.65);
   });
 });

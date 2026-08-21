@@ -1,0 +1,9 @@
+# `sync.ts` contains two DELIBERATE NUL bytes.
+#
+# `fingerprint` joins each key and value with a literal \0 so a value that
+# happens to contain the delimiter cannot forge a boundary. Git sees them and
+# calls the file binary, which makes its history unreadable. Marking it text
+# fixes the diff without touching the bytes — and the bytes must not be
+# touched: removing them changes every sync hash the app has ever computed.
+# See REGISTER.md C21.
+rankd-app/src/lib/sync.ts text diff

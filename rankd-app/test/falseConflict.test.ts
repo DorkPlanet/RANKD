@@ -47,9 +47,21 @@ const seedLocal = (films: string) => {
 
 const FILMS = JSON.stringify([{ id: "heat", title: "Heat", rating: 5, score: 9000 }]);
 
+/**
+ * Whether the merge path reloaded.
+ *
+ * The stub used to be a bare `{}`, which was enough while `canMerge` refused
+ * everything this fixture could produce — the merge branch was simply never
+ * reached from here. It is now, and it ends in `window.location.reload()`,
+ * because every screen read the library once at mount and is holding films the
+ * merge has just replaced.
+ */
+let reloaded = false;
+
 beforeEach(() => {
   store.clear();
-  vi.stubGlobal("window", {});
+  reloaded = false;
+  vi.stubGlobal("window", { location: { reload: () => void (reloaded = true) } });
   vi.stubGlobal("localStorage", {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
@@ -127,10 +139,35 @@ describe("reconcileWithAccount", () => {
     expect(outcome.kind).toBe("pushed");
   });
 
-  // The chooser still has to appear when it is earning its keep.
-  it("still asks when the two sides really differ", async () => {
+  // ── When the chooser does and does not earn its keep ────────────────────
+  //
+  // This used to assert that two DIFFERENT film lists always reach the chooser.
+  // They do not any more, and should not: `LOG` here is empty on both sides, so
+  // there is no evidence anywhere to disagree about — and making somebody pick
+  // a side in that state deletes one library to settle an argument that is not
+  // happening. The union keeps both.
+  it("merges rather than asking when neither side has any evidence", async () => {
     seedLocal(FILMS);
     serverReplies(JSON.stringify([{ id: "drive", title: "Drive", rating: 4, score: 8000 }]));
+
+    const outcome = await reconcileWithAccount();
+
+    expect(outcome.kind).not.toBe("conflict");
+    // And it must reload, or the app keeps rendering the pre-merge library.
+    expect(reloaded).toBe(true);
+  });
+
+  it("still asks when the account's log is empty and this device has played", async () => {
+    // The case that genuinely cannot be decided from here: the account holds a
+    // library with no evidence, which is either somebody who imported and never
+    // played or somebody who used "Clear my ranking" on another device. Merging
+    // would resurrect a ranking they may have thrown away on purpose.
+    seedLocal(FILMS);
+    store.set(
+      "rankd-log-v1",
+      JSON.stringify({ v: 1, f: ["heat", "drive"], r: [["1-aa", 0, 1, "a", "h", 100]] }),
+    );
+    serverReplies(FILMS);
 
     const outcome = await reconcileWithAccount();
 

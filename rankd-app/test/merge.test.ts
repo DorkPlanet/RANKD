@@ -143,15 +143,47 @@ describe("rederive", () => {
 });
 
 describe("canMerge", () => {
-  // "Clear my ranking" throws the log away on purpose, so the model cannot
-  // re-place everything from the same duels. Merging would undo that.
-  it("refuses when one side has been deliberately cleared", () => {
-    expect(canMerge(asFile([]), asFile([j("1-aa", "a", "b", 100)]))).toBe(false);
-    expect(canMerge(asFile([j("1-aa", "a", "b", 100)]), asFile([]))).toBe(false);
+  const played = asFile([j("1-aa", "a", "b", 100)]);
+  const noEvidence = asFile([]);
+
+  // The rule used to be "both logs must be non-empty", which conflated two
+  // completely different reasons a log can be empty. The comment here always
+  // described the RIGHT one; there was simply no way to tell them apart.
+  it("refuses when this browser's log was emptied on purpose", () => {
+    // "Clear my ranking" throws the log away so the model cannot re-place
+    // everything from the same duels. A union hands it straight back.
+    expect(canMerge(noEvidence, played, true)).toBe(false);
+  });
+
+  it("merges when this browser simply has not played yet", () => {
+    // A second device that imported a CSV. The union of an empty log and a real
+    // one IS the real one — nothing is invented and nothing can be lost — yet
+    // this used to send the user to the chooser on their very first sync.
+    expect(canMerge(noEvidence, played, false)).toBe(true);
+  });
+
+  it("defaults to the cautious answer when the caller does not say", () => {
+    // Only matters for the flag's own case; the caller in sync.ts always says.
+    expect(canMerge(noEvidence, played)).toBe(true);
+  });
+
+  it("merges when neither side has any evidence at all", () => {
+    // Two libraries with nothing to disagree about. Asking someone to pick one
+    // here DELETES the other side's films to settle a difference of opinion
+    // that does not exist.
+    expect(canMerge(noEvidence, noEvidence)).toBe(true);
+  });
+
+  it("still asks when the SERVER's log is empty and this one is not", () => {
+    // The mirror of the first case, seen from the other device — and the only
+    // protection for a "Clear my ranking" performed elsewhere. Nothing in this
+    // payload distinguishes "they cleared it" from "they imported and never
+    // played", so it stays a question.
+    expect(canMerge(played, noEvidence)).toBe(false);
   });
 
   it("allows it when both sides have really played", () => {
-    expect(canMerge(asFile([j("1-aa", "a", "b", 100)]), asFile([j("2-bb", "c", "d", 200)]))).toBe(true);
+    expect(canMerge(played, asFile([j("2-bb", "c", "d", 200)]))).toBe(true);
   });
 });
 

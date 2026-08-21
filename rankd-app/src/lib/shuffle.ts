@@ -40,7 +40,26 @@ import type { Film } from "./types";
  * ceiling would place nothing, ever, no matter how long anyone swiped — which
  * would look exactly like a broken feature rather than a strict one.
  *
- * ── Raised from 0.5 to 0.65 on 21 Aug 2026 ────────────────────────────────
+ * ── 0.5 → 0.65 → 0.55, all on 21 Aug 2026 ─────────────────────────────────
+ *
+ * **The landing point is 0.55.** 0.65 was tried first and went too far: the
+ * user played it and said so — "we've gone too far the other way with how many
+ * duels a film now needs. Meet somewhere in the middle, in favour of where it
+ * was." What that buys, measured on the same 120-film simulation:
+ *
+ *    duels/film    @0.5   @0.55   @0.6   @0.65
+ *        2           17      6       0      0
+ *        4          120     80      29      0
+ *        5          120    120      69     25
+ *       10          120    120     120    120
+ *
+ * So 0.55 keeps the shape of 0.5 — full placement at about five duels a film,
+ * not ten — while cutting the SHALLOW placements that were the actual
+ * complaint: at two duels a film it places six where 0.5 placed seventeen. It
+ * costs roughly one extra duel per film before a tier fills in. 0.65 cost five,
+ * which is a different game rather than a stricter one.
+ *
+ * ── The measurement that set the bounds ───────────────────────────────────
  *
  * The user's ask: films should need more evidence before the app claims to have
  * worked them out. Measured before moving it rather than argued, over simulated
@@ -56,12 +75,14 @@ import type { Film } from "./types";
  * affords more informative comparisons. So there is real headroom above 0.5,
  * and the old note was calibrated on a smaller library than anyone actually has.
  *
- * 0.65 is the pick and 0.7 is not, for one reason: 0.7 places only 89 of 120 at
- * ten duels a film, so it punishes a SMALL scope. Fast Shuffle is often played
- * over one tier or one person, and a threshold that works on the whole library
- * but stalls on a tier is the broken-looking failure this constant exists to
- * avoid. 0.65 reaches full placement at ten duels a film at both sizes while
- * demanding roughly five times the evidence 0.5 did at the five-duel mark.
+ * Nothing at or above 0.7 is available at all: it places only 89 of 120 at ten
+ * duels a film, so it punishes a SMALL scope. Fast Shuffle is often played over
+ * one tier or one person, and a threshold that works on the whole library but
+ * stalls on a tier is the broken-looking failure this constant exists to avoid.
+ *
+ * The useful band is therefore narrow — roughly 0.5 to 0.65 — and where to sit
+ * inside it is a feel question rather than a measurement one. Measurement says
+ * what each value costs; only playing it says which cost is right.
  *
  * Beware the obvious misreading of "confidence": it measures how precisely the
  * evidence LOCATES a film, not how much that evidence agrees with itself.
@@ -70,7 +91,7 @@ import type { Film } from "./types";
  * right, but it means this threshold is not a filter for "the user was
  * consistent about this one".
  */
-export const PLACE_CONFIDENCE = 0.65;
+export const PLACE_CONFIDENCE = 0.55;
 
 const meanOf = (film: Film, beliefs: Map<string, Belief>): number =>
   beliefs.get(film.id)?.mean ?? seedOf(film);

@@ -18,6 +18,7 @@ import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
 import type { Prefs } from "@/lib/prefs";
 import { resetRanking, wipeAccount, wipeEverything } from "@/lib/reset";
+import { markRankingCleared } from "@/lib/cleared";
 import { fetchAccount } from "@/lib/account";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
@@ -396,6 +397,11 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
                 // gone and a retry finishes the job. The other order can leave a
                 // library with no placements and a log that re-places it.
                 clearLog();
+                // Record that the emptiness is DELIBERATE. Without this, a sync
+                // against a device that still holds the duels merges them back
+                // in and undoes exactly what this button just did. See
+                // `cleared.ts`.
+                markRankingCleared();
                 onReset(resetRanking(films));
                 setArming(false);
               }}
