@@ -41,19 +41,40 @@ export function TasteChart({
   axes,
   was,
   rankd,
+  locked,
 }: {
   axes: TasteAxis[];
   /** Your shape when this sitting began. Absent on a first sitting. */
   was?: TasteShape;
-  /** Rankd's order over the same films. Absent until the beliefs have loaded. */
+  /**
+   * The films Rankd placed for you, in blue.
+   *
+   * This used to be "Rankd's ORDER over the same films", which was the same
+   * order — a soft lock's score is written in belief order, so the two shapes
+   * came out identical and the chart drew one line twice. It is a different
+   * POPULATION now: everything with a position you did not lock.
+   */
   rankd?: TasteShape;
+  /**
+   * The films you LOCKED, in gold, when there are enough of them to mean
+   * anything. Absent below `MIN_FOR_LOCKED`, and then the gold line falls back
+   * to the whole placed list — which is `axes` and what it always drew.
+   */
+  locked?: TasteShape;
 }) {
   const n = axes.length;
   // Three axes is the fewest that encloses an area. Two would draw a line and
   // call it a shape, which is worse than saying nothing.
   if (n < 3) return null;
 
-  const now = axes.map((a) => a.standing);
+  // Gold is what you locked when that is a real shape, and your whole placed
+  // list otherwise. Same axes and the same standings either way, so the two
+  // cases are the same chart with a different membership rather than two
+  // charts sharing a dial.
+  const now =
+    locked && axes.every((a) => locked[a.genre] !== undefined)
+      ? axes.map((a) => locked[a.genre])
+      : axes.map((a) => a.standing);
   // Rankd's answer, drawn only where it has one for every axis, so the polygon
   // can never close across a gap and imply a value it does not hold.
   const theirs = rankd && axes.every((a) => rankd[a.genre] !== undefined) ? axes.map((a) => rankd[a.genre]) : null;

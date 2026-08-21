@@ -30,12 +30,18 @@ import LiveCardSheet from "./LiveCardSheet";
 import { liveViews } from "@/lib/card/live";
 import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
 import { achievements } from "@/lib/achievements";
-import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
+import {
+  biggestDisagreement,
+  biggestMove,
+  lockedShape,
+  shuffledShape,
+  tasteFor,
+  tasteShape,
+} from "@/lib/taste";
 import { loadLog, type Judgement } from "@/lib/log";
 import { notesFor } from "@/lib/notes";
 import { GenreRing } from "./GenreRing";
 import { Passport } from "./Passport";
-import { beliefsWhenIdle } from "@/lib/beliefs";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
 
@@ -226,37 +232,41 @@ export default function ProfileScreen({
   // answer a library too thin to say anything about gets.
   const [logRows, setLogRows] = useState<Judgement[] | null>(null);
   const notes = useMemo(() => notesFor(films, logRows ?? []), [films, logRows]);
-  // Rankd's own order over the same films, loaded off the interaction path.
-  // `beliefsFor` fits the whole log, which is the expensive one — so this
-  // resolves late and the chart draws your shape alone until it does, rather
-  // than holding the screen for a second opinion.
-  const [rankd, setRankd] = useState<TasteShape | undefined>(undefined);
+  // ── The two shapes ──────────────────────────────────────────────────────
+  //
+  // Both are pure functions of the library now, so they are computed here
+  // rather than awaited. The old blue line needed the whole belief fit — the
+  // expensive one — and arrived late; it also turned out to be the gold line
+  // recomputed, because a soft lock's score IS its belief order. See the header
+  // of `taste.ts`.
+  //
+  // Gold is what you locked, blue is what Rankd shuffled. `lockedShape` returns
+  // null below ten films, and then the gold line falls back to your whole
+  // placed list and the caption says why.
+  const genres = useMemo(() => taste.map((a) => a.genre), [taste]);
+  const locked = useMemo(() => lockedShape(films, genres) ?? undefined, [films, genres]);
+  const rankd = useMemo(() => shuffledShape(films, genres), [films, genres]);
   useEffect(() => {
     let dead = false;
-    if (taste.length < 3) return;
-    void loadLog()
-      .then((log) => {
-        if (!dead) setLogRows(log);
-        return beliefsWhenIdle(films, log);
-      })
-      .then((beliefs) => {
-        if (dead) return;
-        setRankd(rankdShape(films, beliefs, taste.map((a) => a.genre)));
-      });
+    void loadLog().then((log) => {
+      if (!dead) setLogRows(log);
+    });
     return () => {
       dead = true;
     };
-  }, [films, taste]);
+  }, []);
   // Where you and Rankd part company, for the caption.
+  // Where what you locked parts company with what Rankd placed. Only says
+  // anything once there are enough locks for the gold line to be real.
   const disagree = useMemo(
-    () => (rankd ? biggestDisagreement(tasteShape(films, taste.map((a) => a.genre)), rankd) : null),
-    [rankd, films, taste],
+    () => (locked ? biggestDisagreement(locked, rankd) : null),
+    [locked, rankd],
   );
   // What shifted since the sitting began. Null when nothing did, so the caption
   // falls back to explaining the chart rather than announcing a non-event.
   const moved = useMemo(
-    () => (wasShape ? biggestMove(wasShape, tasteShape(films, taste.map((a) => a.genre))) : null),
-    [wasShape, films, taste],
+    () => (wasShape ? biggestMove(wasShape, tasteShape(films, genres)) : null),
+    [wasShape, films, genres],
   );
   const earned = badges.filter((b) => b.got).length;
 
@@ -794,22 +804,41 @@ export default function ProfileScreen({
 
           {/* The shape, above the lines that describe it in words.
               It plots mean POSITION per genre, never win rate and never how much
-              of a genre you own — see the header of `taste.ts` for why both of
-              those are wrong. Renders nothing below three axes, so a thin
-              library is simply the four lines it always was. */}
+              of a genre you've seen — see the header of `taste.ts` for why both
+              of those are wrong. Renders nothing below three axes, so a thin
+              library is simply the four lines it always was.
+
+              TWO POPULATIONS, not two orders. Gold is what you locked, blue is
+              what Rankd shuffled. It used to be your order against Rankd's over
+              the same films, which is the same order twice — a soft lock's score
+              IS its belief order — so the chart drew one line on top of another.
+              Caught on a phone with 1 locked film and 234 shuffled: "they
+              overlap the exact same." */}
           {taste.length >= 3 && (
             <Section title="Your shape">
-              <TasteChart axes={taste} was={wasShape} rankd={rankd} />
+              {/* No blue line until there is a gold one to compare it WITH.
+                  Without enough locks, gold is your whole placed list and blue
+                  is the shuffled part of it — nearly the same films, so nearly
+                  the same outline, which is the overlap that started all this.
+                  One honest line beats two that agree by construction. */}
+              <TasteChart axes={taste} was={wasShape} rankd={locked ? rankd : undefined} locked={locked} />
               {/* A key, because three outlines need one. Only the ones actually
                   drawn appear: offering a legend entry for a line that is not
-                  on the chart is how a reader starts hunting for it. */}
+                  on the chart is how a reader starts hunting for it.
+
+                  The gold entry changes with what gold IS. Below ten locked
+                  films there is no locked shape and the gold line is your whole
+                  placed list, so calling it LOCKED would be naming something
+                  that is not on the chart. */}
               <div className="mt-1 flex justify-center gap-3 text-label tracking-[0.08em] text-dim">
-                <span className="text-gold">● YOURS</span>
-                {rankd && <span className="text-accent">● RANKD</span>}
+                <span className="text-gold">● {locked ? "LOCKED" : "YOUR LIST"}</span>
+                {locked && <span className="text-accent">● SHUFFLED</span>}
                 {moved && <span>◌ WHERE YOU STARTED</span>}
               </div>
               <p className="mt-1.5 text-center text-label leading-snug text-dim">
-                {moved
+                {!locked
+                  ? "Lock ten films and this splits into what you settled against what Rankd did."
+                  : moved
                   ? `${moved.genre} moved this sitting.`
                   : disagree
                     ? `You rate ${disagree.genre} ${disagree.youHigher ? "higher" : "lower"} than your duels do.`

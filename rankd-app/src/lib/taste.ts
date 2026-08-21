@@ -19,26 +19,43 @@
 // your order, not how it got there. Every bias above disappears, because a
 // position is the product of decisions you actually kept.
 //
-// ── Two orders, one population ─────────────────────────────────────────────
+// ── Two POPULATIONS, one order — and why it used to be the other way ───────
 //
-// There are two answers to "where does this film belong": the one you committed
-// to, and the one the evidence implies. Both are drawn, over the SAME set of
-// placed films and the same denominator, so the only difference between the two
-// shapes is the ordering. Anything else would be comparing two populations and
-// calling the difference taste.
+// This drew two orderings over one population: your order by score, and Rankd's
+// by rating-then-belief. The premise was that those are two different answers to
+// "where does this film belong".
 //
-// Rankd's order is tier-scoped, and that is not a detail. `PRIOR_SPREAD` is
-// deliberately wide, so a much-duelled film can out-mean a whole tier above it,
-// while `shuffle.ts` re-spreads within a band and never lets one be escaped.
-// Sorting the library by raw belief mean produces a position Rankd would never
-// act on — it shipped on the film card for one afternoon and printed a 1.5-star
-// film at #391. Rating first, belief second, is the order Rankd would actually
-// apply.
+// **They are the same answer, and it is provable rather than arguable.** A soft
+// lock's `score` is written by `respreadTier`, which spreads a tier IN BELIEF
+// ORDER. Tier bands never overlap, so sorting by score IS sorting by rating then
+// belief. The two orders can only diverge on a HARD lock, whose score the user
+// pinned and the model may not touch.
+//
+// So on a library placed almost entirely by Fast Shuffle the chart drew one line
+// twice. Reported from a phone — "they overlap the exact same" — with one locked
+// film against 234 shuffled, and confirmed by a test over 60 placed films: the
+// two orders came back byte-identical.
+//
+// What is drawn now is the comparison that was actually wanted: **the films you
+// LOCKED against the films Rankd SHUFFLED.** Two populations, one ordering, and
+// a real question — do the films you cared enough to settle sit differently from
+// the ones the model placed for you?
+//
+// The old warning about comparing populations is not forgotten, it is answered:
+// both shapes use the SAME standings, taken from the whole placed list, so a
+// genre's height means the same thing on both lines. Only the membership
+// differs, which is the entire point.
+//
+// Tier-scoping still matters wherever beliefs are turned into a position.
+// `PRIOR_SPREAD` is deliberately wide, so a much-duelled film can out-mean a
+// whole tier above it while `shuffle.ts` never lets a band be escaped. Sorting
+// by raw belief mean produces a position Rankd would never act on — it shipped
+// on the film card for one afternoon and printed a 1.5-star film at #391.
 
 import type { Belief } from "./bayes";
 import { seedOf } from "./beliefs";
 import { genresIn } from "./genres";
-import { isPlaced } from "./lock";
+import { isHard, isPlaced } from "./lock";
 import type { Film } from "./types";
 
 /** Below this a genre has nothing to say and is left off the chart entirely. */
@@ -146,9 +163,78 @@ export function shapeFrom(
   return shape;
 }
 
-/** Your shape, which is what the profile draws in gold. */
+/** Your shape over everything placed — the profile's gold line by default. */
 export function tasteShape(films: readonly Film[], axes: readonly string[]): TasteShape {
   return shapeFrom(films, yourOrder(films), axes);
+}
+
+/**
+ * Below this, a "locked" shape is noise rather than a shape.
+ *
+ * Three films can put a genre on an axis (`MIN_FOR_AXIS`) but they cannot
+ * describe a taste, and a spike drawn from two locked horror films would invite
+ * a reading the data cannot support. Ten is where it starts being a claim.
+ */
+export const MIN_FOR_LOCKED = 10;
+
+/**
+ * The films you LOCKED, shaped against the same standings as everything else.
+ *
+ * Both this and `shuffledShape` take their standings from the whole placed list
+ * — `shapeFrom` is given the full order — so a genre sitting high means the same
+ * thing on both lines and only the MEMBERSHIP differs. That is what makes the
+ * two comparable at all; two separately-normalised shapes would be two charts
+ * sharing a dial.
+ *
+ * Returns null below `MIN_FOR_LOCKED`, so the caller can leave the line off and
+ * say why rather than drawing a shape nobody should read.
+ */
+export function lockedShape(films: readonly Film[], axes: readonly string[]): TasteShape | null {
+  const locked = films.filter(isHard);
+  if (locked.length < MIN_FOR_LOCKED) return null;
+  return membershipShape(locked, yourOrder(films), axes);
+}
+
+/** The films Rankd placed for you — everything with a position you did not lock. */
+export function shuffledShape(films: readonly Film[], axes: readonly string[]): TasteShape {
+  return membershipShape(
+    films.filter((f) => isPlaced(f) && !isHard(f)),
+    yourOrder(films),
+    axes,
+  );
+}
+
+/**
+ * A shape over a SUBSET, where an empty axis means zero rather than no data.
+ *
+ * `shapeFrom` omits a genre below `MIN_FOR_AXIS`, which is right when both
+ * lines cover the same films: a gap there means "not enough to say", and
+ * closing a polygon across it would invent a value.
+ *
+ * It is wrong here, and the difference is the whole point of these two shapes.
+ * When the population is "the films you locked", a genre with none of them in it
+ * is not missing data — it is the answer. You have locked no comedies. Omitting
+ * that axis made the polygon refuse to draw at all, which is how a lock set
+ * concentrated in one genre — the interesting case, and the one the user
+ * predicted would "point mostly one direction" — ended up invisible.
+ *
+ * So every axis gets a value and an absent genre gets 0. That is what produces
+ * the spike.
+ */
+function membershipShape(
+  subset: readonly Film[],
+  order: readonly Film[],
+  axes: readonly string[],
+): TasteShape {
+  const standing = standingsFrom(order);
+  const shape: TasteShape = {};
+  for (const genre of axes) {
+    const mine = subset.filter((f) => f.genres?.includes(genre) && standing.has(f.id));
+    shape[genre] = mine.length
+      ? mine.reduce((sum, f) => sum + standing.get(f.id)!, 0) / mine.length
+      : 0;
+  }
+  return shape;
 }
 
 /**

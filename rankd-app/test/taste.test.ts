@@ -4,8 +4,10 @@ import {
   axisLabel,
   biggestDisagreement,
   biggestMove,
+  lockedShape,
   MIN_FOR_AXIS,
   rankdShape,
+  shuffledShape,
   tasteAxes,
   tasteFor,
   tasteShape,
@@ -136,5 +138,73 @@ describe("axis labels", () => {
   it("shortens the genre names that ran off the chart", () => {
     expect(axisLabel("Science Fiction")).toBe("Sci-Fi");
     expect(axisLabel("Drama")).toBe("Drama");
+  });
+});
+
+// ── Two POPULATIONS, not two orders ────────────────────────────────────────
+//
+// The chart used to draw your order against Rankd's over the same films, and
+// they are the same order: a soft lock's `score` is written by `respreadTier`,
+// which spreads a tier IN BELIEF ORDER, and tier bands never overlap — so
+// sorting by score IS sorting by rating then belief. On a library placed by
+// Fast Shuffle the two lines were identical and the chart drew one twice.
+//
+// Reported from a phone with 1 locked film against 234 shuffled: "they overlap
+// the exact same." These pin the replacement so it cannot quietly come back.
+describe("lockedShape and shuffledShape", () => {
+  const mk = (id: string, genre: string, score: number, lock?: "soft" | "hard"): Film =>
+    ({ id, title: id, rating: 4, score, genres: [genre], ...(lock ? { lock } : {}) }) as Film;
+
+  // Twelve locked horror films and twelve shuffled dramas, so the two
+  // populations genuinely differ and there are enough locks to clear the bar.
+  const films = [
+    ...Array.from({ length: 12 }, (_, i) => mk("h" + i, "Horror", 7900 - i, "hard")),
+    ...Array.from({ length: 12 }, (_, i) => mk("d" + i, "Drama", 7000 - i, "soft")),
+  ];
+  const axes = ["Horror", "Drama"];
+
+  it("draws the locked films only, and they are not the shuffled ones", () => {
+    const locked = lockedShape(films, axes)!;
+    const shuffled = shuffledShape(films, axes);
+    expect(locked).not.toBeNull();
+    // An empty axis is ZERO, not absent. "You have locked no dramas" is an
+    // answer, and omitting the axis made the polygon refuse to close — which is
+    // how a lock set concentrated in one genre, the interesting case, ended up
+    // invisible. The zero is what draws the spike.
+    expect(locked.Horror).toBeGreaterThan(0);
+    expect(locked.Drama).toBe(0);
+    expect(shuffled.Drama).toBeGreaterThan(0);
+    expect(shuffled.Horror).toBe(0);
+  });
+
+  it("gives every axis a value, so the polygon can always close", () => {
+    const locked = lockedShape(films, axes)!;
+    const shuffled = shuffledShape(films, axes);
+    for (const g of axes) {
+      expect(locked[g]).toBeDefined();
+      expect(shuffled[g]).toBeDefined();
+    }
+  });
+
+  it("returns null below the minimum rather than a shape from three films", () => {
+    // A spike drawn from two locked films invites a reading the data cannot
+    // support, so the caller is given nothing and says why instead.
+    const thin = [
+      ...Array.from({ length: 3 }, (_, i) => mk("h" + i, "Horror", 7900 - i, "hard")),
+      ...Array.from({ length: 12 }, (_, i) => mk("d" + i, "Drama", 7000 - i, "soft")),
+    ];
+    expect(lockedShape(thin, axes)).toBeNull();
+    // The shuffled half still works — it never needed a minimum of its own.
+    expect(shuffledShape(thin, axes).Drama).toBeDefined();
+  });
+
+  it("scores both populations on the SAME standings", () => {
+    // Both take their standings from the whole placed list, so a genre sitting
+    // high means the same thing on either line. Separately-normalised shapes
+    // would be two charts sharing a dial.
+    const locked = lockedShape(films, axes)!;
+    const shuffled = shuffledShape(films, axes);
+    // Horror occupies the top half of the order, Drama the bottom.
+    expect(locked.Horror).toBeGreaterThan(shuffled.Drama);
   });
 });
