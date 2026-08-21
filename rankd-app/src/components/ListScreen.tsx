@@ -170,6 +170,17 @@ export default function ListScreen({
         </button>
 
         {/* ── The key to the numbers below ──────────────────────────────
+            "shuffled", not "Rankd placed". The user's call, and it is checkable
+            rather than a matter of taste: `placeSettled` is called from exactly
+            one component in the app — `ShuffleDuel` — so a soft lock can only
+            ever have come from Fast Shuffle. Naming the mode says where the
+            number came from AND where to go to change it, which "Rankd placed"
+            did not.
+
+            If another mode is ever given the right to place films, this label
+            stops being true and has to go back to something generic. That is a
+            real constraint, so it is written down rather than left to be
+            discovered.
             Gold-and-bold against dim has drawn the hard/soft distinction in the
             rows since locks landed, and nothing on any screen said what the two
             weights MEANT. The explanation was a `title` attribute — a hover
@@ -199,7 +210,7 @@ export default function ListScreen({
           <p className="mb-2.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
             {[
               { n: model.settledCount, label: "you settled", gold: true },
-              { n: model.placedCount - model.settledCount, label: "Rankd placed", gold: false },
+              { n: model.placedCount - model.settledCount, label: "shuffled", gold: false },
               { n: model.total - model.placedCount, label: "un-rnkd", gold: false },
             ]
               // A segment reading zero is not information, it is a state you are
@@ -427,7 +438,7 @@ function Row({
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
             isHard(film) ? "font-bold text-gold" : "font-normal text-dim"
           }`}
-          title={isHard(film) ? "You settled this" : "Rankd placed this, and it can still move"}
+          title={isHard(film) ? "You settled this" : "Fast Shuffle placed this, and it can still move"}
         >
           {rank}
         </span>

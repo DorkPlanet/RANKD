@@ -52,6 +52,37 @@ export interface ShuffleOptions {
   includeConfirmed: boolean;
 }
 
+/**
+ * Refit the whole model every this many answers.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * `beliefs.ts` is explicit that the design is two schedules: "the cheap update
+ * keeps the swipe instant, the periodic fit keeps the answer honest". This
+ * screen only ever ran the fit ONCE, on entry, and the comment on the answer
+ * path said the batch refit "runs when the session ends, not between taps".
+ *
+ * It does not run when the session ends. It runs when the NEXT session starts —
+ * and everything the model learned in between arrives in one lump at that
+ * moment. Reported from a phone, and it is the exact signature: "after spamming
+ * fast shuffle and no counter movement, I opened another fast shuffle and one
+ * duel moved 173 movies."
+ *
+ * Simulated, which says the same thing: with online updates only, a 200-duel
+ * sitting over an 86-film tier places ONE film. With a periodic refit it places
+ * 86 — and the placements arrive spread across the session instead of all at
+ * once on the way back in.
+ *
+ * ── Why twelve ─────────────────────────────────────────────────────────────
+ *
+ * The fit is measured at 861 films: 2k judgements → 10ms, 10k → 80ms, 40k →
+ * 295ms. Cheap, but not free, and it runs off the interaction path through
+ * `beliefsWhenIdle` for exactly that reason. Twelve is often enough that a
+ * sitting sees several, and rare enough that a fast swiper is not queueing a
+ * fit behind every other tap.
+ */
+const REFIT_EVERY = 12;
+
 /** How many films ahead the in-session artwork walk goes. See its use below. */
 const LOOKAHEAD = 80;
 
@@ -210,6 +241,65 @@ export default function ShuffleDuel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── The periodic refit ──────────────────────────────────────────────────
+  //
+  // Fires on every REFIT_EVERY-th answer, off the interaction path.
+  //
+  // The reconciliation matters. `beliefsWhenIdle` is async and answers keep
+  // landing while it runs, so the map it resolves with is fitted from a log
+  // that may already be stale. Rather than drop those answers — which would
+  // silently un-learn a duel the user just fought — the judgements that arrived
+  // meanwhile are replayed onto the fitted map with the same online update the
+  // swipe path uses. The fit erases the drift up to its snapshot; the replay
+  // carries the rest forward.
+  //
+  // `logRef` rather than `log`: this must read the CURRENT log when the promise
+  // resolves, not the one captured when the effect was declared.
+  const logRef = useRef<Judgement[] | null>(null);
+  useEffect(() => {
+    logRef.current = log;
+  }, [log]);
+
+  // Only ever one refit outstanding.
+  //
+  // Not just to save work. `beliefsWhenIdle` shares an in-flight promise with
+  // ANY concurrent caller regardless of the arguments it was asked with, so a
+  // second refit started mid-flight would receive a map fitted from the FIRST
+  // one's log — and the replay below, which slices by `atLog.length`, would
+  // then skip every judgement between the two. Serialising removes the whole
+  // class rather than trying to detect it.
+  const refitting = useRef(false);
+
+  const refit = (atLog: Judgement[], currentFilms: Film[]) => {
+      if (refitting.current) return;
+      refitting.current = true;
+      void beliefsWhenIdle(currentFilms, atLog)
+        .then((fitted) => {
+        const now = logRef.current;
+        if (!now) return;
+        // Replay anything that landed while the fit was running.
+        let merged = fitted;
+        for (const j of now.slice(atLog.length)) {
+          merged = applyJudgement(merged, j, fallback);
+        }
+        // Beliefs ONLY. The refit deliberately does not write films.
+        //
+        // `onFilms` takes an array rather than an updater, so writing the
+        // library from a promise means writing a snapshot — and if an answer
+        // landed while the fit was running, that snapshot is older than the
+        // answer and would silently undo its score write.
+        //
+        // The next answer applies the placements instead: it calls
+        // `placeSettled` with whatever beliefs are current, which are now the
+        // refitted ones. Placements therefore land one tap after the refit,
+        // which costs nothing anyone can perceive and removes the race outright.
+        setBeliefs(merged);
+        })
+        .finally(() => {
+          refitting.current = false;
+        });
+  };
+
   const commit = useCallback((judgement: Judgement) => {
     void appendJudgements([judgement]);
   }, []);
@@ -263,8 +353,10 @@ export default function ShuffleDuel({
     const judgement = newJudgement(a.id, b.id, outcome, "shuffle");
     const nextLog = [...log, judgement];
 
-    // Online update — the cheap per-swipe path. The batch refit that erases its
-    // drift runs when the session ends, not between taps.
+    // Online update — the cheap per-swipe path, applied to every answer. The
+    // batch refit that erases its drift runs every REFIT_EVERY answers, off the
+    // interaction path. It used to run only on entry, which meant a whole
+    // session's learning surfaced in one jump when you next opened the mode.
     const nextBeliefs = applyJudgement(beliefs, judgement, fallback);
     // A person run must not write scores.
     //
@@ -289,6 +381,11 @@ export default function ShuffleDuel({
     setCount((n) => n + 1);
     onFilms(placed);
     serve(placed, nextLog, nextBeliefs);
+
+    // Every twelfth answer, re-derive the whole model from the whole log. See
+    // REFIT_EVERY: without this the session learns nothing it can act on until
+    // the NEXT session opens, which is where the 173-films-in-one-tap came from.
+    if (nextLog.length % REFIT_EVERY === 0) refit(nextLog, placed);
   };
 
   // Take back the last answer. It was never written, so there is nothing to

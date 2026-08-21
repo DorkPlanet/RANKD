@@ -199,7 +199,7 @@ export function FilmInfo({
                   )}
                 </>
               ) : (
-                <div className="text-dim">Rankd placed it at #{rank}</div>
+                <div className="text-dim">Fast Shuffle placed it at #{rank}</div>
               )}
             </div>
             {evidence && (
