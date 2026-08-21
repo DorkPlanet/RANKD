@@ -39,6 +39,7 @@ import { loadLog } from "@/lib/log";
 import { openVisit, snapshotOf } from "@/lib/visit";
 import { subjectFromPerson } from "@/lib/subject";
 import type { RunRequest } from "@/lib/curated";
+import type { RefineRequest } from "./DuelScreen";
 import type { Person } from "@/lib/people";
 import type { Film, RankState } from "@/lib/types";
 
@@ -179,6 +180,10 @@ export default function AppShell() {
   // together, and nothing but discipline kept them consistent. See
   // `lib/curated.ts`.
   const [runRequest, setRunRequest] = useState<RunRequest | null>(null);
+  // A Refine asked for from a film card, waiting for the duel screen to start
+  // it. Deliberately NOT a `RunRequest`: that type is for curated runs, which
+  // write no scores, and the whole point of refining is that it writes one.
+  const [refine, setRefine] = useState<RefineRequest | null>(null);
   // The taste shape as this sitting began, for the chart's before/after.
   //
   // This is now the ONLY reason the visit snapshot exists. "Last time" was cut
@@ -787,11 +792,12 @@ export default function AppShell() {
           runRequest={runRequest}
           onPerson={(p) => setOverlay({ kind: "person", person: p })}
           onRunRequestHandled={() => setRunRequest(null)}
+          refine={refine}
+          onRefineHandled={() => setRefine(null)}
         />
       ) : current === "list" ? (
         <ListScreen
           films={library}
-          profile={profile}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}
           onSettings={() => setOverlay({ kind: "settings" })}
           onTrophies={() => setOverlay({ kind: "trophies" })}
@@ -841,6 +847,18 @@ export default function AppShell() {
           // Same reasoning as removal: a guest is not in the library, so there
           // is nothing to correct and the fix would be written to nothing.
           onFixMatch={overlay.film.guest ? undefined : fixMatch}
+          // A guest belongs to somebody's filmography, not to your library, so
+          // there is no position of theirs to refine — the same reasoning as
+          // the two above.
+          onRefine={
+            overlay.film.guest
+              ? undefined
+              : (f, duels, movePlaced) => {
+                  setOverlay(null);
+                  setRefine({ film: f, duels, movePlaced });
+                  goDuel();
+                }
+          }
         />
       )}
 

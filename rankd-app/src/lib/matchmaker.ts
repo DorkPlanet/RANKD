@@ -199,18 +199,38 @@ export function nextPair(
     (a, b) => b.spread - a.spread || (a.film.id < b.film.id ? -1 : 1),
   );
 
-  // A held anchor goes to the front rather than replacing the list. It is still
-  // only a PREFERENCE: if every pair involving it is inside the guard window,
-  // the loop below falls through to the least-settled ordering exactly as it
-  // always did, so holding an anchor can never be the thing that serves nothing.
-  if (opts.anchorId) {
-    const held = anchors.findIndex((c) => c.film.id === opts.anchorId);
-    if (held > 0) anchors.unshift(...anchors.splice(held, 1));
-  }
-
   // One explore/exploit decision per serve, so exploration is a property of the
   // run rather than something the caller has to remember to ask for.
   const explore = (opts.shouldExplore ?? (() => Math.random() < EXPLORATION_RATE))();
+
+  // ── A held anchor is a PIN, not a queue position ────────────────────────
+  //
+  // It used to be moved to the front of the list and otherwise treated like any
+  // other candidate, on the reasoning that falling through to the least-settled
+  // ordering meant holding an anchor could never serve nothing.
+  //
+  // That reasoning was fine and the behaviour was not. Once the anchor had
+  // faced everyone inside the repetition guard, the loop below simply moved on
+  // to a DIFFERENT film — while the screen carried the held one's name and, for
+  // a Refine, while the user believed they were refining one particular film.
+  // Traced over a five-film pool: c, c, c, c, then a, a, a, b.
+  //
+  // So the pin is honoured here, in full, before anything else is considered.
+  // The guard is tried first because a fresh opponent is a better duel; if
+  // every pairing is guarded the guard is dropped rather than the anchor. A
+  // repeated pairing is a weaker duel. Refining a film the user did not choose
+  // is not a weaker anything — it is the wrong answer.
+  //
+  // Falling through still happens when the id is not in the pool at all, which
+  // is how a stale anchor degrades safely.
+  if (opts.anchorId) {
+    const pinned = candidates.find((c) => c.film.id === opts.anchorId);
+    if (pinned) {
+      const opponent =
+        pick(pinned, candidates, guarded, explore) ?? pick(pinned, candidates, new Set(), explore);
+      if (opponent) return [pinned.film, opponent.film];
+    }
+  }
 
   for (const anchor of anchors) {
     const opponent = pick(anchor, candidates, guarded, explore);

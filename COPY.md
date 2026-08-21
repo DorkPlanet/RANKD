@@ -25,6 +25,9 @@ are kept current — see "Changed since the snapshot" below.
 | 21 Aug | Film card | "Fast Shuffle placed it at #42" → **"Shuffled at #42"**, in the same blue as the list |
 | 21 Aug | Profile | **"Last time" removed.** Panels swapped so **Your results** is what you land on. Sections reordered: Your taste → Your shape → What your list says → Your library → Your tiers → Odds and ends → Your world |
 | 21 Aug | Session end | Finishing a batch offers the sizes again rather than one "Keep shuffling" button |
+| 21 Aug | List band | The user's NAME is gone from the top of the list. The total joined the three states as a fourth column: **865 FILMS · 21 LOCKED · 77 SHUFFLED · 767 UN-RNKD** |
+| 21 Aug | Film card | **New: "Refine this film"**, then "HOW MANY DUELS · 10 / 25 / 50". On a locked film it adds "You locked this one, so the run won't move it. The duels still count." — which flips to "The run can move it." when the toggle is on |
+| 21 Aug | Fast Shuffle header | A focused run wears the FILM'S NAME rather than "FAST SHUFFLE" |
 | 21 Aug | List legend | **"you settled" → "locked"**, and three colours: gold LOCKED, accent-blue SHUFFLED, dim UN-RNKD, centred over the search bar. `RunStatus` followed from "N settled" to "N locked" in the same pass — leaving it would have been three words for one idea, which the gotchas already record an incident about |
 | 21 Aug | Fast Shuffle setup | Presets are **5 / 10 / 20 minutes**, not duel counts. The old minutes estimate came from an invented 2s-per-duel and was wrong by 4×; the count is now derived from the user's own median pace in the log |
 | 21 Aug | Fast Shuffle duel | The held film wears a **STAYING** badge from its second duel, using the climb's existing badge slot |

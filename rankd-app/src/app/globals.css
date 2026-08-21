@@ -17,6 +17,7 @@
    combination — impossible to select. */
 :root {
   --bg: #040c1a;
+  --band: #071120;
   --surface: #0a1424;
   --text: #c6d3ea;
   --text-hi: #eaf0fa;
@@ -33,6 +34,7 @@
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
+  --color-band: var(--band);
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-gold: var(--gold);

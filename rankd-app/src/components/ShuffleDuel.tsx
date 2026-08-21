@@ -25,7 +25,7 @@ import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beli
 import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
-import { isPlaced } from "@/lib/lock";
+import { isHard, isPlaced } from "@/lib/lock";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { RunStatus } from "./RunStatus";
 import { PLACE_DUELS, countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
@@ -50,6 +50,34 @@ const SHUFFLE_CONTROL =
 export interface ShuffleOptions {
   scope: MatchOptions["scope"];
   includeConfirmed: boolean;
+  /**
+   * Whether films that already have a position may be RE-SCORED by this run.
+   *
+   * ── Why this is no longer `includeConfirmed` ────────────────────────────
+   *
+   * That flag was doing two different jobs: deciding who is in the pool, and
+   * deciding whether `respreadTier` is allowed to move films that are already
+   * placed. For every run before Refine the two answers happened to coincide,
+   * so one flag carried both and nobody noticed.
+   *
+   * Refine splits them. Refining a film you LOCKED needs it in the pool — it is
+   * the anchor, there is no run without it — while whether its position may
+   * actually move is the user's decision, made on the way in. One flag cannot
+   * say both.
+   *
+   * Defaults to `includeConfirmed`, so every caller that predates this behaves
+   * exactly as it did.
+   */
+  movePlaced?: boolean;
+  /**
+   * Duel this ONE film for the whole run, against opponents from its tier.
+   *
+   * The anchor mechanism already existed — `nextPair` takes an `anchorId` and
+   * a normal run rotates through them — so a focused run is that, pinned and
+   * never rotated. It is the cheapest feature in the app for exactly that
+   * reason: the hard part was built for something else.
+   */
+  focus?: string;
   /**
    * How many FILMS this run is meant to get through. Absent means open-ended.
    *
@@ -96,6 +124,14 @@ export interface ShuffleOptions {
    * to every single tap. "Films to work out" moves when a film crosses the
    * confidence bar, which on a big library can be thousands of duels away —
    * see N11. Duels left moves by exactly one, every time, and ends at zero.
+   */
+  /**
+   * End the run after this many answers.
+   *
+   * Left over from when a run was a length of time and briefly orphaned when
+   * batches replaced it — a batch ends when its FILMS are placed, so it had
+   * nothing to count. A focused run brings it back with a clearer meaning than
+   * it ever had: one film, this many duels, and no other way to be finished.
    */
   target?: number;
 }
@@ -288,7 +324,7 @@ export default function ShuffleDuel({
           .map((c) => c.f.id);
         setBatch(chosen);
       }
-      serve(films, loaded, fitted, chosen?.[0]);
+      serve(films, loaded, fitted, options.focus ?? chosen?.[0]);
       // After `serve`, never before: from here a null pair is a real answer
       // about the pool rather than a screen that has not loaded.
       setOpened(true);
@@ -487,14 +523,35 @@ export default function ShuffleDuel({
     // from the beliefs (rankByBelief), which is where a cross-tier answer can
     // actually live.
     const crossTier = options.scope.kind === "person";
+    // ── A read-only Refine ────────────────────────────────────────────────
+    //
+    // `movePlaced: false` is NOT enough to promise a locked film will not move,
+    // and a test written on that assumption is what found it. It preserves the
+    // ORDER of hard locks against each other; every film in the tier is still
+    // re-spread across the band, and a movable film whose belief overtakes the
+    // locked one is merged in above it. The score changes.
+    //
+    // So when somebody refines a film they locked and leaves the toggle off,
+    // the run writes no scores at all — the same treatment a person run gets,
+    // for the same reason: the duels are real and belong in the log, but this
+    // is not evidence about where the film sits, because they have said it
+    // already sits where they put it.
+    //
+    // The beliefs still move. Confidence still climbs. Only the order is left
+    // alone, which is exactly what the toggle promises.
+    const focusFilm = options.focus ? films.find((f) => f.id === options.focus) : undefined;
+    const readOnly = !!focusFilm && isHard(focusFilm) && options.movePlaced !== true;
     // The duel count first, so everything downstream sees it — including the
     // placement gate, which now reads it. Skipped on a cross-tier run for the
     // same reason the climb skips it: that comparison is not evidence about
     // either film's position inside its own tier.
     const counted = crossTier ? films : countDuel(films, [a, b]);
-    const placed = crossTier
+    const placed = crossTier || readOnly
       ? counted
-      : placeSettled(respreadFor(counted, [a, b], nextBeliefs, options.includeConfirmed), nextBeliefs);
+      : placeSettled(
+          respreadFor(counted, [a, b], nextBeliefs, options.movePlaced ?? options.includeConfirmed),
+          nextBeliefs,
+        );
 
     setPending({ judgement, films, pair });
     undoTimer.current = setTimeout(flush, UNDO_MS);
@@ -534,15 +591,19 @@ export default function ShuffleDuel({
     // happens whenever the evidence says so — it simply no longer cuts a film's
     // turn short, and a film that earns its number early spends its remaining
     // duels being refined, which is what stage two is for.
-    const retire = !anchor || !heldFilm || heldNow >= anchor.hold;
+    // A focused run has exactly one anchor and keeps it. Everything else about
+    // the loop is unchanged — the opponent still comes from the matchmaker.
+    const retire = options.focus ? false : !anchor || !heldFilm || heldNow >= anchor.hold;
     setAnchor(anchor && !retire ? { ...anchor, held: heldNow } : null);
     // On a batch run the next anchor comes from the batch, so the run is
     // actually finishable. Without this the matchmaker would wander off to
     // whichever film in the whole scope it knew least about and the countdown
     // would sit still while you played.
-    const nextAnchor = retire
-      ? batch?.find((id) => !isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))
-      : anchor?.id;
+    const nextAnchor = options.focus
+      ? options.focus
+      : retire
+        ? batch?.find((id) => !isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))
+        : anchor?.id;
     serve(placed, nextLog, nextBeliefs, nextAnchor);
 
     // Every twelfth answer, re-derive the whole model from the whole log. See
@@ -553,7 +614,12 @@ export default function ShuffleDuel({
     // A batch run ends when every film in the batch has its number. `placed`
     // is post-answer, so this sees the placement this duel may have just
     // earned — the run finishes on the tap that finishes it, not one later.
-    if (batch && batch.every((id) => isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))) {
+    // A focused run is over when its duels are. `count` is the state BEFORE
+    // this answer, so the target is met when the increment reaches it.
+    if (options.target && count + 1 >= options.target) {
+      flush();
+      setEnded(true);
+    } else if (batch && batch.every((id) => isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))) {
       // Flush first: the pending judgement is written on a timer that the run
       // ending would otherwise outlive.
       flush();
@@ -693,6 +759,10 @@ export default function ShuffleDuel({
   // A person run is a shuffle underneath, but labelling it FAST SHUFFLE hides
   // the only thing that makes it different from one.
   const person = options.scope.kind === "person" ? options.scope.name : null;
+  // A focused run wears the film's name. "FAST SHUFFLE" over a screen showing
+  // the same film every time would be describing the machinery rather than what
+  // is happening.
+  const focused = options.focus ? (films.find((f) => f.id === options.focus)?.title ?? null) : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -703,13 +773,14 @@ export default function ShuffleDuel({
       <RunStatus
         films={films}
         log={log ?? []}
-        title={person ? person.toUpperCase() : "FAST SHUFFLE"}
+        title={focused ? focused.toUpperCase() : person ? person.toUpperCase() : "FAST SHUFFLE"}
         run={{
-          // With a batch the bar is the BATCH, which fills as films get their
-          // numbers. Without one it is the pool, which on a big library barely
-          // moves — honest, but not something to watch. See N11.
-          done: batch ? batch.length - batchLeft : workedOut,
-          total: batch ? batch.length : pool.length,
+          // Three readouts for three kinds of run. A FOCUSED run counts duels,
+          // because one film's refinement has no other unit. A BATCH counts
+          // films placed. An open run falls back to the pool, which on a big
+          // library barely moves — honest, but not something to watch (N11).
+          done: options.target ? Math.min(count, options.target) : batch ? batch.length - batchLeft : workedOut,
+          total: options.target ?? (batch ? batch.length : pool.length),
         }}
         // The countdown below already says how many are left, so the default
         // opening line would print the same figure twice. This says what to do
@@ -733,7 +804,12 @@ export default function ShuffleDuel({
         className="flex min-h-0 flex-shrink-[12] items-center justify-center overflow-hidden"
         style={{ height: 110, minHeight: 56 }}
       >
-        {batch ? (
+        {options.target ? (
+          <Countdown
+            n={Math.max(0, options.target - count)}
+            label={options.target - count === 1 ? "duel left" : "duels left"}
+          />
+        ) : batch ? (
           <Countdown n={batchLeft} label={batchLeft === 1 ? "film to go" : "films to go"} />
         ) : (
           <Countdown

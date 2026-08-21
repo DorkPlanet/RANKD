@@ -250,3 +250,40 @@ describe("anchorId", () => {
     expect(nextPair(pool, [], flat, { scope: { kind: "all" }, shouldExplore: () => false })).not.toBeNull();
   });
 });
+
+// ── A focused run: one film, many opponents ────────────────────────────────
+//
+// "Refine" pins one film as the anchor for a whole run. The mechanism is the
+// anchor that already existed — this only checks the property the feature rests
+// on, which is that a pinned anchor keeps coming back however the pool moves.
+describe("anchorId, pinned for a whole run", () => {
+  const pool = [film("a"), film("b"), film("c"), film("d"), film("e")];
+  const flat = beliefsFor(pool, []);
+
+  it("returns the same anchor over and over as the log grows", () => {
+    let log: Judgement[] = [];
+    for (let i = 0; i < 8; i++) {
+      const pair = nextPair(pool, log, flat, {
+        scope: { kind: "all" },
+        shouldExplore: () => false,
+        anchorId: "c",
+      });
+      expect(pair?.[0].id).toBe("c");
+      // And the opponent must actually vary, or a focused run is one duel
+      // repeated — the repetition guard is what makes it a run.
+      log = [...log, newJudgement(pair![0].id, pair![1].id, "a", "shuffle")];
+    }
+    const opponents = new Set(log.map((j) => j.b));
+    expect(opponents.size).toBeGreaterThan(1);
+  });
+
+  it("still finds an opponent when the anchor is the least settled anyway", () => {
+    const pair = nextPair(pool, [], flat, {
+      scope: { kind: "all" },
+      shouldExplore: () => false,
+      anchorId: "a",
+    });
+    expect(pair).not.toBeNull();
+    expect(pair![1].id).not.toBe("a");
+  });
+});

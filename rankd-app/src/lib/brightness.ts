@@ -58,6 +58,19 @@ export function brightnessVars(t: number): Record<string, string> {
     // which means the black-to-blue edge gets STRONGER at high brightness — and
     // that is exactly what the header's feather is for. See `Header`.
     "--header-bg": "#000000",
+    // ── The band between the chrome and the page ─────────────────────────
+    //
+    // The list's top block — counts and search — sat on the page's own colour,
+    // which made it page that happened to be at the top rather than a band with
+    // a job. This is deliberately BETWEEN: black header, then this, then the
+    // list. Half the page's lightness at every setting, so the three-step
+    // separation holds across the whole brightness range instead of only at one
+    // end of it.
+    //
+    // It slides where `--header-bg` does not, and that is the distinction: the
+    // header is chrome and stays black, this is part of the surface you are
+    // reading and moves with the rest of it.
+    "--band": hslHex(218, 70, 3 + 6 * c),
     "--surface": hslHex(216, 55, 9 + 15 * c),
     "--border": hslHex(216, 50, 14 + 16 * c),
   };

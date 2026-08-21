@@ -49,6 +49,7 @@ export function FilmInfo({
   onPerson,
   onRemove,
   onFixMatch,
+  onRefine,
 }: {
   film: Film;
   films?: Film[];
@@ -59,8 +60,20 @@ export function FilmInfo({
   onRemove?: (film: Film) => void;
   /** Replace this film's artwork and credits with another TMDb film's. */
   onFixMatch?: (film: Film, meta: FilmMeta) => void;
+  /**
+   * Duel this one film for a run of `duels` answers.
+   *
+   * `movePlaced` is only ever true for a film the user LOCKED and then chose to
+   * let move — see the sheet below. It is passed explicitly rather than inferred
+   * because it is the one thing here that can undo a decision somebody made.
+   */
+  onRefine?: (film: Film, duels: number, movePlaced: boolean) => void;
 }) {
   const [meta, setMeta] = useState<FilmMeta | null>(null);
+  const [refining, setRefining] = useState(false);
+  // Off by default, and deliberately not remembered between opens: letting a
+  // locked film move is a decision about THIS run, not a preference.
+  const [letMove, setLetMove] = useState(false);
   // Whether the remove control has been armed by a first tap.
   const [armed, setArmed] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -322,6 +335,77 @@ export function FilmInfo({
               </button>
             </div>
           ))}
+
+        {/* ── Refine ────────────────────────────────────────────────────────
+            Duel this film and nothing else, for a run you pick.
+
+            Sizes rather than one fixed length, matching how Fast Shuffle's
+            batches work — the same control shape reads as the same idea.
+
+            ── The locked case, which is the whole design ──
+            A hard lock is the one thing the model may never move. Refining a
+            locked film would therefore either do nothing or quietly break that,
+            so it asks instead: an off-by-default toggle saying plainly that the
+            run can change a position you settled.
+
+            That keeps the invariant honest rather than bending it. The MODEL
+            still never takes back a decision; the USER can hand one back to it
+            for a run, which is a different thing and is theirs to do.
+
+            With the toggle off the run writes NO scores — see `readOnly` in
+            `ShuffleDuel`. The obvious implementation, passing `movePlaced:
+            false`, is not enough and a test written on that assumption is what
+            found it: that flag preserves the ORDER of hard locks against each
+            other while still re-spreading the whole tier, so the number moves.
+            Refusing to write is the only version of "it won't move" that is
+            true. The duels still land in the log and confidence still climbs. */}
+        {onRefine && (
+          <div className="border-t border-border px-4 py-3">
+            {refining ? (
+              <>
+                <div className="text-label font-extrabold tracking-[0.12em] text-dim">
+                  HOW MANY DUELS
+                </div>
+                <div className="mt-2 flex gap-2">
+                  {[10, 25, 50].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => {
+                        onRefine(film, d, isHard(film) && letMove);
+                        onClose();
+                      }}
+                      className="flex-1 rounded-xl border border-border py-2.5 text-sub font-bold text-text-hi active:scale-95"
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                {isHard(film) && (
+                  <label className="mt-2.5 flex items-center justify-between gap-3">
+                    <span className="min-w-0 text-sub leading-snug text-dim">
+                      {letMove
+                        ? "You locked this one. The run can move it."
+                        : "You locked this one, so the run won't move it. The duels still count."}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={letMove}
+                      onChange={(e) => setLetMove(e.target.checked)}
+                      className="tickbox"
+                    />
+                  </label>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={() => setRefining(true)}
+                className="w-full text-center text-sub font-semibold text-dim active:scale-95"
+              >
+                Refine this film
+              </button>
+            )}
+          </div>
+        )}
 
         {onRemove && (
           <div className="border-t border-border px-4 py-3">

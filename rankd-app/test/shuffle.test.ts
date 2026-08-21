@@ -374,3 +374,44 @@ describe("countDuel", () => {
     expect(countDuel([a, b], [a, b]).find((f) => f.id === "a")!.duels).toBe(5);
   });
 });
+
+// ── movePlaced: the flag that used to be two flags ─────────────────────────
+//
+// `includeConfirmed` decided BOTH who is in the pool and whether `respreadTier`
+// may move films that already have a position. For every run before Refine the
+// two answers coincided, so one flag carried both and nobody noticed.
+//
+// Refining a LOCKED film needs it in the pool — it is the anchor, there is no
+// run without it — while whether its position may actually move is the user's
+// decision, made on the way in. These pin that a hard lock stays exactly where
+// it was when that decision is no.
+describe("respreadTier leaves hard locks alone when told to", () => {
+  const beliefsFor2 = (ids: string[]) =>
+    new Map(ids.map((id, i) => [id, { mean: 10 - i, spread: 0.5 }]));
+
+  // NOT "the score is unchanged", which is what this test asserted first and
+  // what the plan assumed. `movePlaced: false` preserves the ORDER of hard
+  // locks against one another; the whole tier is still re-spread across its
+  // band, so the numbers move even when the sequence does not.
+  //
+  // That distinction is why a read-only Refine writes no scores at all rather
+  // than relying on this flag — see `readOnly` in `ShuffleDuel`.
+  it("keeps hard locks in their own order with movePlaced false", () => {
+    const locked = [film("a", 4, 7500, "hard"), film("b", 4, 7000, "hard")];
+    const movable = film("c", 4, 6500);
+    // Beliefs that would put b above a if it were allowed to reorder them.
+    const out = respreadTier([...locked, movable], 4, beliefsFor2(["c", "b", "a"]), false);
+    const score = (id: string) => out.find((f) => f.id === id)!.score;
+    expect(score("a")).toBeGreaterThan(score("b"));
+  });
+
+  it("reorders them against each other when movePlaced is true", () => {
+    const locked = [film("a", 4, 7500, "hard"), film("b", 4, 7000, "hard")];
+    const movable = film("c", 4, 6500);
+    const out = respreadTier([...locked, movable], 4, beliefsFor2(["c", "b", "a"]), true);
+    const score = (id: string) => out.find((f) => f.id === id)!.score;
+    expect(score("b")).toBeGreaterThan(score("a"));
+  });
+
+
+});

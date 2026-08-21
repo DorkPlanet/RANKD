@@ -12,7 +12,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
 import { isHard } from "@/lib/lock";
-import { type Profile } from "@/lib/profile";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
@@ -39,7 +38,6 @@ const sectionHeight = (s: { placed: unknown[]; unplaced: unknown[] }) =>
 
 export default function ListScreen({
   films,
-  profile,
   onInfo,
   onSettings,
   onDuel,
@@ -51,7 +49,6 @@ export default function ListScreen({
   frozen,
 }: {
   films: Film[];
-  profile: Profile;
   /**
    * Hold the list absolutely still.
    *
@@ -149,33 +146,23 @@ export default function ListScreen({
     <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
-      {/* No `--header-bg` here any more. This block is page content — your
-          name, your counts, the search — and painting it in the header's colour
-          made it a second, silent header that happened to sit below the real
-          one. Now that the header is always black and the page is not, keeping
-          this black would have drawn a hard band across the top of the list.
+      {/* ── The band ──────────────────────────────────────────────────────
+          Three tones, top to bottom: black chrome, this, then the list. It was
+          `--header-bg` once (a second, silent header) and then briefly the
+          page's own colour (page that happened to be at the top). `--band` sits
+          deliberately between, so the block reads as a thing with a job rather
+          than as either of its neighbours.
 
-          On the page's own background the header's feather does the job it was
-          written for: softening black chrome into the page. */}
-      <div className="flex-shrink-0 px-5 pb-3 pt-3">
-        {/* Whose list this is, tapping through to the profile — the result and
-            the person it belongs to shouldn't feel like separate apps. */}
-        <button onClick={onProfile} className="mb-3 flex w-full items-baseline gap-2.5 active:scale-[0.99]">
-          <span className="min-w-0 flex-1 truncate text-left font-display text-xl tracking-wide text-gold">
-            {profile.name}
-          </span>
-          {/* Just the total now. This used to read "333 ranked · 865 films"
-              directly above a line reading "1 you settled · 332 Rankd placed",
-              and 1 + 332 is 333 — so the two lines stated the same fact twice,
-              once rolled up and once broken out. The user's words, with a
-              screenshot: "saying similar things in the same place."
+          It slides with brightness where the header does not. The header is
+          chrome; this is surface you read.
 
-              The breakdown below is the better of the two because it is the one
-              that says something the reader could not work out, so the roll-up
-              is what goes. Nothing is lost: the three parts sum to the total,
-              which is right here. */}
-          <span className="text-sub text-dim">{model.total} films</span>
-        </button>
+          ── The name is gone ──
+          It was the largest thing here and did the least: a heading telling you
+          whose list you are looking at, on the only list there is. Its one real
+          function was reaching the profile, and the nav's You cell does that
+          from every screen. Removing it hands the top of the band to the counts,
+          which is what people come here to read. */}
+      <div className="flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--band)" }}>
 
         {/* ── The key to the numbers below ──────────────────────────────
             "shuffled", not "Rankd placed". The user's call, and it is checkable
@@ -245,8 +232,19 @@ export default function ListScreen({
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
         {model.total > 0 && (
-          <p className="mb-3 flex items-start justify-center gap-7 text-dim">
+          <p className="mb-3 flex items-start justify-center gap-5 text-dim">
             {[
+              // The total sits WITH the three states rather than above them.
+              // It used to be its own line — "865 films" beside the name — and
+              // the three below already sum to it, so the two lines were the
+              // same fact twice. As a fourth column it is the thing the other
+              // three are parts of, which is what it actually is.
+              //
+              // `--text-hi` because it is not a fourth STATE. Gold, accent and
+              // dim are the three states and a fourth hue beside them would
+              // read as one; the near-white is the app's colour for "the thing
+              // itself" and says total without joining the set.
+              { n: model.total, label: "films", tone: "text-text-hi" },
               { n: model.settledCount, label: "locked", tone: "text-gold" },
               { n: model.placedCount - model.settledCount, label: "shuffled", tone: "text-accent" },
               { n: model.total - model.placedCount, label: "un-rnkd", tone: "text-dim" },

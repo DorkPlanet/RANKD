@@ -96,6 +96,8 @@ export default function DuelScreen({
   onToggleLog,
   onImportFile,
   runRequest,
+  refine,
+  onRefineHandled,
   onRunRequestHandled,
   onRunBegan,
   onRoughCutBegan,
@@ -127,6 +129,8 @@ export default function DuelScreen({
    * See `lib/curated.ts`.
    */
   runRequest?: RunRequest | null;
+  refine?: RefineRequest | null;
+  onRefineHandled?: () => void;
   onRunRequestHandled?: () => void;
   /** Open a filmography from the curated picker. */
   onPerson?: (person: Person) => void;
@@ -176,6 +180,7 @@ export default function DuelScreen({
     setRunSeq((i) => i + 1);
     setShuffleRun(opts);
   };
+
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
@@ -238,7 +243,37 @@ export default function DuelScreen({
   // used to arrive here as a shuffle scope — which asked the right films the
   // right questions and then had nowhere to put the answer, because a shuffle
   // has no pile, no order and no end. It is a climb now; see `personRun` below.
-  const activeRun: ShuffleOptions | null = shuffleRun;
+  // ── A Refine, turned into a run ─────────────────────────────────────────
+  //
+  // DERIVED from the prop rather than started in an effect. An effect would
+  // have to call setState on arrival, which is the pattern the React compiler
+  // rejects and which the lint baseline pins at exactly two instances — and it
+  // would be state duplicating a prop that already says everything.
+  //
+  // Scoped to the film's OWN TIER, and that is not a convenience. A score is
+  // defined inside a tier band, so a cross-tier answer writes nothing; the
+  // person run's comment is emphatic about it. Refining against other tiers
+  // would look like it counted and quietly mean something else.
+  //
+  // `includeConfirmed` is true so the film is in the pool even when it is
+  // locked. Whether that lock may MOVE is the separate `movePlaced` flag, which
+  // is the user's explicit choice and nothing else's.
+  const refineRun: ShuffleOptions | null = useMemo(
+    () =>
+      refine
+        ? {
+            scope: { kind: "tier", tier: refine.film.rating as Rating },
+            includeConfirmed: true,
+            movePlaced: refine.movePlaced,
+            focus: refine.film.id,
+            target: refine.duels,
+          }
+        : null,
+    [refine],
+  );
+
+  // A started run wins: going again from the end screen replaces the refine.
+  const activeRun: ShuffleOptions | null = shuffleRun ?? refineRun;
 
   // What the run on screen is about, when it isn't a tier.
   //
@@ -1187,6 +1222,9 @@ export default function DuelScreen({
           onExit={() => {
             setShuffleRun(null);
             onRunRequestHandled?.();
+            // Clear the refine as well, or the derived run reappears the
+            // instant the screen re-renders and there is no way out of it.
+            onRefineHandled?.();
           }}
           onList={onList}
           // Another batch, same scope, without going back through the sheet.
@@ -1311,6 +1349,20 @@ export function pickOpeningTier(films: Film[]): Rating {
 // Bottom nav — bookends the black header, so the play area sits between two
 // dark bands. Sized to its final height now, so adding List/Stats later slots
 // in without re-flowing the duel.
+/**
+ * A Refine asked for from a film card, waiting to be started.
+ *
+ * Deliberately not a `RunRequest`: that type is for CURATED runs, which write
+ * no scores by design. Refining writes one — improving a film's position inside
+ * its tier is the entire point — so it starts a Fast Shuffle instead.
+ */
+export interface RefineRequest {
+  film: Film;
+  duels: number;
+  /** Only ever true for a locked film whose owner chose to let it move. */
+  movePlaced: boolean;
+}
+
 export function BottomNav({
   screen,
   onSettings,
