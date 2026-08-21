@@ -50,6 +50,31 @@ const SHUFFLE_CONTROL =
 export interface ShuffleOptions {
   scope: MatchOptions["scope"];
   includeConfirmed: boolean;
+  /**
+   * End the session after this many answers, or run open-ended when absent.
+   *
+   * ── Why a count and not a slice of the library ─────────────────────────
+   *
+   * The alternative considered was to pick N films and shuffle only those to
+   * completion. The user's instinct was against it and the instinct is right,
+   * for a reason worth writing down: the matchmaker's whole job is to ask the
+   * question it can least predict the answer to, ACROSS the scope. Fencing it
+   * into a subset takes that judgement away and spends every duel inside a
+   * pen, which finishes those N films and leaves the rest exactly as they
+   * were — a library that is sharp in one arbitrary patch and untouched
+   * everywhere else.
+   *
+   * A count changes only where the session STOPS. The model still picks every
+   * pair on the same terms it always did.
+   *
+   * ── What it fixes on screen ────────────────────────────────────────────
+   *
+   * It also supplies the one thing this mode never had: a number that responds
+   * to every single tap. "Films to work out" moves when a film crosses the
+   * confidence bar, which on a big library can be thousands of duels away —
+   * see N11. Duels left moves by exactly one, every time, and ends at zero.
+   */
+  target?: number;
 }
 
 /**
@@ -386,6 +411,15 @@ export default function ShuffleDuel({
     // REFIT_EVERY: without this the session learns nothing it can act on until
     // the NEXT session opens, which is where the 173-films-in-one-tap came from.
     if (nextLog.length % REFIT_EVERY === 0) refit(nextLog, placed);
+
+    // A bounded session ends itself. `count` is the state BEFORE this answer,
+    // so the target is met when the increment reaches it.
+    if (options.target && count + 1 >= options.target) {
+      // Flush first: the pending judgement is written on a timer that the
+      // session ending would otherwise outlive.
+      flush();
+      setEnded(true);
+    }
   };
 
   // Take back the last answer. It was never written, so there is nothing to
@@ -519,7 +553,13 @@ export default function ShuffleDuel({
         films={films}
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
-        run={{ done: workedOut, total: pool.length }}
+        run={{
+          // With a target the bar is the SESSION, which fills as you play.
+          // Without one it is the pool, which on a big library barely moves —
+          // honest, but not something to watch. See N11 in the register.
+          done: options.target ? Math.min(count, options.target) : workedOut,
+          total: options.target ?? pool.length,
+        }}
         // The countdown below already says how many are left, so the default
         // opening line would print the same figure twice. This says what to do
         // instead, which is the more useful thing on a screen you have just
@@ -542,10 +582,17 @@ export default function ShuffleDuel({
         className="flex min-h-0 flex-shrink-[12] items-center justify-center overflow-hidden"
         style={{ height: 110, minHeight: 56 }}
       >
-        <Countdown
-          n={Math.max(0, pool.length - workedOut)}
-          label={pool.length - workedOut === 1 ? "film to work out" : "films to work out"}
-        />
+        {options.target ? (
+          <Countdown
+            n={Math.max(0, options.target - count)}
+            label={options.target - count === 1 ? "duel left" : "duels left"}
+          />
+        ) : (
+          <Countdown
+            n={Math.max(0, pool.length - workedOut)}
+            label={pool.length - workedOut === 1 ? "film to work out" : "films to work out"}
+          />
+        )}
       </div>
       <div
         ref={arenaRef}

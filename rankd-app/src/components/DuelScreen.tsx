@@ -971,8 +971,16 @@ export default function DuelScreen({
                     // Two sentences, two lines. Left to wrap it broke after
                     // WHAT'S, which splits the question rather than the pair of
                     // sentences and reads as a mistake.
+                    //
+                    // No full stop on the first line. The line break already
+                    // does the stopping, and on a CENTRED line a trailing full
+                    // stop is a piece of ink hanging past the last letter — it
+                    // shifts the optical centre left while the box stays put,
+                    // so the two lines read as misaligned. The user spotted it
+                    // as "it makes the text off centre", which is exactly what
+                    // it does.
                     <>
-                      Everyone has a favourite.
+                      Everyone has a favourite
                       <br />
                       What&rsquo;s yours?
                     </>
@@ -1557,19 +1565,25 @@ function ModePanel({
             in, rather than the order the modes were built in. */}
         <ModeRow
           title="Rough Cut"
-          blurb="Large libraries can be daunting. Start dividing them into smaller groups, then compare from there."
+          blurb="Split a tier into piles, one film at a time. The fastest way to get a big library into shape."
+          meta="one pass"
           onClick={() => setChosen("roughcut")}
         />
         <ModeRow
           title="King of the Hill"
-          blurb="One tier at a time. Winner moves on."
+          blurb="One tier at a time. Winner moves on. This is how a film gets a place you settled yourself."
+          meta="settles films"
           onClick={() => setChosen("koth")}
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
             it can least predict the answer to, and stops when you do. */}
+        {/* The blurb was four sentences and a worked example, which made this
+            row three times the height of the one above it and buried the only
+            thing that matters: these placements are PROVISIONAL. */}
         <ModeRow
           title="Fast Shuffle"
-          blurb="Your provisional rating. Compare films to establish an initial ranking. It's much easier than ranking every film against every other. 50 films alone would mean 1,225 comparisons. Use the other modes for your hard locks."
+          blurb="Two films, no piles, no confirming. Rankd places what it works out, and keeps the right to change its mind."
+          meta="provisional"
           onClick={() => setChosen("shuffle")}
         />
         {/* Curated lists sit with the modes rather than behind a film's info
@@ -1578,7 +1592,8 @@ function ModePanel({
             so the blurb has to say so, or it reads as a fourth way to rank. */}
         <ModeRow
           title="Curator"
-          blurb="A director, an actor or genre. Everyone has their favourite. Your rankings don't move."
+          blurb="A director, an actor or a genre. Everyone has their favourite. Your main list doesn't move."
+          meta="changes nothing"
           onClick={onCurated}
         />
       </Sheet>
@@ -1818,6 +1833,16 @@ function ShuffleSetup({
 }) {
   const [kind, setKind] = useState<"all" | "tier" | "range">("all");
   const [includeConfirmed, setIncludeConfirmed] = useState(false);
+  // ── How long this sitting runs ──────────────────────────────────────────
+  //
+  // The mode's one real weakness was that it never ended: you played until you
+  // got bored, which is not a shape and gives nothing to finish. 250 is the
+  // default rather than 100 because 100 duels over any interesting scope
+  // settles almost nothing, and a session that ends having visibly done
+  // nothing is worse than one that runs long.
+  //
+  // "No limit" stays, because it is what the mode was and somebody may want it.
+  const [target, setTarget] = useState<number | null>(250);
 
   const scope: ShuffleOptions["scope"] =
     kind === "all"
@@ -1830,9 +1855,13 @@ function ShuffleSetup({
   // filter computed here would drift from it the first time either changed.
   const count = poolFor(films, { scope, includeConfirmed }).length;
   const playable = count >= 2;
+  // Rounded to something a person would say. At about one answer every two
+  // seconds this is honest for a thumb that is not racing.
+  const minutes = target ? Math.round((target * 2) / 60) : null;
 
   return (
     <Sheet title="Fast Shuffle" onClose={onClose}>
+      <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">What to compare</div>
       <div className="mb-3 flex gap-2">
         <ScopeTab label="All films" active={kind === "all"} onClick={() => setKind("all")} />
         <ScopeTab label="This tier" active={kind === "tier"} onClick={() => setKind("tier")} />
@@ -1867,6 +1896,28 @@ function ShuffleSetup({
         </div>
       )}
 
+      {/* ── Session length ───────────────────────────────────────────────
+          The user's ask, and the choice inside it mattered: a target that ENDS
+          the session, rather than fencing the shuffle into N films and running
+          those to completion. Fencing it would take away the matchmaker's
+          judgement about which question is worth asking and spend every duel
+          inside a pen — sharpening one arbitrary patch and leaving the rest
+          untouched. See the note on `ShuffleOptions.target`. */}
+      <div className="mb-3">
+        <div className="mb-1.5 flex items-baseline justify-between">
+          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-dim">How long</span>
+          {minutes !== null && (
+            <span className="text-[11px] text-dim">about {minutes} min</span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {[100, 250, 500].map((t) => (
+            <ScopeTab key={t} label={String(t)} active={target === t} onClick={() => setTarget(t)} />
+          ))}
+          <ScopeTab label="No limit" active={target === null} onClick={() => setTarget(null)} />
+        </div>
+      </div>
+
       {/* Off, this ranks the films with no position yet. On, it is allowed to
           re-order the ones you placed — which is why it is a deliberate tick
           rather than a default. */}
@@ -1887,7 +1938,11 @@ function ShuffleSetup({
         />
       </label>
 
-      <StartButton label={`Start · ${count} films`} onClick={() => onStart({ scope, includeConfirmed })} disabled={!playable} />
+      <StartButton
+        label={target ? `Start · ${target} duels` : `Start · ${count} films`}
+        onClick={() => onStart({ scope, includeConfirmed, target: target ?? undefined })}
+        disabled={!playable}
+      />
       {!playable && (
         <p className="mt-2 text-center text-[11px] text-gold">
           Only {count} film{count === 1 ? "" : "s"} in range — widen it or pick another tier.
@@ -1898,14 +1953,31 @@ function ShuffleSetup({
   );
 }
 
+// ── One row shape for all four modes ──────────────────────────────────────
+//
+// It was a bordered card per mode, each with a blurb of whatever length the
+// mode happened to need — Fast Shuffle's ran to four sentences and a worked
+// example while King of the Hill's was six words. Four boxes of wildly
+// different heights read as four unrelated things rather than as one choice
+// with four answers, and the user's verdict was that the menus are "a little
+// awkward to navigate and understand".
+//
+// Hairlines instead of boxes, matching the list and profile. One type scale:
+// 19px display title, 13px body, 9px small-caps for the cost. And a `meta`
+// slot so the thing you are actually choosing on — how long this will take —
+// is in the same place and the same unit on every row, instead of buried in
+// the middle of a paragraph on one of them.
 function ModeRow({
   title,
   blurb,
+  meta,
   disabled,
   onClick,
 }: {
   title: string;
   blurb: string;
+  /** The cost, in the unit every mode shares. Right-aligned, same slot. */
+  meta?: string;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -1913,10 +1985,18 @@ function ModeRow({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-40"
+      className="flex w-full items-baseline gap-3 border-b border-border py-3.5 text-left last:border-b-0 active:scale-[0.99] disabled:opacity-40"
     >
-      <span className="block font-display text-lg tracking-wide text-text-hi">{title}</span>
-      <span className="block text-[11px] leading-snug text-dim">{blurb}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-display text-[19px] leading-tight tracking-wide text-text-hi">{title}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-dim">{blurb}</span>
+      </span>
+      {/* What it costs you, in the one unit all four share. The list used to
+          make you infer this from four blurbs of four different lengths. */}
+      {meta && (
+        <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">{meta}</span>
+      )}
+      <span className="flex-shrink-0 text-[13px] text-dim">›</span>
     </button>
   );
 }
