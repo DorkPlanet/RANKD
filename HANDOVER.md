@@ -16,9 +16,25 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (17 Aug 2026):** Session L, closed. Everything is committed, pushed to
+**State (21 Aug 2026):** Session M, closed. Everything is committed, pushed to
 `origin/master`, and deployed to production. There is no side branch — `master` is what is
 live. Deploy verified against the live bundle and the deployed commit, never by a 200.
+
+**505 tests, typecheck clean, lint at 2 errors in `src`, `next build` clean.** The two lint
+errors are still the `AppShell` set-state-in-effect pair described below. That is the
+baseline. Session M added a third twice and removed it twice — an apostrophe in raw JSX
+needs `&rsquo;`, and reassigning a variable during render is rejected here.
+
+**FOUR NEW DOCUMENTS, and one of them is the important one.**
+- **`REGISTER.md`** — every open idea, complaint and piece of parked work, including the
+  competitive research. **It used to live outside the repo** in a plans directory,
+  unversioned, while three lesser documents sat in git. Moved in at the close of Session M.
+  If you are looking for what to do next, it is there and not here.
+- **`VOICE.md`** — how the app talks. Thirteen rules, derived from the user's own copy
+  rather than from a style opinion. Read it before writing a user-facing string.
+- **`COPY.md`** — all 506 user-facing strings, grouped by screen, with the diagnosis of why
+  they read as machine-written at the top. Roughly 460 are still unreviewed.
+- **`HOW-IT-WORKS.md`** — the five things the app never explains to anybody.
 
 **THE APP IS NOW GATED BEHIND SIGN-IN.** `SignInGate.tsx`, rendered by `AppShell` before
 any screen. This reverses the oldest assumption in the codebase — that the app works fully
@@ -64,6 +80,19 @@ the two ways Blob authenticates.
 
 ## How to get oriented in five minutes
 
+- **Which file answers which question.**
+
+  | Question | File |
+  |---|---|
+  | What is built, what broke, what must not be touched | `HANDOVER.md` — this file |
+  | What to do next, and every open idea | `REGISTER.md` |
+  | What is deliberately NOT built, and why | `POTENTIAL-FEATURES.md` |
+  | How the app is allowed to talk | `VOICE.md` |
+  | Every user-facing string, by screen | `COPY.md` |
+  | What the app never explains to anyone | `HOW-IT-WORKS.md` |
+  | How the ranking actually works | `lib/ladder.ts` (61 tests) |
+  | How to work on this | `CLAUDE.md` |
+
 - **The app is a ranking game.** You rate films 1–5★ on import; the game is deciding the
   ORDER within and across those ratings, by head-to-head duels. `lib/ladder.ts` is the
   engine and the most guarded module here (61 behavioural tests, immutable in and out).
@@ -94,6 +123,65 @@ the two ways Blob authenticates.
 ---
 
 ## Landed
+
+**Session M — the competition, the voice, the profile, and a lockup that took four tries.**
+Everything below is deployed. The open ideas are in `REGISTER.md`, not here.
+
+**It began with research, not code.** ~25 apps the user had found. Nine are genuinely in
+this lane, and the finding that shaped the rest of the session is that **the mechanic is
+commoditised and nobody has won**: 134 App Store ratings is the ceiling of the entire new
+wave. Rankd's moat is the big-library problem — Rough Cut, tier bands — which no
+competitor has hit, and which was invisible on Rankd's own surface. Letterboxd has still
+not shipped ranking. Full write-up in `REGISTER.md` sections D and K.
+
+**The voice.** The user: "everything feels like it's written by AI." The obvious tells were
+absent — no marketing adjectives, no "not just X but Y". The problem was **uniformity**, and
+under it one thing: every string was EXPLAINING and none was RECOGNISING. Flickchart's front
+page beats Rankd's whole app with one sentence because it hands the reader a question they
+already ask themselves. The headline is now "Everyone has a favourite. What's yours?"
+
+- **Every em dash in user-facing copy is gone.** Eight of them, against a rule that already
+  existed and had drifted. `test/tour.test.ts` guarded the tours; nothing guarded the rest.
+- Contractions throughout. Developer-facing errors (`TMDB_API_KEY`, `DATABASE_URL`) are
+  deliberately exempt, and so is the tour title "UN-RNKD is not unrated", where the emphasis
+  is the whole point.
+- **Two factual errors in copy, both long-standing.** The list tour said the rank number was
+  on the LEFT; it renders last in the row. The duel tour claimed Rough Cut is "100 taps,
+  about two minutes"; Split again means more than one pass and 100 decisions is not two
+  minutes. Both had survived every review because nobody checked a claim against the screen.
+  Rules 3 and 4 in `VOICE.md` exist because of them.
+
+**The taste chart, and the trap under it.** Built from SETTLED POSITIONS, never win rates:
+the duel log is not a sample of taste, it is a record of what the matchmaker asked. It draws
+your order and Rankd's over the same films, with a before/after from the sitting's start.
+- **Cross-tier belief means are not calibrated and must never be printed as a position.**
+  `PRIOR_SPREAD` is wide enough that a much-duelled film out-means a whole tier above it,
+  while `shuffle.ts` never lets a band be escaped. Shipped for one afternoon on the film
+  card and printed a 1.5★ film at #391. Any surface comparing the model's answer with the
+  user's meets this.
+
+**The film card says who placed a film.** Gold padlock and a number for a hard lock,
+"Rankd placed it at #42" for a soft one, and "Rankd says #38" beside your own number.
+That distinction lived in a `title` attribute — **a hover tooltip, on a phone.**
+
+**The profile was rebuilt.** Two swipeable panels, **Your taste** and **Your results** —
+data versus what you chose. Boxes became hairlines almost everywhere. Percentage stats
+became named observations, because a percentage names nothing and there is nothing to
+argue with. A genre ring with every genre reachable, a passport of countries, three
+directors and four actors as rows.
+
+**And the lockup.** Fast Shuffle froze the whole HANDSET after a couple of hundred duels.
+Three theories died first — the engine measures flat at 0.6ms per duel over 300, and a DOM
+count of 121 during a freeze killed the leak theory. The cause was `backfillPosters`
+skipping its yield on a cache hit while reporting a "find" for every film that already had
+its artwork: hundreds of half-megabyte `localStorage` writes, back to back, nothing
+yielding. See the gotchas.
+
+**Not done, deliberately:** the world map. Real public-domain geometry exists and was
+fetched to confirm it (Natural Earth via `world-atlas`, 107KB of TopoJSON); it needs an arc
+decoder, a projection and a build step. `Passport` already computes what it would draw.
+`REGISTER.md` P1.
+
 
 **Session A (`c31416d`) — a director's work as a climb.**
 `startRun` gained `only?: string[]` (an arbitrary pile, not a tier) and sessions gained
@@ -956,12 +1044,24 @@ are written up under Landed.
 running), the conflict chooser, and Rough Cut's range. All fixes and additions to shipped
 behaviour, written up under Landed. **The numbering below is unchanged since Session K.**
 
-**Where to start, as of 17 Aug 2026:** 1, 3, 4 and 6 have landed; 2 is parked by the
-user's own decision. That leaves **5 (profile visual pass)** and **7 (resume a curated
-run)** as the two live options, and **7 is the better first move** — it is contained, it
-finishes something half-built, and it got cheaper in Session K because `RunRequest` is now
-exactly the shape a resumed run rebuilds into. 5 needs a steer on visual direction before
-much can be done with it.
+**Where to start, as of 21 Aug 2026.** 1, 3, 4 and 6 landed earlier; 2 is parked by the
+user's own decision.
+
+**5 — the profile visual pass — is LARGELY DONE**, in Session M. It had been waiting on a
+steer on visual direction and got one, at length: the page is two swipeable panels, the
+bordered boxes are hairlines, the sideways shelves are grids, and the statistics are named
+observations rather than percentages. What remains of it is listed as P1 to P5 in
+`REGISTER.md` — chiefly the world map and tapping a country to rank those films.
+
+That leaves **7 (resume a curated run)** as the live numbered item, and it is still the
+better contained move: it finishes something half-built and got cheaper in Session K
+because `RunRequest` is exactly the shape a resumed run rebuilds into.
+
+**But read `REGISTER.md` before picking anything from this list.** It holds the competitive
+research, the rest of the copy sweep, and roughly eighty other open items — this list is
+only the part that was scheduled before any of that existed. **A1 in the register outranks
+everything here**: if the sign-in gate locks people out of their own libraries in aeroplane
+mode, nothing else matters.
 
 1. ~~**Onboarding**~~ — **LANDED in Session G.** Coach marks over the live UI, one pass
    per screen, revisitable from Settings. See the decision block above. The original entry
@@ -1231,6 +1331,24 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
   "hardly like the idea of something else shuffling their list for them." **Deferred to the
   very end deliberately** — it is a question about what the app is for, not a bug. The person
   run no longer depends on it.
+  - **SESSION M FOUND EVIDENCE AGAINST REMOVING IT. Read this before acting on the two
+    entries above.** User reviews across the field were checked, and the split between what
+    people praise and what they complain about is the whole finding. The COMPARISON itself
+    is praised consistently — Beli users call it "genuinely satisfying" and name accuracy as
+    the number one feature, explicitly against star ratings. Nobody complains about it.
+  - What they DO complain about is **loss of ownership**: rankings feeling "wonky and
+    overstated", and not feeling like their own list. That is the Elo-drift complaint, from
+    real users, on the biggest app in the category — and it is an argument for hard locks,
+    not against a soft mode.
+  - So the objection recorded above is to Fast Shuffle being **unexplained and unbounded**,
+    not to it existing. Fast Shuffle is the entire product of every competitor in the field;
+    cutting it removes the one mode the market already understands, immediately before
+    adding the confidence readout that would finally give it a point.
+  - **The recommendation is to rebrand rather than remove**: its own named game writing
+    PROVISIONAL placements, with hard locks still earned through Rough Cut, King of the Hill
+    or by hand, and the two states named on screen. Rankd is the only app in the field that
+    can offer both and say which is which. Full write-up in `REGISTER.md` F4.
+  - If it still has no defenders after that, cut it then.
 - **"Finishing a run doesn't feel like anything."** Partly answered now that the cards exist
   — re-judge once they are on a phone.
 

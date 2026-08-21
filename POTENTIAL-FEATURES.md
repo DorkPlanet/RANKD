@@ -8,6 +8,13 @@ This is a holding pen, not a roadmap. Nothing here is committed.
 **The ordered, scheduled work lives in `HANDOVER.md` under "Next, in order".** This file is
 what that list deliberately does not contain.
 
+**And since Session M there is a third place: `REGISTER.md`.** It holds the competitive
+research and everything that came out of it — roughly eighty open items, statuses and all.
+The division is: this file is ideas thought through and parked WITH THEIR REASONING, the
+register is the full open list including things nobody has reasoned about yet. When an
+entry here and an entry there describe the same thing, the register carries the status and
+this file carries the argument.
+
 ---
 
 ## The editable list
@@ -359,6 +366,18 @@ None are scheduled. Each is small enough to do in an afternoon except the last.
   genuinely is: `ladder.ts` and `bayes.ts` know about ids and ratings, not films.
   What is film-specific is TMDb, the poster path, and every piece of copy. That
   is the honest scope: not the ranking, all the furniture.
+  - **Session M put a stake in which medium.** The user leans multi-medium and the
+    competitive research says the lane is genuinely open: cross-medium TRACKING
+    exists (Achriom, Curate) and cross-medium RANKING exists only as generic
+    toys with no metadata. Nobody has put a serious ranking engine behind more
+    than one medium.
+  - **Music before TV, and the recommendation is not a coin toss.** TV doubles
+    the library problem in the category Rankd has not won yet, against two
+    rivals who already have it. Albums are bounded, ordered, passionately
+    ranked objects with clean metadata and no incumbent doing pairwise — and
+    "which would you rather" beats a star rating most obviously there.
+  - **Not before the app has a social loop.** Two libraries nobody shares is
+    worse than one. See `REGISTER.md` D14.
 
 ---
 
