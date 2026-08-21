@@ -130,7 +130,7 @@ const LIST_STEPS: readonly TourStep[] = [
     id: "jump",
     target: "list-jump",
     title: "Jump to a tier",
-    body: "Straight to any star rating, with a count of how many you've settled there. Quickest way to find where there's work left.",
+    body: "Straight to any star rating, with a count of how many you've locked there. Quickest way to find where there's work left.",
   },
 ];
 

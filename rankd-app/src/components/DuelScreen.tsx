@@ -1573,8 +1573,8 @@ function ModePanel({
         />
         <ModeRow
           title="King of the Hill"
-          blurb="One tier at a time. Winner moves on. This is how a film gets a place you settled yourself."
-          meta="settles films"
+          blurb="One tier at a time. Winner moves on. This is how a film gets a place you locked yourself."
+          meta="locks films"
           onClick={() => setChosen("koth")}
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
