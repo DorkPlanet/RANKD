@@ -247,3 +247,29 @@ describe("duelsInMinutes", () => {
     expect(duelsInMinutes(1, 600)).toBe(1);
   });
 });
+
+describe("paceSeconds stays inside a believable band", () => {
+  const at = (...seconds: number[]) =>
+    seconds.map((s, i) => ({ id: "j" + i, a: "x", b: "y", o: "a" as const, m: "shuffle" as const, t: s * 1000 }));
+
+  // Shipping this unclamped put "1,210 DUELS LEFT" on a ten-minute session,
+  // because a run of half-second taps is a real median and a nonsense pace.
+  it("does not believe a sub-second pace", () => {
+    expect(paceSeconds(at(0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4))).toBe(2);
+  });
+
+  it("does not believe a pace of minutes either", () => {
+    expect(paceSeconds(at(0, 45, 90, 135, 180, 225, 270))).toBe(20);
+  });
+
+  it("leaves a believable pace alone", () => {
+    expect(paceSeconds(at(0, 6, 12, 18, 24, 30, 36))).toBe(6);
+  });
+
+  it("keeps a ten-minute session a sane length at either extreme", () => {
+    const fast = duelsInMinutes(10, paceSeconds(at(0, 0.4, 0.8, 1.2, 1.6, 2.0, 2.4)));
+    const slow = duelsInMinutes(10, paceSeconds(at(0, 45, 90, 135, 180, 225, 270)));
+    expect(fast).toBe(300);
+    expect(slow).toBe(30);
+  });
+});

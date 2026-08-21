@@ -203,6 +203,20 @@ const BREAK_S = 60;
 const WINDOW = 200;
 
 /**
+ * The band a believable pace lives in.
+ *
+ * Measuring the real thing was the right idea and shipping it unclamped was
+ * not. A median under a second is not somebody deciding — it is somebody
+ * double-tapping, or holding the button down, or an automated pass — and
+ * feeding that into "ten minutes" produced a session of **1,210 duels**, seen
+ * on screen. The floor is what a person can actually look at two posters and
+ * choose between; the ceiling stops one very slow stretch turning ten minutes
+ * into a handful of questions.
+ */
+const MIN_PACE_S = 2;
+const MAX_PACE_S = 20;
+
+/**
  * This person's typical seconds per duel, from the timestamps already in the
  * log. The MEDIAN rather than the mean, so one long deliberation does not drag
  * the estimate the way one break would.
@@ -216,7 +230,8 @@ export function paceSeconds(log: readonly Judgement[]): number {
   }
   if (gaps.length < 5) return DEFAULT_PACE_S;
   gaps.sort((a, b) => a - b);
-  return gaps[Math.floor(gaps.length / 2)];
+  const median = gaps[Math.floor(gaps.length / 2)];
+  return Math.min(MAX_PACE_S, Math.max(MIN_PACE_S, median));
 }
 
 /** How many duels fit in a session of this many minutes, at this person's pace. */

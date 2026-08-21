@@ -28,7 +28,7 @@ import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/me
 import { isPlaced } from "@/lib/lock";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { RunStatus } from "./RunStatus";
-import { countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
+import { PLACE_DUELS, countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 
 /**
@@ -158,7 +158,7 @@ export default function ShuffleDuel({
   // reasons that have nothing to do with the anchor — artwork arriving, a
   // re-serve after undo — and an anchor inferred from "whichever film is on the
   // left" would silently reset whenever any of those happened.
-  const [anchor, setAnchor] = useState<{ id: string; held: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ id: string; held: number; wasPlaced: boolean } | null>(null);
   // Whether the opening serve has run yet.
   //
   // `pair === null` meant two completely different things — "not served yet"
@@ -208,7 +208,13 @@ export default function ShuffleDuel({
       // the screen shows a different one.
       setPair(next);
       if (next) {
-        setAnchor((a) => (a && a.id === next[0].id ? a : { id: next[0].id, held: 0 }));
+        setAnchor((a) =>
+          a && a.id === next[0].id
+            ? a
+            : // Whether it ALREADY had a number when its turn began. The
+              // rotation rule needs the transition, not the state — see below.
+              { id: next[0].id, held: 0, wasPlaced: isPlaced(next[0]) },
+        );
       }
     },
     [options.scope, options.includeConfirmed],
@@ -454,8 +460,17 @@ export default function ShuffleDuel({
     // the placement this very duel may have just earned it.
     const heldFilm = anchor ? placed.find((f) => f.id === anchor.id) : undefined;
     const heldNow = anchor ? anchor.held + 1 : 0;
-    const retire = !anchor || !heldFilm || isPlaced(heldFilm) || heldNow >= ANCHOR_HOLD;
-    setAnchor(anchor && !retire ? { id: anchor.id, held: heldNow } : null);
+    // Retire on the TRANSITION into being placed, not on being placed.
+    //
+    // The first version tested `isPlaced(heldFilm)`, which is true from the
+    // very first duel for a film that already had a number — and soft-locked
+    // films stay in the pool precisely so the model can improve its own earlier
+    // guess. So every one of them was retired after a single duel and the
+    // second stage never got the anchor's help at all. Caught on screen: a
+    // soft-locked film held for one duel while its neighbours held five.
+    const justPlaced = !!heldFilm && !anchor?.wasPlaced && isPlaced(heldFilm);
+    const retire = !anchor || !heldFilm || justPlaced || heldNow >= ANCHOR_HOLD;
+    setAnchor(anchor && !retire ? { ...anchor, held: heldNow } : null);
     serve(placed, nextLog, nextBeliefs, retire ? undefined : anchor?.id);
 
     // Every twelfth answer, re-derive the whole model from the whole log. See
@@ -588,6 +603,18 @@ export default function ShuffleDuel({
   // library says what they currently look like.
   const [servedA, servedB] = pair;
   const a = films.find((f) => f.id === servedA.id) ?? servedA;
+  // How many more duels this anchor has, whichever bound bites first.
+  //
+  // Unplaced: the placement gate, because that is what actually retires it.
+  // Already placed and being refined: the hold cap, because the gate is behind
+  // it. Never below 1 — a pill reading "0 MORE" over a duel you are being asked
+  // to answer is a contradiction.
+  const anchorLeft = Math.max(
+    1,
+    isPlaced(a)
+      ? ANCHOR_HOLD - (anchor?.held ?? 0)
+      : Math.min(PLACE_DUELS - (a.duels ?? 0), ANCHOR_HOLD - (anchor?.held ?? 0)),
+  );
   const b = films.find((f) => f.id === servedB.id) ?? servedB;
 
   // A person run is a shuffle underneath, but labelling it FAST SHUFFLE hides
@@ -655,18 +682,33 @@ export default function ShuffleDuel({
             other the way the climb's does. Without it both fell through to the
             same lean and sat parallel, which is what made this mode look unlike
             the compare screen it deliberately reuses. */}
-        {/* The anchor wears a badge, and only from its SECOND duel.
-            Without it, seeing the same film twice reads as the app repeating
-            itself rather than as a deliberate run — and the whole point of
-            holding it is that you are meant to notice.
+        {/* The anchor's badge counts DOWN rather than saying "STAYING".
+            The user's call, and it is the better of the two: a word tells you
+            this film is here again, a number tells you how much longer — which
+            is the thing you actually want to know when a film is in front of
+            you for the fifth time.
 
-            Not on the first, because on the first there is nothing yet to have
-            stayed FROM: the badge would be labelling a fact that has not
-            happened. The badge slot is the climb's own, so this is the existing
-            mechanism rather than new furniture on a protected screen. */}
+            ── Why it counts to the PLACEMENT, not to the cap ──
+            A film is retired from the anchor when it earns its number, and only
+            falls back on ANCHOR_HOLD if the matchmaker somehow cannot get it
+            there. So the honest number is whichever comes first, and for an
+            unplaced film that is almost always the placement. Counting on the
+            cap alone would show "3 more" and then rotate after one, which reads
+            as a bug rather than as a film finishing early.
+
+            A film that already HAS a number can still be anchored — soft locks
+            stay in the pool so the model can improve on its own earlier guess —
+            and for those the placement gate is already behind them, so the cap
+            is the only bound left. Both branches mean the same thing on screen:
+            how many more duels with this film.
+
+            Shown from the SECOND duel. On the first there is nothing yet to
+            have stayed from, and a countdown would be labelling a fact that has
+            not happened. The badge slot is the climb's own, so this is the
+            existing mechanism rather than new furniture on a protected screen. */}
         <PosterCard
           film={a}
-          badge={anchor && anchor.id === a.id && anchor.held > 0 ? "STAYING" : ""}
+          badge={anchor && anchor.id === a.id && anchor.held > 0 ? `${anchorLeft} MORE` : ""}
           side="left"
           pairId={a.id}
           onPick={() => answer("a")}

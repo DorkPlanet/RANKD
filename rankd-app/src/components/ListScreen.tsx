@@ -189,8 +189,20 @@ export default function ListScreen({
             the model, not from you) wearing the same paint.
 
             Centred, because it is a caption for the whole list rather than a
-            label on the name above it, and it now sits over the search bar it
+            label on the name above it, and it sits over the search bar it
             shares a width with.
+
+            Number ABOVE its label, in three columns rather than one running
+            line. Inline, the eye had to parse "21 LOCKED · 77 SHUFFLED · 767
+            UN-RNKD" as a sentence before it could compare the figures, and the
+            middle dots were doing work that whitespace does better. Stacked,
+            the three numbers sit on one baseline and can be read against each
+            other at a glance — which is the only reason to put them together.
+
+            Deliberately the profile stats band's treatment (`Stat` in
+            `ProfileScreen`): serif numeral over 9px small caps. Same idea, same
+            shape, and the profile is the screen whose type the rest of the app
+            is being brought toward.
 
             The row numerals below use the same three, or this is a key to
             nothing.
@@ -225,7 +237,7 @@ export default function ListScreen({
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
         {model.total > 0 && (
-          <p className="mb-2.5 flex flex-wrap items-baseline justify-center gap-x-1.5 gap-y-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+          <p className="mb-3 flex items-start justify-center gap-7 text-dim">
             {[
               { n: model.settledCount, label: "locked", tone: "text-gold" },
               { n: model.placedCount - model.settledCount, label: "shuffled", tone: "text-accent" },
@@ -235,11 +247,12 @@ export default function ListScreen({
               // not in. Dropping them is also what lets this line work on day
               // one, when everything is un-rnkd and the other two would be 0.
               .filter((seg) => seg.n > 0)
-              .map((seg, i) => (
-                <span key={seg.label} className={`flex items-baseline gap-1.5 ${seg.tone}`}>
-                  {i > 0 && <span className="text-dim opacity-40">·</span>}
-                  <span className="font-display text-[13px] font-bold tracking-normal">{seg.n}</span>
-                  <span>{seg.label}</span>
+              .map((seg) => (
+                <span key={seg.label} className={`block text-center ${seg.tone}`}>
+                  <span className="block font-serif text-lg font-bold leading-none tabular-nums">{seg.n}</span>
+                  <span className="mt-1 block text-[9px] font-extrabold uppercase tracking-[0.14em]">
+                    {seg.label}
+                  </span>
                 </span>
               ))}
           </p>
