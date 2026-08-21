@@ -171,18 +171,30 @@ export default function ListScreen({
             rows repeats itself 861 times, and because a row may not grow:
             ROW_H is load-bearing for the spacers and the tier jumps.
 
-            It uses the row treatments EXACTLY — same gold, same weight, same
-            dim — so it reads as a key and not as two more statistics. Change
-            one and change both, or it stops being a key.
+            It carries the row's two treatments — gold and bold against plain
+            and dim — so it reads as a key and not as two more statistics.
+            Change one and change both, or it stops being a key.
+
+            The SIZE deliberately does not match: the rows set their numerals at
+            26px and a key does not need to shout. What it does need is internal
+            contrast, which is the whole reason the first attempt looked wrong
+            on a phone. It was a flat 10px line sitting directly under another
+            flat 11px line, so two dim greys of near-identical size stacked into
+            mush and the longer one read as a runt paragraph. The numbers are in
+            the display face at 13px now and the words are 9px small caps, which
+            is the same label treatment the profile band uses.
 
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
         {model.settledCount > 0 && model.placedCount > model.settledCount && (
-          <p className="mb-2.5 text-[10px] leading-snug text-dim">
-            <b className="font-bold text-gold">{model.settledCount}</b> you settled
-            <span className="mx-1.5 opacity-50">·</span>
-            <span className="text-dim">{model.placedCount - model.settledCount}</span> Rankd placed,
-            and can still move
+          <p className="mb-2.5 flex items-baseline gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+            <b className="font-display text-[13px] font-bold tracking-normal text-gold">{model.settledCount}</b>
+            <span>you settled</span>
+            <span className="opacity-40">·</span>
+            <span className="font-display text-[13px] font-normal tracking-normal">
+              {model.placedCount - model.settledCount}
+            </span>
+            <span>Rankd placed</span>
           </p>
         )}
 
