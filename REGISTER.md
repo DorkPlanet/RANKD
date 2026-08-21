@@ -89,7 +89,7 @@ Landed and recorded so nobody re-opens them: B1 onboarding coach marks, B3 tier 
 | ID | Item | Status |
 |---|---|---|
 | C1 | **Daily Check** — a few films a day, paired against their neighbours, 5–10 duels, confirm before moving. Its final step **is** B2's edit mechanic, so building it first means building that twice | PARKED behind B2 |
-| C2 | **Fast Shuffle as the lazy mode.** Mostly a reframe, not a build — the mechanic already works. What is missing is the payoff: nothing tells you the model is getting surer. `spread` already exists in `bayes.ts`. Risk to design around: "94% confident" reads as finished. It must read as *the app's belief about your taste*, never as *your ranking*. Check first whether confidence over 861 films moves at all on a human timescale — per tier is likelier to feel alive | OPEN — see F4 |
+| C2 | **Fast Shuffle as the lazy mode.** Mostly a reframe, not a build — the mechanic already works. What is missing is the payoff: nothing tells you the model is getting surer. `spread` already exists in `bayes.ts`. Risk to design around: "94% confident" reads as finished. It must read as *the app's belief about your taste*, never as *your ranking*. Check first whether confidence over 861 films moves at all on a human timescale — per tier is likelier to feel alive | OPEN — **unblocked 21 Aug**, C18 is decided; this is now the substance of F4's rebrand |
 | C3 | **Rough Cut: placing a film blind.** Real problem. Rejected fix: show four films and multi-select (costs the one-tap-per-film economics and drifts toward a small sort). **Try instead: reference thumbnails** — the last one or two films filed under each bracket, small, above the buttons | OPEN |
 | C4 | **Badge icons.** ~29 badges in `achievements.ts` all render the same filled/hollow star. Line-art SVGs matching `Icons.tsx`, grouped by family. `Achievement` gains an `icon` field; unknown ids fall back to the star | PARKED |
 | C5 | **Activity tab.** The nav cell exists and shows a "coming soon" pill. Profile scrapbook is its natural first tenant; sharing is the eventual one | OPEN — see D2 |
@@ -103,9 +103,9 @@ Landed and recorded so nobody re-opens them: B1 onboarding coach marks, B3 tier 
 | C13 | **The profile shows full density from film two.** Every screen has a zero state; nothing has a **thin** state. Folds into B5 | OPEN |
 | C14 | **The film strip's "up next" is an approximation** — grabs same-tier films rather than asking the matchmaker. A true lookahead means pre-computing one pair ahead in `matchmaker.ts` | OPEN |
 | C15 | **Multi-medium — books, music.** The engine is genuinely medium-agnostic: `ladder.ts` and `bayes.ts` know ids and ratings, not films. What is film-specific is TMDb, the poster path, and every piece of copy. **Honest scope: not the ranking, all the furniture** | OPEN — see D14 |
-| C16 | A switch to turn Fast Shuffle **off** entirely — opt out rather than remove for everyone | OPEN |
+| C16 | A switch to turn Fast Shuffle **off** entirely — opt out rather than remove for everyone. **Better founded now that C18 is decided**: this was the compromise position while removal was live, and it is the right shape permanently. Somebody who wants only placements they made themselves should be able to say so, and that is the same setting as Settings' "Drop the N the app placed" | OPEN |
 | C17 | **Subgenre runs** — "zombie films" rather than "horror". A keyword is narrow enough to have a real edge, so unlike a genre it could borrow unseen films the way a director run does. `topPeople` already derives subgenres from `f.keywords` | OPEN |
-| C18 | **Fast Shuffle may not deserve to exist.** From watching real people: they "hardly like the idea of something else shuffling their list for them." A question about what the app is for | NEEDS DECISION — see F4 |
+| C18 | **Fast Shuffle stays — DECIDED by the user, 21 Aug 2026.** The old entry read "may not deserve to exist", from watching real people who "hardly like the idea of something else shuffling their list for them." F4 showed that objection was to it being unexplained and unbounded, not to it existing. **Do not re-open this.** What is left is the rebrand, which is F4, not a question | CLOSED — decided, keep |
 | C19 | **"Finishing a run doesn't feel like anything."** Partly answered by the cards; re-judge on a phone | OPEN — see F3 |
 | C20 | Known wart: a brand-new phone hits the conflict chooser rather than a silent pull, because the credits sweep writes the seed library within seconds and marks the browser dirty. Fix: treat a library still exactly equal to `SEED_FILMS` as absent | OPEN |
 | C21 | `src/lib/sync.ts` shows as **binary in git diffs** — probably a stray null byte or BOM. Harmless; makes the file's history unreadable | OPEN |
@@ -138,7 +138,7 @@ Landed and recorded so nobody re-opens them: B1 onboarding coach marks, B3 tier 
 | D13 | **The card's job.** Today an output; should be the growth loop — mark and URL on every card, one tap from the list rather than caught at the end of a run, carrying D1 |
 | D14 | **Multi-medium: music before TV.** TV doubles the library problem in the category not yet won, against two rivals who already have it. Music has bounded, passionately-ranked objects, clean metadata, no incumbent doing pairwise. Same scope note as C15 |
 | D15 | **The Activity tab's "coming soon" pill** → D2. A permanent coming-soon is a promise the app keeps breaking |
-| D16 | **Fast Shuffle's framing — reframe, do not remove.** Recorded here as a *replace* item as well as in F4, because it belongs in both places. It is the entire product of every app in the field table. Cutting it deletes the one mode the market already understands, immediately before adding the confidence readout that would give it a point. The recorded objection — people "hardly like the idea of something else shuffling their list for them" — is an objection to it being **unexplained and unbounded**, not to it existing. Full evidence and the rebrand shape in **F4** |
+| D16 | **Fast Shuffle's framing.** Removal is off the table as of 21 Aug — see C18 — so what is left here is the *replace* half: the mode is unexplained and unbounded, and that is what the recorded objection was always about. It is the entire product of every app in the field table, and it is the one Rankd says least about. The rebrand shape is in **F4**, and its first move is N2 |
 
 ### Note, do not build · Reject
 
@@ -184,7 +184,7 @@ layout**.
 
 ---
 
-## F · Ranking data, payoff, and the Fast Shuffle question
+## F · Ranking data, payoff, and the Fast Shuffle rebrand
 
 ### F1 · The duel log is not a taste sample — the user's objection, and it is correct
 
@@ -256,13 +256,18 @@ Complained about — **none of it the comparison**:
 4. Popcorn List's own reviews complain about **finding films to add** (endless decade
    scrolling) and glitches, not about ranking. Rankd's CSV import already answers that.
 
-**Conclusion — the user's plan is supported by the evidence. Keep Fast Shuffle, rebrand it:**
+**DECIDED 21 Aug 2026: Fast Shuffle stays.** The user's call, and the evidence supported it.
+Everything below is now the open work rather than a recommendation:
 
 - Fast Shuffle becomes its own named game writing **provisional placements** only.
 - Hard locks stay earned — manually, or via Rough Cut and King of the Hill.
 - **Name the two states on screen.** The list already draws gold-and-bold against dim.
-- This resolves C18 and C2, and reverses the "next on the block" pin. Rankd is the only app
-  in the field that can offer both layers and say which is which.
+- This closes C18 and unblocks C2. The removal pin has been **deleted** from `HANDOVER.md`
+  rather than annotated, so there is nothing left to action against the evidence. Rankd is
+  the only app in the field that can offer both layers and say which is which.
+- **The first move is N2, not a rename.** Naming the two states is the whole point of the
+  rebrand, and the locked/believed distinction is currently a `title` attribute — a hover
+  tooltip, on a phone. A new name over an invisible distinction changes nothing.
 
 ---
 
@@ -341,7 +346,7 @@ that explains itself". **E1 breaks that premise.** A taste chart does not explai
 |---|---|
 | I1 | **Record E7** — gradients now allowed if tasteful. The do-not-relitigate block still says "No gradients" flat, and the next session will enforce a rule the user has lifted |
 | I2 | **Contradiction to resolve.** The gotchas list says `rankd-lists-v1` "is not in any backup — a restore silently loses saved rankings". The Session G decision block says the per-format key set shipped and format 2 carries it. **One of these is stale.** Check the code, then fix the file — this file has twice asserted a blocker that was not real |
-| I3 | Record F4's finding so the Fast Shuffle removal pin is not actioned against the evidence |
+| I3 | ~~Record F4's finding so the Fast Shuffle removal pin is not actioned against the evidence~~ **DONE 21 Aug** — the user decided to keep Fast Shuffle and the pin was deleted from `HANDOVER.md`, which is better than recording a counter-argument beside it |
 
 ---
 
@@ -362,7 +367,9 @@ that explains itself". **E1 breaks that premise.** A taste chart does not explai
 2. **E6** — is light mode on the table, or is the answer a light *card* first?
 3. **B2** — is the editable list still parked, given F4 says ownership is the field's top
    complaint and B2 *is* the ownership feature?
-4. **C18/F4** — confirm Fast Shuffle is reprieved and rebranded rather than removed.
+4. ~~**C18/F4** — confirm Fast Shuffle is reprieved rather than removed.~~ **ANSWERED 21 Aug:
+   it stays.** The remaining question is narrower and worth asking properly: **what is it
+   called, and what does the screen say the difference is?** See F4.
 
 ---
 

@@ -64,6 +64,12 @@ mechanic above. Building Daily Check first means building that twice.
 
 ## Fast Shuffle, reframed as the lazy mode
 
+**DECIDED 21 Aug 2026: Fast Shuffle stays.** It had been pinned for possible removal since
+Session I. The user's call, and the competitive research supported it — the comparison
+itself is the one thing users of these apps praise consistently, and what they complain
+about is loss of ownership, which argues for hard locks rather than against a soft mode.
+The pin is deleted from `HANDOVER.md`. Everything below is live work, not a proposal.
+
 **The idea.** Reframe Fast Shuffle as a mindless mode: infinite pairs, no piles, no
 climbing, no confirming. Keep answering and the model's confidence climbs until the order
 *should* be right without anyone having hand-curated it. For people who want to enjoy the
@@ -87,6 +93,13 @@ soft lock; a King of the Hill confirm writes a hard one. The list already draws 
 difference — gold and bold for "you placed this", dim for "placed by the evidence". That
 distinction is the thing that keeps ranking the be-all and end-all, and it is doing real
 work today.
+
+**But it is drawn and never named, and that is the first thing to fix here.** The colour is
+on screen; the explanation of what the colour MEANS lives in a `title` attribute on the
+list row, which is a hover tooltip on a device with no hover. So the distinction the whole
+reframe rests on is, on a phone, two shades of the same number. **Name the two states on
+screen before renaming the mode** — a new name over an invisible distinction changes
+nothing. `REGISTER.md` N2.
 
 **The risk to design around.** Say "94% confident" and people will read it as finished and
 stop. For the lazy user that is the point and it is fine. But the two kinds of position

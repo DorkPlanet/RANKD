@@ -1322,33 +1322,27 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Pinned — decide later, don't act yet
 
-- **Fast Shuffle is next on the block.** Session I: "I might get rid of fast shuffle too -
-  pending." Deliberately NOT touched while removing Spotlight, because they are separate
-  questions and doing both at once would have made one revert impossible without the other.
-  **If it goes, check what depends on it first** — that is the lesson Spotlight taught, and
-  `ShuffleDuel` is reused by the person-run path.
-- **Fast Shuffle may not deserve to exist.** From watching real people use the app: they
-  "hardly like the idea of something else shuffling their list for them." **Deferred to the
-  very end deliberately** — it is a question about what the app is for, not a bug. The person
-  run no longer depends on it.
-  - **SESSION M FOUND EVIDENCE AGAINST REMOVING IT. Read this before acting on the two
-    entries above.** User reviews across the field were checked, and the split between what
-    people praise and what they complain about is the whole finding. The COMPARISON itself
-    is praised consistently — Beli users call it "genuinely satisfying" and name accuracy as
-    the number one feature, explicitly against star ratings. Nobody complains about it.
+- **Fast Shuffle stays. DECIDED 21 Aug 2026 by the user, and this is no longer pinned.**
+  It was pinned from Session I onward — "I might get rid of fast shuffle too - pending" —
+  and from watching real people use the app, who "hardly like the idea of something else
+  shuffling their list for them." Both entries are gone. Do not reinstate them.
+  - **What the objection actually was.** Session M checked user reviews across the whole
+    field, and the split between what people praise and what they complain about settled it.
+    The COMPARISON itself is praised consistently — Beli users call it "genuinely
+    satisfying" and name accuracy as the number one feature, explicitly against star
+    ratings. Nobody complains about it.
   - What they DO complain about is **loss of ownership**: rankings feeling "wonky and
     overstated", and not feeling like their own list. That is the Elo-drift complaint, from
-    real users, on the biggest app in the category — and it is an argument for hard locks,
-    not against a soft mode.
-  - So the objection recorded above is to Fast Shuffle being **unexplained and unbounded**,
-    not to it existing. Fast Shuffle is the entire product of every competitor in the field;
-    cutting it removes the one mode the market already understands, immediately before
-    adding the confidence readout that would finally give it a point.
-  - **The recommendation is to rebrand rather than remove**: its own named game writing
-    PROVISIONAL placements, with hard locks still earned through Rough Cut, King of the Hill
-    or by hand, and the two states named on screen. Rankd is the only app in the field that
-    can offer both and say which is which. Full write-up in `REGISTER.md` F4.
-  - If it still has no defenders after that, cut it then.
+    real users, on the biggest app in the category — an argument for hard locks, not against
+    a soft mode. So the recorded objection was to Fast Shuffle being **unexplained and
+    unbounded**, never to it existing.
+  - **What is left is the rebrand, and it is now open work, not a question.** Its own named
+    game writing PROVISIONAL placements; hard locks still earned through Rough Cut, King of
+    the Hill or by hand; **the two states named on screen.** Rankd is the only app in the
+    field that can offer both layers and say which is which. `REGISTER.md` F4.
+  - Standing note kept from the old pin because it is still true of any change here:
+    **check what depends on it first** — that is the lesson Spotlight taught, and
+    `ShuffleDuel` is reused by the person-run path.
 - **"Finishing a run doesn't feel like anything."** Partly answered now that the cards exist
   — re-judge once they are on a phone.
 
