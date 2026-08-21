@@ -7,9 +7,10 @@
 // ── Tier climbs only ───────────────────────────────────────────────────────
 //
 // · King of the Hill is stored: every film is in the library, so ids rebuild it.
-// · A CURATED run is not. It can borrow films you have never seen, and guests
-//   exist nowhere but in that run, so resuming one needs whole `Film` objects
-//   rather than ids. See the handover's roadmap.
+// · A CURATED run is now stored too, under its own key and in its own shape.
+//   It could not share this one: it can borrow films you have never seen, and a
+//   guest exists nowhere but in that run — so ids rebuild nothing and the whole
+//   `Film` has to be written. See `saveCuratedRun` at the foot of this file.
 // · Fast Shuffle has no pile and no end, so there is nothing to resume.
 //
 // ── Device-local, forever ──────────────────────────────────────────────────
@@ -22,9 +23,11 @@
 // Excluded from the file backup for the same reason: a backup carries what you
 // decided, and this is what you had not decided yet.
 
+import type { RankSubject } from "./subject";
 import type { Film, PlacementSession } from "./types";
 
 const KEY = "rankd-run-v1";
+const CURATED_KEY = "rankd-run-curated-v1";
 
 /**
  * Is this a run worth keeping, and one we can rebuild from ids alone?
@@ -122,5 +125,111 @@ export function clearRun(): void {
     localStorage.removeItem(KEY);
   } catch {
     // Nothing to do; `loadRun` validates anyway.
+  }
+}
+
+// ── Curated runs ────────────────────────────────────────────────────────────
+//
+// A director, an actor or a genre, ranked against itself. Stored apart from the
+// climb above, and the reason is the guests.
+//
+// A climb is rebuildable from ids because every film in it is in your library.
+// A curated run can BORROW — a director's work you have never seen is pulled in
+// for the run and never persisted anywhere else — so an id list would come back
+// pointing at films that exist in no library on earth. The whole objects go in.
+//
+// ── What that costs, since it is the reason this was deferred ───────────────
+//
+// A borrowed film is a title, a year, a poster URL and some credits: on the
+// order of a kilobyte. A generous director run borrows a few dozen, so the
+// record is tens of kilobytes against a ~5MB budget shared with the library and
+// the log. Worth measuring if runs ever get bigger; not worth avoiding now.
+//
+// ── Device-local, like the climb ────────────────────────────────────────────
+//
+// Same reasoning, and it applies harder. An unfinished pile is working state
+// rather than a judgement, `reconcile.ts` refuses to invent an answer when two
+// devices disagree, and a curated run additionally holds films the OTHER device
+// has never heard of. Neither key is in `SYNC_KEYS` and neither belongs in a
+// backup: a backup carries what you decided, and this is what you had not.
+
+export interface CuratedRun {
+  session: PlacementSession;
+  subject: RankSubject;
+  /** Whole films, not ids — a guest exists nowhere else. See above. */
+  guests: Film[];
+}
+
+/**
+ * Keep the curated run, or clear it when there is nothing worth keeping.
+ *
+ * The mirror of `saveRun`, including the clear-on-unresumable rule: a stored
+ * director run offered after you moved to a tier climb would resume you into a
+ * game you had already left.
+ *
+ * The test is the exact inverse of `isResumable`'s first clause. A curated
+ * session IS `crossTier` — that flag is what makes it one — so this refuses
+ * anything that is not.
+ */
+export function saveCuratedRun(run: CuratedRun | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    const s = run?.session;
+    const keep = !!s && s.crossTier && !s.promotionQueue && s.unconfirmed.length >= 2;
+    if (!keep) return void localStorage.removeItem(CURATED_KEY);
+    localStorage.setItem(CURATED_KEY, JSON.stringify(run));
+  } catch {
+    // Storage full or disabled. Playable in memory either way.
+  }
+}
+
+/**
+ * The stored curated run, if it still makes sense.
+ *
+ * Validated against the library PLUS its own guests, which is the whole
+ * difference from `loadRun`: a guest is not in `films` and never will be, so
+ * checking ids against the library alone would throw away every run that
+ * borrowed anything — which is most of them.
+ */
+export function loadCuratedRun(films: readonly Film[]): CuratedRun | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(CURATED_KEY);
+    if (!raw) return null;
+    const run = JSON.parse(raw) as CuratedRun;
+    const s = run?.session;
+    const shaped =
+      !!s &&
+      !!run.subject &&
+      Array.isArray(run.guests) &&
+      Array.isArray(s.unconfirmed) &&
+      Array.isArray(s.confirmed) &&
+      s.crossTier === true;
+    if (!shaped) {
+      localStorage.removeItem(CURATED_KEY);
+      return null;
+    }
+    const have = new Set([...films.map((f) => f.id), ...run.guests.map((f) => f.id)]);
+    if (!idsOf(s).every((id) => have.has(id))) {
+      localStorage.removeItem(CURATED_KEY);
+      return null;
+    }
+    // A climb needs something left to climb. One film cannot duel.
+    if (s.unconfirmed.length < 2 && !s.needsConfirm) {
+      localStorage.removeItem(CURATED_KEY);
+      return null;
+    }
+    return run;
+  } catch {
+    return null;
+  }
+}
+
+export function clearCuratedRun(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(CURATED_KEY);
+  } catch {
+    // Nothing to do; `loadCuratedRun` validates anyway.
   }
 }

@@ -42,7 +42,7 @@ import { ImportGuide } from "./ImportGuide";
 import { ImportButton } from "./ui";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
-import { clearRun, saveRun } from "@/lib/runs";
+import { clearCuratedRun, clearRun, saveCuratedRun, saveRun } from "@/lib/runs";
 import {
   BackRow,
   RangeSlider,
@@ -487,6 +487,18 @@ export default function DuelScreen({
     // run or starting a curated one cannot leave a stale climb behind to be
     // offered later. See lib/runs.ts for why tier climbs only.
     saveRun(next.session);
+    // And the curated half, on the same single path for the same reason. The
+    // two stores are mutually exclusive by construction: `saveRun` clears when
+    // handed a cross-tier session and this one clears when handed anything
+    // else, so whichever kind of run you are in is the only one on disk.
+    //
+    // Guests come from the request rather than the session, because the session
+    // holds ids and a guest is the one film an id cannot resolve.
+    saveCuratedRun(
+      next.session?.crossTier && runSubject
+        ? { session: next.session, subject: runSubject, guests: [...guests] }
+        : null,
+    );
     if (next.journal.length === 0) {
       // Nothing was judged, so this is a confirm, a flick, or a new run — and
       // the step held from the last judgement now points into a game that no
@@ -1185,6 +1197,12 @@ export default function DuelScreen({
           onAgain={rankAgain}
           onDone={() => {
             setRunResult(null);
+            // Done with it, so it must not be offered again on the next open.
+            // The commit path clears this too once the session goes null, but a
+            // run finished from the summary can leave without another commit —
+            // and a resume into a run you have already read the result of is
+            // the exact thing this store exists to avoid.
+            clearCuratedRun();
             onRunRequestHandled?.(); // the request is finished with now, not before
           }}
         />

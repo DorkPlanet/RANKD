@@ -79,7 +79,8 @@ export const FILE_KEYS = FILE_2;
 
 // Deliberately in NEITHER set:
 //
-//  · `rankd-run-v1` and `rankd-roughcut-v1` — an in-progress climb or pass is
+//  · `rankd-run-v1`, `rankd-run-curated-v1` and `rankd-roughcut-v1` — an
+//    in-progress climb, curated run or pass is
 //    ephemeral device state, and a backup carries what you decided rather than
 //    what you had not decided yet. Nobody wants a half-finished duel following
 //    them onto another phone.
@@ -114,6 +115,7 @@ export const FILE_KEYS = FILE_2;
 //
 // RUN STATE — resumable, device-local, in neither set.
 //   `rankd-run-v1`       runs.ts        an in-progress tier climb
+//   `rankd-run-curated-v1` runs.ts      an in-progress curated run, guests and all
 //   `rankd-roughcut-v1`  roughCutRun.ts an in-progress Rough Cut pass
 //
 // PREFERENCES — small, yours, and carried.

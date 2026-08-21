@@ -21,7 +21,7 @@ import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { filmsFromFile } from "@/lib/importCsv";
 import { loadFilms, saveFilms } from "@/lib/store";
-import { loadRun } from "@/lib/runs";
+import { loadCuratedRun, loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
 import { startSync } from "@/lib/sync";
 import { isPlaced } from "@/lib/lock";
@@ -236,7 +236,15 @@ export default function AppShell() {
     const films = loadFilms();
     // Restored, not invented: `loadRun` returns null for anything stale,
     // unreadable, or naming a film this library no longer holds.
-    setState({ films, session: loadRun(films), journal: [] });
+    // A curated run wins when both are somehow present. It is the one that
+    // cannot be rebuilt from the library — its guests exist nowhere else — so
+    // if a stale climb ever survived beside it, dropping the climb costs a pile
+    // that can be re-picked and dropping this costs films that cannot.
+    const curated = loadCuratedRun(films);
+    setState({ films, session: curated?.session ?? loadRun(films), journal: [] });
+    if (curated) {
+      setRunRequest({ subject: curated.subject, guests: curated.guests });
+    }
     // Decided here, on the library as it arrived, and never re-derived. Guests
     // cannot be in play yet — nothing has started a run — so `films` is already
     // the guest-free library the rule wants.
