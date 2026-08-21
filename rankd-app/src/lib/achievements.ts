@@ -30,6 +30,46 @@ export interface Achievement {
   how: string; // what earns it — shown whether locked or not
   got: boolean;
   progress?: string; // how far along, when it's a countable thing
+  /**
+   * The same progress as numbers, for anything that needs to COMPARE badges
+   * rather than print one.
+   *
+   * `progress` is display text and always was. Working out which unearned badge
+   * is nearest means dividing one by the other, and doing that by parsing "312
+   * of 500" back out of a string would be inventing a data format to avoid
+   * carrying two integers.
+   *
+   * Absent on the flag badges, which is the honest answer: "have you imported a
+   * library" has no fraction, and `0 of 1` is not progress toward anything.
+   */
+  have?: number;
+  need?: number;
+}
+
+/**
+ * The unearned badge you are closest to, or null when there is nothing to aim
+ * at.
+ *
+ * ── Why the profile needed this ────────────────────────────────────────────
+ *
+ * The trophy case shows what you have EARNED and nothing else, so it is a
+ * record rather than an invitation — it can only ever tell you about your past.
+ * The thing that actually pulls is the one you are nearly at.
+ *
+ * Nearest by FRACTION, not by remainder. Ten films short of Collector (100) and
+ * ten short of Archivist (500) are not the same distance: the first is 90% of
+ * the way and the second is 98%, and picking by "ten either way" would offer
+ * whichever happened to sort first.
+ *
+ * Untouched badges are excluded. A badge at 0 of 1,000 is not something you are
+ * close to, and offering it as your next move would be the app inventing an
+ * ambition on your behalf.
+ */
+export function nextUp(all: readonly Achievement[]): Achievement | null {
+  const near = all
+    .filter((a) => !a.got && a.need !== undefined && a.have !== undefined && a.have > 0)
+    .sort((a, b) => b.have! / b.need! - a.have! / a.need!);
+  return near[0] ?? null;
 }
 
 export function achievements(films: Film[]): Achievement[] {
@@ -83,7 +123,15 @@ export function achievements(films: Film[]): Achievement[] {
   // which is zero on an empty library — and nobody has completed nothing.
   const count = (id: string, name: string, how: string, have: number, need: number): Achievement => {
     const got = need > 0 && have >= need;
-    return { id, name, how, got, progress: got ? undefined : `${Math.min(have, need)} of ${need}` };
+    return {
+      id,
+      name,
+      how,
+      got,
+      progress: got ? undefined : `${Math.min(have, need)} of ${need}`,
+      have,
+      need,
+    };
   };
 
   // For the ones that are simply true or not, where a running total would be

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { nextUp, type Achievement } from "@/lib/achievements";
 import { MAX_PINNED_PEOPLE, personKey, superlatives, topPeople } from "@/lib/profile";
 import type { Film } from "@/lib/types";
 import type { Rating } from "@/lib/tiers";
@@ -123,5 +124,45 @@ describe("superlatives hold their tongue on a thin library", () => {
   it("does not call one duel an argument", () => {
     const many = Array.from({ length: 12 }, (_, i) => f("f" + i, { duels: i === 0 ? 1 : 0 }));
     expect(superlatives(many).map((s) => s.label)).not.toContain("Most argued over");
+  });
+});
+
+// ── The badge you are nearly at (E3) ───────────────────────────────────────
+//
+// The trophy case shows what you have EARNED and nothing else, which makes it a
+// record rather than an invitation — it can only tell you about your past. The
+// thing that pulls is the one you are close to.
+describe("nextUp", () => {
+  const badge = (id: string, have: number, need: number, got = false): Achievement =>
+    ({ id, name: id, how: id, got, have, need, progress: `${have} of ${need}` }) as Achievement;
+
+  it("picks by fraction, not by how many are left", () => {
+    // Ten short of 100 is 90% there; ten short of 500 is 98%. Picking by "ten
+    // either way" would offer whichever happened to sort first.
+    const out = nextUp([badge("small", 90, 100), badge("large", 490, 500)]);
+    expect(out?.id).toBe("large");
+  });
+
+  it("ignores anything already earned", () => {
+    expect(nextUp([badge("done", 100, 100, true)])).toBeNull();
+  });
+
+  it("ignores a badge you have not started", () => {
+    // 0 of 1,000 is not something you are close to, and offering it would be
+    // the app inventing an ambition on your behalf.
+    expect(nextUp([badge("untouched", 0, 1000)])).toBeNull();
+  });
+
+  it("ignores the flag badges, which have no fraction", () => {
+    const flagged = { id: "flag", name: "f", how: "f", got: false } as Achievement;
+    expect(nextUp([flagged])).toBeNull();
+  });
+
+  it("returns null when there is nothing to aim at", () => {
+    expect(nextUp([])).toBeNull();
+  });
+
+  it("carries the progress text through, so the caller prints one thing", () => {
+    expect(nextUp([badge("x", 7, 10)])?.progress).toBe("7 of 10");
   });
 });

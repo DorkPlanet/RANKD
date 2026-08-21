@@ -40,7 +40,7 @@ import SavedListSheet from "./SavedListSheet";
 import LiveCardSheet from "./LiveCardSheet";
 import { liveViews } from "@/lib/card/live";
 import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
-import { achievements } from "@/lib/achievements";
+import { achievements, nextUp } from "@/lib/achievements";
 import {
   biggestDisagreement,
   biggestMove,
@@ -297,6 +297,9 @@ export default function ProfileScreen({
     [wasShape, films, genres],
   );
   const earned = badges.filter((b) => b.got).length;
+  // The one you are closest to. See `nextUp` for why nearest is a fraction
+  // rather than a remainder.
+  const next = useMemo(() => nextUp(badges), [badges]);
 
   const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
   const hero = placed[0];
@@ -839,6 +842,24 @@ export default function ProfileScreen({
                   </button>
                 ))}
             </div>
+            {/* ── The one you are nearly at ─────────────────────────────────
+                The case above is a record: it can only tell you what you have
+                already done. This is the half that pulls, and it is one line
+                because a list of everything you have NOT done is a chore rather
+                than an invitation.
+
+                Hollow star against the solid ones above, so the row reads as
+                "not yet" at a glance without needing the word. */}
+            {next && (
+              <button
+                onClick={onTrophies}
+                className="mt-2 flex w-full items-baseline gap-1.5 px-6 text-left active:opacity-70"
+              >
+                <span className="text-sub text-dim">☆</span>
+                <span className="min-w-0 flex-1 truncate text-sub text-dim">{next.how}</span>
+                <span className="flex-shrink-0 text-label tabular-nums text-gold">{next.progress}</span>
+              </button>
+            )}
           </section>
         )}
 
