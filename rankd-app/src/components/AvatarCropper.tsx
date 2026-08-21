@@ -186,7 +186,7 @@ export function AvatarCropper({
       >
         <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
         <span className="mb-1 block font-display text-2xl tracking-wide text-gold">Your picture</span>
-        <p className="mb-4 text-[11px] leading-snug text-dim">Drag to move it. Pinch or use the slider to zoom.</p>
+        <p className="mb-4 text-sub leading-snug text-dim">Drag to move it. Pinch or use the slider to zoom.</p>
 
         {/* The stage. `touch-action: none` so the browser does not claim the
             drag for scrolling before the handlers see it — the same reason the
@@ -248,7 +248,7 @@ export function AvatarCropper({
           style={{ accentColor: "var(--gold)" }}
         />
 
-        {error && <p className="mt-2 text-[11px] leading-snug text-gold">{error}</p>}
+        {error && <p className="mt-2 text-sub leading-snug text-gold">{error}</p>}
 
         <button
           onClick={confirm}
@@ -265,7 +265,7 @@ export function AvatarCropper({
         >
           Cancel
         </button>
-        <p className="mt-3 text-center text-[10px] text-dim">
+        <p className="mt-3 text-center text-label text-dim">
           Saved at {AVATAR_SIZE}×{AVATAR_SIZE}
         </p>
       </div>

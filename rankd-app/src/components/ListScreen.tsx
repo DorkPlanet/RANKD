@@ -166,7 +166,7 @@ export default function ListScreen({
               that says something the reader could not work out, so the roll-up
               is what goes. Nothing is lost: the three parts sum to the total,
               which is right here. */}
-          <span className="text-[11px] text-dim">{model.total} films</span>
+          <span className="text-sub text-dim">{model.total} films</span>
         </button>
 
         {/* ── The key to the numbers below ──────────────────────────────
@@ -250,7 +250,7 @@ export default function ListScreen({
               .map((seg) => (
                 <span key={seg.label} className={`block text-center ${seg.tone}`}>
                   <span className="block font-serif text-lg font-bold leading-none tabular-nums">{seg.n}</span>
-                  <span className="mt-1 block text-[9px] font-extrabold uppercase tracking-[0.14em]">
+                  <span className="mt-1 block text-label font-extrabold uppercase tracking-[0.14em]">
                     {seg.label}
                   </span>
                 </span>
@@ -279,7 +279,7 @@ export default function ListScreen({
             <button
               onClick={() => setJumpOpen((v) => !v)}
               data-tour="list-jump"
-              className="rounded-lg border border-border px-2.5 py-2 text-[11px] text-dim active:scale-95"
+              className="rounded-lg border border-border px-2.5 py-2 text-sub text-dim active:scale-95"
             >
               Jump ▾
             </button>
@@ -299,7 +299,7 @@ export default function ListScreen({
                           the thing you are actually choosing on. A finished tier
                           reads as its own total on both sides and needs no
                           separate tick. */}
-                      <span className="text-[11px] tabular-nums text-dim">
+                      <span className="text-sub tabular-nums text-dim">
                         <span className="text-text-hi">{ranked.get(t) ?? 0}</span>/{counts.get(t)}
                       </span>
                     </button>
@@ -313,7 +313,7 @@ export default function ListScreen({
 
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
         {model.total === 0 && (
-          <p className="mt-16 text-center text-[13px] leading-relaxed text-dim">
+          <p className="mt-16 text-center text-sub leading-relaxed text-dim">
             Nothing here yet.
             <br />
             Import a Letterboxd ratings.csv from Settings to begin.
@@ -322,7 +322,7 @@ export default function ListScreen({
 
         {searching ? (
           results.length === 0 ? (
-            <p className="mt-10 text-center text-[13px] text-dim">Nothing matches.</p>
+            <p className="mt-10 text-center text-sub text-dim">Nothing matches.</p>
           ) : (
             <div className="pt-3">
               {results.map((r) =>
@@ -352,7 +352,7 @@ export default function ListScreen({
                     style={{ height: DIVIDER_H }}
                   >
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
-                    <span className="text-[9px] font-extrabold tracking-[0.18em] text-dim">UN-RNKD</span>
+                    <span className="text-label font-extrabold tracking-[0.18em] text-dim">UN-RNKD</span>
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
                   </div>
                 )}
@@ -394,7 +394,7 @@ function TierRule({ stars, count }: { stars: string; count: number }) {
         style={{ background: "linear-gradient(to right, transparent, var(--border))" }}
       />
       <span className="text-base tracking-[0.08em] text-gold">{stars}</span>
-      <span className="text-[10px] text-dim">{count}</span>
+      <span className="text-label text-dim">{count}</span>
       <span
         className="h-px flex-1"
         style={{ background: "linear-gradient(to left, transparent, var(--border))" }}
@@ -433,8 +433,8 @@ function Row({
       )}
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] text-text-hi">{film.title}</span>
-        <span className="block text-[11px] text-dim">
+        <span className="block truncate text-body text-text-hi">{film.title}</span>
+        <span className="block text-sub text-dim">
           {film.year}
           {showStars && <span className="ml-2 text-gold">{starsFor(film.rating)}</span>}
         </span>
@@ -458,7 +458,7 @@ function Row({
           where it is NAMED. It was drawn without ever being named for several
           sessions, which is the whole of N2. */}
       {rank === undefined ? (
-        <span className="flex-shrink-0 text-[9px] font-extrabold tracking-[0.14em] text-dim">UN-RNKD</span>
+        <span className="flex-shrink-0 text-label font-extrabold tracking-[0.14em] text-dim">UN-RNKD</span>
       ) : (
         /* `title` is kept as a desktop pointer, but it is no longer where the
            distinction LIVES — the legend in the header says it out loud. The

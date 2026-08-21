@@ -80,25 +80,25 @@ export function CuratedPicker({
         <div>
           <button
             onClick={() => setGenre(null)}
-            className="mb-3 text-[11px] font-semibold text-dim active:scale-95"
+            className="mb-3 text-sub font-semibold text-dim active:scale-95"
           >
             ‹ All genres
           </button>
           <div className="mb-3 rounded-xl border border-border px-4 py-3">
             <div className="text-sm text-text-hi">{chosen.name}</div>
-            <div className="mt-0.5 text-[11px] text-dim">
+            <div className="mt-0.5 text-sub text-dim">
               {chosen.count} film{chosen.count === 1 ? "" : "s"} in your library
             </div>
           </div>
 
-          <div className="mb-1 text-[10px] font-extrabold tracking-[0.12em] text-dim">HOW MANY</div>
+          <div className="mb-1 text-label font-extrabold tracking-[0.12em] text-dim">HOW MANY</div>
           <div className="mb-3 flex gap-2">
             <SizeChip label="All" active={limit === null} onClick={() => setLimit(null)} />
             {SIZES.filter((n) => n < chosen.count).map((n) => (
               <SizeChip key={n} label={`Top ${n}`} active={limit === n} onClick={() => setLimit(n)} />
             ))}
           </div>
-          <p className="mb-3 text-[11px] leading-snug text-dim">
+          <p className="mb-3 text-sub leading-snug text-dim">
             Ranked highest-first to start with, so a shorter list is the part you care most
             about. Nothing here changes your star ratings.
           </p>
@@ -109,7 +109,7 @@ export function CuratedPicker({
             disabled={chosen.count < MIN_GENRE_RUN}
           />
           {chosen.count < MIN_GENRE_RUN && (
-            <p className="mt-2 text-center text-[11px] text-gold">
+            <p className="mt-2 text-center text-sub text-gold">
               Only {chosen.count} film in this genre — there is nothing to compare it to.
             </p>
           )}
@@ -117,7 +117,7 @@ export function CuratedPicker({
       ) : (
         <div className="flex flex-col gap-1">
           {rows.length === 0 && (
-            <p className="px-1 py-6 text-center text-[11px] leading-snug text-dim">
+            <p className="px-1 py-6 text-center text-sub leading-snug text-dim">
               {q
                 ? "Nothing by that name."
                 : // The honest empty state: genres and credits arrive with a
@@ -153,7 +153,7 @@ function Row({ name, count, onClick }: { name: string; count: number; onClick: (
       className="flex items-center justify-between rounded-xl border border-border px-4 py-2.5 text-left active:scale-[0.99]"
     >
       <span className="min-w-0 truncate text-sm text-text-hi">{name}</span>
-      <span className="ml-3 flex-shrink-0 text-[11px] text-dim">{count}</span>
+      <span className="ml-3 flex-shrink-0 text-sub text-dim">{count}</span>
     </button>
   );
 }
@@ -162,7 +162,7 @@ function SizeChip({ label, active, onClick }: { label: string; active: boolean; 
   return (
     <button
       onClick={onClick}
-      className="flex-1 rounded-xl border px-3 py-2 text-[12px] font-bold active:scale-95"
+      className="flex-1 rounded-xl border px-3 py-2 text-sub font-bold active:scale-95"
       style={{
         borderColor: active ? "var(--gold)" : "var(--border)",
         color: active ? "var(--gold)" : "var(--dim)",

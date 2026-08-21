@@ -144,12 +144,12 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   const chooser = conflict ? (
     <div className="mb-4 rounded-xl border border-gold/40 p-3">
       <span className="text-xs font-extrabold tracking-[0.12em] text-gold">TWO LIBRARIES</span>
-        <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+        <p className="mb-3 mt-1 text-sub leading-snug text-dim">
           This browser and your account have both been used since they last agreed. Nothing is
           merged — combining two rankings would invent judgements you never made — so pick the one
           to keep. The other is replaced.
         </p>
-        <div className="mb-3 space-y-1.5 text-[11px] leading-snug">
+        <div className="mb-3 space-y-1.5 text-sub leading-snug">
           <p className="text-dim">
             <span className="text-text-hi">This device</span> · {conflict.local.films} films,{" "}
             {conflict.local.judgements.toLocaleString()} duels
@@ -160,7 +160,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
             {ago(conflict.serverUpdatedAt)}
           </p>
         </div>
-        <p className="mb-3 text-[11px] leading-snug text-dim">
+        <p className="mb-3 text-sub leading-snug text-dim">
           Not sure? Save a backup first — the button below writes a file neither choice can touch.
         </p>
         <div className="flex gap-2">
@@ -177,14 +177,14 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   if (!account) {
     return (
       <div>
-        <p className="mb-3 text-[11px] leading-snug text-dim">
+        <p className="mb-3 text-sub leading-snug text-dim">
           Backs up your library so clearing this browser isn&rsquo;t the end of it. The app works
           fine without one.
         </p>
         <button onClick={() => void signInWithGoogle()} className={`w-full ${BUTTON}`}>
           Continue with Google
         </button>
-        {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
+        {note && <p className="mt-3 text-sub leading-snug text-gold">{note}</p>}
       </div>
     );
   }
@@ -193,7 +193,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   return (
     <div>
       {chooser}
-      <p className="mb-3 mt-1 text-[11px] leading-snug text-dim">
+      <p className="mb-3 mt-1 text-sub leading-snug text-dim">
         <span className="text-text-hi">{account.email}</span>
         <br />
         Backed up {ago(state.lastSeenServerAt)}
@@ -229,7 +229,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
           Sign out
         </button>
       </div>
-      {note && <p className="mt-3 text-[11px] leading-snug text-gold">{note}</p>}
+      {note && <p className="mt-3 text-sub leading-snug text-gold">{note}</p>}
     </div>
   );
 }

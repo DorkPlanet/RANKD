@@ -357,7 +357,7 @@ export default function ProfileScreen({
           <div className="banner-fade absolute inset-0" />
           <button
             onClick={() => setPickingFor("banner")}
-            className="absolute bottom-2 right-4 rounded-full border border-border px-2.5 py-1 text-[10px] text-dim active:scale-95"
+            className="absolute bottom-2 right-4 rounded-full border border-border px-2.5 py-1 text-label text-dim active:scale-95"
             style={{ background: "color-mix(in srgb, var(--bg) 70%, transparent)" }}
           >
             {bannerFilm ? "Change scene" : "Pick a scene"}
@@ -415,7 +415,7 @@ export default function ProfileScreen({
                   survive to the page. Without it a bio written as three lines
                   came back as one paragraph and the formatting looked broken
                   rather than absent. */}
-              <span className="mt-1.5 block max-w-[280px] whitespace-pre-line font-serif text-[12px] italic leading-snug text-dim">
+              <span className="mt-1.5 block max-w-[280px] whitespace-pre-line font-serif text-sub italic leading-snug text-dim">
                 {profile.bio || "Add a line about your taste"}
               </span>
             </button>
@@ -484,7 +484,7 @@ export default function ProfileScreen({
               <button
                 key={label}
                 onClick={() => goTo(i as 0 | 1)}
-                className="-mb-px pb-2.5 text-[13px] transition-colors"
+                className="-mb-px pb-2.5 text-sub transition-colors"
                 style={{
                   color: tab === i ? "var(--text-hi)" : "var(--dim)",
                   borderBottom: `2px solid ${tab === i ? "var(--gold)" : "transparent"}`,
@@ -533,7 +533,7 @@ export default function ProfileScreen({
                 the rows underneath are free to be names. */}
             {people.directors.length > 0 && (
               <>
-                <div className="mb-1 text-[9px] font-extrabold tracking-[0.16em] text-dim">
+                <div className="mb-1 text-label font-extrabold tracking-[0.16em] text-dim">
                   DIRECTORS
                 </div>
                 <div className="mb-4">
@@ -555,7 +555,7 @@ export default function ProfileScreen({
             )}
             {people.actors.length > 0 && (
               <>
-                <div className="mb-1 text-[9px] font-extrabold tracking-[0.16em] text-dim">ACTORS</div>
+                <div className="mb-1 text-label font-extrabold tracking-[0.16em] text-dim">ACTORS</div>
                 <div>
                   {people.actors.map((a) => (
                     <PersonCard
@@ -730,8 +730,8 @@ export default function ProfileScreen({
                   already carries that word, and two headings with the same
                   label on one page make the reader check whether they are
                   looking at the same thing twice. */}
-              <span className="text-[10px] font-extrabold tracking-[0.18em] text-dim">TROPHY CASE</span>
-              <span className="text-[10px] text-dim tabular-nums">
+              <span className="text-label font-extrabold tracking-[0.18em] text-dim">TROPHY CASE</span>
+              <span className="text-label text-dim tabular-nums">
                 {earned} of {badges.length} ›
               </span>
             </button>
@@ -749,9 +749,9 @@ export default function ProfileScreen({
                   <button
                     key={b.id}
                     onClick={onTrophies}
-                    className="flex items-center gap-1.5 text-[11px] active:opacity-70"
+                    className="flex items-center gap-1.5 text-sub active:opacity-70"
                   >
-                    <span className="text-[11px] text-gold">★</span>
+                    <span className="text-sub text-gold">★</span>
                     <span className="whitespace-nowrap text-text">{b.name}</span>
                   </button>
                 ))}
@@ -786,7 +786,7 @@ export default function ProfileScreen({
               )}
             </div>
             {!print.genre && (
-              <p className="mt-2 text-[10px] leading-snug text-dim">
+              <p className="mt-2 text-label leading-snug text-dim">
                 Genres arrive with artwork — browse your list and this sharpens up.
               </p>
             )}
@@ -803,12 +803,12 @@ export default function ProfileScreen({
               {/* A key, because three outlines need one. Only the ones actually
                   drawn appear: offering a legend entry for a line that is not
                   on the chart is how a reader starts hunting for it. */}
-              <div className="mt-1 flex justify-center gap-3 text-[9px] tracking-[0.08em] text-dim">
+              <div className="mt-1 flex justify-center gap-3 text-label tracking-[0.08em] text-dim">
                 <span className="text-gold">● YOURS</span>
                 {rankd && <span className="text-accent">● RANKD</span>}
                 {moved && <span>◌ WHERE YOU STARTED</span>}
               </div>
-              <p className="mt-1.5 text-center text-[10px] leading-snug text-dim">
+              <p className="mt-1.5 text-center text-label leading-snug text-dim">
                 {moved
                   ? `${moved.genre} moved this sitting.`
                   : disagree
@@ -833,7 +833,7 @@ export default function ProfileScreen({
             <Section title="What your list says">
               <div className="space-y-2.5">
                 {notes.map((n) => (
-                  <p key={n.id} className="text-[13px] leading-snug text-text">
+                  <p key={n.id} className="text-sub leading-snug text-text">
                     {n.before} <span className="text-gold">{n.subject}</span>
                     {/* No space before a full stop or a comma. A note whose tail
                         begins with punctuation would otherwise read "the 2020s ."
@@ -867,7 +867,10 @@ export default function ProfileScreen({
               <div className="space-y-2">
                 {tiers.map((t) => (
                   <button key={t.tier} onClick={onList} className="flex w-full items-center gap-3 active:scale-[0.99]">
-                    <span className="w-[46px] flex-shrink-0 text-left text-[11px] text-gold">
+                    {/* 56px, not 46: five stars at `text-sub` measure 54 and the old box was
+                        cut for them at 11px. The type scale made them bigger and this
+                        was the one place in the app that noticed. */}
+                    <span className="w-[56px] flex-shrink-0 text-left text-sub text-gold">
                       {starsFor(t.tier as Rating)}
                     </span>
                     <span className="flex h-3 flex-1 items-center">
@@ -881,13 +884,13 @@ export default function ProfileScreen({
                         />
                       </span>
                     </span>
-                    <span className="w-[58px] flex-shrink-0 text-right text-[10px] text-dim tabular-nums">
+                    <span className="w-[58px] flex-shrink-0 text-right text-label text-dim tabular-nums">
                       {t.placed}/{t.total}
                     </span>
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[10px] leading-snug text-dim">
+              <p className="mt-2 text-label leading-snug text-dim">
                 Bar length is how many films you&rsquo;ve seen at that rating. The gold is how many have a position.
               </p>
             </Section>
@@ -908,7 +911,7 @@ export default function ProfileScreen({
             <Section title="Odds and ends">
               <div className="space-y-2.5">
                 {facts.map((f) => (
-                  <p key={f.label} className="text-[13px] leading-snug text-text">
+                  <p key={f.label} className="text-sub leading-snug text-text">
                     {f.label} <span className="text-gold">{f.value}</span>
                     {f.note ? <span className="text-dim"> · {f.note}</span> : null}
                   </p>
@@ -1175,7 +1178,7 @@ function AvatarMenu({
 }) {
   return (
     <Sheet title="Your picture" onClose={onClose}>
-      <p className="mb-4 text-[11px] leading-snug text-dim">
+      <p className="mb-4 text-sub leading-snug text-dim">
         {signedIn
           ? "A frame from one of your films, or a photo of your own."
           : "A frame from one of your films. Sign in if you would rather upload a photo."}
@@ -1186,7 +1189,7 @@ function AvatarMenu({
         className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
       >
         <span className="block text-sm text-text-hi">Use a frame from a film</span>
-        <span className="block text-[11px] leading-snug text-dim">
+        <span className="block text-sub leading-snug text-dim">
           Nothing is uploaded. Works whether or not you have an account.
         </span>
       </button>
@@ -1198,7 +1201,7 @@ function AvatarMenu({
       {signedIn && (
         <label className="mb-2 block w-full cursor-pointer rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]">
           <span className="block text-sm text-text-hi">Upload a photo</span>
-          <span className="block text-[11px] leading-snug text-dim">You choose the crop.</span>
+          <span className="block text-sub leading-snug text-dim">You choose the crop.</span>
           <input
             type="file"
             accept="image/*"
@@ -1257,14 +1260,14 @@ function StillPicker({
 
   return (
     <Sheet title={film.title} onClose={onClose}>
-      <p className="mb-3 text-[11px] leading-snug text-dim">
+      <p className="mb-3 text-sub leading-snug text-dim">
         {forAvatar
           ? "Choose a frame for your picture."
           : "Choose a frame for the top of your profile."}
       </p>
-      {stills === null && <p className="text-[11px] text-dim">Finding frames…</p>}
+      {stills === null && <p className="text-sub text-dim">Finding frames…</p>}
       {stills?.length === 0 && (
-        <p className="text-[11px] leading-snug text-dim">
+        <p className="text-sub leading-snug text-dim">
           TMDb has no frames for this one. Try another film.
         </p>
       )}
@@ -1301,9 +1304,9 @@ function StillPicker({
 function Line({ label, value, note, gold }: { label: string; value: string; note?: string; gold?: boolean }) {
   return (
     <div className="flex items-baseline gap-2">
-      <span className="flex-shrink-0 text-[11px] text-dim">{label}</span>
-      <span className={`min-w-0 truncate text-[15px] ${gold ? "text-gold" : "text-text-hi"}`}>{value}</span>
-      {note && <span className="ml-auto flex-shrink-0 text-[10px] text-dim">{note}</span>}
+      <span className="flex-shrink-0 text-sub text-dim">{label}</span>
+      <span className={`min-w-0 truncate text-body ${gold ? "text-gold" : "text-text-hi"}`}>{value}</span>
+      {note && <span className="ml-auto flex-shrink-0 text-label text-dim">{note}</span>}
     </div>
   );
 }
@@ -1361,10 +1364,10 @@ function ExportRow({
           <span className="block truncate text-[7.5px] font-extrabold tracking-[0.18em] text-dim">
             {eyebrow}
           </span>
-          <span className="mt-0.5 block truncate font-display text-[15px] leading-tight tracking-wide text-text-hi">
+          <span className="mt-0.5 block truncate font-display text-body leading-tight tracking-wide text-text-hi">
             {title}
           </span>
-          {sub && <span className="block truncate text-[9px] text-dim">{sub}</span>}
+          {sub && <span className="block truncate text-label text-dim">{sub}</span>}
           {/* Inline rather than a pill on the right. A bordered button in a
               163px cell takes the width the title needs, and this page is being
               de-boxed anyway. Rendered inside the label's column so it lines up
@@ -1383,7 +1386,7 @@ function ExportRow({
                 e.stopPropagation();
                 onCard();
               }}
-              className="mt-1 block text-[9px] font-extrabold tracking-[0.14em] text-gold active:opacity-60"
+              className="mt-1 block text-label font-extrabold tracking-[0.14em] text-gold active:opacity-60"
             >
               MAKE CARD
             </span>
@@ -1435,18 +1438,18 @@ function MiniCard({
         )}
         <span className="flagship-wash" />
         <span className="relative block p-3">
-          <span className="block text-[8px] font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
-          <span className="mt-1 block truncate font-display text-[19px] leading-tight tracking-wide text-text-hi">
+          <span className="block text-label font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
+          <span className="mt-1 block truncate font-display text-title leading-tight tracking-wide text-text-hi">
             {title}
           </span>
-          {sub && <span className="mt-0.5 block truncate text-[10px] text-dim">{sub}</span>}
+          {sub && <span className="mt-0.5 block truncate text-label text-dim">{sub}</span>}
         </span>
       </button>
       {onCard && (
         <button
           onClick={onCard}
           aria-label={`Make a card for ${title}`}
-          className="absolute bottom-2 right-2 z-10 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.14em] active:scale-95"
+          className="absolute bottom-2 right-2 z-10 rounded-full border px-2 py-1 text-label font-extrabold uppercase tracking-[0.14em] active:scale-95"
           style={{
             color: "var(--gold)",
             borderColor: "color-mix(in srgb, var(--gold) 40%, transparent)",
@@ -1482,7 +1485,7 @@ function CollectionSheet({
             Done
           </button>
         </div>
-        <p className="mb-3 flex-shrink-0 text-[11px] leading-snug text-dim">{c.blurb}</p>
+        <p className="mb-3 flex-shrink-0 text-sub leading-snug text-dim">{c.blurb}</p>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {c.films.map((f, i) => (
@@ -1492,7 +1495,7 @@ function CollectionSheet({
               className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
             >
               {c.numbered && (
-                <span className="w-5 flex-shrink-0 text-right font-serif text-[15px] font-bold text-gold tabular-nums">
+                <span className="w-5 flex-shrink-0 text-right font-serif text-body font-bold text-gold tabular-nums">
                   {i + 1}
                 </span>
               )}
@@ -1512,12 +1515,12 @@ function CollectionSheet({
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-text-hi">{f.title}</span>
-                <span className="block text-[10px] text-dim">{f.year}</span>
+                <span className="block text-label text-dim">{f.year}</span>
               </span>
-              <span className="flex-shrink-0 text-[11px] text-gold">{starsFor(f.rating)}</span>
+              <span className="flex-shrink-0 text-sub text-gold">{starsFor(f.rating)}</span>
             </button>
           ))}
-          {c.films.length === 0 && <p className="text-[11px] text-dim">Nothing in here yet.</p>}
+          {c.films.length === 0 && <p className="text-sub text-dim">Nothing in here yet.</p>}
         </div>
       </div>
     </div>
@@ -1556,9 +1559,9 @@ function PersonCard({
       onClick={onClick}
       className="flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 active:opacity-70"
     >
-      <span className="min-w-0 flex-1 truncate text-[15px] text-text-hi">{p.name}</span>
-      <span className="flex-shrink-0 text-[11px] tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
-      <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-[10px] tabular-nums text-dim">
+      <span className="min-w-0 flex-1 truncate text-body text-text-hi">{p.name}</span>
+      <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
+      <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
         {p.count} film{p.count === 1 ? "" : "s"}
       </span>
     </button>
@@ -1569,7 +1572,7 @@ function Stat({ n, label, onClick }: { n: number; label: string; onClick: () => 
   return (
     <button onClick={onClick} className="active:scale-95">
       <span className="block font-serif text-lg font-bold text-text-hi tabular-nums">{n}</span>
-      <span className="block text-[9px] font-extrabold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>
+      <span className="block text-label font-extrabold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>
     </button>
   );
 }
@@ -1602,7 +1605,7 @@ function Section({
   return (
     <section className={first ? "mt-6" : "mt-7"}>
       {!first && <div className="rule-fade mb-6" />}
-      <div className="mb-2.5 text-[10px] font-extrabold tracking-[0.18em] text-dim">{title.toUpperCase()}</div>
+      <div className="mb-2.5 text-label font-extrabold tracking-[0.18em] text-dim">{title.toUpperCase()}</div>
       {children}
     </section>
   );
@@ -1653,9 +1656,9 @@ function EditIdentity({
         {/* Only once it is worth knowing. A counter from zero is pressure to
             fill it; a counter near the ceiling is useful information. */}
         {bio.length > 220 && (
-          <p className="mt-1 text-right text-[10px] text-dim">{300 - bio.length} left</p>
+          <p className="mt-1 text-right text-label text-dim">{300 - bio.length} left</p>
         )}
-        <p className="mt-3 text-[10px] leading-snug text-dim">
+        <p className="mt-3 text-label leading-snug text-dim">
           A profile picture arrives with accounts. Until then it&rsquo;s your initial.
         </p>
         <button

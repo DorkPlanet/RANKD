@@ -60,12 +60,12 @@ export default function SignInGate() {
         ))}
       </span>
 
-      <p className="mt-7 max-w-[300px] font-serif text-[15px] italic leading-snug text-text-hi">
+      <p className="mt-7 max-w-[300px] font-serif text-body italic leading-snug text-text-hi">
         Everyone has a favourite. What&rsquo;s yours?
       </p>
       {/* Says what the account is FOR. "Sign in to continue" is a demand; this
           is the reason, and it is the true one. */}
-      <p className="mt-3 max-w-[290px] text-[12px] leading-snug text-dim">
+      <p className="mt-3 max-w-[290px] text-sub leading-snug text-dim">
         Sign in so your ranking is yours to keep, on every device you use.
       </p>
 
@@ -81,7 +81,7 @@ export default function SignInGate() {
         {going ? "Taking you to Google…" : "Continue with Google"}
       </button>
 
-      <p className="mt-5 max-w-[280px] text-[10px] leading-snug text-dim">
+      <p className="mt-5 max-w-[280px] text-label leading-snug text-dim">
         Rankd asks Google for your name and email, nothing else.
       </p>
     </main>

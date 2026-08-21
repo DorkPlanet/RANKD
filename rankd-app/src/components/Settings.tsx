@@ -56,13 +56,13 @@ function Row({
         onClick={onToggle}
         className="flex w-full items-center justify-between py-3.5 text-left active:scale-[0.99]"
       >
-        <span className="text-[14px] text-text-hi">{title}</span>
+        <span className="text-body text-text-hi">{title}</span>
         <span className="flex items-center gap-2">
           {note && (
-            <span className={urgent ? "text-[11px] font-bold text-gold" : "text-[11px] text-dim"}>{note}</span>
+            <span className={urgent ? "text-label font-bold text-gold" : "text-label text-dim"}>{note}</span>
           )}
           <span
-            className="text-[10px] text-dim"
+            className="text-label text-dim"
             style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s var(--ease)" }}
           >
             ▾
@@ -142,8 +142,8 @@ export function Settings({
   return (
     <Sheet title="Settings" onClose={onClose}>
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[14px] text-text-hi">Brightness</span>
-        <span className="text-[11px] text-dim">{Math.round(brightness * 100)}%</span>
+        <span className="text-body text-text-hi">Brightness</span>
+        <span className="text-label text-dim">{Math.round(brightness * 100)}%</span>
       </div>
       <input
         type="range"
@@ -168,8 +168,8 @@ export function Settings({
           without turning motion off across their whole phone. */}
       <label className="mb-4 flex cursor-pointer items-center justify-between gap-3 active:scale-[0.99]">
         <span className="min-w-0">
-          <span className="block text-[14px] text-text-hi">Let the list drift</span>
-          <span className="block text-[11px] leading-snug text-dim">
+          <span className="block text-body text-text-hi">Let the list drift</span>
+          <span className="block text-sub leading-snug text-dim">
             Scrolls slowly on its own when you stop touching it
           </span>
         </span>
@@ -187,7 +187,7 @@ export function Settings({
         open={open === "library"}
         onToggle={() => toggle("library")}
       >
-        <p className="mb-2.5 text-[11px] text-dim">Add a Letterboxd export.</p>
+        <p className="mb-2.5 text-sub text-dim">Add a Letterboxd export.</p>
         <div className="mb-3 rounded-xl border border-border px-3 py-2.5">
           <ImportGuide compact />
         </div>
@@ -196,7 +196,7 @@ export function Settings({
           <ImportButton label="Replace" onFile={takeFile} />
         </div>
 
-        <p className="mb-2 text-[11px] text-dim">
+        <p className="mb-2 text-sub text-dim">
           Back up everything to one file, or move it to another device.
         </p>
         <div className="flex gap-2">
@@ -221,7 +221,7 @@ export function Settings({
             }}
           />
         </div>
-        {note && <p className="mt-3 text-[11px] text-gold">{note}</p>}
+        {note && <p className="mt-3 text-sub text-gold">{note}</p>}
       </Row>
 
       {/* ── Why this row no longer opens itself ────────────────────────────
@@ -266,7 +266,7 @@ export function Settings({
               day one, and the explanations then reappear as you arrive at each
               screen. Labelled "Show me around" it read as a button that would
               start something, and pressing it appeared to do nothing at all. */}
-          <p className="mb-2 text-[11px] leading-snug text-dim">
+          <p className="mb-2 text-sub leading-snug text-dim">
             Every screen explains itself the first time you see it. This makes them all
             new again, so the notes come back as you go.
           </p>
@@ -285,7 +285,7 @@ export function Settings({
       </Row>
 
       {/* Required by TMDB's API terms. */}
-      <p className="mt-5 text-[10px] leading-snug text-dim">
+      <p className="mt-5 text-sub leading-snug text-dim">
         Film data from TMDB. Not endorsed or certified by TMDB.
       </p>
     </Sheet>
@@ -309,9 +309,9 @@ function InstallRow({ open, onToggle }: { open: boolean; onToggle: () => void })
       onToggle={onToggle}
     >
       {route === "installed" ? (
-        <p className="text-[11px] text-gold">Installed. That&rsquo;s why there&rsquo;s no address bar.</p>
+        <p className="text-sub text-gold">Installed. That&rsquo;s why there&rsquo;s no address bar.</p>
       ) : (
-        <p className="text-[11px] leading-snug text-dim">
+        <p className="text-sub leading-snug text-dim">
           {route === "ios" ? (
             <>
               Tap <span className="text-text">Share</span>, then{" "}
@@ -358,7 +358,7 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
 
   return (
     <>
-      <p className="mb-3 text-[11px] text-dim">Your films and stars are kept. Only the ranking goes.</p>
+      <p className="mb-3 text-sub text-dim">Your films and stars are kept. Only the ranking goes.</p>
 
       {soft > 0 && (
         <button
@@ -383,7 +383,7 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
       ) : (
         <>
           {/* The number, not "are you sure?" — it is the thing you would miss. */}
-          <p className="mb-2 text-[11px] leading-snug text-gold">
+          <p className="mb-2 text-sub leading-snug text-gold">
             Erases {placed.toLocaleString()} placements and {duels.toLocaleString()} duels. Cannot be
             undone.
           </p>
@@ -427,13 +427,13 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           <button
             onClick={() => setWiping(true)}
             disabled={films.length === 0}
-            className="w-full text-center text-[11px] text-dim active:scale-95 disabled:opacity-35"
+            className="w-full text-center text-sub text-dim active:scale-95 disabled:opacity-35"
           >
             Delete everything and start fresh
           </button>
         ) : (
           <>
-            <p className="mb-2 text-[11px] leading-snug text-gold">
+            <p className="mb-2 text-sub leading-snug text-gold">
               Removes all {films.length.toLocaleString()} films, every placement, every duel and
               your profile. The app opens as if you had just installed it. Save a backup first if
               you want any of it back.
@@ -443,12 +443,12 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
                 account touches, and burying it in the same sentence would let
                 it be skimmed. */}
             {hasAccount && (
-              <p className="mb-2 text-[11px] leading-snug text-gold">
+              <p className="mb-2 text-sub leading-snug text-gold">
                 Your saved copy goes too, so it will not come back on your other devices.
               </p>
             )}
             {wipeFailed && (
-              <p className="mb-2 text-[11px] leading-snug" style={{ color: "#D81E26" }}>
+              <p className="mb-2 text-sub leading-snug" style={{ color: "#D81E26" }}>
                 Your saved copy could not be reached, so nothing was deleted. Check your connection
                 and try again.
               </p>

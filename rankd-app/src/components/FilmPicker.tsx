@@ -146,7 +146,7 @@ export function FilmPicker({
 
   return (
     <Sheet title={title} onClose={onClose}>
-      <p className="mb-3 text-[11px] leading-snug text-dim">{blurb}</p>
+      <p className="mb-3 text-sub leading-snug text-dim">{blurb}</p>
 
       {/* Three ways in. The search box below changes what it asks about rather
           than sitting beside three separate fields. */}
@@ -155,7 +155,7 @@ export function FilmPicker({
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 rounded-lg border py-1.5 text-[11px] capitalize active:scale-95 ${
+            className={`flex-1 rounded-lg border py-1.5 text-sub capitalize active:scale-95 ${
               mode === m ? "border-gold text-gold" : "border-border text-dim"
             }`}
           >
@@ -187,7 +187,7 @@ export function FilmPicker({
         >
           <span className="min-w-0">
             <span className="block truncate text-sm font-extrabold">Rank {matchedName}</span>
-            <span className="block truncate text-[11px] opacity-75">
+            <span className="block truncate text-sub opacity-75">
               All {shown.length} against each other, across tiers
             </span>
           </span>
@@ -202,7 +202,7 @@ export function FilmPicker({
       <div className="relative mb-2 flex items-center gap-1.5">
         <button
           onClick={() => setTierOpen((v) => !v)}
-          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] active:scale-95 ${
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sub active:scale-95 ${
             filter === "all" ? "border-border text-dim" : "border-gold text-gold"
           }`}
         >
@@ -296,23 +296,23 @@ export function FilmPicker({
                 {/* In a people search, show who matched — otherwise the row gives
                     no clue why it's in the results. */}
                 {mode !== "film" && query !== "" && (
-                  <span className="block truncate text-[10px] text-dim">
+                  <span className="block truncate text-label text-dim">
                     {mode === "director" ? f.director : f.cast?.find((c) => c.toLowerCase().includes(query))}
                   </span>
                 )}
               </span>
-              {f.year && <span className="text-[11px] text-dim">{f.year}</span>}
-              <span className="text-[11px] text-gold">{starsFor(f.rating)}</span>
+              {f.year && <span className="text-sub text-dim">{f.year}</span>}
+              <span className="text-sub text-gold">{starsFor(f.rating)}</span>
             </button>
           );
         })}
         {shown.length === 0 &&
           (mode === "film" ? (
-            <p className="text-[11px] text-dim">Nothing matches.</p>
+            <p className="text-sub text-dim">Nothing matches.</p>
           ) : (
             // Never imply a person isn't in the library when the truth is that
             // most of it hasn't been looked up yet.
-            <p className="text-[11px] leading-snug text-dim">
+            <p className="text-sub leading-snug text-dim">
               No match among the{" "}
               <span className="text-text-hi">
                 {withCredits} of {films.length}
@@ -345,7 +345,7 @@ function TierOption({
       }`}
     >
       <span className={active ? "text-sm text-gold" : "text-sm text-text-hi"}>{label}</span>
-      <span className="text-[11px] text-dim">{count}</span>
+      <span className="text-sub text-dim">{count}</span>
     </button>
   );
 }

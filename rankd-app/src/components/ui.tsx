@@ -179,7 +179,7 @@ export function ShuffleRow({ shuffle, onShuffle }: { shuffle: boolean; onShuffle
     <label className="mb-3 flex items-center justify-between rounded-xl border border-border px-4 py-3">
       <span>
         <span className="block text-sm text-text-hi">Shuffle the order</span>
-        <span className="block text-[11px] leading-snug text-dim">
+        <span className="block text-sub leading-snug text-dim">
           Face films in a random order instead of weakest first.
         </span>
       </span>
@@ -198,7 +198,7 @@ export function ScopeTab({ label, active, onClick }: { label: string; active: bo
   return (
     <button
       onClick={onClick}
-      className="flex-1 rounded-xl border px-2 py-2.5 text-[11px] font-bold active:scale-[0.98]"
+      className="flex-1 rounded-xl border px-2 py-2.5 text-sub font-bold active:scale-[0.98]"
       style={{
         borderColor: active ? "var(--gold)" : "var(--border)",
         color: active ? "var(--gold)" : "var(--dim)",

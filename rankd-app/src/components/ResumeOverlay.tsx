@@ -76,19 +76,19 @@ export default function ResumeOverlay({
         className="resume-card w-full max-w-[320px] rounded-3xl border border-border px-6 py-7"
         style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)" }}
       >
-        <span className="block text-[9px] font-extrabold uppercase tracking-[0.2em] text-dim">
+        <span className="block text-label font-extrabold uppercase tracking-[0.2em] text-dim">
           King of the Hill
         </span>
         <span className="mt-2 block font-display text-[32px] leading-none tracking-wide text-gold">
           {starsFor(run.tier)}
         </span>
-        <span className="mt-2.5 block text-[12px] text-dim tabular-nums">
+        <span className="mt-2.5 block text-sub text-dim tabular-nums">
           {run.placed} of {run.total} placed
         </span>
 
         <button
           onClick={onContinue}
-          className="mt-6 w-full rounded-full bg-gold py-3.5 text-center text-[13px] font-bold text-[#1c1405] active:scale-[0.99]"
+          className="mt-6 w-full rounded-full bg-gold py-3.5 text-center text-sub font-bold text-[#1c1405] active:scale-[0.99]"
         >
           Continue
         </button>
@@ -100,15 +100,15 @@ export default function ResumeOverlay({
 
         {confirming ? (
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-text">Abandon this run?</span>
+            <span className="text-sub text-text">Abandon this run?</span>
             <span className="flex gap-3">
               <button
                 onClick={() => setConfirming(false)}
-                className="text-[12px] text-dim active:scale-95"
+                className="text-sub text-dim active:scale-95"
               >
                 No
               </button>
-              <button onClick={onAbandon} className="text-[12px] font-bold text-gold active:scale-95">
+              <button onClick={onAbandon} className="text-sub font-bold text-gold active:scale-95">
                 Yes
               </button>
             </span>
@@ -116,7 +116,7 @@ export default function ResumeOverlay({
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            className="w-full text-left text-[12px] text-dim active:scale-95"
+            className="w-full text-left text-sub text-dim active:scale-95"
           >
             Abandon this run
           </button>
@@ -131,7 +131,7 @@ function Route({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="mt-3.5 flex w-full items-center justify-between text-[12px] text-text active:scale-[0.99]"
+      className="mt-3.5 flex w-full items-center justify-between text-sub text-text active:scale-[0.99]"
     >
       {label}
       <span className="text-dim">&rsaquo;</span>

@@ -172,7 +172,7 @@ export function FilmInfo({
           />
           <div className="min-w-0 flex-1">
             <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
-            <div className="mt-1.5 text-[11px] font-bold tracking-[0.1em] text-gold">
+            <div className="mt-1.5 text-label font-bold tracking-[0.1em] text-gold">
               {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
             </div>
             {/* Where it sits, and WHO PUT IT THERE.
@@ -189,7 +189,7 @@ export function FilmInfo({
                 `overallRank` so this number cannot disagree with the list. */}
             {/* Two claims, so two lines. Run together they wrapped mid-phrase on
                 a phone and read as one confused sentence. */}
-            <div className="mt-1.5 text-[11px] leading-snug">
+            <div className="mt-1.5 text-sub leading-snug">
               {rank === undefined ? (
                 <div className="text-dim">Not ranked yet</div>
               ) : isHard(film) ? (
@@ -218,7 +218,7 @@ export function FilmInfo({
               )}
             </div>
             {evidence && (
-              <div className="mt-1.5 text-[11px] leading-snug text-dim">
+              <div className="mt-1.5 text-sub leading-snug text-dim">
                 {evidence.duels === 0
                   ? "Never duelled"
                   : `${evidence.duels} duel${evidence.duels === 1 ? "" : "s"} · ${Math.round(
@@ -227,16 +227,16 @@ export function FilmInfo({
               </div>
             )}
             {meta?.genres?.length ? (
-              <div className="mt-1.5 text-[11px] leading-snug text-dim">{meta.genres.slice(0, 3).join(" · ")}</div>
+              <div className="mt-1.5 text-sub leading-snug text-dim">{meta.genres.slice(0, 3).join(" · ")}</div>
             ) : null}
             {film.tagline && (
-              <p className="mt-2 font-serif text-[13px] italic leading-snug text-text">“{film.tagline}”</p>
+              <p className="mt-2 font-serif text-sub italic leading-snug text-text">“{film.tagline}”</p>
             )}
           </div>
         </div>
 
         {meta?.synopsis && (
-          <p className="px-4 pb-3 text-[12px] leading-relaxed text-text">{meta.synopsis}</p>
+          <p className="px-4 pb-3 text-sub leading-relaxed text-text">{meta.synopsis}</p>
         )}
 
         {/* Names are the way in to a person's filmography, so they are controls
@@ -244,8 +244,8 @@ export function FilmInfo({
             you who made a film and then gave you nowhere to go with it. */}
         {meta?.cast?.length ? (
           <div className="px-4 pb-3">
-            <div className="text-[10px] font-extrabold tracking-[0.12em] text-dim">STARRING</div>
-            <div className="mt-1 text-[12px] leading-snug text-text">
+            <div className="text-label font-extrabold tracking-[0.12em] text-dim">STARRING</div>
+            <div className="mt-1 text-sub leading-snug text-text">
               {meta.cast.map((name, i) => (
                 <span key={name}>
                   {i > 0 && ", "}
@@ -264,7 +264,7 @@ export function FilmInfo({
         {crew.length > 0 && (
           <div className="border-t border-border px-4 py-3">
             {crew.map(([role, name]) => (
-              <div key={role} className="flex justify-between gap-3 py-0.5 text-[12px]">
+              <div key={role} className="flex justify-between gap-3 py-0.5 text-sub">
                 <span className="text-dim">{role}</span>
                 {/* Only the director opens a filmography: they are the only crew
                     role the library stores per film, so the others have nothing
@@ -284,7 +284,7 @@ export function FilmInfo({
           </div>
         )}
 
-        {!meta && <div className="px-4 pb-4 text-[11px] text-dim">Loading details…</div>}
+        {!meta && <div className="px-4 pb-4 text-sub text-dim">Loading details…</div>}
 
         {/* Two taps, not one, and no browser confirm().
             This is the only destructive control in the app, it sits on a card
@@ -316,7 +316,7 @@ export function FilmInfo({
             <div className="border-t border-border px-4 py-3">
               <button
                 onClick={() => setFixing(true)}
-                className="w-full text-center text-[11px] font-semibold text-dim active:scale-95"
+                className="w-full text-center text-sub font-semibold text-dim active:scale-95"
               >
                 Wrong film?
               </button>
@@ -336,13 +336,13 @@ export function FilmInfo({
                   // anything — so this borrows the wordmark bar's red directly
                   // rather than inventing a token for one button.
                   style={{ color: "#D81E26", borderColor: "#D81E26" }}
-                  className="flex-1 rounded-lg border py-2 text-[11px] font-bold active:scale-95"
+                  className="flex-1 rounded-lg border py-2 text-sub font-bold active:scale-95"
                 >
                   Remove it
                 </button>
                 <button
                   onClick={() => setArmed(false)}
-                  className="flex-1 rounded-lg border border-border py-2 text-[11px] font-bold text-dim active:scale-95"
+                  className="flex-1 rounded-lg border border-border py-2 text-sub font-bold text-dim active:scale-95"
                 >
                   Keep it
                 </button>
@@ -350,13 +350,13 @@ export function FilmInfo({
             ) : (
               <button
                 onClick={() => setArmed(true)}
-                className="w-full text-center text-[11px] font-semibold text-dim active:scale-95"
+                className="w-full text-center text-sub font-semibold text-dim active:scale-95"
               >
                 Remove from library
               </button>
             )}
             {armed && (
-              <p className="mt-2 text-center text-[10px] leading-snug text-dim">
+              <p className="mt-2 text-center text-label leading-snug text-dim">
                 Taken out of your list. The duels it fought stay in the record.
               </p>
             )}

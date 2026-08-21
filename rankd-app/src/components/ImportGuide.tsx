@@ -44,15 +44,15 @@ export function ImportGuide({ compact }: { compact?: boolean }) {
               do in the wrong one. `tabular-nums` so the digits align and the
               text starts on one column. */}
           <span
-            className="flex-shrink-0 font-display text-[11px] leading-[1.45] tabular-nums text-gold"
+            className="flex-shrink-0 font-display text-sub leading-[1.45] tabular-nums text-gold"
             aria-hidden
           >
             {i + 1}
           </span>
           <span className="min-w-0">
-            <span className="block text-[11px] leading-snug text-text">{s.do}</span>
+            <span className="block text-sub leading-snug text-text">{s.do}</span>
             {s.note && (
-              <span className="mt-0.5 block text-[10px] leading-snug text-dim">{s.note}</span>
+              <span className="mt-0.5 block text-label leading-snug text-dim">{s.note}</span>
             )}
           </span>
         </li>

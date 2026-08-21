@@ -76,7 +76,7 @@ export default function SavedListSheet({
 
   return (
     <Sheet title={list.name} onClose={onClose}>
-      <p className="mb-4 text-[11px] text-dim">
+      <p className="mb-4 text-sub text-dim">
         {list.source && <span className="uppercase tracking-[0.12em]">{list.source}</span>}
         {list.source && saved && " · "}
         {saved && `saved ${saved}`}
@@ -87,7 +87,7 @@ export default function SavedListSheet({
         {canCard && (
           <button
             onClick={() => setShowCard(true)}
-            className="flex-1 rounded-xl bg-gold py-2.5 text-center text-[12px] font-bold text-[#1c1405] active:scale-[0.98]"
+            className="flex-1 rounded-xl bg-gold py-2.5 text-center text-sub font-bold text-[#1c1405] active:scale-[0.98]"
           >
             Make the card
           </button>
@@ -95,7 +95,7 @@ export default function SavedListSheet({
         <button
           onClick={() => onPin(!pinned)}
           disabled={!pinned && !canPin}
-          className="flex-1 rounded-xl border border-border py-2.5 text-center text-[12px] font-bold text-text-hi active:scale-[0.98] disabled:opacity-40"
+          className="flex-1 rounded-xl border border-border py-2.5 text-center text-sub font-bold text-text-hi active:scale-[0.98] disabled:opacity-40"
         >
           {pinned ? "Unpin" : canPin ? "Pin to profile" : "Profile full"}
         </button>
@@ -105,7 +105,7 @@ export default function SavedListSheet({
         // Said out loud rather than quietly drawn short. These are rows saved
         // before the entry carried a rating whose film has also left the
         // library, so the card genuinely cannot include them.
-        <p className="mb-4 text-[11px] leading-snug text-dim">
+        <p className="mb-4 text-sub leading-snug text-dim">
           {dropped} {dropped === 1 ? "film is" : "films are"} missing from the card: they left your
           library before it recorded enough to redraw them.
         </p>
@@ -114,12 +114,12 @@ export default function SavedListSheet({
       <ol className="mb-5">
         {rows.map(({ entry, film }, i) => (
           <li key={entry.id} className="flex items-baseline gap-3 border-b border-border py-2.5">
-            <span className="w-6 flex-shrink-0 text-[12px] tabular-nums text-dim">{i + 1}</span>
-            <span className="min-w-0 flex-1 truncate text-[13px] text-text-hi">
+            <span className="w-6 flex-shrink-0 text-sub tabular-nums text-dim">{i + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-sub text-text-hi">
               {film?.title ?? entry.title}
-              {entry.guest && <span className="ml-1.5 text-[9px] uppercase tracking-wider text-dim">guest</span>}
+              {entry.guest && <span className="ml-1.5 text-label uppercase tracking-wider text-dim">guest</span>}
             </span>
-            <span className="flex-shrink-0 text-[11px] text-gold">
+            <span className="flex-shrink-0 text-sub text-gold">
               {/* The library's rating where there is one, so a re-rate shows;
                   the frozen one otherwise. */}
               {film ? starsFor(film.rating) : entry.rating !== undefined ? starsFor(entry.rating) : ""}
@@ -130,9 +130,9 @@ export default function SavedListSheet({
 
       {confirmDelete ? (
         <div className="flex items-center justify-between">
-          <span className="text-[12px] text-text">Delete this ranking?</span>
+          <span className="text-sub text-text">Delete this ranking?</span>
           <span className="flex gap-3">
-            <button onClick={() => setConfirmDelete(false)} className="text-[12px] text-dim active:scale-95">
+            <button onClick={() => setConfirmDelete(false)} className="text-sub text-dim active:scale-95">
               No
             </button>
             <button
@@ -140,7 +140,7 @@ export default function SavedListSheet({
                 deleteList(list.id);
                 onDeleted();
               }}
-              className="text-[12px] font-bold text-gold active:scale-95"
+              className="text-sub font-bold text-gold active:scale-95"
             >
               Yes
             </button>
@@ -149,7 +149,7 @@ export default function SavedListSheet({
       ) : (
         <button
           onClick={() => setConfirmDelete(true)}
-          className="text-[12px] text-dim active:scale-95"
+          className="text-sub text-dim active:scale-95"
         >
           Delete this ranking
         </button>

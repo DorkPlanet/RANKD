@@ -43,6 +43,33 @@
   --font-sans: var(--font-inter);
   --font-serif: var(--font-src-serif);
   --font-display: var(--font-bebas);
+
+  /* ── The type scale ──────────────────────────────────────────────────────
+     Four steps, and the gaps are the point.
+
+     The app had SIXTEEN sizes, of which 253 of 280 uses sat between 9px and
+     13px. Sizes that close cannot build hierarchy — the reader sees one
+     texture where the code made five separate decisions — and that is the
+     whole of "everything reads at the same weight".
+
+     Named rather than arbitrary so the next `text-[17px]` is an obvious thing
+     not to write. A sweep drifts back; a scale does not.
+
+     WHAT EACH ONE IS FOR:
+       label  eyebrows, right-aligned values, small caps. Carries font-bold.
+       sub    the line under a title. Normal weight.
+       body   the thing you are actually reading. Normal weight.
+       title  a section or a row heading.
+     Above this the display face handles its own sizes (26/32/44) because those
+     are one-off numerals, not a scale.
+
+     WEIGHT IS NOT A STEP. 117 of 120 weight declarations were semibold or
+     heavier, which is why nothing looked emphasised. Emphasis inside body and
+     sub is COLOUR — gold, accent, text-hi against dim — never a heavier face. */
+  --text-label: 10px;
+  --text-sub: 13px;
+  --text-body: 15px;
+  --text-title: 19px;
 }
 
 html,

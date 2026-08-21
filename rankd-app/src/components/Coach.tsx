@@ -183,13 +183,13 @@ export default function Coach({
         className="coach-card absolute left-1/2 w-[300px] rounded-2xl border border-border px-5 py-4"
         style={{ background: "var(--surface)" }}
       >
-        <span className="block font-display text-[21px] leading-none tracking-wide text-gold">
+        <span className="block font-display text-title leading-none tracking-wide text-gold">
           {step.title}
         </span>
-        <p className="mt-2.5 text-[12px] leading-relaxed text-text">{step.body}</p>
+        <p className="mt-2.5 text-sub leading-relaxed text-text">{step.body}</p>
 
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-[9px] font-extrabold tracking-[0.18em] text-dim tabular-nums">
+          <span className="text-label font-extrabold tracking-[0.18em] text-dim tabular-nums">
             {i + 1} / {steps.length}
           </span>
           <span className="flex items-center gap-2">
@@ -198,14 +198,14 @@ export default function Coach({
             {!last && (
               <button
                 onClick={() => armed() && onDone()}
-                className="px-2 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] text-dim active:scale-95"
+                className="px-2 py-1.5 text-label font-extrabold uppercase tracking-[0.14em] text-dim active:scale-95"
               >
                 Skip
               </button>
             )}
             <button
               onClick={advance}
-              className="rounded-full bg-gold px-5 py-2 text-[11px] font-bold text-[#1c1405] active:scale-[0.98]"
+              className="rounded-full bg-gold px-5 py-2 text-sub font-bold text-[#1c1405] active:scale-[0.98]"
             >
               {last ? "Got it" : "Next"}
             </button>

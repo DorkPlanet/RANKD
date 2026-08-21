@@ -76,21 +76,21 @@ export function FixMatch({
   return (
     <div className="border-t border-border px-4 py-3">
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-[11px] font-semibold text-text-hi">Which film is this?</span>
-        <button onClick={onCancel} className="text-[10px] text-dim active:scale-95">
+        <span className="text-sub font-semibold text-text-hi">Which film is this?</span>
+        <button onClick={onCancel} className="text-label text-dim active:scale-95">
           Cancel
         </button>
       </div>
 
       {failed && (
-        <p className="mb-2 text-[10px] leading-snug text-gold">
+        <p className="mb-2 text-label leading-snug text-gold">
           That didn&rsquo;t work. Check your connection and try again.
         </p>
       )}
 
-      {hits === null && !failed && <p className="text-[11px] text-dim">Looking…</p>}
+      {hits === null && !failed && <p className="text-sub text-dim">Looking…</p>}
       {hits?.length === 0 && (
-        <p className="text-[11px] leading-snug text-dim">
+        <p className="text-sub leading-snug text-dim">
           TMDb has nothing under that title. Nothing to swap it for.
         </p>
       )}
@@ -115,13 +115,13 @@ export function FixMatch({
               )}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12px] text-text-hi">{h.title}</span>
-              <span className="block truncate text-[10px] text-dim">
+              <span className="block truncate text-sub text-text-hi">{h.title}</span>
+              <span className="block truncate text-label text-dim">
                 {h.year || "—"}
                 {h.blurb ? ` · ${h.blurb}` : ""}
               </span>
             </span>
-            {busyId === h.tmdbId && <span className="text-[10px] text-dim">…</span>}
+            {busyId === h.tmdbId && <span className="text-label text-dim">…</span>}
           </button>
         ))}
       </div>

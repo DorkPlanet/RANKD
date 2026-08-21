@@ -153,7 +153,7 @@ export function CardPicker({ data }: { data: CardData }) {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.url} alt={`${designName[design]} card`} className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[11px] text-dim">
+                  <div className="flex h-full w-full items-center justify-center text-sub text-dim">
                     {failed[design] ? "Couldn't draw this one" : "Drawing…"}
                   </div>
                 )}
@@ -177,7 +177,7 @@ export function CardPicker({ data }: { data: CardData }) {
             }}
           />
         ))}
-        <span className="ml-1.5 text-[11px] font-semibold text-dim">{designName[active]}</span>
+        <span className="ml-1.5 text-sub font-semibold text-dim">{designName[active]}</span>
       </div>
 
       <button

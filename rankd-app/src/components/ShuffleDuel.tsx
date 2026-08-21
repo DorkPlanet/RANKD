@@ -45,7 +45,7 @@ const UNDO_MS = 2600;
 
 /** Matches the climb's controls exactly — one language across both modes. */
 const SHUFFLE_CONTROL =
-  "px-4 py-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
+  "px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
 
 export interface ShuffleOptions {
   scope: MatchOptions["scope"];
@@ -831,7 +831,7 @@ const noop = () => {};
 
 function Centre({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-8 text-center text-[13px] leading-relaxed text-dim">
+    <div className="flex flex-1 flex-col items-center justify-center px-8 text-center text-sub leading-relaxed text-dim">
       {children}
     </div>
   );

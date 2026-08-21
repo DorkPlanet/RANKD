@@ -87,16 +87,16 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
   return (
     // Header and rule come from the Settings row this sits in.
     <div>
-      <p className="mb-2 text-[11px] text-dim">Broken? Confusing? Missing something? Tell us.</p>
+      <p className="mb-2 text-sub text-dim">Broken? Confusing? Missing something? Tell us.</p>
 
       {status === "sent" ? (
         // The form is replaced rather than cleared, so there is no doubt about
         // whether the thing was sent. Writing again is a deliberate second act.
         <div className="rounded-xl border border-gold/40 px-3.5 py-3">
-          <p className="text-[12px] leading-snug text-gold">Sent. Thank you.</p>
+          <p className="text-sub leading-snug text-gold">Sent. Thank you.</p>
           <button
             onClick={() => setStatus("idle")}
-            className="mt-2 text-[11px] font-semibold text-dim active:scale-95"
+            className="mt-2 text-sub font-semibold text-dim active:scale-95"
           >
             Write another
           </button>
@@ -118,8 +118,8 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
           >
             {status === "sending" ? "Sending…" : "Send"}
           </button>
-          {error && <p className="mt-2 text-[11px] leading-snug text-gold">{error}</p>}
-          <p className="mt-2 text-[10px] leading-snug text-dim">
+          {error && <p className="mt-2 text-sub leading-snug text-gold">{error}</p>}
+          <p className="mt-2 text-label leading-snug text-dim">
             Sends your library size and browser. Never film titles or ratings.
           </p>
         </>

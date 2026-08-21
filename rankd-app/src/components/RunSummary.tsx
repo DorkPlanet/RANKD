@@ -68,7 +68,7 @@ export function RunSummary({
       <div className="mx-auto w-full max-w-sm">
         <div className="text-center">
           <div className="font-display text-2xl leading-none tracking-wide text-gold">{title}</div>
-          <p className="mt-1.5 text-[11px] uppercase tracking-wider text-dim">
+          <p className="mt-1.5 text-label uppercase tracking-wider text-dim">
             {subtitle ? `${subtitle} · ` : ""}
             {films.length} ranked
           </p>
@@ -76,7 +76,7 @@ export function RunSummary({
               answer — it is just not the same claim as one that went the
               distance, and the saved list should not pretend otherwise. */}
           {!complete && (
-            <p className="mt-1 font-serif text-[12px] italic text-dim">
+            <p className="mt-1 font-serif text-sub italic text-dim">
               Called early — this is where it stood.
             </p>
           )}
@@ -114,7 +114,7 @@ export function RunSummary({
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-text-hi">{f.title}</span>
-                <span className="block truncate text-[11px] text-dim">
+                <span className="block truncate text-sub text-dim">
                   {[f.year, f.guest ? "not seen" : starsFor(f.rating)].filter(Boolean).join(" · ")}
                 </span>
               </span>
@@ -125,7 +125,7 @@ export function RunSummary({
         {/* Stated rather than left to be discovered. A cross-tier order that
             didn't move the main list looks like a bug unless the screen says
             it is the point. */}
-        <p className="mt-3 text-center text-[11px] leading-snug text-dim">
+        <p className="mt-3 text-center text-sub leading-snug text-dim">
           This order crosses your star ratings, so it hasn&rsquo;t changed your list. Keep it here or
           take it with you.
         </p>
@@ -143,13 +143,13 @@ export function RunSummary({
                 : "Save as a list"}
           </button>
           <div className="mt-1 flex items-center justify-center gap-5">
-            <button onClick={onAgain} className="text-[11px] font-semibold text-dim active:scale-95">
+            <button onClick={onAgain} className="text-sub font-semibold text-dim active:scale-95">
               Rank them again
             </button>
-            <button onClick={onList} className="text-[11px] font-semibold text-dim active:scale-95">
+            <button onClick={onList} className="text-sub font-semibold text-dim active:scale-95">
               Your list
             </button>
-            <button onClick={onDone} className="text-[11px] font-semibold text-dim active:scale-95">
+            <button onClick={onDone} className="text-sub font-semibold text-dim active:scale-95">
               Done
             </button>
           </div>

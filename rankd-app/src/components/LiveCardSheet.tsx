@@ -47,7 +47,7 @@ export default function LiveCardSheet({
 
   return (
     <Sheet title={subjectTitle(subject)} onClose={onClose}>
-      <p className="mb-4 text-[11px] text-dim">
+      <p className="mb-4 text-sub text-dim">
         <span className="uppercase tracking-[0.12em]">{subjectEyebrow(subject)}</span>
         <span className="mx-1.5">·</span>
         {/* Says out loud that this is not a saved thing. Without the line, a
@@ -64,7 +64,7 @@ export default function LiveCardSheet({
               onClick={() => onInfo(f)}
               className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
             >
-              <span className="w-5 shrink-0 text-right font-display text-[15px] tabular-nums text-gold">
+              <span className="w-5 shrink-0 text-right font-display text-body tabular-nums text-gold">
                 {i + 1}
               </span>
               {f.poster ? (
@@ -74,8 +74,8 @@ export default function LiveCardSheet({
                 <span className="h-11 w-8 shrink-0 rounded border border-border" />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] text-text-hi">{f.title}</span>
-                {f.year && <span className="block text-[10px] text-dim">{f.year}</span>}
+                <span className="block truncate text-sub text-text-hi">{f.title}</span>
+                {f.year && <span className="block text-label text-dim">{f.year}</span>}
               </span>
             </button>
           </li>

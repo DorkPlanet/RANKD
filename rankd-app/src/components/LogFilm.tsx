@@ -154,7 +154,7 @@ export function LogFilm({
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm text-text-hi">{h.title}</span>
-                    <span className="block truncate text-[11px] text-dim">
+                    <span className="block truncate text-sub text-dim">
                       {h.year}
                       {have ? ` · already in your list at ${starsFor(have.rating)}` : ""}
                     </span>
@@ -165,7 +165,7 @@ export function LogFilm({
 
             {/* One line, four states, so the panel never sits blank and unexplained. */}
             {q.trim() !== "" && hits.length === 0 && (
-              <p className="px-1 py-3 text-center text-[11px] text-dim">
+              <p className="px-1 py-3 text-center text-sub text-dim">
                 {busy ? "Searching…" : failed ? "Couldn't reach the film database." : "Nothing found."}
               </p>
             )}
@@ -198,7 +198,7 @@ function RatingStep({
         )}
         <span className="min-w-0">
           <span className="block font-display text-lg leading-tight text-text-hi">{hit.title}</span>
-          <span className="block text-[11px] text-dim">{hit.year}</span>
+          <span className="block text-sub text-dim">{hit.year}</span>
         </span>
       </div>
 

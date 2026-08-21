@@ -84,8 +84,8 @@ export function InstallPrompt() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/icon-192.png" alt="" className="flex-shrink-0 rounded-lg" style={{ width: 38, height: 38 }} />
           <div className="min-w-0 flex-1">
-            <p className="font-display text-[17px] leading-none tracking-wide text-gold">Put Rankd on your home screen</p>
-            <p className="mt-1.5 text-[11px] leading-snug text-dim">
+            <p className="font-display text-title leading-none tracking-wide text-gold">Put Rankd on your home screen</p>
+            <p className="mt-1.5 text-sub leading-snug text-dim">
               {route === "ios" ? (
                 <>
                   Tap <span className="text-text-hi">Share</span>, then{" "}
@@ -106,13 +106,13 @@ export function InstallPrompt() {
                     await deferred.prompt();
                     close();
                   }}
-                  className="rounded-full px-4 py-1.5 text-[11px] font-bold active:scale-95"
+                  className="rounded-full px-4 py-1.5 text-sub font-bold active:scale-95"
                   style={{ color: "#1c1405", background: "var(--gold)" }}
                 >
                   Install
                 </button>
               )}
-              <button onClick={close} className="px-2 py-1.5 text-[11px] font-semibold text-dim active:scale-95">
+              <button onClick={close} className="px-2 py-1.5 text-sub font-semibold text-dim active:scale-95">
                 {deferred ? "Not now" : "Got it"}
               </button>
             </div>

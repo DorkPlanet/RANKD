@@ -147,7 +147,7 @@ export function PersonSheet({
             style={{ objectPosition: "50% 30%" }}
           />
         )}
-        <p className="text-[11px] uppercase tracking-wider text-dim">
+        <p className="text-label uppercase tracking-wider text-dim">
           {person.role === "director" ? "Director" : "Actor"} · {mine.length} in your list
           {showMissing && credits ? ` · ${missing.length} not logged` : ""}
         </p>
@@ -175,14 +175,14 @@ export function PersonSheet({
             )}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm text-text-hi">{f.title}</span>
-              <span className="block truncate text-[11px] text-dim">
+              <span className="block truncate text-sub text-dim">
                 {f.year} · {starsFor(f.rating)}
               </span>
             </span>
           </button>
         ))}
         {mine.length === 0 && (
-          <p className="px-1 py-3 text-center text-[11px] text-dim">
+          <p className="px-1 py-3 text-center text-sub text-dim">
             Nothing of theirs in your list yet.
           </p>
         )}
@@ -195,7 +195,7 @@ export function PersonSheet({
       <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
         <span className="min-w-0">
           <span className="block text-sm text-text-hi">Include films I haven&rsquo;t seen</span>
-          <span className="block text-[11px] leading-snug text-dim">
+          <span className="block text-sub leading-snug text-dim">
             {credits
               ? `${missing.length} more by ${person.name}. They won't be added to your library.`
               : "Pulls in the rest of their work, just for this session."}
@@ -222,9 +222,9 @@ export function PersonSheet({
 
       {showMissing && (
         <div className="mt-2 flex flex-col gap-1">
-          {loading && <p className="px-1 py-3 text-center text-[11px] text-dim">Looking them up…</p>}
+          {loading && <p className="px-1 py-3 text-center text-sub text-dim">Looking them up…</p>}
           {!loading && missing.length === 0 && credits && (
-            <p className="px-1 py-3 text-center text-[11px] text-dim">
+            <p className="px-1 py-3 text-center text-sub text-dim">
               You&rsquo;ve logged everything of theirs we could find.
             </p>
           )}
@@ -252,7 +252,7 @@ export function PersonSheet({
               )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm text-text-hi">{c.title}</span>
-                <span className="block truncate text-[11px] text-dim">{c.year} · tap to log at ★★★</span>
+                <span className="block truncate text-sub text-dim">{c.year} · tap to log at ★★★</span>
               </span>
             </button>
           ))}

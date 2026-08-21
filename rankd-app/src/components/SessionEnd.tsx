@@ -69,7 +69,7 @@ export function SessionEnd({
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-7 py-6 text-center">
       <div>
         <div className="font-display text-2xl leading-none tracking-wide text-gold">{title}</div>
-        <p className="mt-2 font-serif text-[13px] italic leading-snug text-dim">{blurb}</p>
+        <p className="mt-2 font-serif text-sub italic leading-snug text-dim">{blurb}</p>
       </div>
 
       {/* The result, as the app renders everything else. Five is what fits on a
@@ -90,7 +90,7 @@ export function SessionEnd({
                 <span className="w-full rounded-md bg-border" style={{ aspectRatio: "2/3" }} />
               )}
               <span
-                className={`font-serif text-[13px] leading-none ${isHard(f) ? "font-bold text-gold" : "text-dim"}`}
+                className={`font-serif text-sub leading-none ${isHard(f) ? "font-bold text-gold" : "text-dim"}`}
               >
                 {i + 1}
               </span>
@@ -102,7 +102,7 @@ export function SessionEnd({
       {stats.length > 0 && (
         <div className="flex items-baseline justify-center gap-5">
           {stats.map((s) => (
-            <span key={s.label} className="text-[11px] text-dim">
+            <span key={s.label} className="text-sub text-dim">
               <b className="text-text-hi">{s.value}</b> {s.label}
             </span>
           ))}
@@ -123,7 +123,7 @@ export function SessionEnd({
         </button>
         {againSizes && onAgainSize ? (
           <>
-            <div className="mt-1 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+            <div className="mt-1 text-center text-label font-bold uppercase tracking-[0.12em] text-dim">
               {againLabel}
             </div>
             <div className="flex gap-2">

@@ -56,7 +56,7 @@ export function Passport({ films }: { films: Film[] }) {
 
   return (
     <div>
-      <p className="mb-3 text-[13px] leading-snug text-text">
+      <p className="mb-3 text-sub leading-snug text-text">
         Films from <span className="text-gold">{rows.length} countries</span>
         {". "}
         {Math.round((top.n / known) * 100)}% of them were made in {top.code}.
@@ -68,7 +68,7 @@ export function Passport({ films }: { films: Film[] }) {
             key={r.code}
             className="flex items-center gap-1.5 rounded-full border border-border py-1 pl-1.5 pr-2.5 text-[10.5px]"
           >
-            <span className="text-[13px] leading-none">{flagOf(r.code)}</span>
+            <span className="text-sub leading-none">{flagOf(r.code)}</span>
             <span className="text-dim">{r.code}</span>
             <span className="tabular-nums text-text">{r.n}</span>
           </span>
@@ -81,7 +81,7 @@ export function Passport({ films }: { films: Film[] }) {
       </div>
 
       {known < films.length && (
-        <p className="mt-2 text-[10px] leading-snug text-dim">
+        <p className="mt-2 text-label leading-snug text-dim">
           Known for {known.toLocaleString()} of {films.length.toLocaleString()} so far. This fills in as
           the app looks each film up.
         </p>

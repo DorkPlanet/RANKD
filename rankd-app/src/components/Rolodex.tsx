@@ -181,7 +181,7 @@ export function Rolodex({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="font-serif text-[10px] font-extrabold tracking-wide text-gold">YOU</span>
+              <span className="font-serif text-label font-extrabold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
             // Every film in the pile is a live opponent: a climb rules nothing
@@ -195,7 +195,7 @@ export function Rolodex({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="text-[9px] font-bold tracking-wide text-dim/70">UN-RNKD</span>
+              <span className="text-label font-bold tracking-wide text-dim/70">UN-RNKD</span>
             </div>
           ),
         )}
@@ -219,7 +219,7 @@ export function Rolodex({
               <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
             </div>
             {/* Matches the UN-RNKD label height so every poster shares a baseline */}
-            <span className="text-[9px] leading-none text-transparent">.</span>
+            <span className="text-label leading-none text-transparent">.</span>
           </div>
         ))}
         </div>

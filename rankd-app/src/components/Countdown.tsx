@@ -99,7 +99,7 @@ export function Countdown({
         </span>
         {!tight && <Hairline flip />}
       </div>
-      <span className="text-[9px] font-extrabold uppercase tracking-[0.22em] text-dim">{label}</span>
+      <span className="text-label font-extrabold uppercase tracking-[0.22em] text-dim">{label}</span>
     </div>
   );
 }

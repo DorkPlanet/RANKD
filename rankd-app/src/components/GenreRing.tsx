@@ -134,14 +134,14 @@ export function GenreRing({ films }: { films: Film[] }) {
               and the line underneath says so. */}
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1">
             {slices.slice(0, 5).map((s) => (
-              <div key={s.name} className="flex items-center gap-2 text-[10px]">
+              <div key={s.name} className="flex items-center gap-2 text-label">
                 <span className="h-2 w-2 flex-shrink-0 rounded-[2px]" style={{ background: s.colour }} />
                 <span className="min-w-0 truncate text-dim">{axisLabel(s.name)}</span>
                 <span className="ml-auto flex-shrink-0 tabular-nums text-text">{s.count}</span>
               </div>
             ))}
             {slices.length > 5 && (
-              <div className="flex items-center gap-2 text-[10px]">
+              <div className="flex items-center gap-2 text-label">
                 <span className="h-2 w-2 flex-shrink-0 rounded-[2px] bg-border" />
                 <span className="min-w-0 truncate text-dim">{slices.length - 5} more</span>
                 <span className="ml-auto flex-shrink-0 tabular-nums text-text">
@@ -150,7 +150,7 @@ export function GenreRing({ films }: { films: Film[] }) {
               </div>
             )}
           </div>
-          <p className="mt-2.5 text-center text-[10px] text-dim">Swipe for all {slices.length}.</p>
+          <p className="mt-2.5 text-center text-label text-dim">Swipe for all {slices.length}.</p>
         </div>
 
         {/* Pane two — every one of them, largest first, with the bar doing the
