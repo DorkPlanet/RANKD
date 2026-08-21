@@ -21,6 +21,7 @@ import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
+import { peopleIn } from "@/lib/people";
 import {
   autoCollections,
   avatarOf,
@@ -233,6 +234,7 @@ export default function ProfileScreen({
   // Newest pin last and the cap enforced on WRITE, not by disabling the button.
   // The profile is what the rule is about, so the rule lives where the profile
   // is written — the same reasoning as the saved-ranking pins further down.
+  const [pickingPeople, setPickingPeople] = useState(false);
   const togglePerson = (role: "director" | "actor", name: string) => {
     const key = personKey(role, name);
     const next = pinnedPeople.includes(key)
@@ -586,6 +588,16 @@ export default function ProfileScreen({
             is too. Renamed to cover both halves of that. */}
         {(people.directors.length > 0 || people.actors.length > 0) && (
           <Section title="Who you rate highest">
+            {/* One control for the whole section, not one per row.
+                Whoever you choose here goes to the top and stays, and anybody
+                you don't choose is still worked out from your ratings — so the
+                list is never empty and never only the maths. */}
+            <button
+              onClick={() => setPickingPeople(true)}
+              className="mb-2 block text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
+            >
+              CHANGE ›
+            </button>
             {/* Two groups, each labelled once.
                 The role used to sit on every row, which meant reading the word
                 ACTOR four times to learn one thing. A heading says it once and
@@ -600,9 +612,7 @@ export default function ProfileScreen({
                     <PersonCard
                       key={d.name}
                       p={d}
-                      pinned={pinnedPeople.includes(personKey("director", d.name))}
-                      canPin={pinnedPeople.length < MAX_PINNED_PEOPLE}
-                      onPin={() => togglePerson("director", d.name)}
+                      chosen={pinnedPeople.includes(personKey("director", d.name))}
                       onClick={() =>
                         setOpen({
                           title: d.name,
@@ -623,9 +633,7 @@ export default function ProfileScreen({
                     <PersonCard
                       key={a.name}
                       p={a}
-                      pinned={pinnedPeople.includes(personKey("actor", a.name))}
-                      canPin={pinnedPeople.length < MAX_PINNED_PEOPLE}
-                      onPin={() => togglePerson("actor", a.name)}
+                      chosen={pinnedPeople.includes(personKey("actor", a.name))}
                       onClick={() =>
                         setOpen({
                           title: a.name,
@@ -1024,6 +1032,15 @@ export default function ProfileScreen({
           reader who had to dismiss them one at a time. One overlay at a time is
           the rule everywhere; a screen handing off to the shell is where it was
           being quietly broken. */}
+      {pickingPeople && (
+        <PeoplePicker
+          films={films}
+          chosen={pinnedPeople}
+          onToggle={(role, name) => togglePerson(role, name)}
+          onClose={() => setPickingPeople(false)}
+        />
+      )}
+
       {open && (
         <CollectionSheet
           c={open}
@@ -1631,59 +1648,121 @@ function CollectionSheet({
  * The rating sits right, tabular, so the column lines up down the page and can
  * be compared without reading — which is the only reason the number is there.
  */
-// ── The row, and the star that makes it yours ──────────────────────────────
+// ── The row ────────────────────────────────────────────────────────────────
 //
-// This list is COMPUTED — whose films you rate highest, worked out from your
-// ratings — and until now that was all it could ever be. The star is the option
-// to disagree, and the reason it sits on every row rather than behind an empty
-// "pin somebody" block is the brief it came from: it should "generate through
-// the data with the option to change it built in".
+// A star sat here for one build, to pin somebody to the top. It came out on
+// sight: "the star doesn't make sense — I would rather be able to replace the
+// directors and actors myself."
 //
-// So there is no empty state to fill. The list is useful the moment you have
-// credits; the outline star only says it could be yours. That outline IS the
-// prompt, which is why it is drawn on every row and not just on pinned ones.
-//
-// A `<button>` inside a `<button>` is invalid, so the row is a div with two
-// controls in it: the name opens their films, the star pins. They need separate
-// hit areas anyway — a single tap target that did both would do the wrong one
-// half the time.
+// The instinct was right and the star was the wrong shape for it. Seven stars
+// is seven controls on rows you were trying to READ, and starring is a vote for
+// something already on the list — where what was wanted is the ability to put
+// somebody ON it. One "Change" control on the section does that with no per-row
+// furniture at all, so the row is a row again.
 function PersonCard({
   p,
-  pinned,
-  canPin,
-  onPin,
+  chosen,
   onClick,
 }: {
   p: { name: string; count: number; avg: number };
-  pinned: boolean;
-  /** False at the cap. The star stays, dimmer and inert — see below. */
-  canPin: boolean;
-  onPin: () => void;
+  /** You picked this one, rather than the ratings picking it. */
+  chosen: boolean;
   onClick: () => void;
 }) {
   return (
-    <div className="flex w-full items-baseline gap-2.5 border-b border-border/60 py-2.5 last:border-0">
-      {/* Inert rather than hidden at the cap. A control that disappears when you
-          reach a limit teaches nothing about the limit; one that stays and stops
-          responding at least says there IS one. */}
-      <button
-        onClick={pinned || canPin ? onPin : undefined}
-        aria-label={pinned ? `Unpin ${p.name}` : `Pin ${p.name}`}
-        aria-pressed={pinned}
-        className={`flex-shrink-0 text-sub leading-none active:scale-90 ${
-          pinned ? "text-gold" : canPin ? "text-dim" : "text-dim/30"
-        }`}
-      >
-        {pinned ? "★" : "☆"}
-      </button>
-      <button onClick={onClick} className="flex min-w-0 flex-1 items-baseline gap-3 text-left active:opacity-70">
-        <span className="min-w-0 flex-1 truncate text-body text-text-hi">{p.name}</span>
-        <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
-        <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
-          {p.count} film{p.count === 1 ? "" : "s"}
-        </span>
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      className="flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 active:opacity-70"
+    >
+      {/* A gold name says you chose this one. No icon and no badge: the app
+          already uses gold for "you did this" on every list row, so the same
+          colour says the same thing here without adding an object to look at. */}
+      <span className={`min-w-0 flex-1 truncate text-body ${chosen ? "text-gold" : "text-text-hi"}`}>
+        {p.name}
+      </span>
+      <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
+      <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
+        {p.count} film{p.count === 1 ? "" : "s"}
+      </span>
+    </button>
+  );
+}
+
+
+/**
+ * Choose who sits at the top of the people list.
+ *
+ * Everyone in the library, not just the ones the ratings already surfaced —
+ * putting somebody ON the list is the whole point, and a picker that only
+ * offered the current occupants would be a re-ordering tool.
+ *
+ * Sorted by how many of their films you have, because that is the order you
+ * would look for a name in. Not by average: the maths is what you are here to
+ * override.
+ */
+function PeoplePicker({
+  films,
+  chosen,
+  onToggle,
+  onClose,
+}: {
+  films: Film[];
+  chosen: readonly string[];
+  onToggle: (role: "director" | "actor", name: string) => void;
+  onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const all = useMemo(() => peopleIn(films).sort((a, b) => b.count - a.count), [films]);
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const hits = needle ? all.filter((p) => p.name.toLowerCase().includes(needle)) : all;
+    // Capped, because a big library holds thousands of names and a list that
+    // long is not a picker. Search is the way to anything past the cap.
+    return hits.slice(0, 60);
+  }, [all, q]);
+  const full = chosen.length >= MAX_PINNED_PEOPLE;
+
+  return (
+    <Sheet title="Who goes up top" onClose={onClose}>
+      <p className="mb-3 text-sub leading-snug text-dim">
+        Pick up to {MAX_PINNED_PEOPLE}. Anyone you don&rsquo;t pick is still worked out from your
+        ratings.
+      </p>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search names"
+        className="mb-3 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sub text-text-hi outline-none placeholder:text-dim"
+      />
+      <div className="max-h-[46vh] overflow-y-auto">
+        {shown.map((p) => {
+          const key = personKey(p.role, p.name);
+          const on = chosen.includes(key);
+          return (
+            <button
+              key={key}
+              onClick={on || !full ? () => onToggle(p.role, p.name) : undefined}
+              className={`flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 ${
+                on || !full ? "active:opacity-70" : "opacity-40"
+              }`}
+            >
+              <span className={`min-w-0 flex-1 truncate text-sub ${on ? "text-gold" : "text-text-hi"}`}>
+                {p.name}
+              </span>
+              <span className="flex-shrink-0 text-label uppercase tracking-[0.12em] text-dim">
+                {p.role}
+              </span>
+              <span className="w-[52px] flex-shrink-0 text-right text-label tabular-nums text-dim">
+                {p.count}
+              </span>
+            </button>
+          );
+        })}
+        {shown.length === 0 && (
+          <p className="py-6 text-center text-sub text-dim">Nothing matches.</p>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
