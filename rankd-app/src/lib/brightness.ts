@@ -43,9 +43,21 @@ export function brightnessVars(t: number): Record<string, string> {
   const c = clamp01(t);
   return {
     "--bg": hslHex(218, 72, 6 + 12 * c),
-    // Header sits below --bg, so it's the blackest at t=0 and a deep blue at
-    // t=1 — a darker shade of the background that slides with it.
-    "--header-bg": hslHex(218, 68, 12 * c),
+    // ── The header does NOT slide, and that is the point ────────────────
+    //
+    // It used to: `hslHex(218, 68, 12 * c)`, a darker shade of the background
+    // that moved with it. So at any brightness above zero the RANKD bar was a
+    // deep BLUE rather than black, and the app's one piece of fixed chrome
+    // drifted with a setting about the playing surface.
+    //
+    // The user's call, and it is the right one: the splash is always black. The
+    // brightness slider is about the room you are ranking in; the frame around
+    // it should not move with it.
+    //
+    // Constant, so it is stated here rather than computed. `--bg` still slides,
+    // which means the black-to-blue edge gets STRONGER at high brightness — and
+    // that is exactly what the header's feather is for. See `Header`.
+    "--header-bg": "#000000",
     "--surface": hslHex(216, 55, 9 + 15 * c),
     "--border": hslHex(216, 50, 14 + 16 * c),
   };

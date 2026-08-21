@@ -2198,10 +2198,25 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
           ))}
         </div>
       </div>
-      {/* Short feather below the solid header — ported from rankd.html .lh-header::after */}
+      {/* ── The feather, and the one rule it broke ─────────────────────────
+          A short gradient below the solid header, softening the edge where the
+          black chrome meets the page. Ported from rankd.html .lh-header::after.
+
+          It hangs 44px into whatever is underneath, and it is a child of a
+          POSITIONED header — so it painted on top of that content rather than
+          behind it. On the list screen the block underneath holds the user's
+          name 12px down, which put every letter of it under a gradient that is
+          92% opaque at the top. Measured: the feather spans 59–103px and the
+          name sits at 71–99, entirely inside it. Reported as the name looking
+          "a little feathered", which is precisely what was happening to it.
+
+          `-z-10` puts it behind page content while staying above the page
+          background, so it still softens the edge and can no longer touch a
+          glyph. Nothing else in the header needs a z-index: the header's own
+          background is opaque and paints over this quite happily. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-full h-11"
+        className="pointer-events-none absolute inset-x-0 top-full -z-10 h-11"
         style={{
           background:
             "linear-gradient(to bottom, color-mix(in srgb, var(--header-bg) 92%, transparent), color-mix(in srgb, var(--header-bg) 50%, transparent) 40%, transparent)",

@@ -149,7 +149,15 @@ export default function ListScreen({
     <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
 
-      <div className="flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--header-bg)" }}>
+      {/* No `--header-bg` here any more. This block is page content — your
+          name, your counts, the search — and painting it in the header's colour
+          made it a second, silent header that happened to sit below the real
+          one. Now that the header is always black and the page is not, keeping
+          this black would have drawn a hard band across the top of the list.
+
+          On the page's own background the header's feather does the job it was
+          written for: softening black chrome into the page. */}
+      <div className="flex-shrink-0 px-5 pb-3 pt-3">
         {/* Whose list this is, tapping through to the profile — the result and
             the person it belongs to shouldn't feel like separate apps. */}
         <button onClick={onProfile} className="mb-3 flex w-full items-baseline gap-2.5 active:scale-[0.99]">
