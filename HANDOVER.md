@@ -1567,13 +1567,18 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
   writes it since the review card went (Session I). It stays in `backupFormat.ts`'s FILE_2
   set because ownership is what lets a restore CLEAR a key — drop it and the stale value is
   stranded on every device that ran the old build.
-- **The app now owns ten storage keys and `backupFormat.ts` backs up five.**
-  `rankd-sitting-v1` and `rankd-visit-sitting-v1` are sessionStorage and correctly excluded.
-  But `rankd-lists-v1` (saved rankings) and `rankd-review-dismissed-v1` are localStorage and
-  **are not in any backup** — a restore silently loses both. Fixing it needs the per-format
-  key set described in roadmap item 4, because the restore loop `removeItem`s any key absent
-  from the file.
-  - `rankd-visit-v1` joined them in Session G — it is written for the first time now that
-    the recap exists. **Leave it out of the manifest deliberately**: it describes sittings
-    on THIS device, and its worst case is one missing recap that heals itself on the next
-    open. Do not let it get swept into the fix for the other two, which lose real work.
+- **~~Saved rankings and the review flag are in no backup.~~ FIXED, and this bullet was
+  the stale one — corrected 21 Aug 2026 (register I2).** All three claims here had rotted:
+  - `rankd-lists-v1` IS in the file set — `FILE_2` in `backupFormat.ts` lists it, with the
+    comment "saved rankings — real work, and the reason this exists". It is also SYNCED,
+    through a path of its own: `sync.ts` moves saved rankings as their own rows via
+    `loadLists`/`replaceLists` rather than as a blob key, which is why it is absent from
+    `SYNC_KEYS` and why absence there does not mean absence from the account.
+  - `rankd-review-dismissed-v1` is in `FILE_2` too, deliberately, as a dead key kept so a
+    restore can still CLEAR it on devices that ran the old build. The bullet directly above
+    this one says so, which means the file contradicted itself.
+  - `rankd-visit-v1` is no longer a question at all. The recap it served was removed on
+    21 Aug (register N18) and only the taste chart's before/after still reads that snapshot.
+  - **The lesson, which is why this is kept rather than deleted:** every claim here was true
+    when written and none was re-checked. Three separate register entries turned out the
+    same way in one afternoon. A note about the state of the code has a shelf life.
