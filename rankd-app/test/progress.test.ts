@@ -4,6 +4,8 @@ import { newJudgement } from "@/lib/log";
 import {
   DEFAULT_PACE_S,
   duelsInMinutes,
+  etaLabel,
+  etaSeconds,
   libraryProgress,
   paceSeconds,
   pct,
@@ -271,5 +273,58 @@ describe("paceSeconds stays inside a believable band", () => {
     const slow = duelsInMinutes(10, paceSeconds(at(0, 45, 90, 135, 180, 225, 270)));
     expect(fast).toBe(300);
     expect(slow).toBe(30);
+  });
+});
+
+// ── Telling the user how big the job is ────────────────────────────────────
+//
+// The setup sheet used to ask how long you wanted to play. It states the size
+// of the job instead, because the time "means nothing — it's just to help the
+// user understand how big a task is before they overcommit and hate the app".
+// That only works if the estimate is derived rather than invented, which is
+// what these pin.
+describe("etaSeconds", () => {
+  // One duel per batch film, not two: the batch supplies the anchor and the
+  // opponent comes from the whole scope. Measured in a browser — 70 duels
+  // placed 16 of a 25-film batch — after the halved version shipped and was
+  // wrong by about two.
+  it("counts one duel per batch film, not two", () => {
+    expect(etaSeconds(50, 7, 5)).toBe(250 * 7);
+  });
+
+  it("grows with the batch", () => {
+    const p = DEFAULT_PACE_S;
+    expect(etaSeconds(25, p, 5)).toBeLessThan(etaSeconds(50, p, 5));
+    expect(etaSeconds(50, p, 5)).toBeLessThan(etaSeconds(100, p, 5));
+  });
+
+  it("grows with a slower pace", () => {
+    expect(etaSeconds(50, 4, 5)).toBeLessThan(etaSeconds(50, 9, 5));
+  });
+
+  it("is zero for an empty batch rather than NaN", () => {
+    expect(etaSeconds(0, DEFAULT_PACE_S, 5)).toBe(0);
+  });
+});
+
+describe("etaLabel", () => {
+  it("does not say '1 min' for a few seconds", () => {
+    expect(etaLabel(20)).toBe("under a minute");
+  });
+
+  it("speaks in minutes in the range a session lives in", () => {
+    expect(etaLabel(7 * 60)).toBe("about 7 min");
+    expect(etaLabel(29 * 60)).toBe("about 29 min");
+  });
+
+  it("switches to hours rather than reading '245 min'", () => {
+    expect(etaLabel(60 * 60)).toBe("about an hour");
+    expect(etaLabel(4 * 3600)).toBe("about 4 hours");
+  });
+
+  it("never returns an empty string", () => {
+    for (const s of [0, 1, 89, 90, 3599, 3600, 100000]) {
+      expect(etaLabel(s).length).toBeGreaterThan(0);
+    }
   });
 });

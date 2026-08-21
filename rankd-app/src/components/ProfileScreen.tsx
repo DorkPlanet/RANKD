@@ -30,7 +30,6 @@ import LiveCardSheet from "./LiveCardSheet";
 import { liveViews } from "@/lib/card/live";
 import { subjectEyebrow, subjectKey, subjectTitle, type RankSubject } from "@/lib/subject";
 import { achievements } from "@/lib/achievements";
-import { agoLabel, recapLine, type VisitDelta } from "@/lib/visit";
 import { biggestDisagreement, biggestMove, rankdShape, tasteFor, tasteShape, type TasteShape } from "@/lib/taste";
 import { loadLog, type Judgement } from "@/lib/log";
 import { notesFor } from "@/lib/notes";
@@ -68,7 +67,11 @@ type StillTarget = "banner" | "avatar";
  * rest of what is measured, and the page lost a tab rather than gaining filler
  * to justify one.
  */
-const PANELS = ["Your taste", "Your results"] as const;
+// Results first, taste second. The user's call, and it holds up: the taste
+// panel is derived — the app telling you about yourself — while the results
+// panel is what you MADE. Landing on the thing you made is the better greeting,
+// and it is the half you would show somebody.
+const PANELS = ["Your results", "Your taste"] as const;
 
 /** Matches the sheets. One easing across the app or the motion reads as two apps. */
 const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
@@ -86,7 +89,6 @@ interface Collection {
 export default function ProfileScreen({
   films,
   profile,
-  recap,
   wasShape,
   onProfile,
   onInfo,
@@ -100,7 +102,6 @@ export default function ProfileScreen({
   films: Film[];
   profile: Profile;
   /** What the previous sitting amounted to, or null when there is nothing to say. */
-  recap?: VisitDelta | null;
   /** The taste shape when this sitting began. Absent on a first sitting. */
   wasShape?: Record<string, number>;
   onProfile: (p: Profile) => void;
@@ -410,7 +411,11 @@ export default function ProfileScreen({
               <span className="block truncate font-display text-[26px] leading-none tracking-wide text-gold">
                 {profile.name}
               </span>
-              <span className="mt-1.5 block max-w-[280px] font-serif text-[12px] italic leading-snug text-dim">
+              {/* `whitespace-pre-line` so the line breaks somebody typed
+                  survive to the page. Without it a bio written as three lines
+                  came back as one paragraph and the formatting looked broken
+                  rather than absent. */}
+              <span className="mt-1.5 block max-w-[280px] whitespace-pre-line font-serif text-[12px] italic leading-snug text-dim">
                 {profile.bio || "Add a line about your taste"}
               </span>
             </button>
@@ -443,12 +448,6 @@ export default function ProfileScreen({
               <Stat n={print.duels} label="Duels" onClick={onDuel} />
               <Stat n={earned} label="Badges" onClick={onTrophies} />
             </div>
-
-            {recap && (
-              <div className="mt-3.5 border-t border-border pt-3">
-                <Line label="Last time" value={recapLine(recap)} note={agoLabel(recap.since)} />
-              </div>
-            )}
 
             {/* A gold "start ranking" button lived here and was cut on sight.
                 The nav's RNK cell already does this from every screen, and a
@@ -518,171 +517,6 @@ export default function ProfileScreen({
             className="flex"
             style={{ transform: `translateX(${tab * -100}%)`, transition: `transform 0.3s ${EASE}` }}
           >
-            <div className="w-full flex-shrink-0 px-6">
-          {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
-              The thesis. Three blocks that were peers of everything else on the
-              screen — the fingerprint, the odds and ends, the people — now sit
-              under one heading, because they are one argument made three ways
-              and the page never said so. */}
-          {/* The shape, above the lines that describe it in words.
-              It plots mean POSITION per genre, never win rate and never how much
-              of a genre you own — see the header of `taste.ts` for why both of
-              those are wrong. Renders nothing below three axes, so a thin
-              library is simply the four lines it always was. */}
-          {taste.length >= 3 && (
-            <Section title="Your shape" first>
-              <TasteChart axes={taste} was={wasShape} rankd={rankd} />
-              {/* A key, because three outlines need one. Only the ones actually
-                  drawn appear: offering a legend entry for a line that is not
-                  on the chart is how a reader starts hunting for it. */}
-              <div className="mt-1 flex justify-center gap-3 text-[9px] tracking-[0.08em] text-dim">
-                <span className="text-gold">● YOURS</span>
-                {rankd && <span className="text-accent">● RANKD</span>}
-                {moved && <span>◌ WHERE YOU STARTED</span>}
-              </div>
-              <p className="mt-1.5 text-center text-[10px] leading-snug text-dim">
-                {moved
-                  ? `${moved.genre} moved this sitting.`
-                  : disagree
-                    ? `You rate ${disagree.genre} ${disagree.youHigher ? "higher" : "lower"} than your duels do.`
-                    : "How high each genre sits in your order."}
-              </p>
-            </Section>
-          )}
-
-          {/* Who you are, in four lines that the ranking can't tell you. */}
-          <Section title="Your taste" first>
-            <div className="space-y-1.5">
-              {print.homeTier !== undefined && (
-                <Line label="You live at" value={starsFor(print.homeTier)} gold />
-              )}
-              {print.genre && <Line label="You keep returning to" value={print.genre.name} note={`${print.genre.count} films`} />}
-              {people.subgenre && (
-                <Line label="More precisely" value={people.subgenre.name} note={`${people.subgenre.count} films`} />
-              )}
-              {print.decade && <Line label="Your decade" value={print.decade.label} note={`${print.decade.count} films`} />}
-              {print.generosity && (
-                <Line
-                  label="As a rater you're"
-                  value={print.generosity.label}
-                  note={`${print.generosity.mean.toFixed(2)}★ average`}
-                />
-              )}
-            </div>
-            {!print.genre && (
-              <p className="mt-2 text-[10px] leading-snug text-dim">
-                Genres arrive with artwork — browse your list and this sharpens up.
-              </p>
-            )}
-          </Section>
-
-          {/* Lines, not boxes.
-              A bordered box per fact made eight equal-weight panels with nothing
-              subordinate to anything, which is most of why this page read as a
-              stack of unrelated readouts. The app's own language is a hairline
-              rule and a tracked-caps label; these facts now use it like
-              everything else does. */}
-          {/* Wrapping, not truncating. `Line` clips its value to one row, which
-              is right for "even-handed" and wrong for a film title — the live
-              page read "Cannibal Corpse: Centuries of Torme…". These values are
-              titles, so they take the same treatment as the notes below and the
-              page ends up at one weight throughout. */}
-          {facts.length > 0 && (
-            <Section title="Odds and ends">
-              <div className="space-y-2.5">
-                {facts.map((f) => (
-                  <p key={f.label} className="text-[13px] leading-snug text-text">
-                    {f.label} <span className="text-gold">{f.value}</span>
-                    {f.note ? <span className="text-dim"> · {f.note}</span> : null}
-                  </p>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* ── What your list says about you ────────────────────────────
-              Everything above this comes off the library, which means anyone
-              holding the Letterboxd export could compute it. These come off the
-              ORDER and the duel log, so they are the first things on this page
-              about the reader rather than their collection.
-
-              Sentences, not a label-and-value row. The subjects are film titles,
-              and a title in a value column truncates — "Cannibal Corpse:
-              Centuries of Torme…" was the live version of that. Wrapping prose
-              with the named thing set brighter reads at one weight the whole way
-              down, which three type sizes per row never did. */}
-          {notes.length > 0 && (
-            <Section title="What your list says">
-              <div className="space-y-2.5">
-                {notes.map((n) => (
-                  <p key={n.id} className="text-[13px] leading-snug text-text">
-                    {n.before} <span className="text-gold">{n.subject}</span>
-                    {/* No space before a full stop or a comma. A note whose tail
-                        begins with punctuation would otherwise read "the 2020s ."
-                        — which it did, on the first render of this. */}
-                    {/^[.,;:!?]/.test(n.after) ? n.after : ` ${n.after}`}
-                  </p>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Two panes, one swipe apart. See the header of GenreRing. */}
-          <Section title="Your library">
-            <GenreRing films={films} />
-          </Section>
-
-          {/* Where they were made. Renders nothing until the credits sweep has
-              been round, so it appears by itself rather than needing anybody to
-              do something. See the header of Passport for why it is not yet a
-              map. */}
-          <Section title="Your world">
-            <Passport films={films} />
-          </Section>
-
-          {/* ── THE LEDGER ───────────────────────────────────────────────────
-              Last, and deliberately. This is the most detailed thing on the page
-              and the least likely to be why anyone opened it — so it is what you
-              arrive at by scrolling to the end, not what you wade through.
-
-              One chart doing two jobs. The bar's length is how many films are in
-              the tier — the shape of your taste — and the solid part is how many
-              have a position. Deliberately NOT "locked": the gold counts hard and
-              soft locks alike (`isPlaced`), and "locked" is the app's word for
-              the hard half alone. See the legend in `ListScreen`. Two separate charts of the same ten tiers was one
-              chart too many, and no other app can draw this one because no other
-              app knows the difference between owning a film and placing it. */}
-          <div className="px-6">
-            <Section title="Your tiers">
-              <div className="space-y-2">
-                {tiers.map((t) => (
-                  <button key={t.tier} onClick={onList} className="flex w-full items-center gap-3 active:scale-[0.99]">
-                    <span className="w-[46px] flex-shrink-0 text-left text-[11px] text-gold">
-                      {starsFor(t.tier as Rating)}
-                    </span>
-                    <span className="flex h-3 flex-1 items-center">
-                      <span
-                        className="flex h-full overflow-hidden rounded-sm"
-                        style={{ width: `${(t.total / widest) * 100}%`, background: "var(--border)" }}
-                      >
-                        <span
-                          className="h-full transition-[width] duration-500"
-                          style={{ width: `${(t.placed / t.total) * 100}%`, background: "var(--gold)" }}
-                        />
-                      </span>
-                    </span>
-                    <span className="w-[58px] flex-shrink-0 text-right text-[10px] text-dim tabular-nums">
-                      {t.placed}/{t.total}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-[10px] leading-snug text-dim">
-                Bar length is how many films you&rsquo;ve seen at that rating. The gold is how many have a position.
-              </p>
-            </Section>
-          </div>
-            </div>
             <div className="w-full flex-shrink-0">
         <div className="px-6">
         {/* The people, moved out of What you like.
@@ -925,6 +759,171 @@ export default function ProfileScreen({
           </section>
         )}
 
+            </div>
+            <div className="w-full flex-shrink-0 px-6">
+          {/* ── WHAT YOU LIKE ───────────────────────────────────────────────
+              The thesis. Three blocks that were peers of everything else on the
+              screen — the fingerprint, the odds and ends, the people — now sit
+              under one heading, because they are one argument made three ways
+              and the page never said so. */}
+          {/* Who you are, in four lines that the ranking can't tell you. */}
+          <Section title="Your taste" first>
+            <div className="space-y-1.5">
+              {print.homeTier !== undefined && (
+                <Line label="You live at" value={starsFor(print.homeTier)} gold />
+              )}
+              {print.genre && <Line label="You keep returning to" value={print.genre.name} note={`${print.genre.count} films`} />}
+              {people.subgenre && (
+                <Line label="More precisely" value={people.subgenre.name} note={`${people.subgenre.count} films`} />
+              )}
+              {print.decade && <Line label="Your decade" value={print.decade.label} note={`${print.decade.count} films`} />}
+              {print.generosity && (
+                <Line
+                  label="As a rater you're"
+                  value={print.generosity.label}
+                  note={`${print.generosity.mean.toFixed(2)}★ average`}
+                />
+              )}
+            </div>
+            {!print.genre && (
+              <p className="mt-2 text-[10px] leading-snug text-dim">
+                Genres arrive with artwork — browse your list and this sharpens up.
+              </p>
+            )}
+          </Section>
+
+          {/* The shape, above the lines that describe it in words.
+              It plots mean POSITION per genre, never win rate and never how much
+              of a genre you own — see the header of `taste.ts` for why both of
+              those are wrong. Renders nothing below three axes, so a thin
+              library is simply the four lines it always was. */}
+          {taste.length >= 3 && (
+            <Section title="Your shape">
+              <TasteChart axes={taste} was={wasShape} rankd={rankd} />
+              {/* A key, because three outlines need one. Only the ones actually
+                  drawn appear: offering a legend entry for a line that is not
+                  on the chart is how a reader starts hunting for it. */}
+              <div className="mt-1 flex justify-center gap-3 text-[9px] tracking-[0.08em] text-dim">
+                <span className="text-gold">● YOURS</span>
+                {rankd && <span className="text-accent">● RANKD</span>}
+                {moved && <span>◌ WHERE YOU STARTED</span>}
+              </div>
+              <p className="mt-1.5 text-center text-[10px] leading-snug text-dim">
+                {moved
+                  ? `${moved.genre} moved this sitting.`
+                  : disagree
+                    ? `You rate ${disagree.genre} ${disagree.youHigher ? "higher" : "lower"} than your duels do.`
+                    : "How high each genre sits in your order."}
+              </p>
+            </Section>
+          )}
+
+          {/* ── What your list says about you ────────────────────────────
+              Everything above this comes off the library, which means anyone
+              holding the Letterboxd export could compute it. These come off the
+              ORDER and the duel log, so they are the first things on this page
+              about the reader rather than their collection.
+
+              Sentences, not a label-and-value row. The subjects are film titles,
+              and a title in a value column truncates — "Cannibal Corpse:
+              Centuries of Torme…" was the live version of that. Wrapping prose
+              with the named thing set brighter reads at one weight the whole way
+              down, which three type sizes per row never did. */}
+          {notes.length > 0 && (
+            <Section title="What your list says">
+              <div className="space-y-2.5">
+                {notes.map((n) => (
+                  <p key={n.id} className="text-[13px] leading-snug text-text">
+                    {n.before} <span className="text-gold">{n.subject}</span>
+                    {/* No space before a full stop or a comma. A note whose tail
+                        begins with punctuation would otherwise read "the 2020s ."
+                        — which it did, on the first render of this. */}
+                    {/^[.,;:!?]/.test(n.after) ? n.after : ` ${n.after}`}
+                  </p>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Two panes, one swipe apart. See the header of GenreRing. */}
+          <Section title="Your library">
+            <GenreRing films={films} />
+          </Section>
+
+          {/* ── THE LEDGER ───────────────────────────────────────────────────
+              Last, and deliberately. This is the most detailed thing on the page
+              and the least likely to be why anyone opened it — so it is what you
+              arrive at by scrolling to the end, not what you wade through.
+
+              One chart doing two jobs. The bar's length is how many films are in
+              the tier — the shape of your taste — and the solid part is how many
+              have a position. Deliberately NOT "locked": the gold counts hard and
+              soft locks alike (`isPlaced`), and "locked" is the app's word for
+              the hard half alone. See the legend in `ListScreen`. Two separate charts of the same ten tiers was one
+              chart too many, and no other app can draw this one because no other
+              app knows the difference between owning a film and placing it. */}
+          <div className="px-6">
+            <Section title="Your tiers">
+              <div className="space-y-2">
+                {tiers.map((t) => (
+                  <button key={t.tier} onClick={onList} className="flex w-full items-center gap-3 active:scale-[0.99]">
+                    <span className="w-[46px] flex-shrink-0 text-left text-[11px] text-gold">
+                      {starsFor(t.tier as Rating)}
+                    </span>
+                    <span className="flex h-3 flex-1 items-center">
+                      <span
+                        className="flex h-full overflow-hidden rounded-sm"
+                        style={{ width: `${(t.total / widest) * 100}%`, background: "var(--border)" }}
+                      >
+                        <span
+                          className="h-full transition-[width] duration-500"
+                          style={{ width: `${(t.placed / t.total) * 100}%`, background: "var(--gold)" }}
+                        />
+                      </span>
+                    </span>
+                    <span className="w-[58px] flex-shrink-0 text-right text-[10px] text-dim tabular-nums">
+                      {t.placed}/{t.total}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-snug text-dim">
+                Bar length is how many films you&rsquo;ve seen at that rating. The gold is how many have a position.
+              </p>
+            </Section>
+          </div>
+
+          {/* Lines, not boxes.
+              A bordered box per fact made eight equal-weight panels with nothing
+              subordinate to anything, which is most of why this page read as a
+              stack of unrelated readouts. The app's own language is a hairline
+              rule and a tracked-caps label; these facts now use it like
+              everything else does. */}
+          {/* Wrapping, not truncating. `Line` clips its value to one row, which
+              is right for "even-handed" and wrong for a film title — the live
+              page read "Cannibal Corpse: Centuries of Torme…". These values are
+              titles, so they take the same treatment as the notes below and the
+              page ends up at one weight throughout. */}
+          {facts.length > 0 && (
+            <Section title="Odds and ends">
+              <div className="space-y-2.5">
+                {facts.map((f) => (
+                  <p key={f.label} className="text-[13px] leading-snug text-text">
+                    {f.label} <span className="text-gold">{f.value}</span>
+                    {f.note ? <span className="text-dim"> · {f.note}</span> : null}
+                  </p>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Where they were made. Renders nothing until the credits sweep has
+              been round, so it appears by itself rather than needing anybody to
+              do something. See the header of Passport for why it is not yet a
+              map. */}
+          <Section title="Your world">
+            <Passport films={films} />
+          </Section>
             </div>
           </div>
 
@@ -1636,14 +1635,26 @@ function EditIdentity({
           placeholder="Your name"
           className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
         />
+        {/* 300 characters and four rows, not 120 and two.
+            The old field was sized for the placeholder — "a line about your
+            taste" — and people do not write one line. Worse, it accepted line
+            breaks and the display then collapsed them, so anyone who tried to
+            structure a longer bio watched it come back as one run-on sentence.
+            `whitespace-pre-line` on the display is the other half of this fix
+            and neither half works alone. */}
         <textarea
           value={bio}
           onChange={(e) => setBio(e.target.value)}
-          maxLength={120}
-          rows={2}
+          maxLength={300}
+          rows={4}
           placeholder="A line about your taste"
-          className="w-full resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+          className="w-full resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-sm leading-snug text-text-hi outline-none placeholder:text-dim"
         />
+        {/* Only once it is worth knowing. A counter from zero is pressure to
+            fill it; a counter near the ceiling is useful information. */}
+        {bio.length > 220 && (
+          <p className="mt-1 text-right text-[10px] text-dim">{300 - bio.length} left</p>
+        )}
         <p className="mt-3 text-[10px] leading-snug text-dim">
           A profile picture arrives with accounts. Until then it&rsquo;s your initial.
         </p>

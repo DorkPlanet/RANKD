@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DEFAULT_PACE_S, duelsInMinutes, paceSeconds } from "@/lib/progress";
+import { DEFAULT_PACE_S, etaLabel, etaSeconds, paceSeconds } from "@/lib/progress";
+import { PLACE_DUELS } from "@/lib/shuffle";
 import { saveFilms } from "@/lib/store";
 import { markDirty } from "@/lib/syncState";
 import {
@@ -162,6 +163,19 @@ export default function DuelScreen({
   // nothing and confirms nothing, so giving it a PlacementSession would mean
   // teaching ladder.ts about a mode that never places a film.
   const [shuffleRun, setShuffleRun] = useState<ShuffleOptions | null>(null);
+  // Bumped every time a run starts, and used as `ShuffleDuel`'s key.
+  //
+  // Everything a run holds — its batch, its anchor, the sitting's duel count —
+  // is component state. Starting a second batch by handing the same instance
+  // new options would keep all of it and just change the number beside it, so
+  // the run has to be a NEW component. Going again at the same size produces
+  // identical options, which is exactly the case a key derived from the options
+  // would fail to notice.
+  const [runSeq, setRunSeq] = useState(0);
+  const startShuffle = (opts: ShuffleOptions) => {
+    setRunSeq((i) => i + 1);
+    setShuffleRun(opts);
+  };
   const [shuffle, setShuffle] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
@@ -759,7 +773,7 @@ export default function DuelScreen({
             if (beginRun(t)) closeSetup();
           }}
           onFastShuffle={(opts) => {
-            setShuffleRun(opts);
+            startShuffle(opts);
             closeSetup();
           }}
           onCurated={() => {
@@ -1143,6 +1157,7 @@ export default function DuelScreen({
           climb and no confirm, so none of the branches below apply to it. */
       activeRun ? (
         <ShuffleDuel
+          key={runSeq}
           // Borrowed films are handed to the run and to nothing else. Both
           // writes below strip them, so there is no path from "I ranked a
           // director's whole filmography" to "my library gained forty films I
@@ -1174,6 +1189,14 @@ export default function DuelScreen({
             onRunRequestHandled?.();
           }}
           onList={onList}
+          // Another batch, same scope, without going back through the sheet.
+          //
+          // Remounting matters and is why the key below exists: everything a
+          // run holds — the batch, the anchor, the sitting's duel count — is
+          // component state, and handing the same instance a new `options`
+          // would keep the finished run's state and simply change the number
+          // beside it.
+          onAgainSize={(size) => startShuffle({ ...activeRun, batch: size })}
         />
       ) : champion ? (
         <ConfirmView
@@ -1835,21 +1858,21 @@ function ShuffleSetup({
 }) {
   const [kind, setKind] = useState<"all" | "tier" | "range">("all");
   const [includeConfirmed, setIncludeConfirmed] = useState(false);
-  // ── How long this sitting runs ──────────────────────────────────────────
+  // ── How big this run is ─────────────────────────────────────────────────
   //
-  // The mode's one real weakness was that it never ended: you played until you
-  // got bored, which is not a shape and gives nothing to finish.
+  // FILMS, not minutes, and the third shape this control has taken.
   //
-  // In MINUTES, not duels. The first version offered 100/250/500 duels with a
-  // minutes estimate beside them, and the estimate was wrong by a factor of
-  // four because it came from a constant somebody invented rather than from
-  // anything measured. Minutes are what a person actually decides in — "I have
-  // ten minutes" — so they are what the buttons say, and the duel count is
-  // derived from THIS person's own pace out of the log. It cannot drift from
-  // the truth because it is computed from it.
+  // It was duels with a minutes estimate; then minutes with a duel count. Both
+  // asked the same question — how long do you want to play — and the user's
+  // objection is that the app should not be asking it at all: the time "means
+  // nothing, it's just to help the user understand how big a task is before
+  // they overcommit and hate the app".
   //
-  // "No limit" stays, because it is what the mode was and somebody may want it.
-  const [minutes, setMinutes] = useState<number | null>(10);
+  // So the number you choose is a number of FILMS to get through, the ETA sits
+  // under it as guidance, and the run ends when those films have their numbers.
+  // What you are choosing is the size of the job rather than the length of the
+  // sitting, and the job is the thing with a finish line.
+  const [batch, setBatch] = useState<number | null>(50);
   // This person's own seconds-per-duel, read from the log once when the sheet
   // opens. Async because `loadLog` is, and `DEFAULT_PACE_S` until it lands — a
   // sheet that showed no estimate for a beat would be worse than one that shows
@@ -1866,8 +1889,6 @@ function ShuffleSetup({
       alive = false;
     };
   }, []);
-  const target = minutes === null ? null : duelsInMinutes(minutes, paceS);
-
   const scope: ShuffleOptions["scope"] =
     kind === "all"
       ? { kind: "all" }
@@ -1879,6 +1900,11 @@ function ShuffleSetup({
   // filter computed here would drift from it the first time either changed.
   const count = poolFor(films, { scope, includeConfirmed }).length;
   const playable = count >= 2;
+  // How many films in this scope have no number yet. A batch cannot be bigger
+  // than the work available, and a start button offering 100 when 12 remain
+  // would be promising a run that ends early for reasons nobody explained.
+  const unplaced = poolFor(films, { scope, includeConfirmed }).filter((f) => !isPlaced(f)).length;
+
 
 
   return (
@@ -1926,25 +1952,23 @@ function ShuffleSetup({
           inside a pen — sharpening one arbitrary patch and leaving the rest
           untouched. See the note on `ShuffleOptions.target`. */}
       <div className="mb-3">
-        <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-dim">How long</span>
-          {target !== null && (
-            <span className="text-[11px] text-dim">
-              about {target} duels at your pace
-            </span>
-          )}
-        </div>
+        <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">How many</div>
         <div className="flex gap-2">
-          {[5, 10, 20].map((m) => (
-            <ScopeTab
-              key={m}
-              label={`${m} min`}
-              active={minutes === m}
-              onClick={() => setMinutes(m)}
-            />
+          {[25, 50, 100].map((b) => (
+            <ScopeTab key={b} label={String(b)} active={batch === b} onClick={() => setBatch(b)} />
           ))}
-          <ScopeTab label="No limit" active={minutes === null} onClick={() => setMinutes(null)} />
+          <ScopeTab label="No limit" active={batch === null} onClick={() => setBatch(null)} />
         </div>
+        {/* The ETA is guidance, deliberately under the choice rather than
+            beside it: it is not what you are picking, it is what you are being
+            warned about. Derived from this person's own measured pace. */}
+        <p className="mt-1.5 text-center text-[11px] text-dim">
+          {batch === null
+            ? "Runs until you stop."
+            : `${Math.min(batch, unplaced)} films to get a number · ${etaLabel(
+                etaSeconds(Math.min(batch, unplaced), paceS, PLACE_DUELS),
+              )}`}
+        </p>
       </div>
 
       {/* Off, this ranks the films with no position yet. On, it is allowed to
@@ -1968,8 +1992,8 @@ function ShuffleSetup({
       </label>
 
       <StartButton
-        label={minutes ? `Start · ${minutes} minutes` : `Start · ${count} films`}
-        onClick={() => onStart({ scope, includeConfirmed, target: target ?? undefined })}
+        label={batch ? `Start · ${Math.min(batch, unplaced)} films` : `Start · ${count} films`}
+        onClick={() => onStart({ scope, includeConfirmed, batch: batch ?? undefined })}
         disabled={!playable}
       />
       {!playable && (

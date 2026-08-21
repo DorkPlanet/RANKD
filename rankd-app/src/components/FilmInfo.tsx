@@ -211,7 +211,10 @@ export function FilmInfo({
                   )}
                 </>
               ) : (
-                <div className="text-dim">Fast Shuffle placed it at #{rank}</div>
+                // The same blue the list legend and the row numerals use for
+                // this state, and four words rather than seven. It is a label
+                // for a state, not a sentence about a mode.
+                <div className="text-accent">Shuffled at #{rank}</div>
               )}
             </div>
             {evidence && (

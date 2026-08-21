@@ -51,6 +51,29 @@ export interface ShuffleOptions {
   scope: MatchOptions["scope"];
   includeConfirmed: boolean;
   /**
+   * How many FILMS this run is meant to get through. Absent means open-ended.
+   *
+   * ── Why a batch of films and not a number of duels ──────────────────────
+   *
+   * Because it is the thing with a finish line. Duels are the currency; films
+   * getting their number is the work. A run of 250 duels ends at an arbitrary
+   * moment; a run of 50 films ends when fifty films have a number, which is
+   * something you can look at afterwards.
+   *
+   * ── Why fencing the matchmaker is fine NOW and was not before ───────────
+   *
+   * The earlier version of this idea was rejected, and the rejection was right
+   * at the time: the matchmaker picked a fresh anchor every serve, choosing
+   * whichever film it could least predict, and penning it into a subset threw
+   * that judgement away. It now holds an anchor for a whole turn regardless. A
+   * batch does not take away a choice it is no longer making.
+   *
+   * The batch decides which films are ANCHORED. Opponents still come from the
+   * whole scope, so the comparisons stay worth making — a pen would have made
+   * every duel a fight between two films from the same arbitrary hundred.
+   */
+  batch?: number;
+  /**
    * End the session after this many answers, or run open-ended when absent.
    *
    * ── Why a count and not a slice of the library ─────────────────────────
@@ -121,6 +144,20 @@ const REFIT_EVERY = 12;
  */
 const ANCHOR_HOLD = 6;
 
+/** The batch sizes offered, on the setup sheet and again when a run finishes. */
+export const BATCH_SIZES = [25, 50, 100] as const;
+
+/**
+ * How many duels a film gets when it takes the anchor.
+ *
+ * Decided once, at the start of its turn, and then nothing changes it — see the
+ * note on the rotation rule for why that matters. An unplaced film gets exactly
+ * what it needs to earn its number; one that already has a number gets a full
+ * turn, because for it the gate is behind and refinement is the point.
+ */
+const holdFor = (film: Film): number =>
+  isPlaced(film) ? ANCHOR_HOLD : Math.min(ANCHOR_HOLD, Math.max(1, PLACE_DUELS - (film.duels ?? 0)));
+
 /** How many films ahead the in-session artwork walk goes. See its use below. */
 const LOOKAHEAD = 80;
 
@@ -132,6 +169,7 @@ export default function ShuffleDuel({
   onInfo,
   onExit,
   onList,
+  onAgainSize,
 }: {
   films: Film[];
   onFilms: (films: Film[]) => void;
@@ -148,6 +186,8 @@ export default function ShuffleDuel({
   onExit: () => void;
   /** Leave for the list — where what you just made now lives. */
   onList: () => void;
+  /** Start another batch of this size, without going back through the setup. */
+  onAgainSize: (n: number) => void;
 }) {
   const [log, setLog] = useState<Judgement[] | null>(null);
   const [beliefs, setBeliefs] = useState<Map<string, Belief>>(new Map());
@@ -158,7 +198,13 @@ export default function ShuffleDuel({
   // reasons that have nothing to do with the anchor — artwork arriving, a
   // re-serve after undo — and an anchor inferred from "whichever film is on the
   // left" would silently reset whenever any of those happened.
-  const [anchor, setAnchor] = useState<{ id: string; held: number; wasPlaced: boolean } | null>(null);
+  const [anchor, setAnchor] = useState<{ id: string; held: number; hold: number } | null>(null);
+  // The films this run is meant to get through, chosen once when it opens.
+  //
+  // Held as ids rather than films because `films` is replaced on every answer
+  // and a list of stale objects would go out of date immediately. Null when the
+  // run is open-ended.
+  const [batch, setBatch] = useState<string[] | null>(null);
   // Whether the opening serve has run yet.
   //
   // `pair === null` meant two completely different things — "not served yet"
@@ -208,13 +254,7 @@ export default function ShuffleDuel({
       // the screen shows a different one.
       setPair(next);
       if (next) {
-        setAnchor((a) =>
-          a && a.id === next[0].id
-            ? a
-            : // Whether it ALREADY had a number when its turn began. The
-              // rotation rule needs the transition, not the state — see below.
-              { id: next[0].id, held: 0, wasPlaced: isPlaced(next[0]) },
-        );
+        setAnchor((a) => (a && a.id === next[0].id ? a : { id: next[0].id, held: 0, hold: holdFor(next[0]) }));
       }
     },
     [options.scope, options.includeConfirmed],
@@ -234,7 +274,21 @@ export default function ShuffleDuel({
       const fitted = await beliefsWhenIdle(films, loaded);
       if (!alive) return;
       setBeliefs(fitted);
-      serve(films, loaded, fitted);
+      // The batch, if this is a bounded run: the least-settled films with no
+      // number yet, which is the same ordering `nextPair` uses to choose an
+      // anchor. Picked here rather than in the setup sheet because it needs the
+      // fitted beliefs, and the sheet has none.
+      let chosen: string[] | null = null;
+      if (options.batch) {
+        chosen = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed })
+          .filter((f) => !isPlaced(f))
+          .map((f) => ({ f, spread: fitted.get(f.id)?.spread ?? PRIOR_SPREAD }))
+          .sort((x, y) => y.spread - x.spread || (x.f.id < y.f.id ? -1 : 1))
+          .slice(0, options.batch)
+          .map((c) => c.f.id);
+        setBatch(chosen);
+      }
+      serve(films, loaded, fitted, chosen?.[0]);
       // After `serve`, never before: from here a null pair is a real answer
       // about the pool rather than a screen that has not loaded.
       setOpened(true);
@@ -460,29 +514,48 @@ export default function ShuffleDuel({
     // the placement this very duel may have just earned it.
     const heldFilm = anchor ? placed.find((f) => f.id === anchor.id) : undefined;
     const heldNow = anchor ? anchor.held + 1 : 0;
-    // Retire on the TRANSITION into being placed, not on being placed.
+    // Retire ONLY when the promised turn is used up.
     //
-    // The first version tested `isPlaced(heldFilm)`, which is true from the
-    // very first duel for a film that already had a number — and soft-locked
-    // films stay in the pool precisely so the model can improve its own earlier
-    // guess. So every one of them was retired after a single duel and the
-    // second stage never got the anchor's help at all. Caught on screen: a
-    // soft-locked film held for one duel while its neighbours held five.
-    const justPlaced = !!heldFilm && !anchor?.wasPlaced && isPlaced(heldFilm);
-    const retire = !anchor || !heldFilm || justPlaced || heldNow >= ANCHOR_HOLD;
+    // ── Two goes at this, and why the second one is right ────────────────
+    //
+    // First it retired on `isPlaced`, which is true from the first duel for a
+    // film that already had a number — so soft-locked films were dropped after
+    // one duel and the second stage never got the anchor's help at all.
+    //
+    // Then it retired on the TRANSITION into being placed, which fixed that and
+    // left a subtler lie: `placeSettled` has two routes, the duel count AND
+    // confidence. A film crossing on confidence early was retired while its
+    // pill still read "2 MORE". Reported as the lock disappearing before the
+    // counter reaches zero, which is exactly what it did.
+    //
+    // So the turn is decided ONCE, when the anchor starts, and nothing else
+    // ends it. The pill shows what is left of that turn, which makes it true by
+    // construction rather than by two conditions agreeing. Placement still
+    // happens whenever the evidence says so — it simply no longer cuts a film's
+    // turn short, and a film that earns its number early spends its remaining
+    // duels being refined, which is what stage two is for.
+    const retire = !anchor || !heldFilm || heldNow >= anchor.hold;
     setAnchor(anchor && !retire ? { ...anchor, held: heldNow } : null);
-    serve(placed, nextLog, nextBeliefs, retire ? undefined : anchor?.id);
+    // On a batch run the next anchor comes from the batch, so the run is
+    // actually finishable. Without this the matchmaker would wander off to
+    // whichever film in the whole scope it knew least about and the countdown
+    // would sit still while you played.
+    const nextAnchor = retire
+      ? batch?.find((id) => !isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))
+      : anchor?.id;
+    serve(placed, nextLog, nextBeliefs, nextAnchor);
 
     // Every twelfth answer, re-derive the whole model from the whole log. See
     // REFIT_EVERY: without this the session learns nothing it can act on until
     // the NEXT session opens, which is where the 173-films-in-one-tap came from.
     if (nextLog.length % REFIT_EVERY === 0) refit(nextLog, placed);
 
-    // A bounded session ends itself. `count` is the state BEFORE this answer,
-    // so the target is met when the increment reaches it.
-    if (options.target && count + 1 >= options.target) {
-      // Flush first: the pending judgement is written on a timer that the
-      // session ending would otherwise outlive.
+    // A batch run ends when every film in the batch has its number. `placed`
+    // is post-answer, so this sees the placement this duel may have just
+    // earned — the run finishes on the tap that finishes it, not one later.
+    if (batch && batch.every((id) => isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))) {
+      // Flush first: the pending judgement is written on a timer that the run
+      // ending would otherwise outlive.
       flush();
       setEnded(true);
     }
@@ -536,6 +609,10 @@ export default function ShuffleDuel({
   // numerator climbs, which is what makes a bar mean something.
   const pool = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed });
   const workedOut = pool.filter(isPlaced).length;
+  // What is left of the batch. Films that had their number when the run began
+  // are not in it, so this only ever counts work this sitting actually did.
+  const placedIds = new Set(pool.filter(isPlaced).map((f) => f.id));
+  const batchLeft = batch ? batch.filter((id) => !placedIds.has(id)).length : 0;
 
   if (ended) {
     // Best of what this run touched, so the result is what YOU just worked on
@@ -560,7 +637,11 @@ export default function ShuffleDuel({
         ]}
         onList={onList}
         onAgain={onExit}
-        againLabel="Keep shuffling"
+        // A finished batch is the one moment somebody is definitely up for more.
+        // On an open-ended run there is no size to offer, so it stays a button.
+        againLabel={batch ? "Go again" : "Keep shuffling"}
+        againSizes={batch ? BATCH_SIZES : undefined}
+        onAgainSize={batch ? onAgainSize : undefined}
       />
     );
   }
@@ -603,18 +684,10 @@ export default function ShuffleDuel({
   // library says what they currently look like.
   const [servedA, servedB] = pair;
   const a = films.find((f) => f.id === servedA.id) ?? servedA;
-  // How many more duels this anchor has, whichever bound bites first.
-  //
-  // Unplaced: the placement gate, because that is what actually retires it.
-  // Already placed and being refined: the hold cap, because the gate is behind
-  // it. Never below 1 — a pill reading "0 MORE" over a duel you are being asked
-  // to answer is a contradiction.
-  const anchorLeft = Math.max(
-    1,
-    isPlaced(a)
-      ? ANCHOR_HOLD - (anchor?.held ?? 0)
-      : Math.min(PLACE_DUELS - (a.duels ?? 0), ANCHOR_HOLD - (anchor?.held ?? 0)),
-  );
+  // What is left of the turn this anchor was promised. Read from the anchor
+  // rather than recomputed, so the pill cannot disagree with the rule that
+  // actually retires it — the two used to be computed separately and drifted.
+  const anchorLeft = Math.max(1, (anchor?.hold ?? 1) - (anchor?.held ?? 0));
   const b = films.find((f) => f.id === servedB.id) ?? servedB;
 
   // A person run is a shuffle underneath, but labelling it FAST SHUFFLE hides
@@ -632,11 +705,11 @@ export default function ShuffleDuel({
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
         run={{
-          // With a target the bar is the SESSION, which fills as you play.
-          // Without one it is the pool, which on a big library barely moves —
-          // honest, but not something to watch. See N11 in the register.
-          done: options.target ? Math.min(count, options.target) : workedOut,
-          total: options.target ?? pool.length,
+          // With a batch the bar is the BATCH, which fills as films get their
+          // numbers. Without one it is the pool, which on a big library barely
+          // moves — honest, but not something to watch. See N11.
+          done: batch ? batch.length - batchLeft : workedOut,
+          total: batch ? batch.length : pool.length,
         }}
         // The countdown below already says how many are left, so the default
         // opening line would print the same figure twice. This says what to do
@@ -660,11 +733,8 @@ export default function ShuffleDuel({
         className="flex min-h-0 flex-shrink-[12] items-center justify-center overflow-hidden"
         style={{ height: 110, minHeight: 56 }}
       >
-        {options.target ? (
-          <Countdown
-            n={Math.max(0, options.target - count)}
-            label={options.target - count === 1 ? "duel left" : "duels left"}
-          />
+        {batch ? (
+          <Countdown n={batchLeft} label={batchLeft === 1 ? "film to go" : "films to go"} />
         ) : (
           <Countdown
             n={Math.max(0, pool.length - workedOut)}

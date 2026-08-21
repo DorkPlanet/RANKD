@@ -237,3 +237,40 @@ export function paceSeconds(log: readonly Judgement[]): number {
 /** How many duels fit in a session of this many minutes, at this person's pace. */
 export const duelsInMinutes = (minutes: number, paceS: number): number =>
   Math.max(1, Math.round((minutes * 60) / paceS));
+
+/**
+ * How long a batch of this many films should take, in seconds.
+ *
+ * Derived, not invented — that distinction is the whole reason `paceSeconds`
+ * exists.
+ *
+ * ── One duel per batch film, not two ───────────────────────────────────────
+ *
+ * The first version halved this, reasoning that a duel involves two films and
+ * therefore fills two of the `PLACE_DUELS` slots a placement needs. That is
+ * true of duels in general and false of THIS run: the batch supplies the
+ * ANCHOR and the opponent comes from the whole scope, so all but a few duels
+ * advance exactly one batch film.
+ *
+ * Measured in a browser rather than argued: 70 duels placed 16 of a 25-film
+ * batch, which is 4.4 duels per film against a `PLACE_DUELS` of 5. Some batch
+ * films do get carried along as opponents or cross on confidence, which is why
+ * it is a little under 5 rather than exactly 5 — so this slightly overstates
+ * the work, which is the right direction to be wrong in for a number whose job
+ * is stopping somebody overcommitting.
+ *
+ * `duelsPerFilm` is passed rather than imported to keep this module free of
+ * `shuffle.ts` — `progress.ts` is imported by the duel path and a cycle between
+ * the two would be a genuine nuisance.
+ */
+export const etaSeconds = (films: number, paceS: number, duelsPerFilm: number): number =>
+  films * duelsPerFilm * paceS;
+
+/** That duration as something a person would say: "about 15 min". */
+export function etaLabel(seconds: number): string {
+  if (seconds < 90) return "under a minute";
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `about ${mins} min`;
+  const hours = seconds / 3600;
+  return hours < 1.75 ? "about an hour" : `about ${Math.round(hours)} hours`;
+}

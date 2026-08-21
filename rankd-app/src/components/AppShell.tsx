@@ -36,7 +36,7 @@ import SignInGate from "./SignInGate";
 import { fetchSession, hasSignedInBefore } from "@/lib/account";
 import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
-import { deltaOf, openVisit, snapshotOf, type VisitDelta } from "@/lib/visit";
+import { openVisit, snapshotOf } from "@/lib/visit";
 import { subjectFromPerson } from "@/lib/subject";
 import type { RunRequest } from "@/lib/curated";
 import type { Person } from "@/lib/people";
@@ -179,10 +179,12 @@ export default function AppShell() {
   // together, and nothing but discipline kept them consistent. See
   // `lib/curated.ts`.
   const [runRequest, setRunRequest] = useState<RunRequest | null>(null);
-  // What the last sitting amounted to. Read once, here, for the reason below.
-  const [recap, setRecap] = useState<VisitDelta | null>(null);
-  // The taste shape as this sitting began, for the chart's before/after. Taken
-  // from the same snapshot the recap is, so both describe the same moment.
+  // The taste shape as this sitting began, for the chart's before/after.
+  //
+  // This is now the ONLY reason the visit snapshot exists. "Last time" was cut
+  // on 21 Aug and the obvious follow-up — delete `lib/visit.ts`, which nothing
+  // else imported — would have silently taken the chart's "where you started"
+  // outline with it. The module stays; only the recap half of it went.
   const [wasShape, setWasShape] = useState<Record<string, number> | undefined>(undefined);
   // ── The splash, in two flags ───────────────────────────────────────────────
   //
@@ -281,20 +283,14 @@ export default function AppShell() {
     // `openVisit` rolls the last snapshot into `prev` and takes a new one. That
     // has to happen when the APP opens, once, before any duel of this sitting
     // has been fought — otherwise the "current" snapshot would already include
-    // work the recap is meant to be describing next time.
+    // the work the before/after is meant to be showing.
     //
     // Doing it on `ProfileScreen` mount instead would look equivalent and is
-    // not: once the profile becomes the landing screen (roadmap #2) the feature
-    // would advance its own marker on arrival and erase its own subject. It is
-    // also a no-op after the first call in a tab, so this stays true however
-    // many times you come back to the screen.
-    //
-    // The counts are taken from the library as loaded. The credits sweep can
-    // still earn a badge a few seconds later, which lands in the NEXT recap —
-    // correct, since that badge was earned during this sitting.
+    // not: the profile would advance its own marker on arrival and erase its
+    // own subject. It is also a no-op after the first call in a tab, so this
+    // stays true however many times you come back to the screen.
     void loadLog().then((log) => {
       const record = openVisit(snapshotOf(films, log.length));
-      setRecap(record ? deltaOf(record) : null);
       setWasShape(record?.current.shape);
     });
   }, []);
@@ -812,7 +808,6 @@ export default function AppShell() {
         <ProfileScreen
           films={library}
           profile={profile}
-          recap={recap}
           wasShape={wasShape}
           onProfile={changeProfile}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}

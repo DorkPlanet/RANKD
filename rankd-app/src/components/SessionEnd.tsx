@@ -27,6 +27,8 @@ export function SessionEnd({
   onList,
   onAgain,
   againLabel,
+  againSizes,
+  onAgainSize,
   extra,
 }: {
   title: string;
@@ -38,6 +40,16 @@ export function SessionEnd({
   onList: () => void;
   onAgain: () => void;
   againLabel: string;
+  /**
+   * Sizes to start another run at, if this mode has them.
+   *
+   * A finished batch is the one moment somebody is definitely willing to do
+   * more — they just finished — and the old screen answered that with a single
+   * button back to a setup sheet. Offering the sizes here means going again is
+   * one tap rather than three.
+   */
+  againSizes?: readonly number[];
+  onAgainSize?: (n: number) => void;
   /**
    * What to do NEXT, specific to the run that just ended.
    *
@@ -109,12 +121,31 @@ export function SessionEnd({
         >
           See your list
         </button>
-        <button
-          onClick={onAgain}
-          className="w-full rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-dim active:scale-95"
-        >
-          {againLabel}
-        </button>
+        {againSizes && onAgainSize ? (
+          <>
+            <div className="mt-1 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+              {againLabel}
+            </div>
+            <div className="flex gap-2">
+              {againSizes.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => onAgainSize(size)}
+                  className="flex-1 rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-dim active:scale-95"
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <button
+            onClick={onAgain}
+            className="w-full rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-dim active:scale-95"
+          >
+            {againLabel}
+          </button>
+        )}
       </div>
     </div>
   );
