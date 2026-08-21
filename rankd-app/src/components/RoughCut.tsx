@@ -38,6 +38,14 @@ import { PosterArt } from "./PosterArt";
 import { floatStyle, flyPosterTo } from "./PosterCard";
 
 /** How far a pointer must travel before it counts as a flick rather than a tap. */
+/**
+ * Movement under this is a tap, not a drag.
+ *
+ * Matches the 8px `cancelHold` uses above, so one number decides "did the
+ * thumb move" everywhere on this card rather than two that could drift apart.
+ */
+const TAP_PX = 8;
+
 const FLICK_PX = 44;
 /**
  * How long the card is left flying before the queue advances.
@@ -567,7 +575,29 @@ export default function RoughCut({
             place(dy < 0 ? "top" : "bottom");
             return;
           }
-          // Short of the threshold, so it springs back rather than placing.
+          // ── And a tap is Middle ─────────────────────────────────────────
+          //
+          // Two of the three piles had a gesture and the third was reachable
+          // only by aiming at its button, so the pile you reach for when you
+          // have no strong feeling was the one that cost the most effort.
+          //
+          // A tap is the right gesture for it precisely because it carries the
+          // least intent: up and down are claims, and this is the absence of
+          // one. It was also free — a release under the threshold did nothing
+          // but spring back.
+          //
+          // Not a horizontal flick, which would have been the obvious third
+          // axis: this card sets `touchAction: "pan-x"`, so sideways belongs to
+          // the browser and a gesture there would fight the platform.
+          //
+          // Safe to make a tap commit because `undo` exists and sits right
+          // there — the same protection the two flicks already rely on.
+          if (Math.abs(dy) <= TAP_PX && Math.abs(e.clientX - from.x) <= TAP_PX) {
+            place("middle");
+            return;
+          }
+          // Between a tap and a flick: deliberate movement that did not commit,
+          // so it springs back rather than guessing which pile was meant.
           setDrag(null);
           setAimed(null);
         }}

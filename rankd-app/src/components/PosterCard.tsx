@@ -272,8 +272,11 @@ export function PosterCard({
    */
   pairId?: string;
   onPick: (id: string) => void;
-  onFlick: (id: string) => void;
-  onSink: (id: string) => void;
+  /** Send it to the top of the pile. Absent in a mode with no pile — see the
+   *  throw handler for why that is not the same as a no-op. */
+  onFlick?: (id: string) => void;
+  /** Send it to the bottom. Absent for the same reason. */
+  onSink?: (id: string) => void;
   onInfo: (film: Film) => void;
 }) {
   const pair = pairId ?? film.id;
@@ -325,9 +328,22 @@ export function PosterCard({
     const dx = e.clientX - s.x;
     if (Math.abs(dy) > 45 && Math.abs(dy) > Math.abs(dx)) {
       // vertical throw → up sends it to the top of the pile, down to the bottom
+      //
+      // ── Only when there is somewhere for it to GO ────────────────────────
+      //
+      // Fast Shuffle passes no handler: it has no pile, so there is no top and
+      // no bottom to throw a film to. It used to pass `noop`, and the effect
+      // was worse than ignoring the gesture — the poster played the full
+      // fly-away animation and then nothing happened, so the app appeared to
+      // accept a throw and then quietly refused it.
+      //
+      // Springing back says "not here" honestly. Falling through to `onPick`
+      // was the other option and is worse: a deliberate throw is not a vote,
+      // and turning one into a pick would answer a duel the user did not.
+      const land = dy < 0 ? onFlick : onSink;
+      if (!land) return;
       const img = e.currentTarget.querySelector("img");
       if (img) flyPosterAway(img, film.poster ?? "", dx, dy, tilt);
-      const land = dy < 0 ? onFlick : onSink;
       setTimeout(() => land(film.id), 170);
     } else {
       onPick(film.id); // tap = pick winner

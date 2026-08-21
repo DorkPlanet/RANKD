@@ -148,9 +148,13 @@ const LIST_STEPS: readonly TourStep[] = [
  * a live session, and Rough Cut runs without one. So this is its own tour with
  * its own trigger, on the same deferred path — see `onRoughCutBegan`.
  *
- * Middle deliberately gets its own step. Up and down are one gesture with two
- * directions and read as a pair; the middle pile has no gesture at all, and a
- * reader who has just been taught two flicks will look for a third.
+ * Middle used to need its own sentence because it had no gesture — up and down
+ * are one gesture with two directions and read as a pair, and a reader who has
+ * just been taught two flicks looks for a third that was not there.
+ *
+ * It is there now: a tap on the CARD files it to the middle (register C8). So
+ * the step teaches three gestures rather than two and an exception, which is
+ * both shorter and the truth.
  */
 const ROUGHCUT_STEPS: readonly TourStep[] = [
   {
@@ -163,13 +167,13 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
     id: "rc-targets",
     target: "rc-targets",
     title: "Upper, middle or lower",
-    body: "Tap the pile this film belongs in. The count above it goes up.",
+    body: "Tap the pile this film belongs in. The count above it goes up. The poster takes gestures too, if you'd rather not aim.",
   },
   {
     id: "rc-flick",
     target: "rc-card",
     title: "Or flick it",
-    body: "Flick up for upper, down for lower. Drag a little first and the target you're aimed at lifts, so you can see where it'll land. Middle has no flick, tap it.",
+    body: "Flick up for upper, down for lower, or tap the poster for middle. Drag a little first and the target you're aimed at lifts, so you can see where it'll land.",
   },
   {
     id: "rc-hold",

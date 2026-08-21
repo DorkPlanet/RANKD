@@ -25,6 +25,7 @@ are kept current — see "Changed since the snapshot" below.
 | 21 Aug | Film card | "Fast Shuffle placed it at #42" → **"Shuffled at #42"**, in the same blue as the list |
 | 21 Aug | Profile | **"Last time" removed.** Panels swapped so **Your results** is what you land on. Sections reordered: Your taste → Your shape → What your list says → Your library → Your tiers → Odds and ends → Your world |
 | 21 Aug | Session end | Finishing a batch offers the sizes again rather than one "Keep shuffling" button |
+| 21 Aug | Rough Cut tour | "Middle has no flick, tap it" → **"Flick up for upper, down for lower, or tap the poster for middle."** Middle now has a gesture, so the step teaches three rather than two and an exception. The targets step adds "The poster takes gestures too, if you'd rather not aim." |
 | 21 Aug | Profile, Who you rate highest | **New: CHANGE ›** on the section, opening a sheet titled **"Who goes up top"** — "Pick up to 6. Anyone you don't pick is still worked out from your ratings." |
 | 21 Aug | Profile | The **stats band moved above the bio**, so the first thing under your name is FILMS · RANKED · DUELS · BADGES rather than a paragraph. The bio is its own tap target below it; both still open the same editor |
 | 21 Aug | Taste chart | Legend **YOURS/RANKD → LOCKED/SHUFFLED**, and **YOUR LIST** when there are too few locks to split. New caption below ten locks: "Lock ten films and this splits into what you settled against what Rankd did." |

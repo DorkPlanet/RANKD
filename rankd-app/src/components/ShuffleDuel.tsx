@@ -858,11 +858,13 @@ export default function ShuffleDuel({
           side="left"
           pairId={a.id}
           onPick={() => answer("a")}
-          onFlick={noop}
-          onSink={noop}
           onInfo={onInfo}
         />
-        <PosterCard film={b} badge="" side="right" pairId={a.id} onPick={() => answer("b")} onFlick={noop} onSink={noop} onInfo={onInfo} />
+        {/* No `onFlick`/`onSink`. This mode has no pile, so a throw has
+            nowhere to land — and passing a no-op made the card animate the
+            throw and then refuse it, which reads as the app dropping an
+            answer. Without the handlers the card springs back instead. */}
+        <PosterCard film={b} badge="" side="right" pairId={a.id} onPick={() => answer("b")} onInfo={onInfo} />
       </div>
       {/* Nearly all the slack above, matching the climb: the controls sit low,
           near the thumb that reaches for them, rather than floating mid-gap. */}
@@ -900,7 +902,6 @@ export default function ShuffleDuel({
   );
 }
 
-const noop = () => {};
 
 // The countdown moved to Countdown.tsx when Rough Cut needed the same thing.
 // The run readout lives in RunStatus.tsx, shared with the climb.
