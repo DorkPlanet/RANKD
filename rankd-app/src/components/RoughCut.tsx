@@ -219,6 +219,31 @@ export default function RoughCut({
   const filed: Record<Bucket, number> = { top: 0, middle: 0, bottom: 0 };
   for (const b of choices.values()) filed[b]++;
 
+  // ── The last two films filed into each pile ─────────────────────────────
+  //
+  // Rough Cut's real weakness, and the one the mode is otherwise very good at
+  // hiding: you place each film BLIND. There is no opponent, so "is this upper
+  // or middle" has to be answered against a standard you are holding in your
+  // head — and by film forty that standard has drifted from where it was at
+  // film four, with nothing on screen to catch it.
+  //
+  // The rejected fix was showing four films at once and multi-selecting. That
+  // costs the one-tap-per-film economics the whole mode is built on and turns
+  // it into a small sort, which is King of the Hill with extra steps.
+  //
+  // This is the cheap version: the last thing you called Upper, sitting above
+  // the Upper button. Not a rule, just a reminder of what you have been doing —
+  // which is exactly what a drifting standard needs and all it needs.
+  //
+  // Walked BACKWARDS from the current position so "most recent" is honest: the
+  // pool is the deal order, so a later index is a later decision.
+  const recent: Record<Bucket, Film[]> = { top: [], middle: [], bottom: [] };
+  for (let i = at - 1; i >= 0 && recent.top.length + recent.middle.length + recent.bottom.length < 6; i--) {
+    const f = pool[i];
+    const b = f && choices.get(f.id);
+    if (b && recent[b].length < 2) recent[b].push(f);
+  }
+
   // Applied against the CURRENT library rather than the one captured at mount,
   // so anything the credits sweep filled in while you were placing survives.
   const commit = (picked: Map<string, Bucket>) => {
@@ -725,12 +750,34 @@ export default function RoughCut({
           since the numbers are already in `choices`. */}
       <div className="mx-auto flex w-full max-w-[330px] flex-shrink-0 items-end px-5">
         {(["bottom", "middle", "top"] as const).map((b) => (
-          <span
-            key={b}
-            className="flex-1 text-center text-label font-extrabold tabular-nums"
-            style={{ color: filed[b] > 0 ? "var(--gold)" : "var(--dim)", opacity: filed[b] > 0 ? 0.85 : 0.4 }}
-          >
-            {filed[b]}
+          <span key={b} className="flex flex-1 flex-col items-center gap-1">
+            {/* Inside the row that already held the count, rather than above
+                it. This screen divides its height by weight and a new row would
+                take that from the poster — which is the one thing here you
+                actually have to look at. */}
+            <span className="flex h-[30px] items-end gap-[3px]">
+              {recent[b].map((f, i) =>
+                f.poster ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={f.id}
+                    src={f.poster}
+                    alt=""
+                    className="rounded-[2px] object-cover"
+                    // The most recent is the taller and brighter of the two. A
+                    // pair at identical weight reads as a list; this reads as
+                    // "the last one, and the one before it".
+                    style={{ height: i === 0 ? 30 : 24, width: i === 0 ? 20 : 16, opacity: i === 0 ? 0.9 : 0.5 }}
+                  />
+                ) : null,
+              )}
+            </span>
+            <span
+              className="text-center text-label font-extrabold tabular-nums"
+              style={{ color: filed[b] > 0 ? "var(--gold)" : "var(--dim)", opacity: filed[b] > 0 ? 0.85 : 0.4 }}
+            >
+              {filed[b]}
+            </span>
           </span>
         ))}
       </div>
