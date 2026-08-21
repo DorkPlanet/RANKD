@@ -415,18 +415,11 @@ export default function ProfileScreen({
                 tap; the name inherits it. */}
             <button
               onClick={() => setEditing(true)}
-              aria-label="Edit your name and bio"
+              aria-label="Edit your name"
               className="mt-3 block max-w-full active:opacity-70"
             >
               <span className="block truncate font-display text-[26px] leading-none tracking-wide text-gold">
                 {profile.name}
-              </span>
-              {/* `whitespace-pre-line` so the line breaks somebody typed
-                  survive to the page. Without it a bio written as three lines
-                  came back as one paragraph and the formatting looked broken
-                  rather than absent. */}
-              <span className="mt-1.5 block max-w-[280px] whitespace-pre-line font-serif text-sub italic leading-snug text-dim">
-                {profile.bio || "Add a line about your taste"}
               </span>
             </button>
           </div>
@@ -446,8 +439,21 @@ export default function ProfileScreen({
               A rounded panel round four numbers made them look like a widget
               embedded in the page rather than part of it, and it was the last
               bordered thing left up here after the rest of the de-boxing. The
-              app says this with a hairline everywhere else. */}
-          <div className="mt-5 border-y border-border py-3.5">
+              app says this with a hairline everywhere else.
+
+              ── Above the bio, not below it ─────────────────────────────────
+              The bio used to sit directly under the name and the counters came
+              after it, which is the order every social profile uses — picture,
+              name, a paragraph about yourself.
+
+              DUELS and RANKED are the two words on this screen that no other
+              film app can print, because no other film app ranks. Putting them
+              first means the thing directly under your name is the thing only
+              this app does, rather than a paragraph that could belong anywhere.
+              A profile that reads as somebody's ranking rather than somebody's
+              page is the whole differentiation, and it costs nothing to say so
+              in the running order. */}
+          <div className="mt-4 border-y border-border py-3.5">
             {/* Even columns rather than a left-packed row.
                 Four numbers of different widths on a `gap` read as ragged, and
                 the block sits under a centred name and a centred picture — so
@@ -465,6 +471,23 @@ export default function ProfileScreen({
                 like it was selling the game back to you. The Duels counter
                 above is still a link into it for anyone who wants one. */}
           </div>
+
+          {/* The bio, now BELOW the band rather than between the name and it.
+              Its own control, since it no longer shares a tap target with the
+              name — both open the same editor, which is the point.
+
+              `whitespace-pre-line` so the line breaks somebody typed survive to
+              the page. Without it a bio written as three lines came back as one
+              paragraph and the formatting looked broken rather than absent. */}
+          <button
+            onClick={() => setEditing(true)}
+            aria-label="Edit your bio"
+            className="mt-3.5 block w-full active:opacity-70"
+          >
+            <span className="mx-auto block max-w-[280px] whitespace-pre-line text-center font-serif text-sub italic leading-snug text-dim">
+              {profile.bio || "Add a line about your taste"}
+            </span>
+          </button>
 
 
           {/* ── Three pages, not one scroll ──────────────────────────────────

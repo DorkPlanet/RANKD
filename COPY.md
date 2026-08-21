@@ -25,6 +25,7 @@ are kept current — see "Changed since the snapshot" below.
 | 21 Aug | Film card | "Fast Shuffle placed it at #42" → **"Shuffled at #42"**, in the same blue as the list |
 | 21 Aug | Profile | **"Last time" removed.** Panels swapped so **Your results** is what you land on. Sections reordered: Your taste → Your shape → What your list says → Your library → Your tiers → Odds and ends → Your world |
 | 21 Aug | Session end | Finishing a batch offers the sizes again rather than one "Keep shuffling" button |
+| 21 Aug | Profile | The **stats band moved above the bio**, so the first thing under your name is FILMS · RANKED · DUELS · BADGES rather than a paragraph. The bio is its own tap target below it; both still open the same editor |
 | 21 Aug | Taste chart | Legend **YOURS/RANKD → LOCKED/SHUFFLED**, and **YOUR LIST** when there are too few locks to split. New caption below ten locks: "Lock ten films and this splits into what you settled against what Rankd did." |
 | 21 Aug | List band | The user's NAME is gone from the top of the list. The total joined the three states as a fourth column: **865 FILMS · 21 LOCKED · 77 SHUFFLED · 767 UN-RNKD** |
 | 21 Aug | Film card | **New: "Refine this film"**, then "HOW MANY DUELS · 10 / 25 / 50". On a locked film it adds "You locked this one, so the run won't move it. The duels still count." — which flips to "The run can move it." when the toggle is on |
