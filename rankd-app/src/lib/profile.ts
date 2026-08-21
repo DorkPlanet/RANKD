@@ -110,13 +110,23 @@ export interface PersonStat {
 const MIN_FILMS = 2;
 
 export interface TopThings {
-  director?: PersonStat;
+  /**
+   * Best-rated directors, most first.
+   *
+   * Three, not one. A single name is a fact rather than a taste — everybody has
+   * a top-rated director and at the two-film floor it is often a fluke. Three is
+   * enough to see a pattern in, and it fixes a layout problem at the same time:
+   * one director beside four actors could never fill a two-up grid, so the top
+   * row held a name and a hole for everybody.
+   */
+  directors: PersonStat[];
   actors: PersonStat[];
   genre?: PersonStat;
   subgenre?: PersonStat;
   coverage: number;
 }
 
+const DIRECTOR_SLOTS = 3;
 const ACTOR_SLOTS = 4;
 
 export function topPeople(films: Film[]): TopThings {
@@ -148,7 +158,7 @@ export function topPeople(films: Film[]): TopThings {
       .sort((a, b) => b.avg - a.avg || b.count - a.count);
 
   return {
-    director: rank(directors)[0],
+    directors: rank(directors).slice(0, DIRECTOR_SLOTS),
     actors: rank(actors).slice(0, ACTOR_SLOTS),
     genre: rank(genres)[0],
     // A keyword on more than a fifth of the library is a label, not a taste.
@@ -287,11 +297,12 @@ export function autoCollections(ranked: Film[], print: Fingerprint, top: TopThin
       ranked.filter((f) => f.keywords?.includes(top.subgenre!.name)),
     );
   }
-  if (top.director) {
+  const bestDirector = top.directors[0];
+  if (bestDirector) {
     take(
-      top.director.name,
+      bestDirector.name,
       "Their whole filmography in your library.",
-      ranked.filter((f) => f.director === top.director!.name),
+      ranked.filter((f) => f.director === bestDirector.name),
     );
   }
   if (print.decade) {

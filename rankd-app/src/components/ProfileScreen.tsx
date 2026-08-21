@@ -687,41 +687,54 @@ export default function ProfileScreen({
             they actually are: a thing with a name and a face on it that you
             would show somebody, which is what everything else on this panel
             is too. Renamed to cover both halves of that. */}
-        {(people.director || people.actors.length > 0) && (
+        {(people.directors.length > 0 || people.actors.length > 0) && (
           <Section title="Who you rate highest" first>
-            {people.director && (
+            {/* Two groups, each labelled once.
+                The role used to sit on every row, which meant reading the word
+                ACTOR four times to learn one thing. A heading says it once and
+                the rows underneath are free to be names. */}
+            {people.directors.length > 0 && (
               <>
-                <PersonCard
-                  role="Director"
-                  p={people.director}
-                  onClick={() =>
-                    setOpen({
-                      title: people.director!.name,
-                      blurb: "Every film of theirs in your library, your favourite first.",
-                      films: filmsOf(people.director!.name, true),
-                    })
-                  }
-                />
+                <div className="mb-1 text-[9px] font-extrabold tracking-[0.16em] text-dim">
+                  DIRECTORS
+                </div>
+                <div className="mb-4">
+                  {people.directors.map((d) => (
+                    <PersonCard
+                      key={d.name}
+                      p={d}
+                      onClick={() =>
+                        setOpen({
+                          title: d.name,
+                          blurb: "Every film of theirs in your library, your favourite first.",
+                          films: filmsOf(d.name, true),
+                        })
+                      }
+                    />
+                  ))}
+                </div>
               </>
             )}
-            {/* Four, not one — a single actor says almost nothing about taste,
-                and the fourth name is usually the interesting one. */}
-            <div>
-              {people.actors.map((a) => (
-                <PersonCard
-                  key={a.name}
-                  role="Actor"
-                  p={a}
-                  onClick={() =>
-                    setOpen({
-                      title: a.name,
-                      blurb: "Every film of theirs in your library, your favourite first.",
-                      films: filmsOf(a.name, false),
-                    })
-                  }
-                />
-              ))}
-            </div>
+            {people.actors.length > 0 && (
+              <>
+                <div className="mb-1 text-[9px] font-extrabold tracking-[0.16em] text-dim">ACTORS</div>
+                <div>
+                  {people.actors.map((a) => (
+                    <PersonCard
+                      key={a.name}
+                      p={a}
+                      onClick={() =>
+                        setOpen({
+                          title: a.name,
+                          blurb: "Every film of theirs in your library, your favourite first.",
+                          films: filmsOf(a.name, false),
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </Section>
         )}
         </div>
@@ -775,56 +788,41 @@ export default function ProfileScreen({
           </section>
         )}
 
-        {/* Rankings you made and kept.
-            `saveList` has written these since the share cards landed and nothing
-            ever read them back, so a ranking you sat through the duels for could
-            be saved and never seen again. Pinned ones lead — that is what
-            pinning is — and the rest follow, so this is both the shelf and the
-            way to see everything at once. */}
-        {/* ── What the list already says ──────────────────────────────────
-            The app's whole output was write-only from here. Every duel feeds
-            the master order, and the only way to LOOK at that order as a thing
-            — let alone share it — was to finish a King of the Hill run and
-            catch the card on the summary screen before dismissing it. Miss it
-            and your top ten existed nowhere you could point at.
+        {/* ── The things you can actually hand somebody ───────────────────
+            Two shelves became one list.
 
-            These sit ABOVE the saved shelf on purpose. They are the answer the
-            app is actually building; a saved ranking is a side quest off it.
+            "Straight from your list" and "Your rankings" were separate sections
+            scrolling sideways in parallel, which made them look like different
+            kinds of object. They are not. Both are an ordered set of films with
+            a name, both open a sheet, and both end at the same three card
+            designs — the only difference is whether the app derived the order or
+            you sat through the duels for it, and each row's eyebrow already says
+            which.
 
-            Nothing here can be saved or pinned, and the sheet says so. A frozen
-            copy of a live view starts lying the moment you duel again. */}
-        {live.length > 0 && (
-          <section className="mt-5">
-            <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
-              STRAIGHT FROM YOUR LIST
-            </div>
-            <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-6 pb-1">
+            Rows rather than tiles, for the reason the whole page is being
+            de-boxed: a 172px poster tile is a container the list screen does not
+            have, and four shelves of them was most of why this page read as
+            belonging to a different app. A row with a thumbnail is exactly what
+            the list screen already is.
+
+            Vertical, so the count is visible. A shelf hides how many there are
+            behind the right-hand edge, which for the one part of the app that
+            makes something is precisely the wrong thing to hide. */}
+        {(live.length > 0 || savedLists.length > 0) && (
+          <div className="px-6">
+            <Section title="Cards you can make">
               {live.map(({ subject, films: top }) => (
-                <MiniCard
+                <ExportRow
                   key={subjectKey(subject)}
                   film={top[0]}
                   eyebrow={subjectEyebrow(subject).toUpperCase()}
                   title={subjectTitle(subject)}
                   sub={`${top.length} film${top.length === 1 ? "" : "s"}`}
                   onClick={() => setOpenLive(subject)}
-                  // No card shortcut. The tile is already one tap from the
-                  // designs, and the list underneath is the part a reader has
-                  // never been shown — skipping it would hide the new thing to
-                  // save a tap on the old one.
                 />
               ))}
-            </div>
-          </section>
-        )}
-
-        {savedLists.length > 0 && (
-          <section className="mt-5">
-            <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">
-              YOUR RANKINGS
-            </div>
-            <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-6 pb-1">
               {shelf.map(({ list, top, pinned }) => (
-                <MiniCard
+                <ExportRow
                   key={list.id}
                   film={top}
                   eyebrow={pinned ? "PINNED" : (list.source ?? "RANKING").toUpperCase()}
@@ -836,7 +834,7 @@ export default function ProfileScreen({
                   }}
                   // Only where a card can actually be drawn. `SavedListSheet`
                   // uses the same two conditions — a subject to be OF, and two
-                  // films to compare — and offering the shortcut on a tile that
+                  // films to compare — and offering the shortcut on a row that
                   // cannot honour it would be worse than not offering it.
                   onCard={
                     subjectOf(list) && list.entries.length >= 2
@@ -848,8 +846,8 @@ export default function ProfileScreen({
                   }
                 />
               ))}
-            </div>
-          </section>
+            </Section>
+          </div>
         )}
 
         {/* ── THE TROPHY CASE ──────────────────────────────────────────────
@@ -881,17 +879,24 @@ export default function ProfileScreen({
                 {earned} of {badges.length} ›
               </span>
             </button>
-            <div className="no-scrollbar flex gap-2 overflow-x-auto px-6 pb-1">
+            {/* Wrapped, not scrolled, and unboxed.
+                A bordered pill each, on a shelf, meant the badge count was
+                hidden past the right edge of a row of little rounded boxes —
+                for the one section whose entire point is how many you have.
+                Wrapping shows all of them at once and the border comes off with
+                the rest of the boxes on this page. The star is enough of a mark
+                to tell one apart from body text. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-6">
               {badges
                 .filter((b) => b.got)
                 .map((b) => (
                   <button
                     key={b.id}
                     onClick={onTrophies}
-                    className="flex flex-shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 active:scale-[0.98]"
+                    className="flex items-center gap-1.5 text-[11px] active:opacity-70"
                   >
-                    <span className="text-[13px] text-gold">★</span>
-                    <span className="whitespace-nowrap text-[11px] text-text-hi">{b.name}</span>
+                    <span className="text-[11px] text-gold">★</span>
+                    <span className="whitespace-nowrap text-text">{b.name}</span>
                   </button>
                 ))}
             </div>
@@ -1291,6 +1296,64 @@ function Line({ label, value, note, gold }: { label: string; value: string; note
 }
 
 // Narrow enough that several sit side by side and you can tell there are more.
+/**
+ * One thing you can turn into a card, as a row.
+ *
+ * The list screen is poster, title, number — so this is poster, title, number,
+ * and the profile stops being the one page in the app with its own furniture.
+ * `MiniCard` survives for Collections, where a wide poster wash is doing real
+ * work because that shelf IS browsing artwork.
+ *
+ * The card shortcut is a control INSIDE the row, so the row is a div with a
+ * button in it rather than a button: a button inside a button is invalid markup
+ * and browsers resolve it by dropping one, usually the inner one.
+ */
+function ExportRow({
+  film,
+  eyebrow,
+  title,
+  sub,
+  onClick,
+  onCard,
+}: {
+  film?: Film;
+  eyebrow: string;
+  title: string;
+  sub?: string;
+  onClick: () => void;
+  onCard?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border/60 last:border-0">
+      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left active:opacity-70">
+        {film?.poster ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={film.poster} alt="" aria-hidden className="list-poster flex-shrink-0" />
+        ) : (
+          <span className="list-poster flex-shrink-0" style={{ background: "var(--border)" }} />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[8px] font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
+          <span className="mt-0.5 block truncate font-display text-[17px] leading-tight tracking-wide text-text-hi">
+            {title}
+          </span>
+          {sub && <span className="block text-[10px] text-dim">{sub}</span>}
+        </span>
+      </button>
+      {onCard && (
+        <button
+          onClick={onCard}
+          aria-label={`Make a card for ${title}`}
+          className="flex-shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-extrabold tracking-[0.12em] active:scale-95"
+          style={{ color: "var(--gold)", borderColor: "color-mix(in srgb, var(--gold) 40%, transparent)" }}
+        >
+          CARD
+        </button>
+      )}
+    </div>
+  );
+}
+
 function MiniCard({
   film,
   eyebrow,
@@ -1442,11 +1505,9 @@ function CollectionSheet({
  * be compared without reading — which is the only reason the number is there.
  */
 function PersonCard({
-  role,
   p,
   onClick,
 }: {
-  role: string;
   p: { name: string; count: number; avg: number };
   onClick: () => void;
 }) {
@@ -1455,9 +1516,6 @@ function PersonCard({
       onClick={onClick}
       className="flex w-full items-baseline gap-3 border-b border-border/60 py-2.5 text-left last:border-0 active:opacity-70"
     >
-      <span className="w-[52px] flex-shrink-0 text-[9px] font-extrabold tracking-[0.14em] text-dim">
-        {role.toUpperCase()}
-      </span>
       <span className="min-w-0 flex-1 truncate text-[15px] text-text-hi">{p.name}</span>
       <span className="flex-shrink-0 text-[11px] tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
       <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-[10px] tabular-nums text-dim">
