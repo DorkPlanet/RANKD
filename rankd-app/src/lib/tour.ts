@@ -99,13 +99,26 @@ const DUEL_STEPS: readonly TourStep[] = [
  * exists while a tier still has unplaced films in it, so a user who has finished
  * ranking simply does not see a step explaining a label that is not on their
  * screen. `resolveSteps` handles it, and the counter adjusts.
+ *
+ * ── Why "row" carries the founding idea and not "unrnkd" ──────────────────
+ *
+ * A rating is not a position is the idea this whole tour exists for, and it used
+ * to be stated ONLY in the UN-RNKD step — the one step that is allowed to
+ * disappear. So the reader who had finished ranking a tier, which is to say the
+ * reader furthest into the app, was the one who never had it explained at all.
+ * The test guarding it asserted it on the droppable step too, so it looked
+ * covered.
+ *
+ * It now lives in "row", which points at the list itself and can never be
+ * absent. UN-RNKD keeps its own step and elaborates: same idea, applied to the
+ * films that have no number yet.
  */
 const LIST_STEPS: readonly TourStep[] = [
   {
     id: "row",
     target: "list-row",
     title: "Your ranking, in order",
-    body: "One tier at a time, your favourite first. The numbers on the right show where each film sits across everything you've ranked. Tap any row to open it.",
+    body: "One tier at a time, your favourite first. The stars decide which tier a film is in. The number on the right is a different thing: the position it holds across everything you've ranked. Tap any row to open it.",
   },
   {
     id: "unrnkd",

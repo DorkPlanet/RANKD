@@ -58,7 +58,19 @@ describe("the tours", () => {
   });
 
   // The list tour exists for exactly one idea: a rating is not a position.
-  it("explains that rated is not ranked", () => {
+  //
+  // This used to assert it on the UN-RNKD step alone, which is precisely the
+  // step `resolveSteps` is allowed to drop — so the idea was guarded on the one
+  // surface where it could vanish, and the reader who had finished ranking a
+  // tier never met it. It is now stated on "row", which points at the list and
+  // can never be absent.
+  it("explains that rated is not ranked on a step that always fires", () => {
+    const row = TOURS.list.find((s) => s.id === "row")!;
+    expect(row.body).toMatch(/tier/i);
+    expect(row.body).toMatch(/position/i);
+  });
+
+  it("still elaborates on UN-RNKD when that divider is there", () => {
     const unrnkd = TOURS.list.find((s) => s.id === "unrnkd")!;
     expect(unrnkd.body).toMatch(/rated/i);
     expect(unrnkd.body).toMatch(/position/i);
@@ -97,5 +109,13 @@ describe("resolveSteps", () => {
   it("drops the UN-RNKD step for someone who has finished ranking", () => {
     const out = resolveSteps((t) => t !== "list-unrnkd", TOURS.list);
     expect(out.map((s) => s.id)).toEqual(["row", "jump"]);
+  });
+
+  // The regression that mattered: dropping a step must never drop the idea.
+  it("still teaches that a rating is not a position with no UN-RNKD divider", () => {
+    const out = resolveSteps((t) => t !== "list-unrnkd", TOURS.list);
+    const bodies = out.map((s) => s.body).join(" ");
+    expect(bodies).toMatch(/tier/i);
+    expect(bodies).toMatch(/position/i);
   });
 });

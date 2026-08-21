@@ -7,8 +7,20 @@ This is the working document for the voice pass (register item G1).
 for lines that sound wrong. A tick, a cross, a swear word, a rewrite. You do not have to fix
 anything here. Marking what grates is the job; deciding what replaces it is the next step.
 
-Line numbers are live as of 20 Aug 2026. **Some copy is asserted in tests** — check what
-breaks before changing a string.
+**Line numbers were accurate on 20 Aug 2026 and drift as soon as anything is edited.**
+Treat them as a hint, and find the string by searching for its text. The strings themselves
+are kept current — see "Changed since the snapshot" below.
+
+**Some copy is asserted in tests** — check what breaks before changing a string.
+
+### Changed since the snapshot
+
+| When | Where | What |
+|---|---|---|
+| 21 Aug | List header | **New:** the locked/believed legend. "**55** you settled · 105 Rankd placed, and can still move". The distinction had never been stated anywhere on a phone — it lived in a `title` attribute. Register N2 |
+| 21 Aug | Profile stats band | "Settled" → **"Ranked"** (line 285 below). The number counts hard AND soft locks, and "settled" is the app's word for the hard half alone, so the label was naming the wrong state |
+| 21 Aug | Profile tier chart | "The gold is how many you've settled" → "**The gold is how many have a position**", for the same reason |
+| 21 Aug | List tour, "row" step | Now carries "a rating is not a position" itself. It was stated only on the UN-RNKD step, which `resolveSteps` drops for anyone who has finished ranking a tier — so the reader furthest into the app never met the idea the tour exists for. Register N3 |
 
 ---
 
@@ -374,7 +386,7 @@ flags.
 | 260 | Edit your name and bio |  |  |
 | 267 | Add a line about your taste |  |  |
 | 284 | Films |  |  |
-| 285 | Settled |  |  |
+| 285 | Ranked |  |  |
 | 286 | Duels |  |  |
 | 287 | Badges |  |  |
 | 292 | Last time |  |  |
@@ -466,7 +478,7 @@ flags.
 | 90 | Big library? Start with a Rough Cut |  |  |
 | 91 | A tier of 100 films is 4,950 duels this way. That's hours. Rough Cut is one decision per film instead, and it leaves the piles small enough to duel properly. It's under RNK. |  |  |
 | 107 | Your ranking, in order |  |  |
-| 108 | One tier at a time, your favourite first. The numbers on the right show where each film sits across everything you've ranked. Tap any row to open it. |  |  |
+| 108 | One tier at a time, your favourite first. The stars decide which tier a film is in. The number on the right is a different thing: the position it holds across everything you've ranked. Tap any row to open it. |  |  |
 | 113 | UN-RNKD is not unrated |  |  |
 | 114 | Each tier holds films you rated the same. The ones marked UN-RNKD came in from your import and have never been ranked, so they've got no position yet. That's what the duels are for. |  |  |
 | 119 | Jump to a tier |  |  |
