@@ -320,6 +320,16 @@ export default function ProfileScreen({
 
   const banner = profile.bannerStill ?? fallback;
 
+  // One way in, used by every tappable fact on this page. Sorted best-first,
+  // because a set of films opened from "your decade" is a small ranking and
+  // arriving at it in library order would waste the ranking you made.
+  const show = (title: string, blurb: string, films: Film[]) =>
+    setOpen({ title, blurb, films: [...films].sort((a, b) => b.score - a.score), numbered: true });
+
+  /** The decade a film belongs to, as the profile labels them. */
+  const decadeOf = (f: Film): string =>
+    /^\d{4}$/.test(f.year ?? "") ? `${Math.floor(Number(f.year) / 10) * 10}s` : "";
+
   const filmsOf = (name: string, isDirector: boolean) =>
     ranked.filter((f) => (isDirector ? f.director === name : f.cast?.includes(name)));
 
@@ -843,13 +853,64 @@ export default function ProfileScreen({
           <Section title="Your taste" first>
             <div className="space-y-1.5">
               {print.homeTier !== undefined && (
-                <Line label="You live at" value={starsFor(print.homeTier)} gold />
+                <Line
+                  label="You live at"
+                  value={starsFor(print.homeTier)}
+                  gold
+                  onClick={() =>
+                    show(
+                      starsFor(print.homeTier!),
+                      "Everything you rated this.",
+                      ranked.filter((f) => f.rating === print.homeTier),
+                    )
+                  }
+                />
               )}
-              {print.genre && <Line label="You keep returning to" value={print.genre.name} note={`${print.genre.count} films`} />}
+              {print.genre && (
+                <Line
+                  label="You keep returning to"
+                  value={print.genre.name}
+                  note={`${print.genre.count} films`}
+                  onClick={() =>
+                    show(
+                      print.genre!.name,
+                      "Your best first.",
+                      ranked.filter((f) => f.genres?.includes(print.genre!.name)),
+                    )
+                  }
+                />
+              )}
               {people.subgenre && (
-                <Line label="More precisely" value={people.subgenre.name} note={`${people.subgenre.count} films`} />
+                <Line
+                  label="More precisely"
+                  value={people.subgenre.name}
+                  note={`${people.subgenre.count} films`}
+                  onClick={() =>
+                    show(
+                      people.subgenre!.name,
+                      "Your best first.",
+                      ranked.filter((f) => f.keywords?.includes(people.subgenre!.name)),
+                    )
+                  }
+                />
               )}
-              {print.decade && <Line label="Your decade" value={print.decade.label} note={`${print.decade.count} films`} />}
+              {print.decade && (
+                <Line
+                  label="Your decade"
+                  value={print.decade.label}
+                  note={`${print.decade.count} films`}
+                  onClick={() =>
+                    show(
+                      print.decade!.label,
+                      "Your best first.",
+                      ranked.filter((f) => decadeOf(f) === print.decade!.label),
+                    )
+                  }
+                />
+              )}
+              {/* Not a way in. "Even-handed" describes HOW you rate rather than
+                  WHAT you rated, so there is no set of films behind it — and a
+                  control that opens your whole library is not an answer. */}
               {print.generosity && (
                 <Line
                   label="As a rater you're"
@@ -939,7 +1000,10 @@ export default function ProfileScreen({
 
           {/* Two panes, one swipe apart. See the header of GenreRing. */}
           <Section title="Your library">
-            <GenreRing films={films} />
+            <GenreRing
+              films={films}
+              onPick={(g) => show(g, "Your best first.", ranked.filter((f) => f.genres?.includes(g)))}
+            />
           </Section>
 
           {/* ── THE LEDGER ───────────────────────────────────────────────────
@@ -1017,7 +1081,12 @@ export default function ProfileScreen({
               do something. See the header of Passport for why it is not yet a
               map. */}
           <Section title="Your world">
-            <Passport films={films} />
+            <Passport
+              films={films}
+              onPick={(code) =>
+                show(code, "Everything you've seen from there.", ranked.filter((f) => f.countries?.includes(code)))
+              }
+            />
           </Section>
             </div>
           </div>
@@ -1402,11 +1471,48 @@ function StillPicker({
 }
 
 
-function Line({ label, value, note, gold }: { label: string; value: string; note?: string; gold?: boolean }) {
+// ── A fact you can act on ──────────────────────────────────────────────────
+//
+// Every one of these lines names a set of films — the genre you keep returning
+// to, the decade you live in, the tier you rate most at — and until now naming
+// them was all they did. You could read that you have a hundred and forty
+// documentaries and have no way to see them.
+//
+// The value is the control, not the whole row. The label is a question
+// ("Your decade") and the value is the answer ("1970s"); only the answer has
+// films behind it, and making the question tappable would be offering a way in
+// to something that is not there.
+//
+// Underlined in the border colour rather than given a chevron or a colour of
+// its own. The page is deliberately short of objects and this is a hint, not a
+// button — the same treatment the film card already uses for a person's name.
+function Line({
+  label,
+  value,
+  note,
+  gold,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  gold?: boolean;
+  onClick?: () => void;
+}) {
+  const tone = gold ? "text-gold" : "text-text-hi";
   return (
     <div className="flex items-baseline gap-2">
       <span className="flex-shrink-0 text-sub text-dim">{label}</span>
-      <span className={`min-w-0 truncate text-body ${gold ? "text-gold" : "text-text-hi"}`}>{value}</span>
+      {onClick ? (
+        <button
+          onClick={onClick}
+          className={`min-w-0 truncate text-body ${tone} underline decoration-border underline-offset-4 active:opacity-70`}
+        >
+          {value}
+        </button>
+      ) : (
+        <span className={`min-w-0 truncate text-body ${tone}`}>{value}</span>
+      )}
       {note && <span className="ml-auto flex-shrink-0 text-label text-dim">{note}</span>}
     </div>
   );

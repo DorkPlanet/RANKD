@@ -73,7 +73,7 @@ function slicePath(fromTurn: number, toTurn: number): string {
   ].join(" ");
 }
 
-export function GenreRing({ films }: { films: Film[] }) {
+export function GenreRing({ films, onPick }: { films: Film[]; onPick?: (genre: string) => void }) {
   const [pane, setPane] = useState(0);
 
   const tally = genresIn(films);
@@ -157,8 +157,17 @@ export function GenreRing({ films }: { films: Film[] }) {
             comparing. Same order as the ring, so the eye can move between. */}
         <div className="w-full flex-shrink-0 snap-center">
           <div className="space-y-[3px]">
+            {/* The rows open their films. The RING does not, deliberately: a
+                slice for a genre with four films is a couple of degrees of arc
+                and asking somebody to hit it is asking them to miss. The list
+                is the same data with tap targets a thumb can actually land on,
+                which is most of why it exists. */}
             {slices.map((s) => (
-              <div key={s.name} className="flex items-center gap-2.5 text-[10.5px]">
+              <button
+                key={s.name}
+                onClick={onPick ? () => onPick(s.name) : undefined}
+                className="flex w-full items-center gap-2.5 text-left text-[10.5px] active:opacity-70"
+              >
                 <span className="w-[70px] flex-shrink-0 truncate text-dim">{axisLabel(s.name)}</span>
                 <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-border">
                   <span
@@ -167,7 +176,7 @@ export function GenreRing({ films }: { films: Film[] }) {
                   />
                 </span>
                 <span className="w-[30px] flex-shrink-0 text-right tabular-nums text-text-hi">{s.count}</span>
-              </div>
+              </button>
             ))}
           </div>
         </div>

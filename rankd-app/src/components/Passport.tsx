@@ -34,7 +34,7 @@ const flagOf = (code: string): string =>
 /** Enough to be worth a row of its own. The rest are counted, not listed. */
 const SHOWN = 12;
 
-export function Passport({ films }: { films: Film[] }) {
+export function Passport({ films, onPick }: { films: Film[]; onPick?: (code: string) => void }) {
   const tally = new Map<string, number>();
   let known = 0;
   for (const f of films) {
@@ -63,15 +63,20 @@ export function Passport({ films }: { films: Film[] }) {
       </p>
 
       <div className="flex flex-wrap gap-1.5">
+        {/* Each flag opens what you have seen from there. The point of the
+            section, in the user's words, is that a blank region invites you to
+            watch something from it — which only works if a filled one lets you
+            see what you already have. */}
         {rows.slice(0, SHOWN).map((r) => (
-          <span
+          <button
             key={r.code}
-            className="flex items-center gap-1.5 rounded-full border border-border py-1 pl-1.5 pr-2.5 text-[10.5px]"
+            onClick={onPick ? () => onPick(r.code) : undefined}
+            className="flex items-center gap-1.5 rounded-full border border-border py-1 pl-1.5 pr-2.5 text-[10.5px] active:opacity-70"
           >
             <span className="text-sub leading-none">{flagOf(r.code)}</span>
             <span className="text-dim">{r.code}</span>
             <span className="tabular-nums text-text">{r.n}</span>
-          </span>
+          </button>
         ))}
         {rows.length > SHOWN && (
           <span className="flex items-center rounded-full border border-border px-2.5 py-1 text-[10.5px] text-dim">
