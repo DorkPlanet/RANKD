@@ -23,7 +23,9 @@
 // 204px track by a quarter of a pixel, so they could not respond to anything you
 // did — a progress bar that is physically incapable of moving is furniture. They
 // belong where you go to reflect, not where you play: `ListScreen`'s header
-// already reads "232 ranked · 861 films".
+// carries the library-scale figures, and as of 21 Aug it breaks them into the
+// three states rather than rolling them up — "1 you settled · 332 Rankd placed
+// · 532 un-rnkd" over a plain "865 films".
 //
 // What replaces them answers to the duel you just fought. See `sessionStats`.
 

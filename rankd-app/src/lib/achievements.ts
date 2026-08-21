@@ -79,7 +79,7 @@ export function achievements(films: Film[]): Achievement[] {
   const atRating = (r: number) => films.filter((f) => f.rating === r).length;
   const ratingsUsed = ORDERED_TIERS.filter((t) => atRating(t) > 0).length;
 
-  // `need > 0` matters: Completionist's target is "every tier you own films in",
+  // `need > 0` matters: Completionist's target is "every tier you've seen films in",
   // which is zero on an empty library — and nobody has completed nothing.
   const count = (id: string, name: string, how: string, have: number, need: number): Achievement => {
     const got = need > 0 && have >= need;
@@ -134,7 +134,7 @@ export function achievements(films: Film[]): Achievement[] {
     count(
       "all-tiers",
       "Completionist",
-      "Settle every tier you own films in",
+      "Settle every tier you've seen films in",
       finishedTiers.length,
       ORDERED_TIERS.filter((t) => films.some((f) => f.rating === t)).length,
     ),

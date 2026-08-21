@@ -83,7 +83,7 @@ function blindSpot(films: readonly Film[]): Note | null {
   if (!worst || worst.own - worst.done < 5) return null;
   return {
     id: "blind-spot",
-    before: `You own ${plural(worst.own, `${worst.name.toLowerCase()} film`)} and have ranked`,
+    before: `You've seen ${plural(worst.own, `${worst.name.toLowerCase()} film`)} and have ranked`,
     subject: worst.done === 0 ? "none" : String(worst.done),
     after: worst.done === 0 ? "of them." : "of them.",
   };
@@ -213,7 +213,7 @@ function ownVersusRank(films: readonly Film[]): Note | null {
   if (!best || best[0] === most[0]) return null;
   return {
     id: "own-vs-rank",
-    before: `You own more ${most[0]} than anyone. You rank`,
+    before: `You've seen more ${most[0]} than anyone. You rank`,
     subject: best[0],
     after: "higher.",
   };

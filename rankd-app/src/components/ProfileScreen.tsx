@@ -678,7 +678,7 @@ export default function ProfileScreen({
                 ))}
               </div>
               <p className="mt-2 text-[10px] leading-snug text-dim">
-                Bar length is how many films you own at that rating. The gold is how many have a position.
+                Bar length is how many films you&rsquo;ve seen at that rating. The gold is how many have a position.
               </p>
             </Section>
           </div>

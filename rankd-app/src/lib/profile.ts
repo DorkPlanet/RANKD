@@ -246,7 +246,13 @@ export function superlatives(films: Film[]): Superlative[] {
   const years = new Map<string, number>();
   for (const f of withYear) years.set(f.year!, (years.get(f.year!) ?? 0) + 1);
   const busiest = [...years.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (busiest) out.push({ label: "Biggest year", value: busiest[0], note: `${busiest[1]} films` });
+  // "Biggest year" reads as the year you watched the most films. It is not —
+  // Rankd has no viewing dates, only release years, so this is the year the most
+  // of your films were MADE. Reported from a phone: "I'm pretty sure my biggest
+  // year was much more than 65 films… unless you're saying I've seen 65 films
+  // made in that year", which is exactly the ambiguity. "Most from" can only
+  // mean the one thing.
+  if (busiest) out.push({ label: "Most from", value: busiest[0], note: `${busiest[1]} films` });
 
   const longest = films.filter((f) => f.runtime).sort((a, b) => b.runtime! - a.runtime!)[0];
   if (longest) {

@@ -36,12 +36,15 @@ const BTN =
 function Row({
   title,
   note,
+  urgent,
   open,
   onToggle,
   children,
 }: {
   title: string;
   note?: string;
+  /** The note is something the user has to act on, so it is not dim. */
+  urgent?: boolean;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -54,7 +57,9 @@ function Row({
       >
         <span className="text-[14px] text-text-hi">{title}</span>
         <span className="flex items-center gap-2">
-          {note && <span className="text-[11px] text-dim">{note}</span>}
+          {note && (
+            <span className={urgent ? "text-[11px] font-bold text-gold" : "text-[11px] text-dim"}>{note}</span>
+          )}
           <span
             className="text-[10px] text-dim"
             style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s var(--ease)" }}
@@ -218,13 +223,34 @@ export function Settings({
         {note && <p className="mt-3 text-[11px] text-gold">{note}</p>}
       </Row>
 
-      {/* Forced open on a conflict. Two devices disagreeing needs an answer, and
-          the chooser is the one panel in the app allowed to be demanding — it
-          must not sit behind a shut row. */}
+      {/* ── Why this row no longer opens itself ────────────────────────────
+          It used to be `open={open === "account" || conflict}`, on the reasoning
+          that a conflict is the one thing in the app allowed to be demanding and
+          must not sit behind a shut row. The reasoning was fine and the timing
+          was awful.
+
+          `conflict` arrives from an async check, so the sequence on a real phone
+          was: the panel draws with every row shut, the user's thumb starts
+          moving toward Account, and about half a second later the row animates
+          itself open under that thumb and a tall chooser fills the screen. That
+          is N7, reported as "it jumps open, and it's jarring especially since
+          people are pressing that tab".
+
+          The answer is not to hide the conflict — it is that a row opening on
+          its own, LATE, is the worst possible way to raise something urgent. The
+          `note` beside the title already says "needs you" and now says it in
+          gold, which is visible without moving anything. The banner is still the
+          first thing inside the row when it is opened.
+
+          Note for anyone tempted to cut the chooser instead: the server is a
+          MIRROR, not a source of truth (see the header of `lib/sync.ts`).
+          localStorage is what every screen reads and writes, so two devices
+          genuinely can diverge and nothing merges them. The question is real. */}
       <Row
         title="Account"
         note={conflict ? "needs you" : undefined}
-        open={open === "account" || conflict}
+        urgent={!!conflict}
+        open={open === "account"}
         onToggle={() => toggle("account")}
       >
         <Account onConflict={setConflict} />

@@ -78,6 +78,11 @@ export default function ListScreen({
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
   const scroller = useRef<HTMLDivElement | null>(null);
+  // Pressing the list cell while already ON the list has never done anything.
+  // It now opens the keyboard on the search field, which is the user's ask and
+  // is the one thing a second press of a tab you are already on can usefully
+  // mean: you are here, and you are looking for something.
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   // ── The review card lived here ─────────────────────────────────────────────
   //
@@ -151,13 +156,17 @@ export default function ListScreen({
           <span className="min-w-0 flex-1 truncate text-left font-display text-xl tracking-wide text-gold">
             {profile.name}
           </span>
-          {/* "ranked", not "placed" — the same count the RANKED bar reports and
-              the exact inverse of the UN-RNKD pills below it. Three words for one
-              idea across three components is how the bars came to look like they
-              were contradicting this line. */}
-          <span className="text-[11px] text-dim">
-            <b className="text-text-hi">{model.placedCount}</b> ranked · {model.total} films
-          </span>
+          {/* Just the total now. This used to read "333 ranked · 865 films"
+              directly above a line reading "1 you settled · 332 Rankd placed",
+              and 1 + 332 is 333 — so the two lines stated the same fact twice,
+              once rolled up and once broken out. The user's words, with a
+              screenshot: "saying similar things in the same place."
+
+              The breakdown below is the better of the two because it is the one
+              that says something the reader could not work out, so the roll-up
+              is what goes. Nothing is lost: the three parts sum to the total,
+              which is right here. */}
+          <span className="text-[11px] text-dim">{model.total} films</span>
         </button>
 
         {/* ── The key to the numbers below ──────────────────────────────
@@ -186,15 +195,30 @@ export default function ListScreen({
 
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
-        {model.settledCount > 0 && model.placedCount > model.settledCount && (
-          <p className="mb-2.5 flex items-baseline gap-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
-            <b className="font-display text-[13px] font-bold tracking-normal text-gold">{model.settledCount}</b>
-            <span>you settled</span>
-            <span className="opacity-40">·</span>
-            <span className="font-display text-[13px] font-normal tracking-normal">
-              {model.placedCount - model.settledCount}
-            </span>
-            <span>Rankd placed</span>
+        {model.total > 0 && (
+          <p className="mb-2.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[9px] font-bold uppercase tracking-[0.12em] text-dim">
+            {[
+              { n: model.settledCount, label: "you settled", gold: true },
+              { n: model.placedCount - model.settledCount, label: "Rankd placed", gold: false },
+              { n: model.total - model.placedCount, label: "un-rnkd", gold: false },
+            ]
+              // A segment reading zero is not information, it is a state you are
+              // not in. Dropping them is also what lets this line work on day
+              // one, when everything is un-rnkd and the other two would be 0.
+              .filter((seg) => seg.n > 0)
+              .map((seg, i) => (
+                <span key={seg.label} className="flex items-baseline gap-1.5">
+                  {i > 0 && <span className="opacity-40">·</span>}
+                  <span
+                    className={`font-display text-[13px] tracking-normal ${
+                      seg.gold ? "font-bold text-gold" : "font-normal"
+                    }`}
+                  >
+                    {seg.n}
+                  </span>
+                  <span>{seg.label}</span>
+                </span>
+              ))}
           </p>
         )}
 
@@ -204,9 +228,15 @@ export default function ListScreen({
             section top while `jumpTo` kept using the unshifted numbers. */}
         <div className="flex items-center gap-2">
           <input
+            ref={searchRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search your films"
+            // Names what it will actually match now. A bar that silently
+            // searches three fields is a bar nobody knows searches three
+            // fields — and the alternative the user ruled out, separate
+            // buttons per field, makes you declare what you are looking for
+            // before you look.
+            placeholder="Film, director or actor"
             className="min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 py-2 text-sm text-text-hi outline-none placeholder:text-dim"
           />
           <div className="relative flex-shrink-0">
@@ -303,7 +333,13 @@ export default function ListScreen({
         screen="list"
         onSettings={onSettings}
         onModes={onDuel}
-        onList={() => {}}
+        onList={() => {
+          // `select` as well as `focus`: arriving here with a stale query
+          // already in the box means the first thing you type should replace
+          // it, not append to it.
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        }}
         onProfile={onProfile}
         logging={logging}
         onToggleLog={onToggleLog}

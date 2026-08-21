@@ -134,14 +134,25 @@ export function buildList(films: Film[]): ListModel {
 export function searchList(model: ListModel, query: string): (RankedFilm | Film)[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const hit = (t: string) => t.toLowerCase().includes(q);
+  const hit = (t: string | undefined) => !!t && t.toLowerCase().includes(q);
+  // One bar, three things it can be. The user's ask, and the reason it is one
+  // bar rather than a row of filter buttons: nobody arriving at a search field
+  // wants to first declare what KIND of thing they are about to type. They know
+  // "Fincher" is a director; the field can work that out too.
+  //
+  // Credits ride in on the same TMDb response as the poster (see the header of
+  // `types.ts`), so this costs no extra request — only films whose artwork has
+  // been fetched are searchable by person, which degrades quietly rather than
+  // wrongly: a film with no credits yet simply does not match a director query.
+  const matches = (f: Film): boolean =>
+    hit(f.title) || hit(f.director) || (f.cast ?? []).some(hit);
   const placed = model.sections
     .flatMap((s) => s.placed)
-    .filter((r) => hit(r.film.title))
+    .filter((r) => matches(r.film))
     .sort((a, b) => a.rank - b.rank);
   const unplaced = model.sections
     .flatMap((s) => s.unplaced)
-    .filter((f) => hit(f.title))
+    .filter(matches)
     .sort((a, b) => a.title.localeCompare(b.title));
   return [...placed, ...unplaced];
 }

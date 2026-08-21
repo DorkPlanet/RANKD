@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildList, rankMap } from "@/lib/list";
+import { buildList, rankMap, searchList } from "@/lib/list";
 import { applyRoughCut, type Bucket } from "@/lib/roughCut";
 import { seedScore } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
@@ -185,5 +185,50 @@ describe("placedCount and settledCount", () => {
     const model = buildList(films);
     expect(model.placedCount).toBe(0);
     expect(model.settledCount).toBe(0);
+  });
+});
+
+// ── One bar, three things it can be ────────────────────────────────────────
+//
+// The user's ask, and the shape of it mattered as much as the feature: search
+// by director and actor too, "but they should be part of the same search bar.
+// Not different buttons." Nobody arriving at a search field wants to first
+// declare what KIND of thing they are about to type.
+//
+// Credits ride in on the same TMDb response as the poster, so this costs no
+// extra request — and a film whose artwork has never been fetched simply has no
+// credits to match, which is why these tests pin the degrade-quietly case too.
+describe("searchList across title, director and cast", () => {
+  const heat = film("heat", { title: "Heat", score: 8.9, lock: "hard", director: "Michael Mann", cast: ["Al Pacino", "Robert De Niro"] });
+  const collateral = film("collateral", { title: "Collateral", score: 8.1, lock: "soft", director: "Michael Mann", cast: ["Tom Cruise", "Jamie Foxx"] });
+  const bare = film("bare", { title: "Some Unfetched Film", score: 7.0 });
+
+  const films = [heat, collateral, bare];
+  const ids = (q: string) => searchList(buildList(films), q).map((r) => ("film" in r ? r.film.id : r.id));
+
+  it("still finds a film by its title", () => {
+    expect(ids("heat")).toEqual(["heat"]);
+  });
+
+  it("finds every film by a director", () => {
+    expect(ids("michael mann").sort()).toEqual(["collateral", "heat"]);
+  });
+
+  it("finds a film by someone in the cast", () => {
+    expect(ids("pacino")).toEqual(["heat"]);
+  });
+
+  it("is case-insensitive and matches partway through a name", () => {
+    expect(ids("DE NIR")).toEqual(["heat"]);
+  });
+
+  it("degrades quietly on a film whose credits have not been fetched", () => {
+    // No director, no cast — it must not throw, and it must not match a person.
+    expect(ids("mann")).not.toContain("bare");
+    expect(ids("unfetched")).toEqual(["bare"]);
+  });
+
+  it("returns nothing for an empty query rather than everything", () => {
+    expect(ids("   ")).toEqual([]);
   });
 });

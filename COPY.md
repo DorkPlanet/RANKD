@@ -20,6 +20,10 @@ are kept current — see "Changed since the snapshot" below.
 | 21 Aug | List header | **New:** the locked/believed legend. "**55** you settled · 105 Rankd placed, and can still move". The distinction had never been stated anywhere on a phone — it lived in a `title` attribute. Register N2 |
 | 21 Aug | Profile stats band | "Settled" → **"Ranked"** (line 285 below). The number counts hard AND soft locks, and "settled" is the app's word for the hard half alone, so the label was naming the wrong state |
 | 21 Aug | Profile tier chart | "The gold is how many you've settled" → "**The gold is how many have a position**", for the same reason |
+| 21 Aug | Everywhere | **"own" is gone from user-facing copy.** The user's call: "people don't own these films." Now "you've seen". Four strings: the blind-spot note, the own-versus-rank note, the tier-chart caption and Completionist's target. `your library` is left alone — a library of films you have seen is not a claim of ownership |
+| 21 Aug | Profile, Odds and ends | "Biggest year" → **"Most from"**. It read as the year you WATCHED the most films; Rankd has no viewing dates, only release years, so it is the year most of your films were made. "Most from 2013" can only mean the one thing |
+| 21 Aug | List header | The name row now reads just "865 films". It used to read "333 ranked · 865 films" directly above "1 you settled · 332 Rankd placed", which states the same fact twice — the user, with a screenshot: "saying similar things in the same place." The breakdown is now one line of three states that sum to the total |
+| 21 Aug | List search | Placeholder "Search your films" → **"Film, director or actor"**, because the bar now matches all three |
 | 21 Aug | List tour, "row" step | Now carries "a rating is not a position" itself. It was stated only on the UN-RNKD step, which `resolveSteps` drops for anyone who has finished ranking a tier — so the reader furthest into the app never met the idea the tour exists for. Register N3 |
 
 ---
