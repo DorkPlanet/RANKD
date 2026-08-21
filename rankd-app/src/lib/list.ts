@@ -12,7 +12,7 @@
 // is still allowed to revise it (see lib/lock.ts).
 
 import type { Film } from "./types";
-import { isPlaced } from "./lock";
+import { isHard, isPlaced } from "./lock";
 import { rankedFilms } from "./ladder";
 import { ORDERED_TIERS, type Rating } from "./tiers";
 
@@ -30,7 +30,16 @@ export interface TierSection {
 
 export interface ListModel {
   sections: TierSection[];
+  /** Has a number, however it got one. The umbrella count, reported as "ranked". */
   placedCount: number;
+  /**
+   * You committed to this one. A HARD lock, always <= placedCount.
+   *
+   * Split out because the difference between the two is the only thing on the
+   * list a reader could not work out for themselves, and until now the app
+   * never counted it anywhere. See the legend in `ListScreen`.
+   */
+  settledCount: number;
   total: number;
 }
 
@@ -111,7 +120,12 @@ export function buildList(films: Film[]): ListModel {
     sections.push({ tier, placed, unplaced, total: inTier.length });
   }
 
-  return { sections, placedCount: ranks.size, total: films.length };
+  return {
+    sections,
+    placedCount: ranks.size,
+    settledCount: films.reduce((n, f) => (isHard(f) ? n + 1 : n), 0),
+    total: films.length,
+  };
 }
 
 // Search abandons the tier grouping — when you're hunting one film, sections are

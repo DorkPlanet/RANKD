@@ -160,6 +160,32 @@ export default function ListScreen({
           </span>
         </button>
 
+        {/* ── The key to the numbers below ──────────────────────────────
+            Gold-and-bold against dim has drawn the hard/soft distinction in the
+            rows since locks landed, and nothing on any screen said what the two
+            weights MEANT. The explanation was a `title` attribute — a hover
+            tooltip, on a phone. So the one idea a reader could not work out for
+            themselves was the one idea the app never spoke.
+
+            This is a legend rather than a per-row label because a label on 861
+            rows repeats itself 861 times, and because a row may not grow:
+            ROW_H is load-bearing for the spacers and the tier jumps.
+
+            It uses the row treatments EXACTLY — same gold, same weight, same
+            dim — so it reads as a key and not as two more statistics. Change
+            one and change both, or it stops being a key.
+
+            Hidden unless both states are actually present. A library with no
+            soft locks would otherwise be taught a distinction it cannot see. */}
+        {model.settledCount > 0 && model.placedCount > model.settledCount && (
+          <p className="mb-2.5 text-[10px] leading-snug text-dim">
+            <b className="font-bold text-gold">{model.settledCount}</b> you settled
+            <span className="mx-1.5 opacity-50">·</span>
+            <span className="text-dim">{model.placedCount - model.settledCount}</span> Rankd placed,
+            and can still move
+          </p>
+        )}
+
         {/* Deliberately in the header block and NOT in the scroller below: the
             section spacers and the tier-jump offsets are computed from row
             heights, so anything inserted above the sections would shift every
@@ -340,15 +366,20 @@ function Row({
           UN-RNKD         = no position at all.
 
           The distinction has existed in the data since hard and soft locks
-          landed and this is the first place a reader can see it. */}
+          landed. This is where it is DRAWN; the legend in the header block is
+          where it is NAMED. It was drawn without ever being named for several
+          sessions, which is the whole of N2. */}
       {rank === undefined ? (
         <span className="flex-shrink-0 text-[9px] font-extrabold tracking-[0.14em] text-dim">UN-RNKD</span>
       ) : (
+        /* `title` is kept as a desktop pointer, but it is no longer where the
+           distinction LIVES — the legend in the header says it out loud. The
+           wording matches the legend on purpose. */
         <span
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
             isHard(film) ? "font-bold text-gold" : "font-normal text-dim"
           }`}
-          title={isHard(film) ? "You placed this" : "Rankd placed this"}
+          title={isHard(film) ? "You settled this" : "Rankd placed this, and it can still move"}
         >
           {rank}
         </span>

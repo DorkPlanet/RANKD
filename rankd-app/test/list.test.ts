@@ -132,3 +132,58 @@ describe("rankMap", () => {
     expect(rankMap(films).get("b")).toBeUndefined();
   });
 });
+
+// ── The two counts the header reports ──────────────────────────────────────
+//
+// These exist because the app had ONE WORD for TWO STATES and shipped it that
+// way. `RunStatus` reported "6 settled" from hard locks only, while the profile
+// band labelled `placedCount` — hard AND soft — "Settled". Both were on screen
+// at once, both said settled, and they could never agree.
+//
+// The rule, and the reason these assertions are worth their lines:
+//
+//   placedCount   has a number, however it got one.  Spoken as "ranked".
+//   settledCount  YOU committed to it. Hard only.    Spoken as "you settled".
+//
+// The list legend subtracts one from the other to name the soft half, so the
+// moment settledCount counts anything other than hard locks the legend starts
+// lying about a distinction it exists to explain.
+describe("placedCount and settledCount", () => {
+  it("counts every placed film, whichever way it was placed", () => {
+    const films = [
+      film("a", { score: 8.5, lock: "hard" }),
+      film("b", { score: 8.1, lock: "soft" }),
+      film("c", { score: 7.4 }),
+    ];
+    expect(buildList(films).placedCount).toBe(2);
+  });
+
+  it("counts only what the user settled, never what the model placed", () => {
+    const films = [
+      film("a", { score: 8.5, lock: "hard" }),
+      film("b", { score: 8.1, lock: "soft" }),
+      film("c", { score: 7.9, lock: "soft" }),
+      film("d", { score: 7.4 }),
+    ];
+    expect(buildList(films).settledCount).toBe(1);
+  });
+
+  it("never reports more settled than placed, so the legend cannot go negative", () => {
+    const films = [
+      film("a", { score: 8.5, lock: "hard" }),
+      film("b", { score: 8.1, lock: "hard" }),
+      film("c", { score: 7.4 }),
+    ];
+    const model = buildList(films);
+    expect(model.settledCount).toBeLessThanOrEqual(model.placedCount);
+    // Nothing soft, so the legend hides rather than reading "0 Rankd placed".
+    expect(model.placedCount - model.settledCount).toBe(0);
+  });
+
+  it("reports nothing settled in a library nobody has touched", () => {
+    const films = [film("a", { score: 8.5 }), film("b", { score: 7.4 })];
+    const model = buildList(films);
+    expect(model.placedCount).toBe(0);
+    expect(model.settledCount).toBe(0);
+  });
+});

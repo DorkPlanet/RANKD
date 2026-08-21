@@ -439,7 +439,7 @@ export default function ProfileScreen({
                 the one thing on the band that was not centred was the band. */}
             <div className="grid grid-cols-4 text-center">
               <Stat n={model.total} label="Films" onClick={onList} />
-              <Stat n={model.placedCount} label="Settled" onClick={onList} />
+              <Stat n={model.placedCount} label="Ranked" onClick={onList} />
               <Stat n={print.duels} label="Duels" onClick={onDuel} />
               <Stat n={earned} label="Badges" onClick={onTrophies} />
             </div>
@@ -647,7 +647,9 @@ export default function ProfileScreen({
 
               One chart doing two jobs. The bar's length is how many films are in
               the tier — the shape of your taste — and the solid part is how many
-              you've settled. Two separate charts of the same ten tiers was one
+              have a position. Deliberately NOT "settled": the gold counts hard and
+              soft locks alike (`isPlaced`), and "settled" is the app's word for
+              the hard half alone. See the legend in `ListScreen`. Two separate charts of the same ten tiers was one
               chart too many, and no other app can draw this one because no other
               app knows the difference between owning a film and placing it. */}
           <div className="px-6">
@@ -676,7 +678,7 @@ export default function ProfileScreen({
                 ))}
               </div>
               <p className="mt-2 text-[10px] leading-snug text-dim">
-                Bar length is how many films you own at that rating. The gold is how many you&rsquo;ve settled.
+                Bar length is how many films you own at that rating. The gold is how many have a position.
               </p>
             </Section>
           </div>

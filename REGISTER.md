@@ -261,13 +261,15 @@ Everything below is now the open work rather than a recommendation:
 
 - Fast Shuffle becomes its own named game writing **provisional placements** only.
 - Hard locks stay earned — manually, or via Rough Cut and King of the Hill.
-- **Name the two states on screen.** The list already draws gold-and-bold against dim.
+- ~~**Name the two states on screen.**~~ **DONE 21 Aug** — the list draws gold-and-bold
+  against dim and now says what the two weights mean, in a legend above the search box.
 - This closes C18 and unblocks C2. The removal pin has been **deleted** from `HANDOVER.md`
   rather than annotated, so there is nothing left to action against the evidence. Rankd is
   the only app in the field that can offer both layers and say which is which.
-- **The first move is N2, not a rename.** Naming the two states is the whole point of the
-  rebrand, and the locked/believed distinction is currently a `title` attribute — a hover
-  tooltip, on a phone. A new name over an invisible distinction changes nothing.
+- ~~**The first move is N2, not a rename.**~~ **N2 landed 21 Aug.** The two states are now
+  named on the list, which was the rebrand's prerequisite and is the third bullet above
+  already half-answered. What is left here is the mode's own name and its bounded shape
+  (D4), plus the confidence payoff (C2). None of those is blocked any more.
 
 ---
 
@@ -331,7 +333,7 @@ that explains itself". **E1 breaks that premise.** A taste chart does not explai
 | ID | Item | Status |
 |---|---|---|
 | N1 | **A rating can climb but can never fall.** Verified: nothing in `ladder.ts` lowers a rating, and `promotionTarget` only fires when a film beats every other film at its own rating. **The user's call: this must go both ways.** The consequence is bigger than an inconsistency, because a one-directional system can only inflate. A film overrated on import can never find its level through play however many duels it loses, and the only route down is editing the rating by hand. **Demotion is the play-based half of B2**, so the two should be designed together rather than one papering over the other | NEW, OPEN |
-| N2 | **The locked/believed explanation is in a `title` attribute** (`ListScreen.tsx:351`). That is a hover tooltip and there is no hover on a phone, so the distinction the whole product rests on is colour with no label on the only device it is used on. Also makes Settings' "Drop the N the app placed" unreadable. **Small fix, highest value on the H2 list**, and F4 makes it more load-bearing not less | NEW, OPEN |
+| N2 | ~~**The locked/believed explanation is in a `title` attribute.**~~ **DONE 21 Aug 2026.** A legend now sits in the list header, above the search box: "**55** you settled · 105 Rankd placed, and can still move". It uses the row treatments exactly — same gold, same weight, same dim — so it reads as a key rather than as two more statistics, and it hides when a library has only one of the two states. A legend rather than a per-row label because a label on 861 rows repeats itself 861 times and because `ROW_H` is load-bearing. **Found on the way in and also fixed: the app had one word for two states.** `RunStatus` reported "6 settled" from hard locks only while the profile band labelled `placedCount` — hard AND soft — "Settled", both on screen at once and unable to agree. Vocabulary is now fixed: **ranked** = has a number however it got one; **settled** = you committed to it. The profile stat is relabelled "Ranked" (the number is unchanged), and four tests in `list.test.ts` guard the two counts | DONE |
 | N3 | **"A rating is not a position" is taught only when the UN-RNKD divider exists.** `resolveSteps` correctly drops the step when the divider is absent, so anyone with a fully ranked tier never sees the app's founding idea explained at all | NEW, OPEN |
 | N4 | **H1, the "How this works" sheet — PARKED** by the user, 20 Aug. `HOW-IT-WORKS.md` stands on its own as the record. Revisit once N1 and N2 land, since both change what the sheet would need to say | PARKED |
 | N5 | **`FilmInfo` needs a visual pass.** User's call on seeing it on a phone. It is not in B8's PROVISIONAL list (`SessionEnd`, `PersonSheet`, `LogFilm`, `RunStatus`) but it should be: the header block is now five stacked lines of 11px dim text (position, app's answer, duels and settledness, genres, tagline) beside an 88px poster, and it has grown by accretion rather than being designed. **Fold into B8 rather than doing it alone**, and after E6 decides the light/dark question, since that changes what the card is being designed against | NEW, OPEN |

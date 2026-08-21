@@ -1377,6 +1377,28 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Gotchas that have already cost time
 
+- **One word for two states, shipped on two screens at once (Session M).** The app
+  used "settled" to mean a HARD lock in `RunStatus` ("6 settled", a delta over
+  `isHard`) and to mean ANY placement on the profile band, which labelled
+  `placedCount` — hard and soft together — "Settled". Both were on screen in the
+  same session and could never agree, and nothing caught it because no test
+  asserted a label.
+  - **The vocabulary, now fixed, and worth keeping:** *ranked* = has a number,
+    however it got one · *settled* = you committed to it, hard only · *UN-RNKD* =
+    no position at all. `ListScreen`'s header reads "160 ranked · 260 films" and
+    `RunStatus` points at that line in a comment, so it is the canonical phrasing.
+  - The older warning in `ListScreen` was about three words for ONE idea. This was
+    the inverse, and it is the more dangerous direction: synonyms look untidy, but
+    one word for two ideas makes two correct numbers look like a bug.
+- **A distinction can be DRAWN for months without ever being NAMED (Session M).**
+  Hard versus soft locks were gold-and-bold against dim in the list from the day
+  locks landed, and the only text explaining the difference was a `title`
+  attribute — a hover tooltip, on a device with no hover. So the one idea a reader
+  could not possibly work out for themselves was the one idea the app never said.
+  - **The check worth running on any new visual encoding: where does the phone say
+    what this colour means?** If the answer is a tooltip, an `aria-label` or a
+    comment in the source, it is not said.
+
 - **A cache hit that skips the yield turns a paced loop into a blocking one
   (Session M).** `backfillPosters` slept `gapMs` between films but skipped the
   sleep entirely when the film was already cached — correct about network pacing,
