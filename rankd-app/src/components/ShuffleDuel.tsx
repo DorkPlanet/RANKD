@@ -547,7 +547,7 @@ export default function ShuffleDuel({
     const placed = pool.filter((f) => f.lock !== undefined).length;
     return (
       <SessionEnd
-        title={count > 0 ? "Session done" : "Nothing settled"}
+        title={count > 0 ? "Session done" : "Nothing changed"}
         blurb={
           count > 0
             ? "Every answer is kept. The list has moved to match."

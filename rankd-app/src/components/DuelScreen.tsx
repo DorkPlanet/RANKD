@@ -1633,7 +1633,7 @@ function ModePanel({
     return (
       <Sheet title="Rough Cut" onClose={onClose} closing={closing}>
         <p className="mb-3 text-[11px] leading-snug text-dim">
-          One pass, one decision per film. Nothing is settled — it just gives the tier a rough
+          One pass, one decision per film. Nothing is locked — it just gives the tier a rough
           order so ranking it properly afterwards is a fraction of the work.
         </p>
         <button
