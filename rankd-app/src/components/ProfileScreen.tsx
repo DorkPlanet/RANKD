@@ -397,25 +397,23 @@ export default function ProfileScreen({
                 onOpen={() => setAvatarMenu(true)}
               />
             </span>
-            {/* The pencil sits after the name rather than pinned to the right
-                edge. Centred text with a control anchored to one side reads as
-                lopsided — and pushed the name itself off the true centre, which
-                is the one thing this layout exists to fix. */}
-            <span className="mt-3 flex max-w-full items-start gap-1.5">
-              <span className="min-w-0 truncate font-display text-[26px] leading-none tracking-wide text-gold">
+            {/* The name IS the control now.
+                A pencil beside it was a second thing to look at for an action
+                nobody performs twice, and it pushed the name off the centre this
+                block exists to hold. The bio's placeholder already invites the
+                tap; the name inherits it. */}
+            <button
+              onClick={() => setEditing(true)}
+              aria-label="Edit your name and bio"
+              className="mt-3 block max-w-full active:opacity-70"
+            >
+              <span className="block truncate font-display text-[26px] leading-none tracking-wide text-gold">
                 {profile.name}
               </span>
-              <button
-                onClick={() => setEditing(true)}
-                aria-label="Edit your name and bio"
-                className="mt-[1px] flex-shrink-0 text-dim active:scale-90"
-              >
-                <PencilIcon />
-              </button>
-            </span>
-            <span className="mt-1.5 block max-w-[280px] font-serif text-[12px] italic leading-snug text-dim">
-              {profile.bio || "Add a line about your taste"}
-            </span>
+              <span className="mt-1.5 block max-w-[280px] font-serif text-[12px] italic leading-snug text-dim">
+                {profile.bio || "Add a line about your taste"}
+              </span>
+            </button>
           </div>
 
           {/* ── WHERE YOU ARE ───────────────────────────────────────────────
@@ -435,7 +433,11 @@ export default function ProfileScreen({
               bordered thing left up here after the rest of the de-boxing. The
               app says this with a hairline everywhere else. */}
           <div className="mt-5 border-y border-border py-3.5">
-            <div className="flex gap-7">
+            {/* Even columns rather than a left-packed row.
+                Four numbers of different widths on a `gap` read as ragged, and
+                the block sits under a centred name and a centred picture — so
+                the one thing on the band that was not centred was the band. */}
+            <div className="grid grid-cols-4 text-center">
               <Stat n={model.total} label="Films" onClick={onList} />
               <Stat n={model.placedCount} label="Settled" onClick={onList} />
               <Stat n={print.duels} label="Duels" onClick={onDuel} />
@@ -688,7 +690,7 @@ export default function ProfileScreen({
             would show somebody, which is what everything else on this panel
             is too. Renamed to cover both halves of that. */}
         {(people.directors.length > 0 || people.actors.length > 0) && (
-          <Section title="Who you rate highest" first>
+          <Section title="Who you rate highest">
             {/* Two groups, each labelled once.
                 The role used to sit on every row, which meant reading the word
                 ACTOR four times to learn one thing. A heading says it once and
@@ -745,47 +747,57 @@ export default function ProfileScreen({
             app derived it or you sat through the duels for it. That distinction
             is already carried by each card's eyebrow, so it does not also need
             two unrelated-looking headers. */}
-        {/* Collections scroll sideways so user-made lists can join them without
-            the screen growing another full-width block each time. */}
+        {/* ── Collections ─────────────────────────────────────────────────
+            The same treatment as the cards below — a two-up grid in the gutter,
+            no shelf — and deliberately a different object inside it.
+
+            Cards are a row: a thumbnail beside a name, because what matters is
+            WHICH ranking and how many are in it. A collection is a way into
+            artwork, so it keeps the wide poster wash and leads with the image.
+            Same skeleton, different flesh, which is what stops two adjacent
+            grids reading as one long undifferentiated list.
+
+            It was a shelf because user-made lists were going to join it. They
+            did, and they went somewhere better. */}
         {hero && (
-          <section className="mt-4">
-            <div className="mb-2.5 px-6 text-[10px] font-extrabold tracking-[0.18em] text-dim">COLLECTIONS</div>
-            <div className="flex gap-2.5 overflow-x-auto px-6 pb-1">
-              <MiniCard
-                film={hero}
-                eyebrow="#1"
-                title={hero.title}
-                sub={[hero.year, hero.director].filter(Boolean).join(" · ")}
-                onClick={() => onInfo(hero)}
-              />
-              <MiniCard
-                film={topTen[1] ?? hero}
-                eyebrow="RANKED"
-                title="Top ten"
-                sub={`${topTen.length} films`}
-                onClick={() =>
-                  setOpen({
-                    title: "Your top ten",
-                    blurb: "The highest films in your ranking, in order.",
-                    films: topTen,
-                    numbered: true,
-                  })
-                }
-              />
-              {/* Everything else in this row is derived, not curated — which is
-                  exactly the shape user-made lists will take when they land. */}
-              {autos.map((c) => (
+          <div className="px-6">
+            <Section title="Collections" first>
+              <div className="grid grid-cols-2 gap-2.5">
                 <MiniCard
-                  key={c.title}
-                  film={c.films[0]}
-                  eyebrow="YOURS"
-                  title={c.title}
-                  sub={`${c.films.length} films`}
-                  onClick={() => setOpen({ ...c, numbered: true })}
+                  film={hero}
+                  eyebrow="#1"
+                  title={hero.title}
+                  sub={[hero.year, hero.director].filter(Boolean).join(" · ")}
+                  onClick={() => onInfo(hero)}
                 />
-              ))}
-            </div>
-          </section>
+                <MiniCard
+                  film={topTen[1] ?? hero}
+                  eyebrow="RANKED"
+                  title="Top ten"
+                  sub={`${topTen.length} films`}
+                  onClick={() =>
+                    setOpen({
+                      title: "Your top ten",
+                      blurb: "The highest films in your ranking, in order.",
+                      films: topTen,
+                      numbered: true,
+                    })
+                  }
+                />
+                {/* Everything else here is derived rather than curated. */}
+                {autos.map((c) => (
+                  <MiniCard
+                    key={c.title}
+                    film={c.films[0]}
+                    eyebrow="YOURS"
+                    title={c.title}
+                    sub={`${c.films.length} films`}
+                    onClick={() => setOpen({ ...c, numbered: true })}
+                  />
+                ))}
+              </div>
+            </Section>
+          </div>
         )}
 
         {/* ── The things you can actually hand somebody ───────────────────
@@ -811,6 +823,13 @@ export default function ProfileScreen({
         {(live.length > 0 || savedLists.length > 0) && (
           <div className="px-6">
             <Section title="Cards you can make">
+              {/* Two per row.
+                  Single file was right when the row had to prove it was not a
+                  poster tile, and wrong once there are ten of them: a set of
+                  small, similar things reads faster side by side than as a
+                  column you scroll. Two is the most that fits without the title
+                  truncating to nothing at 375px. */}
+              <div className="grid grid-cols-2 gap-x-3">
               {live.map(({ subject, films: top }) => (
                 <ExportRow
                   key={subjectKey(subject)}
@@ -846,6 +865,7 @@ export default function ProfileScreen({
                   }
                 />
               ))}
+              </div>
             </Section>
           </div>
         )}
@@ -1276,14 +1296,6 @@ function StillPicker({
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
-}
 
 function Line({ label, value, note, gold }: { label: string; value: string; note?: string; gold?: boolean }) {
   return (
@@ -1324,32 +1336,59 @@ function ExportRow({
   onCard?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/60 last:border-0">
-      <button onClick={onClick} className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left active:opacity-70">
+    <div className="flex gap-2.5 border-b border-border/60 py-2.5">
+      <button onClick={onClick} className="flex min-w-0 flex-1 gap-2.5 text-left active:opacity-70">
+        {/* Smaller than the list screen's poster on purpose: two of these share
+            a 375px row, so `list-poster` at 54px would leave the title about
+            forty pixels to truncate inside. */}
         {film?.poster ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={film.poster} alt="" aria-hidden className="list-poster flex-shrink-0" />
+          <img
+            src={film.poster}
+            alt=""
+            aria-hidden
+            className="h-[50px] w-[36px] flex-shrink-0 rounded-[4px] object-cover"
+            style={{ objectPosition: "center top" }}
+          />
         ) : (
-          <span className="list-poster flex-shrink-0" style={{ background: "var(--border)" }} />
+          <span
+            className="h-[50px] w-[36px] flex-shrink-0 rounded-[4px]"
+            style={{ background: "var(--border)" }}
+          />
         )}
         <span className="min-w-0 flex-1">
-          <span className="block text-[8px] font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
-          <span className="mt-0.5 block truncate font-display text-[17px] leading-tight tracking-wide text-text-hi">
+          <span className="block truncate text-[7.5px] font-extrabold tracking-[0.18em] text-dim">
+            {eyebrow}
+          </span>
+          <span className="mt-0.5 block truncate font-display text-[15px] leading-tight tracking-wide text-text-hi">
             {title}
           </span>
-          {sub && <span className="block text-[10px] text-dim">{sub}</span>}
+          {sub && <span className="block truncate text-[9px] text-dim">{sub}</span>}
+          {/* Inline rather than a pill on the right. A bordered button in a
+              163px cell takes the width the title needs, and this page is being
+              de-boxed anyway. Rendered inside the label's column so it lines up
+              under the thing it belongs to. */}
+          {onCard && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCard();
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                e.stopPropagation();
+                onCard();
+              }}
+              className="mt-1 block text-[9px] font-extrabold tracking-[0.14em] text-gold active:opacity-60"
+            >
+              MAKE CARD
+            </span>
+          )}
         </span>
       </button>
-      {onCard && (
-        <button
-          onClick={onCard}
-          aria-label={`Make a card for ${title}`}
-          className="flex-shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-extrabold tracking-[0.12em] active:scale-95"
-          style={{ color: "var(--gold)", borderColor: "color-mix(in srgb, var(--gold) 40%, transparent)" }}
-        >
-          CARD
-        </button>
-      )}
     </div>
   );
 }
@@ -1381,7 +1420,7 @@ function MiniCard({
     // A div, not a button. The card shortcut is a control INSIDE this tile, and
     // a button inside a button is invalid markup that browsers resolve by
     // dropping one of them — usually the inner one, which is the shortcut.
-    <div className="flagship relative w-[172px] flex-shrink-0 text-left">
+    <div className="flagship relative w-full text-left">
       <button onClick={onClick} className="block w-full text-left active:scale-[0.98]">
         {film?.poster && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -1527,7 +1566,7 @@ function PersonCard({
 
 function Stat({ n, label, onClick }: { n: number; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="text-left active:scale-95">
+    <button onClick={onClick} className="active:scale-95">
       <span className="block font-serif text-lg font-bold text-text-hi tabular-nums">{n}</span>
       <span className="block text-[9px] font-extrabold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>
     </button>

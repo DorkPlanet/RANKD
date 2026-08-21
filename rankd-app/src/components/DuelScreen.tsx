@@ -965,7 +965,18 @@ export default function DuelScreen({
             <div className="flex flex-1 items-center justify-center text-center">
               <div>
                 <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
-                  {empty ? "No films yet" : "Everyone has a favourite. What's yours?"}
+                  {empty ? (
+                    "No films yet"
+                  ) : (
+                    // Two sentences, two lines. Left to wrap it broke after
+                    // WHAT'S, which splits the question rather than the pair of
+                    // sentences and reads as a mistake.
+                    <>
+                      Everyone has a favourite.
+                      <br />
+                      What&rsquo;s yours?
+                    </>
+                  )}
                 </p>
                 {empty ? (
                   <>
