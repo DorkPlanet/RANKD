@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
-import { isHard } from "@/lib/lock";
+import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
@@ -93,9 +93,37 @@ export default function ListScreen({
   // opinion about it. If this comes back it needs a mechanic to hand the answer
   // to first, and that decision is the feature, not this card.
 
+  // ── Filtering by state ──────────────────────────────────────────────────
+  //
+  // The three counts in the band are already the three states, already in their
+  // own colours, and already the thing you read to decide what to do next. So
+  // they ARE the filter — tap LOCKED to see only those, tap again to clear.
+  // No tab strip, no new row, nothing added to the screen at all.
+  //
+  // The alternative in the register (P14) bundled year and genre in with these.
+  // Those are GROUPINGS, not filters: every row stays and the sections change,
+  // which rebuilds the geometry `ROW_H` drives. This half is free because it
+  // only changes which films exist.
+  //
+  // Filtered on the way IN, not on the way out. `buildList` computes the
+  // sections, the spacers and the tier-jump offsets together, so handing it a
+  // smaller library keeps all three consistent — filtering its OUTPUT would
+  // leave the offsets describing rows that are no longer there.
+  const [only, setOnly] = useState<null | "locked" | "shuffled" | "unrnkd">(null);
+  const shown = useMemo(() => {
+    if (!only) return films;
+    return films.filter((f) =>
+      only === "locked" ? isHard(f) : only === "shuffled" ? isPlaced(f) && !isHard(f) : !isPlaced(f),
+    );
+  }, [films, only]);
+
   // Built once per library change, never inside a scroll handler — the
   // prototype re-sorted all 828 films on every scroll tick and it showed.
-  const model = useMemo(() => buildList(films), [films]);
+  const model = useMemo(() => buildList(shown), [shown]);
+  // The band's counts come from the WHOLE library, never the filtered view.
+  // They are a key to the list, and a key that changed every time you used it
+  // would be describing itself rather than the library.
+  const all = useMemo(() => buildList(films), [films]);
   const results = useMemo(() => searchList(model, q), [model, q]);
   const searching = q.trim().length > 0;
 
@@ -231,7 +259,7 @@ export default function ListScreen({
 
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
-        {model.total > 0 && (
+        {all.total > 0 && (
           <p className="mb-3 flex items-start justify-center gap-5 text-dim">
             {[
               // The total sits WITH the three states rather than above them.
@@ -244,23 +272,48 @@ export default function ListScreen({
               // dim are the three states and a fourth hue beside them would
               // read as one; the near-white is the app's colour for "the thing
               // itself" and says total without joining the set.
-              { n: model.total, label: "films", tone: "text-text-hi" },
-              { n: model.settledCount, label: "locked", tone: "text-gold" },
-              { n: model.placedCount - model.settledCount, label: "shuffled", tone: "text-accent" },
-              { n: model.total - model.placedCount, label: "un-rnkd", tone: "text-dim" },
+              { n: all.total, label: "films", tone: "text-text-hi", key: null },
+              { n: all.settledCount, label: "locked", tone: "text-gold", key: "locked" as const },
+              {
+                n: all.placedCount - all.settledCount,
+                label: "shuffled",
+                tone: "text-accent",
+                key: "shuffled" as const,
+              },
+              { n: all.total - all.placedCount, label: "un-rnkd", tone: "text-dim", key: "unrnkd" as const },
             ]
               // A segment reading zero is not information, it is a state you are
               // not in. Dropping them is also what lets this line work on day
               // one, when everything is un-rnkd and the other two would be 0.
               .filter((seg) => seg.n > 0)
-              .map((seg) => (
-                <span key={seg.label} className={`block text-center ${seg.tone}`}>
-                  <span className="block font-serif text-lg font-bold leading-none tabular-nums">{seg.n}</span>
-                  <span className="mt-1 block text-label font-extrabold uppercase tracking-[0.14em]">
-                    {seg.label}
-                  </span>
-                </span>
-              ))}
+              .map((seg) => {
+                const active = only === seg.key;
+                return (
+                  <button
+                    key={seg.label}
+                    onClick={() => setOnly(active ? null : seg.key)}
+                    aria-pressed={active}
+                    className={`block text-center active:scale-95 ${seg.tone} ${
+                      only && !active ? "opacity-35" : ""
+                    }`}
+                  >
+                    <span className="block font-serif text-lg font-bold leading-none tabular-nums">
+                      {seg.n}
+                    </span>
+                    <span className="mt-1 block text-label font-extrabold uppercase tracking-[0.14em]">
+                      {seg.label}
+                    </span>
+                    {/* The active column is underlined in its own colour. The
+                        dimming of the others carries most of the signal, but a
+                        filtered list that looks like an unfiltered one is how
+                        somebody concludes their films have gone. */}
+                    <span
+                      className="mx-auto mt-1 block h-[2px] w-6 rounded-full"
+                      style={{ background: active ? "currentColor" : "transparent" }}
+                    />
+                  </button>
+                );
+              })}
           </p>
         )}
 
