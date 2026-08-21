@@ -25,8 +25,8 @@ import { applyJudgement, beliefsWhenIdle, seedOf, type Belief } from "@/lib/beli
 import { PRIOR_SPREAD } from "@/lib/bayes";
 import { appendJudgements, newJudgement, type Judgement } from "@/lib/log";
 import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/meta";
+import { isPlaced } from "@/lib/lock";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
-import { sessionProgress } from "@/lib/progress";
 import { RunStatus } from "./RunStatus";
 import { placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
@@ -83,6 +83,16 @@ export default function ShuffleDuel({
   const [log, setLog] = useState<Judgement[] | null>(null);
   const [beliefs, setBeliefs] = useState<Map<string, Belief>>(new Map());
   const [pair, setPair] = useState<[Film, Film] | null>(null);
+  // Whether the opening serve has run yet.
+  //
+  // `pair === null` meant two completely different things — "not served yet"
+  // and "nothing left to serve" — and only one of them has a message worth
+  // showing. The opening effect sets `log` BEFORE awaiting the belief fit,
+  // which on a big library is seconds, so for that whole window the screen
+  // rendered "Nothing left to ask here." over a mode that was about to serve a
+  // pair perfectly happily. Reported from a phone: three or four seconds of a
+  // finished screen on the way in, every time.
+  const [opened, setOpened] = useState(false);
   const [count, setCount] = useState(0);
   // One undoable judgement, with the library exactly as it was before it — so
   // taking it back restores the scores too, not just the log row.
@@ -130,6 +140,9 @@ export default function ShuffleDuel({
       if (!alive) return;
       setBeliefs(fitted);
       serve(films, loaded, fitted);
+      // After `serve`, never before: from here a null pair is a real answer
+      // about the pool rather than a screen that has not loaded.
+      setOpened(true);
     })();
     return () => {
       alive = false;
@@ -306,7 +319,26 @@ export default function ShuffleDuel({
     setEnded(true);
   };
 
+  // ── What this mode is actually measuring ────────────────────────────
+  //
+  // It used to be `sessionProgress`: how many films in scope appear ANYWHERE
+  // in the duel log. That number saturates after one duel per film, and one
+  // duel per film is the point at which the model has worked out precisely
+  // nothing. Simulated over a 120-film library: at 1.0 duels per film the
+  // readout already says "0 films to go" while median confidence is 0.313 and
+  // NOT ONE film has been placed. Reported from a phone as "it says 0 films to
+  // go every time I come back", which is exactly right and is not a reset.
+  //
+  // What it measures now is how many the model has actually WORKED OUT — a
+  // soft lock, granted when confidence clears `PLACE_CONFIDENCE`. That climbs
+  // for as long as there is anything to learn, which is the whole span this
+  // mode is played over.
+  //
+  // The pool excludes hard locks and nothing else, so it does not shrink under
+  // the readout as films get placed: the denominator is stable and the
+  // numerator climbs, which is what makes a bar mean something.
   const pool = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed });
+  const workedOut = pool.filter(isPlaced).length;
 
   if (ended) {
     // Best of what this run touched, so the result is what YOU just worked on
@@ -336,8 +368,16 @@ export default function ShuffleDuel({
     );
   }
 
+  // Two waits, named separately because they take noticeably different
+  // amounts of time and the second is the long one. Reading the log is a
+  // storage round trip; fitting the beliefs is the expensive part, and saying
+  // so is better than a spinner that could mean anything.
   if (!log) {
     return <Centre>Reading the evidence…</Centre>;
+  }
+
+  if (!opened) {
+    return <Centre>Working out what to ask you…</Centre>;
   }
 
   if (!pair) {
@@ -368,12 +408,6 @@ export default function ShuffleDuel({
   const a = films.find((f) => f.id === servedA.id) ?? servedA;
   const b = films.find((f) => f.id === servedB.id) ?? servedB;
 
-  // Derived from the log rather than counted as you go, so walking away
-  // mid-session and coming back an hour later resumes where you left off.
-  const session = sessionProgress(
-    poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed }),
-    log ?? [],
-  );
   // A person run is a shuffle underneath, but labelling it FAST SHUFFLE hides
   // the only thing that makes it different from one.
   const person = options.scope.kind === "person" ? options.scope.name : null;
@@ -388,7 +422,7 @@ export default function ShuffleDuel({
         films={films}
         log={log ?? []}
         title={person ? person.toUpperCase() : "FAST SHUFFLE"}
-        run={{ done: session.compared, total: session.total }}
+        run={{ done: workedOut, total: pool.length }}
         // The countdown below already says how many are left, so the default
         // opening line would print the same figure twice. This says what to do
         // instead, which is the more useful thing on a screen you have just
@@ -412,8 +446,8 @@ export default function ShuffleDuel({
         style={{ height: 110, minHeight: 56 }}
       >
         <Countdown
-          n={Math.max(0, session.total - session.compared)}
-          label={session.total - session.compared === 1 ? "film to go" : "films to go"}
+          n={Math.max(0, pool.length - workedOut)}
+          label={pool.length - workedOut === 1 ? "film to work out" : "films to work out"}
         />
       </div>
       <div

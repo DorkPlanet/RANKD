@@ -34,12 +34,34 @@ import type { Film } from "./types";
  *   ~1 duel per film   → nothing placed. Correct: one duel is not an opinion.
  *   ~10 duels per film → everything placed, median confidence 0.73.
  *
- * And the constraint that actually pins this value: confidence SATURATES around
- * 0.72–0.73. It cannot climb further because the matchmaker stops asking about
- * films it has already settled, so they stop tightening. A threshold anywhere
- * near 0.8 would therefore place nothing, ever, no matter how long anyone
- * swiped — which would look exactly like a broken feature rather than a strict
- * one. 0.5 sits clearly below that ceiling and clearly above trivial evidence.
+ * And the constraint that actually pins this value: confidence SATURATES. It
+ * cannot climb indefinitely because the matchmaker stops asking about films it
+ * has already settled, so they stop tightening. A threshold at or above the
+ * ceiling would place nothing, ever, no matter how long anyone swiped — which
+ * would look exactly like a broken feature rather than a strict one.
+ *
+ * ── Raised from 0.5 to 0.65 on 21 Aug 2026 ────────────────────────────────
+ *
+ * The user's ask: films should need more evidence before the app claims to have
+ * worked them out. Measured before moving it rather than argued, over simulated
+ * sessions at two library sizes, counting how many films clear each threshold:
+ *
+ *   120 films   5 duels/film   @0.5 120   @0.6  69   @0.65  25   @0.7   4
+ *   120 films  10 duels/film   @0.5 120   @0.6 120   @0.65 120   @0.7  89
+ *   400 films  10 duels/film   @0.5 400   @0.6 400   @0.65 400   @0.7 400
+ *
+ * Two things that measurement corrected in the note above. The ceiling is
+ * higher than "0.72–0.73" — median reaches 0.744 at 20 duels/film on 120 films
+ * and 0.779 on 400, with maxima of 0.798 and 0.845 — because a bigger library
+ * affords more informative comparisons. So there is real headroom above 0.5,
+ * and the old note was calibrated on a smaller library than anyone actually has.
+ *
+ * 0.65 is the pick and 0.7 is not, for one reason: 0.7 places only 89 of 120 at
+ * ten duels a film, so it punishes a SMALL scope. Fast Shuffle is often played
+ * over one tier or one person, and a threshold that works on the whole library
+ * but stalls on a tier is the broken-looking failure this constant exists to
+ * avoid. 0.65 reaches full placement at ten duels a film at both sizes while
+ * demanding roughly five times the evidence 0.5 did at the five-duel mark.
  *
  * Beware the obvious misreading of "confidence": it measures how precisely the
  * evidence LOCATES a film, not how much that evidence agrees with itself.
@@ -48,7 +70,7 @@ import type { Film } from "./types";
  * right, but it means this threshold is not a filter for "the user was
  * consistent about this one".
  */
-export const PLACE_CONFIDENCE = 0.5;
+export const PLACE_CONFIDENCE = 0.65;
 
 const meanOf = (film: Film, beliefs: Map<string, Belief>): number =>
   beliefs.get(film.id)?.mean ?? seedOf(film);

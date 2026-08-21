@@ -235,3 +235,45 @@ describe("withdrawSoftLocks", () => {
     expect(out[0].score).toBe(7654);
   });
 });
+
+// ── The readout Fast Shuffle puts on screen ────────────────────────────────
+//
+// The bar and the countdown used to be driven by `sessionProgress`: how many
+// films in scope appear anywhere in the duel log. That is a saturating measure.
+// It reaches its maximum after ONE duel per film — the exact point at which the
+// model has worked out nothing at all — and then reads finished for the rest of
+// the mode's life. Reported from a phone as "0 films to go every time I come
+// back", which was not a reset and was not a bug in the counter: the counter
+// was faithfully reporting a number that had stopped meaning anything.
+//
+// They are driven by placement now. These tests pin the property that made the
+// old measure useless, so the readout cannot quietly go back to saturating.
+describe("what the Fast Shuffle readout measures", () => {
+  it("does not count a film as worked out just because it has been duelled", () => {
+    // One duel's worth of evidence: a belief barely tighter than the prior.
+    const barelyTouched = beliefs({ a: { spread: PRIOR_SPREAD * 0.95 } });
+    const out = placeSettled([film("a")], barelyTouched);
+    expect(out[0].lock).toBeUndefined();
+  });
+
+  it("climbs as the evidence tightens rather than topping out at first contact", () => {
+    const worked = [0.95, 0.6, 0.3, 0.1].map(
+      (factor) => placeSettled([film("a")], beliefs({ a: { spread: PRIOR_SPREAD * factor } }))[0].lock,
+    );
+    // Unsettled at the wide end, settled at the tight end, and the transition
+    // happens somewhere in between rather than immediately.
+    expect(worked[0]).toBeUndefined();
+    expect(worked[worked.length - 1]).toBe("soft");
+  });
+
+  it("demands real evidence: the threshold sits well above trivially touched", () => {
+    // Raised from 0.5 to 0.65 on 21 Aug after measuring what each value costs.
+    // The floor matters more than the exact number — a threshold down near the
+    // prior would place films nobody has an opinion about yet.
+    expect(PLACE_CONFIDENCE).toBeGreaterThanOrEqual(0.6);
+    // And the ceiling matters just as much: confidence saturates below 1, so a
+    // threshold set too high places nothing ever, which looks broken rather
+    // than strict. Measured maxima were 0.798 (120 films) and 0.845 (400).
+    expect(PLACE_CONFIDENCE).toBeLessThan(0.75);
+  });
+});
