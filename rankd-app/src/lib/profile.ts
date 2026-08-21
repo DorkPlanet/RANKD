@@ -281,8 +281,23 @@ export interface Superlative {
 
 // Facts, not rankings. Each one is a single film or a single number, so none of
 // them can turn into another version of the list.
+/**
+ * Below this a superlative is arithmetic rather than a fact about you.
+ *
+ * Every screen in the app has a zero state and, until now, none of these had a
+ * THIN one — so a library of four films produced "Oldest", "Longest" and a
+ * biggest year with the same confidence as a library of nine hundred. Naming
+ * the oldest of four is not a discovery, it is a sort.
+ *
+ * Ten is where the answer stops being obvious to the person who owns the list.
+ * `notes.ts` already gates itself at 8, 10, 20 and 40 depending on the claim;
+ * this brings the facts beside it into line rather than inventing a new idea.
+ */
+const MIN_FOR_FACT = 10;
+
 export function superlatives(films: Film[]): Superlative[] {
   const out: Superlative[] = [];
+  if (films.length < MIN_FOR_FACT) return out;
   const withYear = films.filter((f) => /^\d{4}$/.test(f.year ?? ""));
 
   const oldest = withYear.sort((a, b) => Number(a.year) - Number(b.year))[0];
@@ -297,7 +312,13 @@ export function superlatives(films: Film[]): Superlative[] {
   // year was much more than 65 films… unless you're saying I've seen 65 films
   // made in that year", which is exactly the ambiguity. "Most from" can only
   // mean the one thing.
-  if (busiest) out.push({ label: "Most from", value: busiest[0], note: `${busiest[1]} films` });
+  //
+  // And a second bar on top of the library one: a "biggest" year that holds two
+  // films has not beaten anything, it has tied with half the list and won on
+  // sort order. Three is the fewest that can look like a pattern.
+  if (busiest && busiest[1] >= 3) {
+    out.push({ label: "Most from", value: busiest[0], note: `${busiest[1]} films` });
+  }
 
   const longest = films.filter((f) => f.runtime).sort((a, b) => b.runtime! - a.runtime!)[0];
   if (longest) {
@@ -305,7 +326,9 @@ export function superlatives(films: Film[]): Superlative[] {
     out.push({ label: "Longest", value: longest.title, note: `${h}h ${longest.runtime! % 60}m` });
   }
 
-  const mostFought = films.filter((f) => f.duels).sort((a, b) => b.duels! - a.duels!)[0];
+  // Same again: one duel is not an argument, and "most argued over · 1 duel"
+  // says the opposite of what it means.
+  const mostFought = films.filter((f) => (f.duels ?? 0) >= 3).sort((a, b) => b.duels! - a.duels!)[0];
   if (mostFought) {
     const n = mostFought.duels!;
     out.push({ label: "Most argued over", value: mostFought.title, note: `${n} duel${n === 1 ? "" : "s"}` });

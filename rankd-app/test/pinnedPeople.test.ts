@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_PINNED_PEOPLE, personKey, topPeople } from "@/lib/profile";
+import { MAX_PINNED_PEOPLE, personKey, superlatives, topPeople } from "@/lib/profile";
 import type { Film } from "@/lib/types";
 import type { Rating } from "@/lib/tiers";
 
@@ -82,5 +82,46 @@ describe("pinned directors and actors", () => {
     // Three is right for saved rankings because they share one row. This is two
     // groups, so reusing that number would quietly halve it.
     expect(MAX_PINNED_PEOPLE).toBeGreaterThan(3);
+  });
+});
+
+// ── Thin states for the facts (C13) ────────────────────────────────────────
+//
+// Every screen had a zero state and none of these had a THIN one, so a library
+// of four films produced "Oldest" and a biggest year with the same confidence
+// as a library of nine hundred. Naming the oldest of four is not a discovery,
+// it is a sort — and the profile was stating it as a finding.
+describe("superlatives hold their tongue on a thin library", () => {
+  const f = (id: string, over: Partial<Film> = {}): Film =>
+    ({ id, title: id, year: "2000", rating: 4, score: 7000, ...over }) as Film;
+
+  it("says nothing at all below the minimum", () => {
+    expect(superlatives([f("a"), f("b"), f("c")])).toEqual([]);
+  });
+
+  it("speaks once the library is big enough", () => {
+    const many = Array.from({ length: 12 }, (_, i) => f("f" + i, { year: String(1990 + i) }));
+    const out = superlatives(many).map((s) => s.label);
+    expect(out).toContain("Oldest");
+  });
+
+  it("refuses a biggest year that only ties on sort order", () => {
+    // Twelve films, every one a different year: the "busiest" year holds one.
+    const spread = Array.from({ length: 12 }, (_, i) => f("f" + i, { year: String(1990 + i) }));
+    expect(superlatives(spread).map((s) => s.label)).not.toContain("Most from");
+  });
+
+  it("names a year that actually won", () => {
+    const clustered = [
+      ...Array.from({ length: 4 }, (_, i) => f("c" + i, { year: "1999" })),
+      ...Array.from({ length: 8 }, (_, i) => f("o" + i, { year: String(2001 + i) })),
+    ];
+    const hit = superlatives(clustered).find((s) => s.label === "Most from");
+    expect(hit?.value).toBe("1999");
+  });
+
+  it("does not call one duel an argument", () => {
+    const many = Array.from({ length: 12 }, (_, i) => f("f" + i, { duels: i === 0 ? 1 : 0 }));
+    expect(superlatives(many).map((s) => s.label)).not.toContain("Most argued over");
   });
 });
