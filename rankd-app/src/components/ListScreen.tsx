@@ -467,7 +467,7 @@ function Row({
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
             isHard(film) ? "font-bold text-gold" : "font-normal text-accent"
           }`}
-          title={isHard(film) ? "You settled this" : "Fast Shuffle placed this, and it can still move"}
+          title={isHard(film) ? "You locked this" : "Fast Shuffle placed this, and it can still move"}
         >
           {rank}
         </span>
