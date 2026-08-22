@@ -162,7 +162,7 @@ export default function ProfileScreen({
    * anywhere. Passing the direction rather than calling `onList` keeps the
    * knowledge of what is next door in one place — see `lib/ribbon.ts`.
    */
-  onRibbon: (dir: Dir) => void;
+  onRibbon: (dir: Dir, travelled?: number) => void;
   onTrophies: () => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
   logging?: boolean;
@@ -435,8 +435,9 @@ export default function ProfileScreen({
           slideTo(0, true);
           // Ran off an end. The screen is not this gesture's subject any more, so
           // it goes up to the shell — which is what carries you to the game.
-          if (landed === "before") return onRibbon(-1);
-          if (landed === "after") return onRibbon(1);
+          const travelled = Math.abs(dx) / width;
+          if (landed === "before") return onRibbon(-1, travelled);
+          if (landed === "after") return onRibbon(1, travelled);
           if (landed !== tab) setTab(landed as Tab);
         }}
       >

@@ -75,7 +75,7 @@ export default function ListScreen({
    * The list is the left-hand end of the ribbon, so only `1` ever leads
    * anywhere — off the end of un-rnkd and into the game. See `lib/ribbon.ts`.
    */
-  onRibbon: (dir: Dir) => void;
+  onRibbon: (dir: Dir, travelled?: number) => void;
   /** Swiped into from the game, so land on the state nearest it. */
   enterAtEnd?: boolean;
   onPoster: (id: string, meta: FilmMeta) => void;
@@ -499,7 +499,10 @@ export default function ListScreen({
           // than sitting where the finger left it.
           if (landed === "before" || landed === "after") {
             slide("0px", TURN_MS);
-            if (landed === "after") onRibbon(1);
+            // This pane eases home either way: on "after" the whole screen is
+            // about to leave, and it should leave from where it sits rather than
+            // with an inner offset still on it.
+            if (landed === "after") onRibbon(1, Math.abs(dx) / e.currentTarget.clientWidth);
             return;
           }
           if (landed === page) return slide("0px", TURN_MS);

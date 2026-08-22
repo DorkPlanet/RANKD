@@ -83,28 +83,73 @@ export const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
 export const TURN_MS = 150;
 
 /**
- * Drag the current screen sideways, holding its chrome still.
+ * The parts of the current screen that travel: everything but its chrome.
  *
- * The bars live inside each screen's `main`, so moving the screen moves them.
- * Rather than lift five call sites out (and `--nav-h` is measured from one of
- * them), each bar gets the exact inverse offset — the same trick `.page-hold-*`
- * plays during the slide, done by hand while a finger is down.
+ * The header, the nav and any `.chrome-hold` band stay exactly where they are.
+ * An earlier version moved `main` and gave each bar the inverse offset so the
+ * two would cancel; the maths was right and the result was wrong, because
+ * `main` is `overflow-hidden` and a bar pushed back to its old place is outside
+ * the box of the parent that moved. It was clipped, not pinned. Leaving `main`
+ * alone makes that same `overflow-hidden` useful instead: it is what crops the
+ * page cleanly at the screen edge.
+ */
+function pageLayers(): HTMLElement[] {
+  const main = document.querySelector("main");
+  if (!main) return [];
+  return [...main.children].filter(
+    (el): el is HTMLElement =>
+      el instanceof HTMLElement &&
+      el.tagName !== "HEADER" &&
+      el.tagName !== "NAV" &&
+      !el.classList.contains("chrome-hold"),
+  );
+}
+
+/**
+ * Drag the current screen sideways under a finger.
  *
  * DOM straight, no React. This runs on every touchmove; routing it through state
  * would re-render a screen to move one layer.
+ *
+ * `null` means let go without turning: everything eases back where it started.
  */
 export function dragScreen(px: number | null): void {
-  const main = document.querySelector("main");
-  if (!main) return;
-  const holds = main.querySelectorAll<HTMLElement>(
-    ":scope > header, :scope > nav, :scope > .chrome-hold",
-  );
-  const set = (el: HTMLElement, x: number, ms: number) => {
-    el.style.transition = ms ? `transform ${ms}ms ${EASE}` : "none";
-    el.style.transform = x ? `translateX(${x}px)` : "";
-  };
-  // null means let go without turning: everything eases back where it started.
-  const ms = px === null ? TURN_MS : 0;
-  set(main as HTMLElement, px ?? 0, ms);
-  holds.forEach((el) => set(el, px === null ? 0 : -px, ms));
+  for (const el of pageLayers()) {
+    el.style.transition = px === null ? `transform ${TURN_MS}ms ${EASE}` : "none";
+    el.style.transform = px ? `translateX(${px}px)` : "";
+  }
+}
+
+/**
+ * Walk the screen you are leaving off the edge, then call back.
+ *
+ * ── Why the outgoing screen has to move ────────────────────────────────────
+ *
+ * It used to vanish the instant the next one was chosen, so the arriving screen
+ * slid in over bare page background. That reads as a wipe rather than a turn:
+ * nothing left, something arrived.
+ *
+ * ── And why the mount lands between the two halves ─────────────────────────
+ *
+ * A screen is expensive to build. Mounting one in the same commit that starts
+ * its animation spends the first frames of that animation on the mount, which is
+ * the chop. Leaving first gives the build a gap of its own, and a frame dropped
+ * between two movements is far harder to see than one dropped inside a movement.
+ *
+ * `travelled` is how far across the finger already got, 0 to 1. The exit is timed
+ * against the remainder for the same reason the list's is: a fixed duration from
+ * most of the way across overtakes the hand that let go.
+ */
+export function exitScreen(dir: Dir, travelled: number, done: () => void): void {
+  const layers = pageLayers();
+  if (!layers.length) return done();
+  const ms = Math.max(70, Math.round(TURN_MS * (1 - Math.min(1, travelled))));
+  for (const el of layers) {
+    el.style.transition = `transform ${ms}ms ${EASE}`;
+    el.style.transform = `translateX(${dir * -100}%)`;
+  }
+  // A timer rather than transitionend: the callback must fire even if the
+  // element is torn down mid-flight, and a navigation that never happens is a
+  // far worse failure than one that happens a frame early.
+  window.setTimeout(done, ms);
 }

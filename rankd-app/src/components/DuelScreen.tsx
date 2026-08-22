@@ -150,7 +150,7 @@ export default function DuelScreen({
    * See `lib/ribbon.ts`. The duel is the middle of it, so both directions lead
    * somewhere: right to the list, left to the profile.
    */
-  onRibbon?: (dir: Dir) => void;
+  onRibbon?: (dir: Dir, travelled?: number) => void;
   /** A sheet is open over the game and owns the finger. */
   swipeBlocked?: boolean;
 }) {
@@ -268,10 +268,11 @@ export default function DuelScreen({
       // The same fraction a page turn costs on the list and the profile, so the
       // app asks for one amount of finger rather than three tuned numbers.
       if (Math.abs(dx) <= window.innerWidth * TURN_AT) return dragScreen(null);
+      const travelled = Math.abs(dx) / window.innerWidth;
       // No spring back: this `main` is about to be replaced by the next screen's,
       // which arrives with the slide. Easing this one home first would be a
       // bounce nobody asked for in front of the navigation.
-      onRibbon(dx < 0 ? 1 : -1);
+      onRibbon(dx < 0 ? 1 : -1, travelled);
     };
     window.addEventListener("touchstart", start, { passive: true });
     window.addEventListener("touchmove", move, { passive: true });

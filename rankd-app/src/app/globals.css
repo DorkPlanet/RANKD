@@ -838,51 +838,50 @@ button * {
    The ribbon is horizontal, so a screen change should be too. A tap on the
    bottom bar is a jump and keeps the veil it always had; only a swipe slides.
 
+   ── The page moves. The chrome is never touched. ──
+   This started by sliding the whole `main` and giving each bar the exact inverse
+   offset, so they would cancel. The maths was right and it did not work, and the
+   screenshot said why: `main` is `overflow-hidden`. A bar pushed back to its
+   original place is still OUTSIDE the box of the parent that moved, so it was
+   clipped — correctly positioned, and painted only where the moved parent still
+   covered. The bars looked like they were sliding because half of each one had
+   been cut away.
+
+   So nothing counter-moves. `main` holds still and only its CONTENT children
+   travel, which also means the parent's `overflow-hidden` becomes the thing that
+   clips the page neatly at the screen edge instead of the thing fighting us.
+
+   `.chrome-hold` marks any band that is not a header or a nav but reads as one —
+   the list's counts, which are the filter indicator and must not appear to
+   travel with the filter they indicate.
+
    Applied by adding a class, not by remounting: the class going on is what
-   starts the animation, and `AppShell` takes it off again on animationend. That
-   matters — a transform left in place is a permanent stacking context over the
-   whole app, which is how sheets end up trapped behind the nav. */
-@keyframes page-in-r {
-  from { transform: translateX(100%); }
-  to { transform: none; }
+   starts the animation, and `AppShell` takes it off again on animationend. A
+   transform left in place is a permanent stacking context over the whole app,
+   which is how sheets end up trapped behind the nav. */
+:root {
+  /* Out far, in close. The screen you leave goes the whole way because it has to
+     stop existing; the one arriving comes a fifth of the way. Only one screen is
+     mounted at a time, so between the old clearing the edge and the new being
+     built there is a gap of about three frames with nothing in it — measured, and
+     it does not shrink by wishing. What shrinks is how much of it you can see. */
+  --page-in: 22%;
 }
-@keyframes page-in-l {
-  from { transform: translateX(-100%); }
-  to { transform: none; }
-}
-.page-in-r { animation: page-in-r 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
-.page-in-l { animation: page-in-l 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
 
-/* ── The chrome holds still while the page moves under it ───────────────────
-   The bars live INSIDE each screen's `main`, so sliding the screen slid them
-   too and the whole app appeared to move. They are chrome; only the page is
-   travelling.
-
-   Lifting them out of the screens is the structural fix and it is a real
-   refactor: five call sites, and `--nav-h` is measured from the bar. This is the
-   exact inverse instead. Same duration, same curve, opposite direction, so the
-   two transforms cancel at every frame and the bars are pinned to the pixel.
-
-   `.chrome-hold` is for anything else that reads as a fixed band — the list's
-   counts, which are the filter indicator and must not appear to travel with the
-   filter they are indicating. */
-@keyframes page-hold-r {
-  from { transform: translateX(-100%); }
+@keyframes page-in {
+  from { transform: translateX(var(--from)); }
   to { transform: none; }
 }
-@keyframes page-hold-l {
-  from { transform: translateX(100%); }
-  to { transform: none; }
+
+/* Every direct child of the screen EXCEPT its chrome. */
+.page-slide main > :not(header):not(nav):not(.chrome-hold) {
+  animation: page-in 0.22s cubic-bezier(0.2, 0.8, 0.3, 1) both;
 }
-.page-in-r header,
-.page-in-r nav,
-.page-in-r .chrome-hold { animation: page-hold-r 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
-.page-in-l header,
-.page-in-l nav,
-.page-in-l .chrome-hold { animation: page-hold-l 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.page-park main > :not(header):not(nav):not(.chrome-hold) {
+  transform: translateX(var(--from));
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .page-in-r, .page-in-l,
-  .page-in-r header, .page-in-r nav, .page-in-r .chrome-hold,
-  .page-in-l header, .page-in-l nav, .page-in-l .chrome-hold { animation-duration: 0.01s; }
+  .page-slide,
+  .page-slide main > :not(header):not(nav):not(.chrome-hold) { animation-duration: 0.01s; }
 }

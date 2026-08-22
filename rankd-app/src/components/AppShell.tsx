@@ -9,7 +9,7 @@
 // lives in memory, and navigating away would destroy it mid-run. When sessions
 // are persisted this becomes the one place to swap in real routing.
 
-import { stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
+import { dragScreen, exitScreen, stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
 import { useEffect, useRef, useState } from "react";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
@@ -502,7 +502,7 @@ export default function AppShell() {
    * a permanent stacking context over every screen, which is exactly how a sheet
    * ends up trapped behind the nav.
    */
-  const [slide, setSlide] = useState<Dir | null>(null);
+  const [slide, setSlide] = useState<{ dir: Dir; phase: "hold" | "run" } | null>(null);
   // ── Arrivals at RNK ────────────────────────────────────────────────────────
   //
   // Bumped every time the user comes to the duel from somewhere else, and it
@@ -681,6 +681,21 @@ export default function AppShell() {
     return () => clearTimeout(t);
   }, [splashLeaving]);
 
+  // ── Held off-screen until it has finished building ────────────────────────
+  //
+  // `hold` parks the arriving screen at the edge with no animation, so the mount
+  // happens while it is out of sight. Only once React has painted does the class
+  // go on and the slide run. Setting it in the frame after paint rather than in
+  // the same commit is the whole point: an animation that starts alongside a
+  // mount spends its opening frames on the mount.
+  useEffect(() => {
+    if (slide?.phase !== "hold") return;
+    const id = requestAnimationFrame(() => {
+      setSlide((cur) => (cur?.phase === "hold" ? { ...cur, phase: "run" } : cur));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [slide]);
+
   const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
 
   // Still nothing to show behind it — the splash IS the screen for now.
@@ -815,13 +830,13 @@ export default function AppShell() {
    * measuring the outgoing screen.
    */
   const go = (s: Screen, swiped = false) => {
-    // A swipe already carries the motion. The veil on top of it is two
-    // transitions for one navigation.
-    const arriving = s === "duel" && current !== "duel" && !swiped;
-    if (arriving) {
-      setVeil((v) => v + 1);
-      setGreet((g) => g + 1); // coming back to the game earns the overlay again
-    }
+    const arriving = s === "duel" && current !== "duel";
+    // Every arrival earns the greeting, however you got here — that is what puts
+    // `ResumeOverlay` in front of a run you walked away from. Only the VEIL is
+    // suppressed for a swipe, because the swipe already carries the motion and
+    // the two together are two transitions for one navigation.
+    if (arriving) setGreet((g) => g + 1);
+    if (arriving && !swiped) setVeil((v) => v + 1);
     setScreen(s);
     // Whatever was open over the old screen does not follow you to the new one.
     // These render outside the screen branch, so without this a Settings sheet
@@ -845,11 +860,16 @@ export default function AppShell() {
    * game mid-flight lands on the offer to continue rather than dropping you into
    * a duel you had walked away from.
    */
-  const ribbon = (dir: Dir) => {
+  const ribbon = (dir: Dir, travelled = 0) => {
     const next = stepScreen(current, dir);
-    if (!next) return;
-    setSlide(dir);
-    go(next, true);
+    // Nothing next door. Whatever the finger dragged eases back where it was.
+    if (!next) return dragScreen(null);
+    // Leave first, then arrive. See `exitScreen` for why the two are separate
+    // and why the mount belongs in the gap between them.
+    exitScreen(dir, travelled, () => {
+      setSlide({ dir, phase: "hold" });
+      go(next, true);
+    });
   };
 
   const goDuel = () => go("duel");
@@ -914,12 +934,27 @@ export default function AppShell() {
   return (
     <>
       <div
-        className={slide === 1 ? "page-in-r" : slide === -1 ? "page-in-l" : undefined}
-        // Only THIS element's animation. Every animation inside a screen bubbles
-        // to here — the poster shake, the sheets, the coach marks — and any one
-        // of them would otherwise cut the slide short.
+        className={slide ? (slide.phase === "run" ? "page-slide" : "page-park") : undefined}
+        // The direction, as a custom property the content children inherit. The
+        // wrapper itself never moves — moving it moves the bars inside it, which
+        // is the whole bug this shape exists to avoid.
+        style={
+          slide
+            ? ({ "--from": slide.dir === 1 ? "var(--page-in)" : "calc(var(--page-in) * -1)" } as React.CSSProperties)
+            : undefined
+        }
+        // Matched by NAME, not by target.
+        //
+        // Every animation inside a screen bubbles to here — the poster shake, the
+        // sheets, the coach marks — so it cannot simply accept the first one. It
+        // used to test `e.target === e.currentTarget`, which was right while the
+        // wrapper itself animated and became silently wrong when the animation
+        // moved down to the content layer: the class was never cleared, and a
+        // finished `both`-filled animation OVERRIDES INLINE STYLES, so the page
+        // stayed pinned at `transform: none` and every drag after the first did
+        // nothing at all. That was most of the remaining chop.
         onAnimationEnd={(e) => {
-          if (e.target === e.currentTarget) setSlide(null);
+          if (e.animationName === "page-in") setSlide(null);
         }}
       >
       {current === "duel" ? (
@@ -981,7 +1016,7 @@ export default function AppShell() {
           onRibbon={ribbon}
           // Swiped in from the game, which sits to the RIGHT of the list, so the
           // state to land on is the one nearest it.
-          enterAtEnd={slide === -1}
+          enterAtEnd={slide?.dir === -1}
           onPoster={setMeta}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}
