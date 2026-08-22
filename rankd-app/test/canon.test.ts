@@ -11,13 +11,41 @@ const entry = (i: string, r: number): SnapshotEntry => ({ i, r, s: 10000 - r, t:
 
 describe("placing the canon", () => {
   it("puts the top of the list at the top of the scale", () => {
-    expect(tierForRank(1)).toBe(5);
-    expect(tierForRank(50)).toBe(5);
-    expect(tierForRank(51)).toBe(4.5);
-    expect(tierForRank(200)).toBe(4.5);
-    expect(tierForRank(201)).toBe(4);
-    expect(tierForRank(501)).toBe(3.5);
-    expect(tierForRank(100_000)).toBe(3.5);
+    // Fractions of the canon, so the shape is the same whatever its size.
+    expect(tierForRank(1, 250)).toBe(5);
+    expect(tierForRank(25, 250)).toBe(5);
+    expect(tierForRank(26, 250)).toBe(4.5);
+    expect(tierForRank(75, 250)).toBe(4.5);
+    expect(tierForRank(76, 250)).toBe(4);
+    expect(tierForRank(151, 250)).toBe(3.5);
+    expect(tierForRank(250, 250)).toBe(3.5);
+  });
+
+  it("fills all four tiers at 250, which absolute cut points did not", () => {
+    // The bug this replaced: a ladder tuned for 1000 films put 80% of a 250-film
+    // canon at 4.5 or better and left the bottom two tiers empty, so every film
+    // read as a masterpiece and the rating said nothing.
+    const tiers = new Set(placeCanon(250).map((p) => p.rating));
+    expect([...tiers].sort()).toEqual([3.5, 4, 4.5, 5]);
+  });
+
+  it("keeps the same shape at any canon size", () => {
+    for (const size of [100, 250, 1000]) {
+      const counts = new Map<number, number>();
+      for (const p of placeCanon(size)) counts.set(p.rating, (counts.get(p.rating) ?? 0) + 1);
+      // Roughly a tenth five-star, whatever the size.
+      expect(counts.get(5)! / size, `five-star share at ${size}`).toBeCloseTo(0.1, 1);
+      expect(new Set(counts.keys()).size, `tiers used at ${size}`).toBe(4);
+    }
+  });
+
+  it("clamps a rank past the end rather than falling through", () => {
+    expect(tierForRank(100_000, 250)).toBe(3.5);
+    expect(tierForRank(0, 250)).toBe(5);
+  });
+
+  it("survives an empty canon being asked about", () => {
+    expect(tierForRank(1, 0)).toBe(5);
   });
 
   it("never runs a tier out of band, which is the reason rank drives this", () => {

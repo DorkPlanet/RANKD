@@ -18,25 +18,44 @@ import { TIER_RANGE, type Rating } from "../tiers";
 /**
  * Where each slice of the canon sits on the half-star scale.
  *
- * Deliberately top-heavy. A canon is a list of good films, so the interesting
- * question is which of them are great, not how far down the merely-good go. The
- * cut points are round numbers chosen to read as a claim rather than derived
- * from anything: the top fifty are five-star films, the top two hundred are at
- * least four and a half.
+ * ── Fractions, not fixed ranks, and that was a bug ─────────────────────────
  *
- * Every band holds far fewer than its 1000-score ceiling, which leaves room for
- * the canon to grow without this needing to be rewritten.
+ * These were absolute cut points tuned for a thousand films: top 50 five-star,
+ * top 200 four and a half, and so on. Applied to the 250-film canon that is
+ * actually being built, it put eighty per cent of the list at 4.5 or better and
+ * left the bottom two tiers completely empty. The profile would have read as
+ * though every film in it were a masterpiece, and the star rating would have
+ * carried no information at all.
+ *
+ * As fractions it looks like a library at any size the canon is ever set to.
+ * Deliberately still top-heavy, because a canon IS a list of good films and the
+ * interesting question is which of them are great, not how far down the merely
+ * good go.
+ *
+ * This changes only the DISPLAYED rating. Bands do not overlap and
+ * `scoreWithinTier` spreads within them, so the published order is identical
+ * either way.
  */
-const LADDER: ReadonlyArray<{ upTo: number; rating: Rating }> = [
-  { upTo: 50, rating: 5 },
-  { upTo: 200, rating: 4.5 },
-  { upTo: 500, rating: 4 },
-  { upTo: Infinity, rating: 3.5 },
+const LADDER: ReadonlyArray<{ share: number; rating: Rating }> = [
+  { share: 0.1, rating: 5 },
+  { share: 0.3, rating: 4.5 },
+  { share: 0.6, rating: 4 },
+  { share: 1, rating: 3.5 },
 ];
 
-/** The star rating for a 1-based position in the canon. */
-export function tierForRank(rank: number): Rating {
-  return (LADDER.find((step) => rank <= step.upTo) ?? LADDER[LADDER.length - 1]).rating;
+/**
+ * The star rating for a 1-based position in a canon of `size` films.
+ *
+ * `size` is required rather than defaulted, on purpose. A default would let a
+ * caller silently get the wrong ladder for their canon, which is exactly the
+ * mistake the fractions above were introduced to fix.
+ */
+export function tierForRank(rank: number, size: number): Rating {
+  if (size <= 0) return LADDER[0].rating;
+  // Clamped, so a rank past the end of the canon still lands in the last tier
+  // rather than falling through to a default nobody chose.
+  const position = Math.min(Math.max(rank, 1), size) / size;
+  return (LADDER.find((step) => position <= step.share) ?? LADDER[LADDER.length - 1]).rating;
 }
 
 /**
@@ -77,7 +96,7 @@ export interface Placed {
  * easy to get subtly wrong once and never notice.
  */
 export function placeCanon(size: number): Placed[] {
-  const ratings = Array.from({ length: size }, (_, i) => tierForRank(i + 1));
+  const ratings = Array.from({ length: size }, (_, i) => tierForRank(i + 1, size));
 
   // How many films landed in each tier, so the spread knows its denominator.
   const totals = new Map<Rating, number>();
