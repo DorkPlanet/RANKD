@@ -26,6 +26,7 @@ import type { PublicProfile } from "@/lib/social/publicProfile";
 import type { PersonStat } from "@/lib/profile";
 import type { SnapshotFilm } from "@/lib/snapshot";
 import { blockFor, inkOn } from "@/lib/card/palette";
+import { genreTypeSize } from "@/lib/card/genreType";
 
 /** Matches `Stat` on the owner's profile. Numbers first, label under. */
 function Stat({ n, label }: { n: number; label: string }) {
@@ -84,31 +85,48 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
   const block = blockFor(genre.name);
   const ink = inkOn(block);
 
+  // ── The type is sized from the WORD, because nothing here can measure ─────
+  //
+  // The canvas marquee calls `fitText`, which shrinks until it fits because it
+  // has a rendering context to ask. In the DOM there is no such thing at render
+  // time, and the first version simply set a large size and let a long genre run
+  // straight out of its block: "DOCUMENTARY" overlapped the numbers beside it on
+  // a real profile.
+  //
+  // So the size comes from the longest word instead: see `genreTypeSize`, which
+  // is its own tested function because the first version was inline and split on
+  // the letter "s" instead of on whitespace. `break-words` and `overflow-hidden`
+  // are the backstop for anything longer than it anticipates.
+  const size = genreTypeSize(genre.name);
+
   return (
     <section className="mt-7">
       <div className="rule-fade mb-6" />
-      <div className="flex overflow-hidden rounded-2xl" style={{ background: "var(--surface)" }}>
-        {/* The block. A third of the width, matching the card it is quoting. */}
-        <div
-          className="flex w-[38%] shrink-0 flex-col justify-center px-4 py-5"
-          style={{ background: block, color: ink }}
-        >
-          <span className="text-label font-extrabold tracking-[0.16em] opacity-70">
+      <div className="overflow-hidden rounded-2xl" style={{ background: "var(--surface)" }}>
+        {/* ── Full width, not a left third ──────────────────────────────────
+            `marquee.ts` fills the left 41% of a 960px landscape card, which
+            leaves about 120px for the word on a phone. That is enough for CRIME
+            and not for DOCUMENTARY, and the whole argument of the format is that
+            the claim is enormous.
+
+            So the block spans the card and the support sits under it. Same
+            language, different proportions, because the proportions were a
+            consequence of a 960px canvas rather than a decision about how loud
+            the thing should be. */}
+        <div className="px-5 py-5" style={{ background: block, color: ink }}>
+          <span className="block text-label font-extrabold tracking-[0.16em] opacity-70">
             THEIR GENRE
           </span>
-          {/* The one enormous thing. Wraps rather than truncates: a long genre
-              is still the subject, and shrinking it to fit would make the loud
-              card quiet for exactly the people whose taste is unusual. */}
           <span
-            className="mt-1.5 block font-display leading-[0.92] tracking-wide"
-            style={{ fontSize: "clamp(28px, 9vw, 40px)" }}
+            className="mt-1 block break-words font-display leading-[0.9] tracking-wide"
+            style={{ fontSize: size }}
           >
             {genre.name.toUpperCase()}
           </span>
         </div>
 
-        {/* The support. Numbers, and a whisper of the film behind them. */}
-        <div className="relative flex min-w-0 flex-1 flex-col justify-center px-4 py-5">
+        {/* The support: numbers, and a whisper of the film behind them. */}
+        <div className="relative flex items-center gap-6 px-5 py-4">
           {film?.poster && (
             <>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -117,30 +135,37 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
                 alt=""
                 aria-hidden
                 className="absolute inset-0 h-full w-full object-cover"
-                style={{ opacity: 0.14 }}
+                style={{ opacity: 0.12 }}
               />
-              <div className="absolute inset-0" style={{ background: "linear-gradient(to right, var(--surface), transparent)" }} />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(to right, var(--surface), color-mix(in srgb, var(--surface) 70%, transparent))",
+                }}
+              />
             </>
           )}
           <div className="relative">
-            <span className="block font-serif text-2xl font-bold tabular-nums text-text-hi">
+            <span className="block font-serif text-lg font-bold tabular-nums text-text-hi">
               {genre.count}
             </span>
-            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
-              FILMS
-            </span>
-            <span className="mt-3 block font-serif text-2xl font-bold tabular-nums text-text-hi">
+            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">FILMS</span>
+          </div>
+          <div className="relative">
+            <span className="block font-serif text-lg font-bold tabular-nums text-text-hi">
               {genre.avg.toFixed(1)}★
             </span>
             <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
               ON AVERAGE
             </span>
-            {film && (
-              <span className="mt-3 block truncate text-label text-dim">
-                Best of them: {film.title}
-              </span>
-            )}
           </div>
+          {film && (
+            <div className="relative min-w-0 flex-1 text-right">
+              <span className="block truncate text-label text-dim">Their best</span>
+              <span className="block truncate text-sub text-text-hi">{film.title}</span>
+            </div>
+          )}
         </div>
       </div>
     </section>

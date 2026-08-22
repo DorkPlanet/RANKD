@@ -115,6 +115,9 @@ export interface Snapshot {
   summary: SnapshotSummary;
 }
 
+/** Mean of a list of ratings. Only ever called on a non-empty one. */
+const avgOf = (rs: readonly number[]): number => rs.reduce((a, b) => a + b, 0) / rs.length;
+
 /** How many films the profile shows. Ten is a top ten. */
 const TOP_FILMS = 10;
 
@@ -156,10 +159,37 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
 
   const people = topPeople(own);
 
-  // The best-placed film carrying their top genre. `placed` is already sorted
-  // best first, so the first hit is the answer and there is nothing to compare.
-  const genreFilm = people.genre
-    ? placed.find((f) => f.genres?.includes(people.genre!.name))
+  // ── The genre is picked BY COUNT, not by rating ──────────────────────────
+  //
+  // `topPeople.genre` is the best-RATED genre: `rank()` sorts on average and
+  // uses count only to break a tie. That is right for the directors and actors
+  // it sits beside, and wrong for this card, which says "their genre" and prints
+  // a film count next to it.
+  //
+  // The two disagree more often than you would think. A library with eleven
+  // well-liked documentaries and forty horror films reports Documentary, and its
+  // owner says, correctly, that horror is their genre by the numbers. Reported
+  // from a real profile, 22 Aug 2026.
+  //
+  // So this counts. `fingerprint.genre` already picks the same way and is the
+  // "you keep returning to" line on the owner's own profile, which means the two
+  // surfaces now agree about somebody instead of naming different genres.
+  const genreCounts = new Map<string, number[]>();
+  for (const film of own) {
+    for (const g of film.genres ?? []) {
+      genreCounts.set(g, [...(genreCounts.get(g) ?? []), film.rating]);
+    }
+  }
+  const topGenre = [...genreCounts.entries()]
+    // Most films first. Average breaks a tie, so between two genres you have
+    // watched equally the one you like more wins.
+    .sort((a, b) => b[1].length - a[1].length || avgOf(b[1]) - avgOf(a[1]))
+    .map(([name, ratings]) => ({ name, count: ratings.length, avg: avgOf(ratings) }))[0];
+
+  // The best-placed film carrying that genre. `placed` is already sorted best
+  // first, so the first hit is the answer and there is nothing to compare.
+  const genreFilm = topGenre
+    ? placed.find((f) => f.genres?.includes(topGenre.name))
     : undefined;
 
   return {
@@ -176,7 +206,7 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
       })),
       directors: people.directors,
       actors: people.actors,
-      genre: people.genre,
+      genre: topGenre,
       genreFilm: genreFilm
         ? {
             id: genreFilm.id,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { BARS } from "@/lib/brand";
 import { DARK_INK, LIGHT_INK, blockFor, inkOn } from "@/lib/card/palette";
+import { genreTypeSize } from "@/lib/card/genreType";
 
 // The marquee card's two colour rules, shared by the canvas renderer and the
 // genre card on a public profile. They were lifted out of `marquee.ts` so those
@@ -63,5 +64,39 @@ describe("which block a subject gets", () => {
 
   it("survives a subject with no characters in it", () => {
     expect(BARS as readonly string[]).toContain(blockFor(""));
+  });
+});
+
+describe("how large the genre gets to be", () => {
+  it("keeps a short genre enormous", () => {
+    expect(genreTypeSize("Crime")).toBe(52);
+    expect(genreTypeSize("Horror")).toBe(52);
+  });
+
+  it("steps a long one down rather than letting it run out of its block", () => {
+    // "DOCUMENTARY" overlapped the numbers beside it on a real profile. That is
+    // what this whole function exists to stop.
+    expect(genreTypeSize("Documentary")).toBe(30);
+  });
+
+  it("measures the LONGEST WORD, not the whole string", () => {
+    // The bug that made this a tested function. Sizing by total length would
+    // shrink a two-word genre to fit a width it never needs, because it wraps
+    // and each line only has to hold its own word.
+    expect(genreTypeSize("Science Fiction")).toBe(44); // longest word is 7
+    expect(genreTypeSize("Science Fiction").valueOf()).toBeGreaterThan(
+      genreTypeSize("Documentary"),
+    );
+  });
+
+  it("splits on whitespace, not on the letter s", () => {
+    // The typo it shipped with: `/s+/` rather than `/\s+/`. It broke words on
+    // "s", so "Musical" measured as four characters and came out enormous.
+    expect(genreTypeSize("Musical")).toBe(44); // seven characters, one word
+  });
+
+  it("survives a genre with nothing in it", () => {
+    expect(genreTypeSize("")).toBe(52);
+    expect(genreTypeSize("   ")).toBe(52);
   });
 });
