@@ -979,6 +979,9 @@ export default function AppShell() {
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onRibbon={ribbon}
+          // Swiped in from the game, which sits to the RIGHT of the list, so the
+          // state to land on is the one nearest it.
+          enterAtEnd={slide === -1}
           onPoster={setMeta}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}

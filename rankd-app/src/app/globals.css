@@ -852,6 +852,37 @@ button * {
 }
 .page-in-r { animation: page-in-r 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
 .page-in-l { animation: page-in-l 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
+/* ── The chrome holds still while the page moves under it ───────────────────
+   The bars live INSIDE each screen's `main`, so sliding the screen slid them
+   too and the whole app appeared to move. They are chrome; only the page is
+   travelling.
+
+   Lifting them out of the screens is the structural fix and it is a real
+   refactor: five call sites, and `--nav-h` is measured from the bar. This is the
+   exact inverse instead. Same duration, same curve, opposite direction, so the
+   two transforms cancel at every frame and the bars are pinned to the pixel.
+
+   `.chrome-hold` is for anything else that reads as a fixed band — the list's
+   counts, which are the filter indicator and must not appear to travel with the
+   filter they are indicating. */
+@keyframes page-hold-r {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes page-hold-l {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+.page-in-r header,
+.page-in-r nav,
+.page-in-r .chrome-hold { animation: page-hold-r 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.page-in-l header,
+.page-in-l nav,
+.page-in-l .chrome-hold { animation: page-hold-l 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .page-in-r, .page-in-l { animation-duration: 0.01s; }
+  .page-in-r, .page-in-l,
+  .page-in-r header, .page-in-r nav, .page-in-r .chrome-hold,
+  .page-in-l header, .page-in-l nav, .page-in-l .chrome-hold { animation-duration: 0.01s; }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { TURN_AT, type Dir } from "@/lib/ribbon";
+import { dragScreen, TURN_AT, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_PACE_S, etaLabel, etaSeconds, paceSeconds } from "@/lib/progress";
@@ -245,9 +245,14 @@ export default function DuelScreen({
       from = { x: t.clientX, y: t.clientY, axis: null };
     };
     const move = (e: TouchEvent) => {
-      if (!from || from.axis) return;
+      if (!from) return;
       const t = e.touches[0];
       const dx = t.clientX - from.x;
+      // Already committed sideways: the screen follows the hand, so a swipe here
+      // holds and drags like the profile's panels rather than only reporting
+      // itself once the finger is gone.
+      if (from.axis === "x") return dragScreen(dx);
+      if (from.axis) return;
       const dy = t.clientY - from.y;
       // Waiting until the finger commits to an axis. Guessing early turns a
       // scroll that drifted sideways into a navigation.
@@ -257,11 +262,15 @@ export default function DuelScreen({
     const end = (e: TouchEvent) => {
       const f = from;
       from = null;
-      if (!f || f.axis !== "x") return;
+      if (!f) return;
+      if (f.axis !== "x") return;
       const dx = e.changedTouches[0].clientX - f.x;
       // The same fraction a page turn costs on the list and the profile, so the
       // app asks for one amount of finger rather than three tuned numbers.
-      if (Math.abs(dx) <= window.innerWidth * TURN_AT) return;
+      if (Math.abs(dx) <= window.innerWidth * TURN_AT) return dragScreen(null);
+      // No spring back: this `main` is about to be replaced by the next screen's,
+      // which arrives with the slide. Easing this one home first would be a
+      // bounce nobody asked for in front of the navigation.
       onRibbon(dx < 0 ? 1 : -1);
     };
     window.addEventListener("touchstart", start, { passive: true });

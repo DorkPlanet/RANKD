@@ -44,6 +44,7 @@ export default function ListScreen({
   onDuel,
   onProfile,
   onRibbon,
+  enterAtEnd = false,
   onPoster,
   onTrophies,
   logging,
@@ -75,6 +76,8 @@ export default function ListScreen({
    * anywhere — off the end of un-rnkd and into the game. See `lib/ribbon.ts`.
    */
   onRibbon: (dir: Dir) => void;
+  /** Swiped into from the game, so land on the state nearest it. */
+  enterAtEnd?: boolean;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
@@ -118,7 +121,20 @@ export default function ListScreen({
   // sections, the spacers and the tier-jump offsets together, so handing it a
   // smaller library keeps all three consistent — filtering its OUTPUT would
   // leave the offsets describing rows that are no longer there.
-  const [only, setOnly] = useState<null | "locked" | "shuffled" | "unrnkd">(null);
+  // Arriving from the right means walking back INTO the list from the game, so
+  // the page you land on is the one nearest the game — the last state, not the
+  // first. Coming from anywhere else starts at everything-you-own.
+  //
+  // Computed lazily rather than in an effect: the band drops empty states, so
+  // "last" is the last one with a film in it, and the answer is known before
+  // the first paint.
+  const [only, setOnly] = useState<null | "locked" | "shuffled" | "unrnkd">(() => {
+    if (!enterAtEnd) return null;
+    if (films.some((f) => !isPlaced(f))) return "unrnkd";
+    if (films.some((f) => isPlaced(f) && !isHard(f))) return "shuffled";
+    if (films.some(isHard)) return "locked";
+    return null;
+  });
   // ── The same three states, as pages you can swipe between ────────────────
   //
   // Tapping a count is still the way in, and still the obvious one. This is the
@@ -153,10 +169,14 @@ export default function ListScreen({
     el.style.transition = ms ? `transform ${ms}ms ${EASE}` : "none";
     el.style.transform = `translateX(${to})`;
   };
-  const turnTo = (next: (typeof segments)[number]["key"], dir: 1 | -1) => {
+  const turnTo = (next: (typeof segments)[number]["key"], dir: 1 | -1, travelled = 0) => {
     if (turning.current) return;
     turning.current = true;
-    slide(`${dir * -100}%`, TURN_MS);
+    // The finger has already covered `travelled` of the way. Timing the rest in
+    // proportion is what stops the pane overtaking the hand it just left — a
+    // fixed 150ms from 80% across is a lurch, and that is the "catch up".
+    const out = Math.max(60, Math.round(TURN_MS * (1 - Math.min(1, travelled))));
+    slide(`${dir * -100}%`, out);
     window.setTimeout(() => {
       // Off-screen now, so the jump to the far side and the content swap are
       // both invisible and their order does not matter.
@@ -169,7 +189,7 @@ export default function ListScreen({
         slide("0px", TURN_MS);
         turning.current = false;
       });
-    }, TURN_MS);
+    }, out);
   };
 
   const shown = useMemo(() => {
@@ -284,7 +304,7 @@ export default function ListScreen({
           function was reaching the profile, and the nav's You cell does that
           from every screen. Removing it hands the top of the band to the counts,
           which is what people come here to read. */}
-      <div className="flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--band)" }}>
+      <div className="chrome-hold flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--band)" }}>
 
         {/* ── The key to the numbers below ──────────────────────────────
             "shuffled", not "Rankd placed". The user's call, and it is checkable
@@ -483,10 +503,14 @@ export default function ListScreen({
             return;
           }
           if (landed === page) return slide("0px", TURN_MS);
-          turnTo(segments[landed as number].key, dx < 0 ? 1 : -1);
+          turnTo(
+            segments[landed as number].key,
+            dx < 0 ? 1 : -1,
+            Math.abs(dx) / e.currentTarget.clientWidth,
+          );
         }}
       >
-        <div ref={track} className="will-change-transform">
+        <div ref={track}>
         {model.total === 0 && (
           <p className="mt-16 text-center text-sub leading-relaxed text-dim">
             Nothing here yet.

@@ -81,3 +81,30 @@ export const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
  * out, then in — so each is half that and the two gestures take the same time.
  */
 export const TURN_MS = 150;
+
+/**
+ * Drag the current screen sideways, holding its chrome still.
+ *
+ * The bars live inside each screen's `main`, so moving the screen moves them.
+ * Rather than lift five call sites out (and `--nav-h` is measured from one of
+ * them), each bar gets the exact inverse offset — the same trick `.page-hold-*`
+ * plays during the slide, done by hand while a finger is down.
+ *
+ * DOM straight, no React. This runs on every touchmove; routing it through state
+ * would re-render a screen to move one layer.
+ */
+export function dragScreen(px: number | null): void {
+  const main = document.querySelector("main");
+  if (!main) return;
+  const holds = main.querySelectorAll<HTMLElement>(
+    ":scope > header, :scope > nav, :scope > .chrome-hold",
+  );
+  const set = (el: HTMLElement, x: number, ms: number) => {
+    el.style.transition = ms ? `transform ${ms}ms ${EASE}` : "none";
+    el.style.transform = x ? `translateX(${x}px)` : "";
+  };
+  // null means let go without turning: everything eases back where it started.
+  const ms = px === null ? TURN_MS : 0;
+  set(main as HTMLElement, px ?? 0, ms);
+  holds.forEach((el) => set(el, px === null ? 0 : -px, ms));
+}

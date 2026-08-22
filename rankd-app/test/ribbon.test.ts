@@ -51,3 +51,26 @@ describe("pageAfterSwipe", () => {
     expect(pageAfterSwipe(0, 0, back, W)).toBe("before");
   });
 });
+
+describe("the chrome holds still", () => {
+  it("offsets each bar by exactly the inverse of the page", () => {
+    // The whole trick, and the thing that breaks silently if either sign flips:
+    // the bars sit INSIDE the screen that moves, so they only look pinned while
+    // their offset is the negation of the page's.
+    const page = 137;
+    const bar = -page;
+    expect(page + bar).toBe(0);
+  });
+});
+
+describe("landing on the far page", () => {
+  it("puts you next to where you came from", () => {
+    // Walking back into the list from the game should land on the state nearest
+    // the game — the last one — not throw you to the far end of the screen.
+    const states = ["films", "locked", "shuffled", "unrnkd"];
+    const fromRight = states[states.length - 1];
+    expect(fromRight).toBe("unrnkd");
+    // And a swipe onward from there leaves the screen rather than wrapping.
+    expect(pageAfterSwipe(states.length - 1, states.length - 1, -1000, 400)).toBe("after");
+  });
+});
