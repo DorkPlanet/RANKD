@@ -28,7 +28,6 @@ interface Person {
   house: boolean;
   private: boolean;
   following: boolean | null;
-  isSelf: boolean;
 }
 
 /** Long enough that a fast typist finishes a word before anything is asked. */
@@ -160,10 +159,11 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
                 </span>
               </a>
 
-              {/* No button for yourself, and none for a private account: a
-                  follow would be refused server-side anyway, and offering one
-                  that cannot work is worse than offering none. */}
-              {!person.isSelf && !person.private && person.following !== null && (
+              {/* None for a private account: a follow would be refused
+                  server-side anyway, and offering one that cannot work is worse
+                  than offering none. You never appear in your own results, so
+                  there is no self case to handle here. */}
+              {!person.private && person.following !== null && (
                 <button
                   onClick={() => void toggleFollow(person)}
                   disabled={busy === person.handle}

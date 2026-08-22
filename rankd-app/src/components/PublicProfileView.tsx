@@ -25,6 +25,7 @@ import { starsFor } from "@/lib/tiers";
 import type { PublicProfile } from "@/lib/social/publicProfile";
 import type { PersonStat } from "@/lib/profile";
 import type { SnapshotFilm } from "@/lib/snapshot";
+import { blockFor, inkOn } from "@/lib/card/palette";
 
 /** Matches `Stat` on the owner's profile. Numbers first, label under. */
 function Stat({ n, label }: { n: number; label: string }) {
@@ -56,55 +57,90 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /**
  * The one card on the page, and it is the genre.
  *
- * Films, directors and actors all had a place already; a genre did not, and it
- * is the only one of the four that says something about SHAPE rather than about
- * a name. "They keep coming back to crime" is a different kind of fact from
- * "they rate Michael Mann highest", and it is the one a stranger reads first.
+ * ── It is a MARQUEE, in HTML ───────────────────────────────────────────────
  *
- * It borrows the poster of their best-placed film in that genre, because a genre
- * is the one thing here with no picture of its own. Darkened hard and overlaid,
- * so it reads as a ground the type sits on rather than as a film being
- * recommended: the subject is the genre, not that poster.
+ * `lib/card/marquee.ts` is the loud share card: a solid block of colour filling
+ * the left third, the claim about you set larger than anything else in the app,
+ * and the ranking demoted to support. Its own header explains the borrowed
+ * trick, which is that a slide says ONE thing enormously.
+ *
+ * This is that card, drawn in the DOM instead of on a canvas, for a surface that
+ * has no duels behind it and nothing to export. A stranger reading a profile
+ * gets the same object your share card is, in the same colours, without anybody
+ * having had to make one.
+ *
+ * The block colour and the ink rule come from `lib/card/palette.ts`, which both
+ * files now read, so a subject is the same colour here as it is on anything you
+ * post. That is the reason those two functions were lifted out.
+ *
+ * ── Why genre and not something with a picture ─────────────────────────────
+ *
+ * Films, directors and actors were already on the page and all three have a
+ * face: a poster, a portrait, a name people recognise. A genre has none, which
+ * is exactly why it needs the loud treatment rather than another row of text.
+ * The colour IS the artwork here, which is the marquee's whole argument.
  */
 function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) {
+  const block = blockFor(genre.name);
+  const ink = inkOn(block);
+
   return (
     <section className="mt-7">
       <div className="rule-fade mb-6" />
-      <div
-        className="relative flex min-h-[132px] flex-col justify-end overflow-hidden rounded-2xl px-5 py-4"
-        style={{ background: "var(--surface)" }}
-      >
-        {film?.poster && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={film.poster}
-              alt=""
-              aria-hidden
-              className="absolute inset-0 h-full w-full object-cover"
-              style={{ opacity: 0.28, filter: "grayscale(0.4)" }}
-            />
-            {/* The type has to stay readable over whatever poster turns up, and
-                posters are not a controlled palette. */}
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(to top, var(--bg) 8%, color-mix(in srgb, var(--bg) 55%, transparent) 60%, transparent)",
-              }}
-            />
-          </>
-        )}
-        <div className="relative">
-          <span className="block text-label font-extrabold tracking-[0.18em] text-dim">
-            THEY KEEP COMING BACK TO
+      <div className="flex overflow-hidden rounded-2xl" style={{ background: "var(--surface)" }}>
+        {/* The block. A third of the width, matching the card it is quoting. */}
+        <div
+          className="flex w-[38%] shrink-0 flex-col justify-center px-4 py-5"
+          style={{ background: block, color: ink }}
+        >
+          <span className="text-label font-extrabold tracking-[0.16em] opacity-70">
+            THEIR GENRE
           </span>
-          <span className="mt-1 block font-display text-[34px] leading-none tracking-wide text-gold">
+          {/* The one enormous thing. Wraps rather than truncates: a long genre
+              is still the subject, and shrinking it to fit would make the loud
+              card quiet for exactly the people whose taste is unusual. */}
+          <span
+            className="mt-1.5 block font-display leading-[0.92] tracking-wide"
+            style={{ fontSize: "clamp(28px, 9vw, 40px)" }}
+          >
             {genre.name.toUpperCase()}
           </span>
-          <span className="mt-1.5 block text-sub leading-snug text-dim">
-            {genre.count} films, {genre.avg.toFixed(1)}★ on average
-          </span>
+        </div>
+
+        {/* The support. Numbers, and a whisper of the film behind them. */}
+        <div className="relative flex min-w-0 flex-1 flex-col justify-center px-4 py-5">
+          {film?.poster && (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={film.poster}
+                alt=""
+                aria-hidden
+                className="absolute inset-0 h-full w-full object-cover"
+                style={{ opacity: 0.14 }}
+              />
+              <div className="absolute inset-0" style={{ background: "linear-gradient(to right, var(--surface), transparent)" }} />
+            </>
+          )}
+          <div className="relative">
+            <span className="block font-serif text-2xl font-bold tabular-nums text-text-hi">
+              {genre.count}
+            </span>
+            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
+              FILMS
+            </span>
+            <span className="mt-3 block font-serif text-2xl font-bold tabular-nums text-text-hi">
+              {genre.avg.toFixed(1)}★
+            </span>
+            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
+              ON AVERAGE
+            </span>
+            {film && (
+              <span className="mt-3 block truncate text-label text-dim">
+                Best of them: {film.title}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </section>

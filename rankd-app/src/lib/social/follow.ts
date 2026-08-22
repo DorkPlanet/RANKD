@@ -26,6 +26,16 @@ export interface FollowState {
   followsMe: boolean;
   /** Both directions. What unlocks comparison and, later, private threads. */
   friends: boolean;
+  /**
+   * The viewer is looking at their own profile.
+   *
+   * Reported rather than left for the client to work out by comparing handles.
+   * The button was rendering "Follow" on your own page: every edge is correctly
+   * false for yourself, which is indistinguishable from a stranger you have not
+   * followed. Tapping it got a 400 from a route that already knew better, so the
+   * knowledge existed and simply was not being passed on.
+   */
+  isSelf: boolean;
   followerCount: number;
   followingCount: number;
 }
@@ -57,7 +67,13 @@ export async function followCounts(
 export async function followStateFor(userId: string, viewerId: string | null): Promise<FollowState> {
   const counts = await followCounts(userId);
   if (!viewerId || viewerId === userId) {
-    return { following: false, followsMe: false, friends: false, ...counts };
+    return {
+      following: false,
+      followsMe: false,
+      friends: false,
+      isSelf: viewerId === userId,
+      ...counts,
+    };
   }
 
   const edges = await db
@@ -72,7 +88,7 @@ export async function followStateFor(userId: string, viewerId: string | null): P
 
   const following = edges.some((e) => e.followerId === viewerId && e.followeeId === userId);
   const followsMe = edges.some((e) => e.followerId === userId && e.followeeId === viewerId);
-  return { following, followsMe, friends: following && followsMe, ...counts };
+  return { following, followsMe, friends: following && followsMe, isSelf: false, ...counts };
 }
 
 /** Are these two people mutual? The gate on comparison and private threads. */

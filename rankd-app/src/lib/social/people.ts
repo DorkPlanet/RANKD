@@ -19,7 +19,7 @@
 // already know of. Search is for reaching a person, not for browsing strangers;
 // that is what discovery will be, and discovery gets to be its own decision.
 
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db, follows, users } from "@/lib/db";
 import { MIN_QUERY } from "./searchRules";
@@ -34,8 +34,6 @@ export interface PersonResult {
   private: boolean;
   /** Does the viewer already follow them? `null` when signed out. */
   following: boolean | null;
-  /** The viewer themselves, who gets no follow button. */
-  isSelf: boolean;
 }
 
 // Re-exported so a server caller has one import rather than two. The value
@@ -83,6 +81,13 @@ export async function searchPeople(query: string, viewerId: string | null): Prom
         // account would be a tombstone nobody asked for.
         isNull(users.deletedAt),
         isNull(users.suspendedAt),
+        // ── You are not a search result ──────────────────────────────────
+        //
+        // Search is for reaching somebody ELSE. Your own name coming back is a
+        // row you can do nothing with, taking a slot from the person you were
+        // actually looking for, and it reads as though Rankd has not noticed
+        // who is asking.
+        ...(viewerId ? [ne(users.id, viewerId)] : []),
         or(
           sql`lower(${users.handle}) LIKE ${prefix} ESCAPE '\\'`,
           sql`lower(${users.handle}) LIKE ${anywhere} ESCAPE '\\'`,
@@ -131,6 +136,5 @@ export async function searchPeople(query: string, viewerId: string | null): Prom
     house: r.kind === "house",
     private: r.visibility !== "public",
     following: viewerId ? followed.has(r.id) : null,
-    isSelf: r.id === viewerId,
   }));
 }

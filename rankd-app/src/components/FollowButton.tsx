@@ -23,6 +23,7 @@ interface State {
   following: boolean;
   followsMe: boolean;
   friends: boolean;
+  isSelf: boolean;
   followerCount: number;
   followingCount: number;
 }
@@ -98,7 +99,9 @@ export function FollowButton({ handle }: { handle: string }) {
         {plural(state.followerCount, "follower")} · {state.followingCount} following
       </span>
 
-      {signedIn === false ? (
+      {/* Nothing to offer yourself. Your own counts still show, because they
+          are the reason to look at your own page. */}
+      {state.isSelf ? null : signedIn === false ? (
         <span className="text-sub leading-snug text-dim">Sign in to follow {handle}.</span>
       ) : (
         <>
