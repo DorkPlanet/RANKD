@@ -27,7 +27,12 @@ import type { Film } from "@/lib/types";
 // then. Ten sections to manage instead of eight hundred rows, and because the
 // heights are known the scroll bar, the tier jumps and the idle drift all behave
 // as if the whole list were live. These numbers must match the CSS.
-const ROW_H = 96;
+// Was 96. Grown so the poster's tilt and its shadow have somewhere to land:
+// .list-row carries paint containment, so anything drawn outside the row box is
+// cut square, and the poster's rotated top-left corner was being shaved off.
+// The extra twelve pixels also give the list the breathing room it wanted.
+// Change this and change contain-intrinsic-size in globals.css in the same move.
+const ROW_H = 108;
 const HEADER_H = 56;
 const DIVIDER_H = 30;
 const NEAR = 900; // how far beyond the viewport a section mounts
@@ -169,6 +174,7 @@ export default function ListScreen({
     el.style.transition = ms ? `transform ${ms}ms ${EASE}` : "none";
     el.style.transform = `translateX(${to})`;
   };
+
   const turnTo = (next: (typeof segments)[number]["key"], dir: 1 | -1, travelled = 0) => {
     if (turning.current) return;
     turning.current = true;
@@ -191,7 +197,6 @@ export default function ListScreen({
       });
     }, out);
   };
-
   const shown = useMemo(() => {
     if (!only) return films;
     return films.filter((f) =>
@@ -243,6 +248,7 @@ export default function ListScreen({
 
   useVisiblePosters(scroller, films, onPoster);
   useDriftScroll(scroller, !searching && !jumpOpen && !frozen);
+  usePosterShake(scroller, !searching && !frozen);
 
   const counts = tierCounts(films);
   // How much of each tier has a position, for the Jump menu.
@@ -463,7 +469,7 @@ export default function ListScreen({
         ref={scroller}
         // overflow-x hidden as well as y: setting one axis to auto computes the
         // other to auto, and the pane mid-turn would be reachable sideways.
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-6"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6"
         onTouchStart={(e) => {
           const t = e.touches[0];
           touch.current = { x: t.clientX, y: t.clientY, axis: null };
@@ -498,10 +504,10 @@ export default function ListScreen({
           // Off an end: the shell takes it, and this pane springs back rather
           // than sitting where the finger left it.
           if (landed === "before" || landed === "after") {
-            slide("0px", TURN_MS);
             // This pane eases home either way: on "after" the whole screen is
             // about to leave, and it should leave from where it sits rather than
             // with an inner offset still on it.
+            slide("0px", TURN_MS);
             if (landed === "after") onRibbon(1, Math.abs(dx) / e.currentTarget.clientWidth);
             return;
           }
@@ -604,6 +610,69 @@ function TierRule({ stars, count }: { stars: string; count: number }) {
       />
     </div>
   );
+}
+
+/**
+ * Every few seconds, one poster that is actually on screen gives a shake.
+ *
+ * It signals nothing and it is not a recommendation — it is warmth. A column of
+ * eight hundred stills sits very dead, and one card twitching now and then is
+ * enough to stop it reading as a screenshot of itself. If someone looks over at
+ * whichever film moved, that is a bonus, not the point.
+ *
+ * Straight DOM, no state. Driving this through React would re-render the whole
+ * list to animate a single image, which is exactly the cost the section
+ * virtualisation and content-visibility above exist to avoid.
+ *
+ * The interval is re-randomised each time rather than fixed: a steady beat reads
+ * as a stuck loop, and the whole effect depends on being unable to predict it.
+ */
+function usePosterShake(root: React.RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !active) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    let current: HTMLElement | null = null;
+
+    const clear = () => {
+      current?.classList.remove("shake");
+      current = null;
+    };
+
+    const shake = () => {
+      // Only ever one at a time — two posters moving together stops reading as
+      // a quirk and starts reading as the page glitching.
+      clear();
+
+      const box = el.getBoundingClientRect();
+      const onScreen: HTMLElement[] = [];
+      el.querySelectorAll<HTMLElement>("[data-film-id]").forEach((row) => {
+        const r = row.getBoundingClientRect();
+        // Fully inside, not merely intersecting: half a poster twitching at the
+        // edge of the viewport looks like a rendering fault.
+        if (r.top >= box.top && r.bottom <= box.bottom) onScreen.push(row);
+      });
+
+      const row = onScreen[Math.floor(Math.random() * onScreen.length)];
+      const poster = row?.querySelector<HTMLElement>(".list-poster");
+      // A film with no artwork yet renders a plain span in the poster's place;
+      // shaking an empty rectangle is just a flicker, so let it sit this one out.
+      if (poster instanceof HTMLImageElement) {
+        current = poster;
+        poster.classList.add("shake");
+        poster.addEventListener("animationend", clear, { once: true });
+      }
+
+      timer = setTimeout(shake, 4000 + Math.random() * 5000);
+    };
+
+    timer = setTimeout(shake, 4000 + Math.random() * 5000);
+    return () => {
+      clearTimeout(timer);
+      clear();
+    };
+  }, [root, active]);
 }
 
 function Row({

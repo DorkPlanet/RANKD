@@ -343,7 +343,39 @@ button * {
    drift all behave as if every one of the 800+ rows were live. */
 .list-row {
   content-visibility: auto;
-  contain-intrinsic-size: 0 96px;
+  /* MUST match ROW_H in ListScreen.tsx. The section heights, the scroll spacers
+     and the tier jumps are all derived from that constant, so a drift here is
+     silent until a jump lands forty pixels off its heading. */
+  contain-intrinsic-size: 0 108px;
+  /* content-visibility applies PAINT containment, which clips to this padding
+     box — always, not just while the row is off screen. The poster below is
+     rotated, so its top-left corner reaches about 2.6px past its own layout
+     box; with the poster flush against the row's edge that corner was being
+     shaved off. The padding is what buys it room. Height is set inline and
+     box-sizing is border-box, so this costs no height and ROW_H stays true. */
+  padding-inline: 10px;
+  /* Containing block for the seam below. */
+  position: relative;
+}
+
+/* A seam between films, not a rule under each one: it starts where the title
+   starts rather than under the poster, and fades out to the right. Same voice
+   as TierRule and .card-rule — this list is made of hairlines that dissolve,
+   never boxes. Drawn as ::after so it adds no height. */
+.list-row::after {
+  content: "";
+  position: absolute;
+  /* Lines up under the title, not under the poster: 10px row padding + 54px
+     poster + the 14px gap. Under the artwork it reads as an underline on it. */
+  left: 78px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--border) 70%, transparent),
+    transparent
+  );
 }
 
 /* Every poster tilted by the same 4 degrees — the list stops reading as a table
@@ -357,7 +389,40 @@ button * {
   object-position: center top;
   transform: rotate(-4deg);
   border: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.65), 0 2px 4px rgba(0, 0, 0, 0.4);
+  /* Tightened from 0 6px 16px. That reached 22px below the artwork and the row
+     only has 16px of clearance to give, so the tail was being cut square by the
+     paint containment above. This fits. */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Every so often one poster on screen gives a shake and settles. Nothing is
+   being signalled — it is warmth, and a way for a column of 800 stills to not
+   sit completely dead. Starts and ends on the resting -4deg so it returns to
+   the tilt it shares with every other poster rather than snapping back to it. */
+@keyframes poster-shake {
+  0%,
+  100% {
+    transform: rotate(-4deg);
+  }
+  20% {
+    transform: rotate(-7deg) translateX(-1px);
+  }
+  45% {
+    transform: rotate(-1deg) translateX(1px);
+  }
+  70% {
+    transform: rotate(-5.5deg);
+  }
+}
+
+.list-poster.shake {
+  animation: poster-shake 0.55s var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-poster.shake {
+    animation: none;
+  }
 }
 
 /* The rank is set, not boxed. A framed recess was the one piece of heavy chrome
