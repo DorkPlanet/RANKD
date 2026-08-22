@@ -39,7 +39,7 @@ import { dragScreen, inShelf, TURN_AT, type Dir } from "@/lib/ribbon";
 
 /** What kind of thing happened, in the card's own small caps. */
 function eyebrowFor(item: FeedItem): string {
-  const meta = item.meta as { to?: number; places?: number; count?: number };
+  const meta = item.meta as { to?: number; places?: number; count?: number; of?: string; at?: number };
   switch (item.kind) {
     case "climb":
       return `UP ${meta.places} PLACES`;
@@ -47,9 +47,23 @@ function eyebrowFor(item: FeedItem): string {
       return `NOW A ${meta.to}`;
     case "arrival":
       return "NEW IN THE TOP TEN";
+    case "milestone":
+      return meta.of === "duels" ? `${meta.at} DUELS` : `${meta.at} FILMS RANKED`;
     default:
       return `${meta.count} MORE RANKED`;
   }
+}
+
+/** The line under the eyebrow — a title, or what the milestone actually means. */
+function titleFor(item: FeedItem): string {
+  const meta = item.meta as { title?: string; of?: string; at?: number };
+  if (meta.title) return meta.title;
+  if (item.kind === "milestone") {
+    // Said as a sentence rather than repeated as a number. The eyebrow already
+    // carried the figure; this says why anybody should care about it.
+    return meta.of === "duels" ? "That is a lot of deciding" : "The list keeps growing";
+  }
+  return "Films placed";
 }
 
 /**
@@ -197,11 +211,13 @@ function Card({
   open,
   onToggle,
   onCount,
+  onFilm,
 }: {
   item: FeedItem;
   open: boolean;
   onToggle: () => void;
   onCount: (n: number) => void;
+  onFilm: (id: string) => void;
 }) {
   const meta = item.meta as {
     title?: string;
@@ -210,6 +226,7 @@ function Card({
     rank?: number;
     from?: number;
     count?: number;
+    at?: number;
   };
 
   return (
@@ -234,15 +251,25 @@ function Card({
             className="flex h-[68px] w-[46px] flex-shrink-0 items-center justify-center rounded-md font-serif text-lg font-bold text-gold"
             style={{ background: "var(--surface)" }}
           >
-            {meta.count ?? "·"}
+            {(meta.at ?? meta.count ?? "·").toString()}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
           <div className="text-label font-extrabold tracking-[0.14em] text-gold">{eyebrowFor(item)}</div>
-          <div className="mt-1 truncate text-body font-semibold text-text-hi">
-            {meta.title ?? "Films placed"}
-          </div>
+          {/* Tappable only when the reader OWNS the film. Offering to open
+              something that is not in your library is a promise the app cannot
+              keep, and the same check already decides the rank line below. */}
+          {meta.title && item.yourRank !== undefined ? (
+            <button
+              onClick={() => onFilm(item.subjectId)}
+              className="mt-1 block max-w-full truncate text-left text-body font-semibold text-text-hi active:opacity-70"
+            >
+              {titleFor(item)}
+            </button>
+          ) : (
+            <div className="mt-1 truncate text-body font-semibold text-text-hi">{titleFor(item)}</div>
+          )}
           <div className="mt-0.5 truncate text-sub text-dim">
             {/* Your own cards say "You", because "@donnie climbed" reads as a
                 stranger when the stranger is you. */}
@@ -308,6 +335,7 @@ export function FeedScreen({
   onToggleLog,
   onRibbon,
   onRead,
+  onFilm,
 }: {
   onSettings: () => void;
   onTrophies: () => void;
@@ -325,6 +353,13 @@ export function FeedScreen({
   onRibbon: (dir: Dir, travelled?: number) => void;
   /** Opening the screen clears the dot on the nav. */
   onRead: () => void;
+  /**
+   * Open a film you own, by its `slugId`.
+   *
+   * The feed knows a title and an id, not a `Film` — the shell owns the library
+   * and does the lookup. Only ever offered for a film the reader has.
+   */
+  onFilm: (id: string) => void;
 }) {
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -416,6 +451,7 @@ export function FeedScreen({
                 item={item}
                 open={open === item.id}
                 onToggle={() => setOpen((o) => (o === item.id ? null : item.id))}
+                onFilm={onFilm}
                 onCount={(n) =>
                   setItems((all) => (all ?? []).map((x) => (x.id === item.id ? { ...x, comments: n } : x)))
                 }

@@ -104,7 +104,46 @@ export interface ActivityRow {
   meta: Record<string, unknown>;
 }
 
-export type ActivityKind = "climb" | "promotion" | "arrival" | "placed";
+export type ActivityKind = "climb" | "promotion" | "arrival" | "placed" | "milestone";
+
+/**
+ * The counts a milestone is crossed on.
+ *
+ * ── Why milestones are here at all ─────────────────────────────────────────
+ *
+ * Every other card is about the top ten, because that is the only place the
+ * snapshot carries titles. Somebody who ranks hard for an evening and shifts
+ * nothing up there gets one quiet "40 more ranked" line, which undersells a real
+ * session — and somebody with a settled top ten could rank for a month and never
+ * appear.
+ *
+ * A milestone is the one thing that says the work happened rather than what it
+ * moved. It is also the only card in the feed that is purely about persistence,
+ * which is the thing this app actually asks of people.
+ */
+export interface Counts {
+  /** Duels fought, ever. */
+  duels: number;
+  /** Films with a position, ever. */
+  placed: number;
+}
+
+/**
+ * Where a milestone sits.
+ *
+ * Round numbers a person would notice, spaced so they arrive rarely enough to
+ * still mean something. Doubling roughly each step: hitting 500 duels should
+ * feel like a longer walk than hitting 250 did, because it was.
+ */
+export const DUEL_MARKS = [100, 250, 500, 1000, 2500, 5000, 10000];
+export const PLACED_MARKS = [25, 50, 100, 250, 500, 1000];
+
+/** The largest mark crossed by going from `was` to `now`, if any. */
+export function crossed(marks: readonly number[], was: number, now: number): number | null {
+  let best: number | null = null;
+  for (const mark of marks) if (was < mark && now >= mark) best = mark;
+  return best;
+}
 
 /**
  * How many places a film must gain before it is worth saying.
@@ -147,6 +186,7 @@ export function diffToActivity(
   before: readonly SnapshotEntry[],
   after: readonly SnapshotEntry[],
   top: readonly SnapshotFilm[],
+  counts?: { was: Counts; now: Counts },
 ): ActivityRow[] {
   // A first-ever snapshot is not news. Everything would read as an arrival, and
   // somebody importing a library would fill their followers' feeds with the
@@ -199,6 +239,20 @@ export function diffToActivity(
   const placed = after.length - before.length;
   if (placed > 0) {
     cards.push({ row: { kind: "placed", subjectId: "", meta: { count: placed } }, weight: 1 });
+  }
+
+  // Milestones outrank everything. They are rare by construction, and a card
+  // saying somebody just passed a thousand duels is worth more than the third
+  // climb of the same evening.
+  if (counts) {
+    const duels = crossed(DUEL_MARKS, counts.was.duels, counts.now.duels);
+    if (duels) {
+      cards.push({ row: { kind: "milestone", subjectId: "", meta: { of: "duels", at: duels } }, weight: 900 });
+    }
+    const films = crossed(PLACED_MARKS, counts.was.placed, counts.now.placed);
+    if (films) {
+      cards.push({ row: { kind: "milestone", subjectId: "", meta: { of: "placed", at: films } }, weight: 800 });
+    }
   }
 
   return cards

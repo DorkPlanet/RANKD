@@ -74,7 +74,10 @@ export async function PUT(request: Request) {
   // ranking exactly as it always did and asserts nothing, so there is no event
   // anybody can fake and no emission route to rate limit. It is also idempotent
   // by construction — pushing the same library twice diffs to nothing.
-  await writeFeedCards(user, entries as SnapshotEntry[], summary as SnapshotSummary);
+  await writeFeedCards(user, entries as SnapshotEntry[], summary as SnapshotSummary, {
+    filmCount: Math.max(0, Math.floor(filmCount)),
+    duelCount: Math.max(0, Math.floor(duelCount)),
+  });
 
   // Replaced whole. There is no history and there should not be: a snapshot is
   // the CURRENT answer, and last week's guess about somebody's taste is of no

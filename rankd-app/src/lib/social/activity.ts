@@ -28,6 +28,7 @@ export async function writeFeedCards(
   user: { id: string; kind: "person" | "house" },
   entries: SnapshotEntry[],
   summary: SnapshotSummary,
+  counts?: { filmCount: number; duelCount: number },
 ): Promise<void> {
   // ── A house account publishes nothing ────────────────────────────────────
   //
@@ -40,9 +41,22 @@ export async function writeFeedCards(
   try {
     const stored = await db.query.tasteSnapshots.findFirst({
       where: eq(tasteSnapshots.userId, user.id),
-      columns: { entries: true },
+      columns: { entries: true, duelCount: true },
     });
-    const rows = diffToActivity(stored?.entries ?? [], entries, summary.topFilms ?? []);
+    const rows = diffToActivity(
+      stored?.entries ?? [],
+      entries,
+      summary.topFilms ?? [],
+      // Placed films are counted from the orders themselves rather than taken
+      // from `filmCount`, which is the whole LIBRARY including everything still
+      // un-rnkd. A milestone is about work done, not films owned.
+      counts && stored
+        ? {
+            was: { duels: stored.duelCount, placed: stored.entries.length },
+            now: { duels: counts.duelCount, placed: entries.length },
+          }
+        : undefined,
+    );
     if (rows.length === 0) return;
 
     await db

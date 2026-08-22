@@ -95,7 +95,15 @@ export const accountKind = pgEnum("account_kind", ["person", "house"]);
  * architecture; the reasoning is written out in `feed.ts` and the omission is
  * deliberate rather than pending.
  */
-export const activityKind = pgEnum("activity_kind", ["climb", "promotion", "arrival", "placed"]);
+export const activityKind = pgEnum("activity_kind", [
+  "climb",
+  "promotion",
+  "arrival",
+  "placed",
+  // Not about the top ten, and the only card that is purely about persistence —
+  // see `Counts` in `lib/social/feed.ts` for why the feed needed one.
+  "milestone",
+]);
 
 export const users = pgTable(
   "user",

@@ -2,7 +2,15 @@
 
 import { describe, expect, it } from "vitest";
 
-import { diffToActivity, MAX_CARDS, MIN_CLIMB, ratingOfScore, shortAgo } from "@/lib/social/feed";
+import {
+  crossed,
+  diffToActivity,
+  DUEL_MARKS,
+  MAX_CARDS,
+  MIN_CLIMB,
+  ratingOfScore,
+  shortAgo,
+} from "@/lib/social/feed";
 import type { SnapshotEntry, SnapshotFilm } from "@/lib/snapshot";
 import { seedScore, tierMax, tierMin } from "@/lib/tiers";
 
@@ -143,5 +151,63 @@ describe("shortAgo", () => {
   it("switches to a date once days stop meaning anything", () => {
     // "63d" is not a length of time anybody feels.
     expect(at("2026-06-01T10:00:00Z", "2026-08-23T10:00:00Z")).not.toMatch(/^\d+d$/);
+  });
+});
+
+describe("crossed", () => {
+  it("only fires on the step that passes the mark", () => {
+    expect(crossed(DUEL_MARKS, 99, 100)).toBe(100);
+    expect(crossed(DUEL_MARKS, 100, 140)).toBeNull(); // already past it
+    expect(crossed(DUEL_MARKS, 40, 90)).toBeNull(); // never reached one
+  });
+
+  it("reports the biggest mark when a session vaults several", () => {
+    // A long import or a marathon can cross more than one. Announcing "you
+    // passed 100" to somebody who just passed 1000 undersells it.
+    expect(crossed(DUEL_MARKS, 50, 1200)).toBe(1000);
+  });
+
+  it("never fires backwards", () => {
+    expect(crossed(DUEL_MARKS, 500, 200)).toBeNull();
+  });
+});
+
+describe("milestones in the diff", () => {
+  const before = order(["a", "b"]);
+  const after = order(["a", "b"]);
+
+  it("says nothing when no mark was passed", () => {
+    const cards = diffToActivity(before, after, [film("a")], {
+      was: { duels: 10, placed: 2 },
+      now: { duels: 20, placed: 2 },
+    });
+    expect(cards.filter((c) => c.kind === "milestone")).toEqual([]);
+  });
+
+  it("announces a duel milestone, and puts it first", () => {
+    const climbBefore = order(["a", "b", "c", "d", "e"]);
+    const climbAfter = order(["e", "a", "b", "c", "d"]);
+    const cards = diffToActivity(climbBefore, climbAfter, [film("e")], {
+      was: { duels: 990, placed: 5 },
+      now: { duels: 1010, placed: 5 },
+    });
+    // Rare by construction, so it outranks the third climb of the evening.
+    expect(cards[0].kind).toBe("milestone");
+    expect(cards[0].meta).toMatchObject({ of: "duels", at: 1000 });
+  });
+
+  it("counts PLACED films, not the whole library", () => {
+    // `filmCount` includes everything still un-rnkd. A milestone is about work
+    // done, not films owned.
+    const wide = order(Array.from({ length: 25 }, (_, i) => `f${i}`));
+    const cards = diffToActivity(order(["f0"]), wide, [], {
+      was: { duels: 0, placed: 1 },
+      now: { duels: 0, placed: 25 },
+    });
+    expect(cards.some((c) => c.kind === "milestone" && (c.meta as { at: number }).at === 25)).toBe(true);
+  });
+
+  it("stays silent when the caller gives no counts", () => {
+    expect(diffToActivity(before, after, [film("a")]).filter((c) => c.kind === "milestone")).toEqual([]);
   });
 });
