@@ -23,6 +23,8 @@ import { FollowButton } from "./FollowButton";
 import { avatarOf } from "@/lib/profile";
 import { starsFor } from "@/lib/tiers";
 import type { PublicProfile } from "@/lib/social/publicProfile";
+import type { PersonStat } from "@/lib/profile";
+import type { SnapshotFilm } from "@/lib/snapshot";
 
 /** Matches `Stat` on the owner's profile. Numbers first, label under. */
 function Stat({ n, label }: { n: number; label: string }) {
@@ -47,6 +49,64 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {title.toUpperCase()}
       </div>
       {children}
+    </section>
+  );
+}
+
+/**
+ * The one card on the page, and it is the genre.
+ *
+ * Films, directors and actors all had a place already; a genre did not, and it
+ * is the only one of the four that says something about SHAPE rather than about
+ * a name. "They keep coming back to crime" is a different kind of fact from
+ * "they rate Michael Mann highest", and it is the one a stranger reads first.
+ *
+ * It borrows the poster of their best-placed film in that genre, because a genre
+ * is the one thing here with no picture of its own. Darkened hard and overlaid,
+ * so it reads as a ground the type sits on rather than as a film being
+ * recommended: the subject is the genre, not that poster.
+ */
+function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) {
+  return (
+    <section className="mt-7">
+      <div className="rule-fade mb-6" />
+      <div
+        className="relative flex min-h-[132px] flex-col justify-end overflow-hidden rounded-2xl px-5 py-4"
+        style={{ background: "var(--surface)" }}
+      >
+        {film?.poster && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={film.poster}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ opacity: 0.28, filter: "grayscale(0.4)" }}
+            />
+            {/* The type has to stay readable over whatever poster turns up, and
+                posters are not a controlled palette. */}
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(to top, var(--bg) 8%, color-mix(in srgb, var(--bg) 55%, transparent) 60%, transparent)",
+              }}
+            />
+          </>
+        )}
+        <div className="relative">
+          <span className="block text-label font-extrabold tracking-[0.18em] text-dim">
+            THEY KEEP COMING BACK TO
+          </span>
+          <span className="mt-1 block font-display text-[34px] leading-none tracking-wide text-gold">
+            {genre.name.toUpperCase()}
+          </span>
+          <span className="mt-1.5 block text-sub leading-snug text-dim">
+            {genre.count} films, {genre.avg.toFixed(1)}★ on average
+          </span>
+        </div>
+      </div>
     </section>
   );
 }
@@ -91,6 +151,14 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
           {profile.handle}
         </span>
 
+        {/* Said before the bio, because "this is not a person" changes how you
+            read everything under it. */}
+        {profile.house && (
+          <span className="mt-2 text-label font-extrabold tracking-[0.16em] text-dim">
+            A RANKD HOUSE ACCOUNT
+          </span>
+        )}
+
         {profile.bio && (
           <p className="mx-auto mt-3.5 max-w-[280px] whitespace-pre-line font-serif text-sub italic leading-snug text-dim">
             {profile.bio}
@@ -119,6 +187,8 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
         </p>
       ) : (
         <>
+          {summary.genre && <GenreCard genre={summary.genre} film={summary.genreFilm} />}
+
           {summary.topFilms.length > 0 && (
             <Section title="Their top films">
               <ol className="space-y-2.5">

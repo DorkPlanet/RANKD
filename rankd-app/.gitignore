@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# Cached TMDb pages from scripts/. Re-fetchable, never committed.
+scripts/.cache/

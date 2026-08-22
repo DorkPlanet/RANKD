@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Standalone Node scripts. They are CommonJS and run outside the bundler,
+    // so the app's module rules do not apply to them: `require()` is how they
+    // are meant to be written, not a lapse. Nothing here ships to a browser.
+    "scripts/**",
   ]),
 ]);
 

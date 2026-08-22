@@ -17,8 +17,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { getPublicProfile } from "@/lib/social/publicProfile";
+import { getProfileView } from "@/lib/social/publicProfile";
 import { PublicProfileView } from "@/components/PublicProfileView";
+import { PrivateProfileView } from "@/components/PrivateProfileView";
 
 // Always fresh. A profile changes whenever its owner ranks anything, and a
 // cached copy of somebody's top ten is worse than a slightly slower page.
@@ -28,15 +29,25 @@ type Props = { params: Promise<{ handle: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { handle } = await params;
-  const profile = await getPublicProfile(handle);
-  if (!profile) return { title: "Not found" };
+  const view = await getProfileView(handle);
+  if (!view) return { title: "Not found" };
+
+  // A private profile gets a title and its own bio, and NOTHING derived from a
+  // library. The description falls back to a plain sentence rather than a count,
+  // because a count is exactly the thing being withheld.
+  const identity = view.kind === "public" ? view.profile : view.identity;
+  const description =
+    identity.bio ??
+    (view.kind === "public"
+      ? `${view.profile.filmCount} films, ranked against each other.`
+      : "This profile is private.");
 
   return {
-    title: `${profile.handle} on Rankd`,
-    description: profile.bio ?? `${profile.filmCount} films, ranked against each other.`,
+    title: `${identity.handle} on Rankd`,
+    description,
     // The pretty address is the real one. Without this, `/u/handle` is what
     // gets shared and indexed, and the rewrite becomes a detail people see.
-    alternates: { canonical: `/@${profile.handle}` },
+    alternates: { canonical: `/@${identity.handle}` },
     // Belt and braces with app/robots.ts. That file asks crawlers not to come;
     // this says so on the page itself, for anything that ignores it.
     robots: { index: false, follow: false },
@@ -45,11 +56,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function Page({ params }: Props) {
   const { handle } = await params;
-  const profile = await getPublicProfile(handle);
+  const view = await getProfileView(handle);
 
-  // One not-found for every reason: no such handle, private, suspended, gone.
-  // `getPublicProfile` has the argument for why they must be indistinguishable.
-  if (!profile) notFound();
+  // `null` now means only: no such handle, suspended, or deleted. A private
+  // account renders its own view rather than a 404, so that search and the
+  // profile agree with each other. See the header of publicProfile.ts for the
+  // trade that was made deliberately.
+  if (!view) notFound();
 
-  return <PublicProfileView profile={profile} />;
+  return view.kind === "public" ? (
+    <PublicProfileView profile={view.profile} />
+  ) : (
+    <PrivateProfileView identity={view.identity} />
+  );
 }

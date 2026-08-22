@@ -112,6 +112,7 @@ export default function ProfileScreen({
   wasShape,
   onProfile,
   onMe,
+  onFindPeople,
   onInfo,
   onSettings,
   onDuel,
@@ -133,6 +134,8 @@ export default function ProfileScreen({
   onProfile: (p: Profile) => void;
   /** Change the public half. Optimistic in `AppShell`; the write is its job. */
   onMe: (patch: Partial<Me>) => void;
+  /** Open the people search. Lives in the shell's overlay slot. */
+  onFindPeople: () => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -552,7 +555,24 @@ export default function ProfileScreen({
           </button>
 
 
-          {/* ── Three pages, not one scroll ──────────────────────────────────
+          {/* ── The way to somebody else ────────────────────────────────────
+            On the profile rather than in the header, whose two corners are
+            already spoken for by Settings and the trophy case, and rather than
+            on the Activity nav cell, which is reserved for the feed and would
+            have to mean something different once that lands.
+
+            It sits under your own name because that is where the question comes
+            up: this screen is the one that says who you are, and "who else is
+            here" is the next thing you want to know. */}
+        <button
+          onClick={onFindPeople}
+          className="mx-auto mt-4 block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
+          style={{ background: "rgba(255,255,255,0.05)" }}
+        >
+          FIND PEOPLE
+        </button>
+
+        {/* ── Three pages, not one scroll ──────────────────────────────────
               The zones were always the right grouping. The problem was that all
               three were stacked, so the page ran to eight sections and nothing
               broke it up — which is exactly how it read.

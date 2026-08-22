@@ -58,6 +58,9 @@ export const RESERVED: ReadonlySet<string> = new Set([
   "images", "img", "fonts", "discover", "search", "report",
   // Impersonation.
   "rankd", "rnkd", "rnk", "admin", "administrator", "root", "official", "staff",
+  // House accounts, and the names next to them. `faulkner` is Rankd's own,
+  // and the neighbours are reserved so nobody can pass themselves off as it.
+  "faulkner", "williamfaulkner", "faulknr", "canon", "thecanon", "house", "bot",
   "team", "mod", "mods", "moderator", "support", "help", "contact", "about",
   "terms", "privacy", "legal", "security", "abuse", "billing", "system",
   "me", "you", "null", "undefined", "none", "anonymous", "deleted", "unknown",

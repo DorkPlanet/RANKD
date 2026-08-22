@@ -89,6 +89,20 @@ export interface SnapshotSummary {
   directors: PersonStat[];
   actors: PersonStat[];
   genre?: PersonStat;
+  /**
+   * Their best-placed film in that genre, purely so the genre card on a public
+   * profile has artwork to sit on.
+   *
+   * A genre is the one thing a profile says about somebody that has no picture
+   * of its own: a director has a face, a film has a poster, a genre is a word.
+   * Borrowing the poster of the film they rate highest inside it is the only
+   * honest image available, and it is a film they chose rather than stock art.
+   *
+   * Optional, and absent is a real state: a library with no credits yet has no
+   * genre either. Added after the format existed, which costs nothing because a
+   * snapshot is rebuilt whole on every push.
+   */
+  genreFilm?: SnapshotFilm;
   fingerprint: Fingerprint;
   superlatives: Superlative[];
 }
@@ -142,6 +156,12 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
 
   const people = topPeople(own);
 
+  // The best-placed film carrying their top genre. `placed` is already sorted
+  // best first, so the first hit is the answer and there is nothing to compare.
+  const genreFilm = people.genre
+    ? placed.find((f) => f.genres?.includes(people.genre!.name))
+    : undefined;
+
   return {
     entries,
     filmCount: own.length,
@@ -157,6 +177,15 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
       directors: people.directors,
       actors: people.actors,
       genre: people.genre,
+      genreFilm: genreFilm
+        ? {
+            id: genreFilm.id,
+            title: genreFilm.title,
+            year: genreFilm.year,
+            poster: genreFilm.poster,
+            rating: genreFilm.rating,
+          }
+        : undefined,
       fingerprint: fingerprint(own),
       superlatives: superlatives(own),
     },

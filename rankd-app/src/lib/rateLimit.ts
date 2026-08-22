@@ -62,6 +62,15 @@ export const LIMITS = {
 
   /** Claiming. One succeeds, so anything past a handful is somebody guessing. */
   handleClaim: { bucket: "handle-claim", max: 20, windowMs: HOUR },
+
+  /**
+   * People search, typed into a field with its own debounce.
+   *
+   * Same enumeration concern as the handle check above and the same sizing: a
+   * person looking for a friend types a handful of queries, and 120 a minute is
+   * far past anything a debounced field produces.
+   */
+  peopleSearch: { bucket: "people-search", max: 120, windowMs: MINUTE },
 } as const satisfies Record<string, Limit>;
 
 export interface Verdict {

@@ -44,3 +44,34 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR OTHER DEALINGS IN THE SOFTWARE,
 OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+## TMDb — attribution, not a licence
+
+Rankd's film data and artwork come from **The Movie Database**. Posters, stills,
+credits, genres, keywords and runtimes are all TMDb's.
+
+**This product uses the TMDB API but is not endorsed or certified by TMDB.**
+
+That sentence is required wherever the data is shown, which until 22 Aug 2026 was
+only ever a signed-in person looking at their own library. Public profiles
+changed that: `/@handle` republishes poster art to anybody with the address,
+including people who have never heard of Rankd, so the credit is now rendered in
+the footer of every public page. It has to go on anything else that leaves the
+app in the same way, which means share cards and link previews when those land.
+
+**Two rules for anything built on top of this.**
+
+TMDb's own numeric ratings are theirs and are not republished. Rankd may use them
+to derive an ORDER and then publish that order, which is Rankd's own artefact.
+Printing "8.7 on TMDb" on a page is a different thing and is not done.
+
+Bulk ingestion is kept modest and deliberate. Fetching a film somebody has
+already logged is plainly within normal use; pulling a thousand records to build
+a published ranking is a greyer area, so it stays small, cached, and re-read
+against the current terms before each release that changes it.
+
+IMDb was considered for the same purpose and rejected: its lists and ratings are
+licensed data, scraping breaches its terms, and the dataset it publishes freely
+is non-commercial only.

@@ -63,6 +63,26 @@ export const listVisibility = pgEnum("list_visibility", ["private", "public"]);
 // because a code path forgot to ask.
 export const profileVisibility = pgEnum("profile_visibility", ["private", "public"]);
 
+// Whether there is a person behind this account.
+//
+// ── Why a column and not `handle === "faulkner"` ───────────────────────────
+//
+// A string comparison scattered across aggregation, following, moderation and
+// counts is a rule you have to remember, and this one is only load-bearing at
+// the moment somebody forgets it. The worst case is silent: the house account's
+// own snapshot is public, so an aggregation that fails to exclude it reads its
+// own output, and the ranking slowly eats itself and freezes. That is a bug
+// nobody notices for months.
+//
+// An enum rather than a boolean because there may one day be a third kind (a
+// guest curator, a partner), and because `kind === "house"` reads better at
+// every call site than `isBot`.
+//
+// What it enforces, wherever those surfaces exist: a house account is excluded
+// from the community aggregation, may not follow anybody, is not counted as a
+// user, and cannot be reported or suspended by readers.
+export const accountKind = pgEnum("account_kind", ["person", "house"]);
+
 export const users = pgTable(
   "user",
   {
@@ -85,6 +105,9 @@ export const users = pgTable(
     // the gate yet", which is a real state on every existing account.
     handle: text("handle"),
     handleClaimedAt: timestamp("handle_claimed_at", { withTimezone: true }),
+    // A person, unless something says otherwise. See `accountKind` above for
+    // what the exception costs if it is ever left unchecked.
+    kind: accountKind("kind").notNull().default("person"),
     // ── Public identity, which is why it moved off the device ──────────────
     //
     // These three used to live in `lib/profile.ts` in localStorage, where they

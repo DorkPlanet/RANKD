@@ -34,6 +34,7 @@ import Coach from "./Coach";
 import { InstallPrompt } from "./InstallPrompt";
 import SignInGate from "./SignInGate";
 import HandleGate from "./HandleGate";
+import { FindPeople } from "./FindPeople";
 import {
   fetchMe,
   fetchSession,
@@ -76,7 +77,8 @@ type Overlay =
   | { kind: "person"; person: Person }
   | { kind: "settings" }
   | { kind: "trophies" }
-  | { kind: "log" };
+  | { kind: "log" }
+  | { kind: "people" };
 
 /** Matches `.veil-out` in globals.css. Kept here only to sequence the tour behind it. */
 const VEIL_MS = 200;
@@ -946,6 +948,7 @@ export default function AppShell() {
           wasShape={wasShape}
           onProfile={changeProfile}
           onMe={changeMe}
+          onFindPeople={() => setOverlay({ kind: "people" })}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}
           onSettings={() => setOverlay({ kind: "settings" })}
           onTrophies={() => setOverlay({ kind: "trophies" })}
@@ -964,6 +967,8 @@ export default function AppShell() {
       {overlay?.kind === "trophies" && (
         <Trophies films={library} onClose={() => setOverlay(null)} />
       )}
+
+      {overlay?.kind === "people" && <FindPeople onClose={() => setOverlay(null)} />}
 
       {overlay?.kind === "info" && (
         <FilmInfo
