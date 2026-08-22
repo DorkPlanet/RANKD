@@ -115,20 +115,29 @@ describe("handing identity over", () => {
 });
 
 describe("what to call somebody", () => {
-  it("uses a name they typed, when there is one", () => {
-    expect(publicName({ handle: "jarrad_b", displayName: "Jarrad", avatarUrl: null })).toBe("Jarrad");
+  it("is the handle, and the handle BEATS the provider's name", () => {
+    // The whole point, and it is asserted this way round on purpose. Rankd had
+    // a display name for one afternoon and the symptom was a profile headed
+    // JARRAD BISHOP (UNKNOWNENTITY) with the same words repeated underneath:
+    // a value copied out of somebody's email account years ago, printed twice.
+    expect(
+      publicName({ handle: "jarrad_b", displayName: "Jarrad Bishop (UnknownEntity)", avatarUrl: null }),
+    ).toBe("jarrad_b");
   });
 
-  it("falls back to the HANDLE, never to the provider's name", () => {
-    // The whole point. `display_name` arrives from Google at provision and
-    // nobody ever agreed to it, so a profile must not be captioned by it. The
-    // handle is the one name on the row somebody actually chose.
+  it("uses the handle when there is nothing else", () => {
     expect(publicName({ handle: "jarrad_b", displayName: null, avatarUrl: null })).toBe("jarrad_b");
-    expect(publicName({ handle: "jarrad_b", displayName: "   ", avatarUrl: null })).toBe("jarrad_b");
+  });
+
+  it("falls back to a display name ONLY before a handle exists", () => {
+    // The one case that keeps this field alive: an account that has not been
+    // through the gate yet still has to be called something.
+    expect(publicName({ handle: null, displayName: "Jarrad", avatarUrl: null })).toBe("Jarrad");
   });
 
   it("still has an answer for an account with neither", () => {
     expect(publicName({ handle: null, displayName: null, avatarUrl: null })).toBe("You");
+    expect(publicName({ handle: null, displayName: "   ", avatarUrl: null })).toBe("You");
   });
 });
 

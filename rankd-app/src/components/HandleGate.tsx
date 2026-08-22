@@ -64,23 +64,18 @@ async function handOverLocalIdentity(me: Me): Promise<Me> {
   const legacy = takeLegacyIdentity();
 
   const patch: Partial<Me> = {};
-  const name = legacy.name?.trim();
-  // ── A name they typed, or no name at all ──────────────────────────────────
+  // ── The name is DROPPED, not carried ──────────────────────────────────────
   //
-  // `"You"` is the shipped default and means nobody decided anything, so it
-  // must not overwrite anything. But neither may Google's value SURVIVE as the
-  // profile's identity: `display_name` was written once at provision from
-  // whatever the provider held, and a profile captioned by your email account
-  // is what claiming a handle was meant to end.
+  // An earlier version of this kept a locally typed name and promoted it to
+  // `display_name`. On a real account that name was "Jarrad Bishop
+  // (UnknownEntity)", copied from Google years ago, and the profile ended up
+  // headed with it in gold and repeating it in grey underneath.
   //
-  // So a chosen name is kept and everything else is cleared. `publicName` then
-  // falls through to the handle, which is the one name on the row somebody
-  // actually picked.
-  if (name && name !== "You") {
-    if (name !== me.displayName) patch.displayName = name;
-  } else if (me.displayName) {
-    patch.displayName = null;
-  }
+  // Rankd has one name now and it is the handle, chosen a moment ago in the
+  // field above. A second name is a legal name on a public page nobody asked to
+  // publish, so it is cleared here rather than migrated. `publicName` reads the
+  // handle first and never asks for this.
+  if (me.displayName) patch.displayName = null;
 
   const bio = legacy.bio?.trim();
   if (bio && bio !== me.bio) patch.bio = bio;

@@ -318,7 +318,24 @@ export default function AppShell() {
     // each other instead of queueing and the splash covers one window and not
     // two. A signed-out visitor gets a cheap 401 here, which is the answer this
     // needs anyway.
-    void fetchMe().then(setMeState);
+    void fetchMe().then((answer) => {
+      setMeState(answer);
+      // ── Clearing a name Rankd stores and never shows ──────────────────────
+      //
+      // `display_name` was written once by `provisionUser` from whatever Google
+      // held. Nothing displays it any more (see `publicName`), which leaves a
+      // person's real name sitting in the database for no purpose at all.
+      //
+      // Accounts that claim a handle from now on shed it in `HandleGate`. This
+      // catches the ones that already went through, and it is self-limiting:
+      // after one success the field is null and the condition never holds
+      // again. A failure simply leaves it for the next open.
+      if (answer.kind === "me" && answer.me.handle && answer.me.displayName) {
+        void saveMe({ displayName: null }).then((done) => {
+          if (done.ok) setMeState({ kind: "me", me: done.me });
+        });
+      }
+    });
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //

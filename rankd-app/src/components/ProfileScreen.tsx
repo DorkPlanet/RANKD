@@ -480,19 +480,10 @@ export default function ProfileScreen({
             <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
               {publicName(me)}
             </span>
-            {/* A display name, and ONLY if they set one. Absent by default, so
-                nobody is introduced by a name they did not pick. */}
-            {me.displayName && (
-              <button
-                onClick={() => setEditing(true)}
-                aria-label="Edit your display name"
-                className="mt-1.5 block max-w-full active:opacity-70"
-              >
-                <span className="block truncate text-sub leading-none text-dim">
-                  {me.displayName}
-                </span>
-              </button>
-            )}
+            {/* Nothing goes under it. A second line held the display name, which
+                on a real account read "Jarrad Bishop (UnknownEntity)" directly
+                beneath the same words in gold: the provider's value, printed
+                twice, neither of them chosen here. See `publicName`. */}
           </div>
 
           {/* ── WHERE YOU ARE ───────────────────────────────────────────────
@@ -2009,10 +2000,14 @@ function EditIdentity({
   onSave: (patch: Partial<Me>) => void;
   onClose: () => void;
 }) {
-  // Seeded from the account rather than from storage, and `publicName` supplies
-  // the same "You" the field has always defaulted to, so an account that has
-  // never set a name still opens on something rather than on an empty box.
-  const [name, setName] = useState(publicName(me));
+  // ── The name field is gone ──────────────────────────────────────────────
+  //
+  // Rankd has one name and you chose it at the gate. Editing a SECOND one here
+  // is what produced a profile headed JARRAD BISHOP (UNKNOWNENTITY) with the
+  // same words repeated underneath. See `publicName` in lib/profile.ts.
+  //
+  // The handle itself is deliberately not editable here either: it is claimed
+  // once, and a link somebody has already shared has to keep working.
   const [bio, setBio] = useState(me.bio ?? "");
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
@@ -2021,14 +2016,12 @@ function EditIdentity({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <span className="mb-4 block font-display text-2xl tracking-wide text-gold">You</span>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={24}
-          placeholder="Your name"
-          className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
-        />
+        <span className="mb-1.5 block font-display text-2xl tracking-wide text-gold">
+          {publicName(me)}
+        </span>
+        {/* The sheet is headed by the name rather than by the word "You", which
+            is both warmer and the only place the handle now needs restating. */}
+        <p className="mb-4 text-sub leading-snug text-dim">Say something about your taste.</p>
         {/* 300 characters and four rows, not 120 and two.
             The old field was sized for the placeholder — "a line about your
             taste" — and people do not write one line. Worse, it accepted line
@@ -2050,13 +2043,13 @@ function EditIdentity({
           <p className="mt-1 text-right text-label text-dim">{300 - bio.length} left</p>
         )}
         <p className="mt-3 text-label leading-snug text-dim">
-          Tap your picture to change it.
+          Tap your picture to change it or the scene behind you.
         </p>
         <button
           onClick={() => {
-            // Only the two fields this sheet owns. A patch rather than a whole
+            // The one field this sheet owns. A patch rather than a whole
             // object, so editing a bio cannot carry a stale avatar back with it.
-            onSave({ displayName: name.trim() || "You", bio: bio.trim() || null });
+            onSave({ bio: bio.trim() || null });
             onClose();
           }}
           className="mt-3 w-full rounded-full bg-gold py-3 text-sm font-bold text-[#1c1405] active:scale-[0.99]"

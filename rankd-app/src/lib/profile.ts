@@ -137,21 +137,26 @@ export interface Identity {
 }
 
 /**
- * What to call somebody.
+ * What to call somebody. There is only one answer, and it is the handle.
  *
- * ── The handle outranks the display name, and that is the point ────────────
+ * ── Rankd has no display name, and that is the decision ────────────────────
  *
- * `display_name` arrives from Google at provision and nobody ever agreed to it.
- * Showing it as somebody's identity means the profile is captioned by whatever
- * their email provider happens to hold, which is exactly what claiming a handle
- * was supposed to end.
+ * It had one, briefly, and it was a mistake with a very clear symptom: a profile
+ * headed JARRAD BISHOP (UNKNOWNENTITY) with "Jarrad Bishop (UnknownEntity)"
+ * repeated underneath it. Both lines were `display_name`, which arrives from
+ * Google at provision carrying whatever a person happens to have typed into
+ * their email account years ago, brackets and all.
  *
- * So the order is: a name they typed, then the name they claimed, then the old
- * fallback for an account that has neither yet. Google's value is not in that
- * list at all. `HandleGate` clears it at claim time rather than promoting it.
+ * A second name was never worth its cost. It duplicates the handle when they
+ * agree, contradicts it when they don't, doubles the moderation surface, and
+ * puts a legal name on a public page nobody asked to publish. The handle is a
+ * name somebody chose, for this app, knowing it would be seen.
+ *
+ * `displayName` remains on the row for accounts that have not been through the
+ * gate yet. It is a fallback, never a preference, and nothing offers to edit it.
  */
 export function publicName(identity: Identity): string {
-  return identity.displayName?.trim() || identity.handle || "You";
+  return identity.handle || identity.displayName?.trim() || "You";
 }
 
 export function avatarOf(identity: Identity, accountImage?: string | null): Avatar {
