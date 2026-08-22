@@ -42,6 +42,7 @@ export function TasteChart({
   was,
   rankd,
   locked,
+  noLocks = false,
 }: {
   axes: TasteAxis[];
   /** Your shape when this sitting began. Absent on a first sitting. */
@@ -61,7 +62,21 @@ export function TasteChart({
    * to the whole placed list — which is `axes` and what it always drew.
    */
   locked?: TasteShape;
+  /**
+   * Nothing is locked at all, so the one line drawn is entirely Rankd's work.
+   *
+   * It has to be BLUE then, not gold. Gold means "you settled this" everywhere
+   * else in the app, and a gold web on a library with no locks in it names a
+   * population that does not exist — reported exactly that way. The line is
+   * honest about its shape and was lying about whose it was.
+   *
+   * Only true at zero. With a handful of locks the line is a genuine mix and
+   * gold is fair, because gold is the app's colour for what you made.
+   */
+  noLocks?: boolean;
 }) {
+  // What the single line is made of decides its colour. See `noLocks`.
+  const soleTone = noLocks ? "var(--accent)" : "var(--gold)";
   const n = axes.length;
   // Three axes is the fewest that encloses an area. Two would draw a line and
   // call it a shape, which is worse than saying nothing.
@@ -109,7 +124,7 @@ export function TasteChart({
           most of the chart — the fill painted over it and the blue vanished.
           Reported as "I see the yellow but not the blue".
           A fill can only ever hide a line. Lines last, always. */}
-      <polygon points={polygon(now)} fill="var(--gold)" fillOpacity="0.15" stroke="none" />
+      <polygon points={polygon(now)} fill={soleTone} fillOpacity="0.15" stroke="none" />
 
       {before && shifted && (
         <polygon
@@ -139,7 +154,7 @@ export function TasteChart({
       <polygon
         points={polygon(now)}
         fill="none"
-        stroke="var(--gold)"
+        stroke={soleTone}
         strokeWidth="1.75"
         strokeLinejoin="round"
       />

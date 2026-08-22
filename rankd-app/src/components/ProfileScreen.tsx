@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { FilmPicker } from "./FilmPicker";
 import { rankedFilms } from "@/lib/ladder";
-import { isPlaced } from "@/lib/lock";
+import { isHard, isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import Sheet from "./Sheet";
@@ -311,6 +311,10 @@ export default function ProfileScreen({
   const genres = useMemo(() => taste.map((a) => a.genre), [taste]);
   const locked = useMemo(() => lockedShape(films, genres) ?? undefined, [films, genres]);
   const rankd = useMemo(() => shuffledShape(films, genres), [films, genres]);
+  // Nothing locked at all, so whatever single line the chart draws is entirely
+  // Fast Shuffle's doing and must not wear the colour that means "you settled
+  // this". See `noLocks` on TasteChart.
+  const noLocks = useMemo(() => !films.some(isHard), [films]);
   useEffect(() => {
     let dead = false;
     void loadLog().then((log) => {
@@ -1041,7 +1045,13 @@ export default function ProfileScreen({
                   is the shuffled part of it — nearly the same films, so nearly
                   the same outline, which is the overlap that started all this.
                   One honest line beats two that agree by construction. */}
-              <TasteChart axes={taste} was={wasShape} rankd={locked ? rankd : undefined} locked={locked} />
+              <TasteChart
+                axes={taste}
+                was={wasShape}
+                rankd={locked ? rankd : undefined}
+                locked={locked}
+                noLocks={noLocks}
+              />
               {/* A key, because three outlines need one. Only the ones actually
                   drawn appear: offering a legend entry for a line that is not
                   on the chart is how a reader starts hunting for it.
@@ -1051,12 +1061,16 @@ export default function ProfileScreen({
                   placed list, so calling it LOCKED would be naming something
                   that is not on the chart. */}
               <div className="mt-1 flex justify-center gap-3 text-label tracking-[0.08em] text-dim">
-                <span className="text-gold">● {locked ? "LOCKED" : "YOUR LIST"}</span>
+                <span className={noLocks ? "text-accent" : "text-gold"}>
+                  ● {locked ? "LOCKED" : noLocks ? "SHUFFLED" : "YOUR LIST"}
+                </span>
                 {locked && <span className="text-accent">● SHUFFLED</span>}
                 {moved && <span>◌ WHERE YOU STARTED</span>}
               </div>
               <p className="mt-1.5 text-center text-label leading-snug text-dim">
-                {!locked
+                {noLocks
+                  ? "This is what Fast Shuffle worked out. Lock films and your own shape arrives in gold."
+                  : !locked
                   ? "Lock ten films and this splits into what you settled against what Rankd did."
                   : moved
                   ? `${moved.genre} moved this sitting.`

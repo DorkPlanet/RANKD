@@ -416,7 +416,19 @@ export default function ListScreen({
             section spacers and the tier-jump offsets are computed from row
             heights, so anything inserted above the sections would shift every
             section top while `jumpTo` kept using the unshifted numbers. */}
-        <div className="flex items-center gap-2">
+        {/* ── One field, with the jump inside it ──────────────────────────
+            It was a rounded field beside a smaller rounded pill reading
+            "Jump ▾": two containers of different widths sharing a line, and the
+            only control in the app carrying a word plus a caret where every
+            other one carries a glyph.
+
+            The field now runs the whole line and the jump sits at its trailing
+            edge as an arrow. That spot is usually a clear button, so two things
+            keep it honest: this search has no clear button to be confused with,
+            and a hairline separates the arrow from the text so it reads as its
+            own control rather than as furniture inside the box. The arrow turns
+            over when the menu is open, which is the only state it has. */}
+        <div className="relative flex items-center">
           <input
             ref={searchRef}
             value={q}
@@ -427,41 +439,60 @@ export default function ListScreen({
             // buttons per field, makes you declare what you are looking for
             // before you look.
             placeholder="Film, director or actor"
-            className="min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 py-2 text-sm text-text-hi outline-none placeholder:text-dim"
+            // `pr-12` is the arrow's room. Without it a long query runs under
+            // the glyph and the last characters are unreadable.
+            className="w-full rounded-xl border border-border bg-bg py-2 pl-3 pr-12 text-sm text-text-hi outline-none placeholder:text-dim"
           />
-          <div className="relative flex-shrink-0">
-            <button
-              onClick={() => setJumpOpen((v) => !v)}
-              data-tour="list-jump"
-              className="rounded-lg border border-border px-2.5 py-2 text-sub text-dim active:scale-95"
+          <button
+            onClick={() => setJumpOpen((v) => !v)}
+            data-tour="list-jump"
+            aria-label="Jump to a tier"
+            aria-expanded={jumpOpen}
+            className="absolute inset-y-1 right-1 flex items-center pl-2.5 pr-3 text-dim active:scale-95"
+            style={{ borderLeft: "1px solid var(--border)" }}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+              style={{
+                transform: jumpOpen ? "rotate(180deg)" : "none",
+                transition: "transform 0.2s var(--ease)",
+              }}
             >
-              Jump ▾
-            </button>
-            {jumpOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setJumpOpen(false)} />
-                <div className="absolute right-0 top-full z-20 mt-1 max-h-64 w-40 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
-                  {ORDERED_TIERS.filter((t) => (counts.get(t) ?? 0) > 0).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => jumpTo(t)}
-                      className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98]"
-                    >
-                      <span className="text-sm text-gold">{starsFor(t)}</span>
-                      {/* "12/134", not "134". The count alone said how big the
-                          tier is; the pair says how much of it is left, which is
-                          the thing you are actually choosing on. A finished tier
-                          reads as its own total on both sides and needs no
-                          separate tick. */}
-                      <span className="text-sub tabular-nums text-dim">
-                        <span className="text-text-hi">{ranked.get(t) ?? 0}</span>/{counts.get(t)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {jumpOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setJumpOpen(false)} />
+              <div className="absolute right-0 top-full z-20 mt-1 max-h-64 w-40 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-xl">
+                {ORDERED_TIERS.filter((t) => (counts.get(t) ?? 0) > 0).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => jumpTo(t)}
+                    className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98]"
+                  >
+                    <span className="text-sm text-gold">{starsFor(t)}</span>
+                    {/* "12/134", not "134". The count alone said how big the
+                        tier is; the pair says how much of it is left, which is
+                        the thing you are actually choosing on. A finished tier
+                        reads as its own total on both sides and needs no
+                        separate tick. */}
+                    <span className="text-sub tabular-nums text-dim">
+                      <span className="text-text-hi">{ranked.get(t) ?? 0}</span>/{counts.get(t)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
 
