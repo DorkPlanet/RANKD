@@ -130,8 +130,6 @@ export default function ListScreen({
   // of truth for the same fact drift the moment a tap sets one and a swipe sets
   // the other, and then the band would be highlighting a state the list is not
   // showing.
-  const STATES = [null, "locked", "shuffled", "unrnkd"] as const;
-  const page = STATES.indexOf(only);
   const touch = useRef<{ x: number; y: number; axis: null | "x" | "y" } | null>(null);
   const shown = useMemo(() => {
     if (!only) return films;
@@ -147,6 +145,38 @@ export default function ListScreen({
   // They are a key to the list, and a key that changed every time you used it
   // would be describing itself rather than the library.
   const all = useMemo(() => buildList(films), [films]);
+  // ── One list, read twice ─────────────────────────────────────────────────
+  //
+  // The band drops any segment reading zero, on the reasoning in its own
+  // comment: a zero is not information, it is a state you are not in. So the
+  // pages a swipe can turn to are whatever the band is actually SHOWING, never
+  // a fixed four.
+  //
+  // Getting this wrong is not a small bug. A library with nothing locked would
+  // have had a page you could swipe onto, holding no films, with no segment lit
+  // to say where you were — which is precisely the "empty page you had to visit
+  // to find out was empty" that cost the profile its third tab.
+  const segments = [
+    // The total sits WITH the three states rather than above them. It used to
+    // be its own line — "865 films" beside the name — and the three below
+    // already sum to it, so the two lines were the same fact twice. As a fourth
+    // column it is the thing the other three are parts of.
+    //
+    // `--text-hi` because it is not a fourth STATE. Gold, accent and dim are the
+    // three states and a fourth hue beside them would read as one; the
+    // near-white is the app's colour for "the thing itself" and says total
+    // without joining the set.
+    { n: all.total, label: "films", tone: "text-text-hi", key: null },
+    { n: all.settledCount, label: "locked", tone: "text-gold", key: "locked" as const },
+    {
+      n: all.placedCount - all.settledCount,
+      label: "shuffled",
+      tone: "text-accent",
+      key: "shuffled" as const,
+    },
+    { n: all.total - all.placedCount, label: "un-rnkd", tone: "text-dim", key: "unrnkd" as const },
+  ].filter((seg) => seg.n > 0);
+  const page = segments.findIndex((seg) => seg.key === only);
   const results = useMemo(() => searchList(model, q), [model, q]);
   const searching = q.trim().length > 0;
 
@@ -284,32 +314,7 @@ export default function ListScreen({
             soft locks would otherwise be taught a distinction it cannot see. */}
         {all.total > 0 && (
           <p className="mb-3 flex items-start justify-center gap-5 text-dim">
-            {[
-              // The total sits WITH the three states rather than above them.
-              // It used to be its own line — "865 films" beside the name — and
-              // the three below already sum to it, so the two lines were the
-              // same fact twice. As a fourth column it is the thing the other
-              // three are parts of, which is what it actually is.
-              //
-              // `--text-hi` because it is not a fourth STATE. Gold, accent and
-              // dim are the three states and a fourth hue beside them would
-              // read as one; the near-white is the app's colour for "the thing
-              // itself" and says total without joining the set.
-              { n: all.total, label: "films", tone: "text-text-hi", key: null },
-              { n: all.settledCount, label: "locked", tone: "text-gold", key: "locked" as const },
-              {
-                n: all.placedCount - all.settledCount,
-                label: "shuffled",
-                tone: "text-accent",
-                key: "shuffled" as const,
-              },
-              { n: all.total - all.placedCount, label: "un-rnkd", tone: "text-dim", key: "unrnkd" as const },
-            ]
-              // A segment reading zero is not information, it is a state you are
-              // not in. Dropping them is also what lets this line work on day
-              // one, when everything is un-rnkd and the other two would be 0.
-              .filter((seg) => seg.n > 0)
-              .map((seg) => {
+            {segments.map((seg) => {
                 const active = only === seg.key;
                 return (
                   <button
@@ -418,11 +423,11 @@ export default function ListScreen({
           touch.current = null;
           if (!from || from.axis !== "x") return;
           const dx = e.changedTouches[0].clientX - from.x;
-          const landed = pageAfterSwipe(page, STATES.length - 1, dx, e.currentTarget.clientWidth);
+          const landed = pageAfterSwipe(page, segments.length - 1, dx, e.currentTarget.clientWidth);
           // Nothing to the left of everything-you-own, so that end simply holds.
           if (landed === "before") return;
           if (landed === "after") return onRibbon(1);
-          if (landed !== page) setOnly(STATES[landed as number]);
+          if (landed !== page) setOnly(segments[landed as number].key);
         }}
       >
         {model.total === 0 && (
