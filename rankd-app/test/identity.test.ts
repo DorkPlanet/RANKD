@@ -115,44 +115,58 @@ describe("handing identity over", () => {
 });
 
 describe("what to call somebody", () => {
-  it("uses the account name", () => {
-    expect(publicName({ displayName: "Jarrad", avatarUrl: null })).toBe("Jarrad");
+  it("uses a name they typed, when there is one", () => {
+    expect(publicName({ handle: "jarrad_b", displayName: "Jarrad", avatarUrl: null })).toBe("Jarrad");
   });
 
-  it("falls back to the word the app has always used", () => {
-    expect(publicName({ displayName: null, avatarUrl: null })).toBe("You");
-    expect(publicName({ displayName: "   ", avatarUrl: null })).toBe("You");
+  it("falls back to the HANDLE, never to the provider's name", () => {
+    // The whole point. `display_name` arrives from Google at provision and
+    // nobody ever agreed to it, so a profile must not be captioned by it. The
+    // handle is the one name on the row somebody actually chose.
+    expect(publicName({ handle: "jarrad_b", displayName: null, avatarUrl: null })).toBe("jarrad_b");
+    expect(publicName({ handle: "jarrad_b", displayName: "   ", avatarUrl: null })).toBe("jarrad_b");
+  });
+
+  it("still has an answer for an account with neither", () => {
+    expect(publicName({ handle: null, displayName: null, avatarUrl: null })).toBe("You");
   });
 });
 
 describe("which picture to draw", () => {
   const shot = "https://image.tmdb.org/t/p/w780/still.jpg";
+  const someone = { handle: "sam", displayName: "Sam", avatarUrl: null };
 
   it("prefers the one the person chose over the one Google supplied", () => {
     // The ranking `avatarOf` has had since uploads existed, preserved across
     // the move off the device.
-    expect(avatarOf({ displayName: "Sam", avatarUrl: shot }, "https://google/photo.jpg")).toEqual({
+    expect(avatarOf({ ...someone, avatarUrl: shot }, "https://google/photo.jpg")).toEqual({
       kind: "image",
       url: shot,
     });
   });
 
   it("falls back to the account photo", () => {
-    expect(avatarOf({ displayName: "Sam", avatarUrl: null }, "https://google/photo.jpg")).toEqual({
+    expect(avatarOf(someone, "https://google/photo.jpg")).toEqual({
       kind: "image",
       url: "https://google/photo.jpg",
     });
   });
 
   it("falls back to an initial, so the circle is never empty", () => {
-    expect(avatarOf({ displayName: "Sam", avatarUrl: null })).toEqual({
+    expect(avatarOf(someone)).toEqual({ kind: "initial", letter: "S" });
+  });
+
+  it("takes the initial from the HANDLE when there is no display name", () => {
+    // Follows `publicName`, so the letter in the circle matches the name on the
+    // profile rather than coming from a Google value nobody sees any more.
+    expect(avatarOf({ handle: "jarrad_b", displayName: null, avatarUrl: null })).toEqual({
       kind: "initial",
-      letter: "S",
+      letter: "J",
     });
   });
 
-  it("has an initial even for an account with no name at all", () => {
-    expect(avatarOf({ displayName: null, avatarUrl: null })).toEqual({
+  it("has an initial even for an account with nothing set", () => {
+    expect(avatarOf({ handle: null, displayName: null, avatarUrl: null })).toEqual({
       kind: "initial",
       letter: "Y",
     });

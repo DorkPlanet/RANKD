@@ -108,13 +108,20 @@ export async function PATCH(request: Request) {
   const patch: Parameters<typeof updateProfile>[1] = {};
 
   if (displayName !== undefined) {
-    if (typeof displayName !== "string") {
+    if (displayName !== null && typeof displayName !== "string") {
       return NextResponse.json({ error: "That name isn't valid." }, { status: 400 });
     }
-    const trimmed = displayName.trim();
+    const trimmed = typeof displayName === "string" ? displayName.trim() : "";
+    // ── Empty CLEARS it, and that is a real outcome rather than a mistake ────
+    //
+    // A display name is optional now. The identity on a profile is the handle,
+    // which somebody chose; this is a second, softer name they may or may not
+    // want. Clearing it is how `HandleGate` discards the Google value nobody
+    // agreed to, and it is also what a reader is asking for when they empty the
+    // field. Refusing an empty name would strand both.
     if (trimmed.length === 0) {
-      return NextResponse.json({ error: "Pick a name to show." }, { status: 400 });
-    }
+      patch.displayName = null;
+    } else {
     if (trimmed.length > 60) {
       return NextResponse.json({ error: "That name's too long." }, { status: 400 });
     }
@@ -123,6 +130,7 @@ export async function PATCH(request: Request) {
     const clean = textIsClean(trimmed);
     if (!clean.clean) return NextResponse.json({ error: clean.reason }, { status: 400 });
     patch.displayName = trimmed;
+    }
   }
 
   if (bio !== undefined) {

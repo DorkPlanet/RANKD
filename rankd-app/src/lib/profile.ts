@@ -130,13 +130,28 @@ export type Avatar = { kind: "image"; url: string } | { kind: "initial"; letter:
  * testable without a network.
  */
 export interface Identity {
+  /** The name they CHOSE. This is the identity, and it outranks the rest. */
+  handle: string | null;
   displayName: string | null;
   avatarUrl: string | null;
 }
 
-/** What to call somebody. The fallback is the one the app has always used. */
+/**
+ * What to call somebody.
+ *
+ * ── The handle outranks the display name, and that is the point ────────────
+ *
+ * `display_name` arrives from Google at provision and nobody ever agreed to it.
+ * Showing it as somebody's identity means the profile is captioned by whatever
+ * their email provider happens to hold, which is exactly what claiming a handle
+ * was supposed to end.
+ *
+ * So the order is: a name they typed, then the name they claimed, then the old
+ * fallback for an account that has neither yet. Google's value is not in that
+ * list at all. `HandleGate` clears it at claim time rather than promoting it.
+ */
 export function publicName(identity: Identity): string {
-  return identity.displayName?.trim() || "You";
+  return identity.displayName?.trim() || identity.handle || "You";
 }
 
 export function avatarOf(identity: Identity, accountImage?: string | null): Avatar {

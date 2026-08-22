@@ -315,7 +315,11 @@ export default function ProfileScreen({
   const placed = useMemo(() => ranked.filter(isPlaced), [ranked]);
   const hero = placed[0];
   const topTen = placed.slice(0, 10);
-  const bannerFilm = films.find((f) => f.id === profile.bannerFilmId) ?? hero;
+  // `bannerFilm` lived here to label the pill that floated on the banner
+  // ("Change scene" against "Pick a scene"). The pill is gone and the sheet asks
+  // the question now, off `profile.bannerStill`, which is the thing that
+  // actually records a choice. Resolving a whole Film to word one button was
+  // always more work than the answer needed.
 
   // With no banner chosen, borrow a frame from your number one. Fetched once and
   // never stored on the profile, so choosing your own always wins.
@@ -417,13 +421,11 @@ export default function ProfileScreen({
           {/* Fades into the page so the name below emerges from the scene rather
               than sitting on a photograph. */}
           <div className="banner-fade absolute inset-0" />
-          <button
-            onClick={() => setPickingFor("banner")}
-            className="absolute bottom-2 right-4 rounded-full border border-border px-2.5 py-1 text-label text-dim active:scale-95"
-            style={{ background: "color-mix(in srgb, var(--bg) 70%, transparent)" }}
-          >
-            {bannerFilm ? "Change scene" : "Pick a scene"}
-          </button>
+          {/* The "Pick a scene" pill used to float here. It was the only control
+              in the app parked on top of its own artwork, and it competed with
+              the picture for the one corner the eye lands on. Both the banner
+              and the avatar are answers to "how does my profile look", so they
+              are asked in one place now: tap the picture. */}
         </div>
 
         {/* The name card. Its own block, held apart from the details below by a
@@ -460,20 +462,31 @@ export default function ProfileScreen({
                 onOpen={() => setAvatarMenu(true)}
               />
             </span>
-            {/* The name IS the control now.
-                A pencil beside it was a second thing to look at for an action
-                nobody performs twice, and it pushed the name off the centre this
-                block exists to hold. The bio's placeholder already invites the
-                tap; the name inherits it. */}
-            <button
-              onClick={() => setEditing(true)}
-              aria-label="Edit your name"
-              className="mt-3 block max-w-full active:opacity-70"
-            >
-              <span className="block truncate font-display text-[26px] leading-none tracking-wide text-gold">
-                {publicName(me)}
-              </span>
-            </button>
+            {/* ── The name they CHOSE ────────────────────────────────────
+                This used to show `display_name`, which arrives from Google at
+                sign-in and which nobody ever agreed to. A profile captioned by
+                whatever your email provider happens to hold is exactly what
+                claiming a handle was supposed to end.
+
+                Not a button, because a handle is permanent. The bio underneath
+                is still the way into the edit sheet, and its placeholder has
+                always been the thing that invites the tap. */}
+            <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
+              {me.handle ? `@${me.handle}` : publicName(me)}
+            </span>
+            {/* A display name, and ONLY if they set one. Absent by default, so
+                nobody is introduced by a name they did not pick. */}
+            {me.displayName && (
+              <button
+                onClick={() => setEditing(true)}
+                aria-label="Edit your display name"
+                className="mt-1.5 block max-w-full active:opacity-70"
+              >
+                <span className="block truncate text-sub leading-none text-dim">
+                  {me.displayName}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* ── WHERE YOU ARE ───────────────────────────────────────────────
@@ -1197,10 +1210,15 @@ export default function ProfileScreen({
         <AvatarMenu
           identity={me}
           signedIn={signedIn}
+          hasBanner={!!profile.bannerStill}
           onClose={() => setAvatarMenu(false)}
           onPickFromFilms={() => {
             setAvatarMenu(false);
             setPickingFor("avatar");
+          }}
+          onPickBanner={() => {
+            setAvatarMenu(false);
+            setPickingFor("banner");
           }}
           onUploadFile={(file) => {
             setAvatarMenu(false);
@@ -1369,20 +1387,27 @@ function AvatarSlot({
 function AvatarMenu({
   identity,
   signedIn,
+  hasBanner,
   onPickFromFilms,
+  onPickBanner,
   onUploadFile,
   onRemove,
   onClose,
 }: {
   identity: Identity;
   signedIn: boolean;
+  hasBanner: boolean;
   onPickFromFilms: () => void;
+  onPickBanner: () => void;
   onUploadFile: (file: File) => void;
   onRemove: () => void;
   onClose: () => void;
 }) {
   return (
-    <Sheet title="Your picture" onClose={onClose}>
+    // The banner joined this sheet when its own floating pill was removed. One
+    // question, asked once: how does your profile look. Two controls in two
+    // places for the two halves of the same answer was the thing that was wrong.
+    <Sheet title="Your picture and banner" onClose={onClose}>
       <p className="mb-4 text-sub leading-snug text-dim">
         {signedIn
           ? "A frame from one of your films, or a photo of your own."
@@ -1434,6 +1459,24 @@ function AvatarMenu({
           Remove it
         </button>
       )}
+
+      {/* ── The banner ────────────────────────────────────────────────────────
+          Below the picture and behind a rule, because it is the same question
+          asked about a different part of the page rather than a third way to
+          set your avatar. The rule is the app's usual "same page, next idea"
+          treatment, matching `Section`. */}
+      <div className="rule-fade my-5" />
+      <button
+        onClick={onPickBanner}
+        className="w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
+      >
+        <span className="block text-sm text-text-hi">
+          {hasBanner ? "Change the scene up top" : "Pick a scene for up top"}
+        </span>
+        <span className="block text-sub leading-snug text-dim">
+          A frame from one of your films, across the width of your profile.
+        </span>
+      </button>
     </Sheet>
   );
 }

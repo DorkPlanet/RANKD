@@ -65,7 +65,22 @@ async function handOverLocalIdentity(me: Me): Promise<Me> {
 
   const patch: Partial<Me> = {};
   const name = legacy.name?.trim();
-  if (name && name !== "You" && name !== me.displayName) patch.displayName = name;
+  // ── A name they typed, or no name at all ──────────────────────────────────
+  //
+  // `"You"` is the shipped default and means nobody decided anything, so it
+  // must not overwrite anything. But neither may Google's value SURVIVE as the
+  // profile's identity: `display_name` was written once at provision from
+  // whatever the provider held, and a profile captioned by your email account
+  // is what claiming a handle was meant to end.
+  //
+  // So a chosen name is kept and everything else is cleared. `publicName` then
+  // falls through to the handle, which is the one name on the row somebody
+  // actually picked.
+  if (name && name !== "You") {
+    if (name !== me.displayName) patch.displayName = name;
+  } else if (me.displayName) {
+    patch.displayName = null;
+  }
 
   const bio = legacy.bio?.trim();
   if (bio && bio !== me.bio) patch.bio = bio;
