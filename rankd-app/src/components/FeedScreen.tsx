@@ -318,6 +318,18 @@ function Card({
               : "SAY SOMETHING"
             : `${item.comments} ${item.comments === 1 ? "REPLY" : "REPLIES"}`}
         </button>
+
+        {/* One line of the argument, so the count is not the only thing on
+            offer. Hidden once the thread is open, where it would be the same
+            sentence twice. */}
+        {!open && item.latest && (
+          <button onClick={onToggle} className="mt-1 block max-w-full text-left active:opacity-70">
+            <span className="line-clamp-2 text-sub leading-snug text-dim">
+              <span className="font-semibold text-text-hi">{item.latest.handle}</span>{" "}
+              {item.latest.body}
+            </span>
+          </button>
+        )}
       </div>
 
       {open && <Thread item={item} onCount={onCount} />}

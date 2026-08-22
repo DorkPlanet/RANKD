@@ -95,6 +95,19 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
       actorId: activity.actorId,
       handle: users.handle,
       avatarUrl: users.avatarUrl,
+      // ── When this card last had a pulse ────────────────────────────────
+      //
+      // A card sorted purely by when it was CREATED buries a conversation the
+      // moment it is a day old. Somebody replies to a week-old climb, the reader
+      // gets a dot on the nav, opens Activity, and the thing they were told
+      // about is forty rows down — which is the dot lying by omission.
+      //
+      // So a comment lifts its card. That is what makes a thread findable, and
+      // it is the difference between a comment box and a conversation.
+      lastAt: sql<Date>`GREATEST(${activity.createdAt}, COALESCE((
+        SELECT MAX(c.created_at) FROM activity_comment c
+        WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
+      ), ${activity.createdAt}))`,
     })
     .from(activity)
     .innerJoin(users, eq(users.id, activity.actorId))
@@ -107,7 +120,10 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
         isNull(users.deletedAt),
       ),
     )
-    .orderBy(desc(activity.createdAt))
+    .orderBy(desc(sql`GREATEST(${activity.createdAt}, COALESCE((
+      SELECT MAX(c.created_at) FROM activity_comment c
+      WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
+    ), ${activity.createdAt}))`))
     .limit(limit);
 
   if (rows.length === 0) return [];
@@ -119,7 +135,9 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
   });
   const myRank = new Map((mine?.entries ?? []).map((e) => [e.i, e.r]));
 
-  const counts = await commentCounts(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const counts = await commentCounts(ids);
+  const latest = await latestComments(ids);
 
   return rows
     .filter((r) => r.handle !== null)
@@ -136,7 +154,43 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
       // it #1" on your own is the app agreeing with itself out loud.
       yourRank: r.actorId === viewerId ? undefined : (myRank.get(r.subjectId) ?? undefined),
       comments: counts.get(r.id) ?? 0,
+      latest: latest.get(r.id),
     }));
+}
+
+/**
+ * The newest line on each card, for the preview under it.
+ *
+ * A count alone ("3 replies") says a conversation exists and nothing about
+ * whether it is worth opening. One line of it is what makes somebody tap, and on
+ * a feed this size it is also most of the reason the screen feels inhabited.
+ */
+async function latestComments(ids: string[]): Promise<Map<string, { handle: string; body: string }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({
+      activityId: activityComments.activityId,
+      body: activityComments.body,
+      createdAt: activityComments.createdAt,
+      handle: users.handle,
+    })
+    .from(activityComments)
+    .innerJoin(users, eq(users.id, activityComments.authorId))
+    .where(
+      and(
+        inArray(activityComments.activityId, ids),
+        isNull(activityComments.deletedAt),
+        isNull(users.suspendedAt),
+        isNull(users.deletedAt),
+      ),
+    )
+    .orderBy(activityComments.createdAt);
+
+  // Last write wins, and the rows arrive oldest first, so this ends up holding
+  // the newest of each without a window function.
+  const out = new Map<string, { handle: string; body: string }>();
+  for (const r of rows) if (r.handle) out.set(r.activityId, { handle: r.handle, body: r.body });
+  return out;
 }
 
 /** Everyone whose cards this reader is entitled to see. */

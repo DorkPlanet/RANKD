@@ -87,6 +87,15 @@ export interface FeedItem {
    */
   yourRank?: number;
   comments: number;
+  /**
+   * The newest thing said on this card.
+   *
+   * A count says a conversation exists and nothing about whether it is worth
+   * opening. One line of it is what makes somebody tap — and on a feed this
+   * size it is most of the reason the screen feels inhabited rather than
+   * generated.
+   */
+  latest?: { handle: string; body: string };
 }
 
 /** One card, shaped for the row it becomes. */
