@@ -56,9 +56,9 @@ export function TasteChart({
    */
   rankd?: TasteShape;
   /**
-   * The films you LOCKED, in gold, when there are enough of them to mean
-   * anything. Absent below `MIN_FOR_LOCKED`, and then the gold line falls back
-   * to the whole placed list — which is `axes` and what it always drew.
+   * The films you LOCKED, in gold. Absent only when you have locked nothing at
+   * all, and then there is no gold line rather than a gold line standing in for
+   * something else.
    */
   locked?: TasteShape;
 }) {
@@ -70,16 +70,14 @@ export function TasteChart({
   // ── One line, or two, and the colour follows the population ───────────────
   //
   // Gold means "you settled this" everywhere in the app, so it may only ever be
-  // drawn over films you actually locked. Below `MIN_FOR_LOCKED` there is no
-  // locked shape, and what used to happen then was that gold fell back to your
-  // whole placed list — which with 82 shuffled films and one lock drew a gold
-  // web labelled YOUR LIST over data that was 82/83 Rankd's. Reported exactly
-  // that way, and it made no sense because it was not true.
+  // drawn over films you actually locked. It used to fall back to your whole
+  // PLACED list when there were too few locks, which with 82 shuffled films and
+  // one lock drew a gold web labelled YOUR LIST over data that was 82/83
+  // Rankd's — a third population with no name and no colour of its own.
   //
-  // So the single line below the threshold is the SHUFFLED shape itself, in
-  // blue, named for what it is. No fallback to the placed list at all: that
-  // fallback was the whole bug, and it was drawing a third population that had
-  // no name and no colour of its own.
+  // There is no fallback now. Gold appears the moment you lock anything, however
+  // sparse that makes it, and until then the only line is the SHUFFLED shape in
+  // blue, named for what it is.
   //
   // Each is drawn only where it has a value for every axis, so no polygon can
   // close across a gap and imply a number it does not hold.

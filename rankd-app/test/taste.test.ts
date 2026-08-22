@@ -186,16 +186,30 @@ describe("lockedShape and shuffledShape", () => {
     }
   });
 
-  it("returns null below the minimum rather than a shape from three films", () => {
-    // A spike drawn from two locked films invites a reading the data cannot
-    // support, so the caller is given nothing and says why instead.
+  it("draws from the very first lock, however thin that makes it", () => {
+    // There was a floor of ten here, on the reasoning that a spike from two
+    // locked films invites a reading the data will not support. Reversed on the
+    // user's call: the gold line is a drawing of what you have LOCKED, not a
+    // claim about your taste, and "one horror film" answers that completely. A
+    // wall at ten also hid the thing worth watching — the shape growing a limb
+    // each time you settle something.
     const thin = [
-      ...Array.from({ length: 3 }, (_, i) => mk("h" + i, "Horror", 7900 - i, "hard")),
+      mk("h0", "Horror", 7900, "hard"),
       ...Array.from({ length: 12 }, (_, i) => mk("d" + i, "Drama", 7000 - i, "soft")),
     ];
-    expect(lockedShape(thin, axes)).toBeNull();
-    // The shuffled half still works — it never needed a minimum of its own.
+    const shape = lockedShape(thin, axes)!;
+    expect(shape).not.toBeNull();
+    // A spike on the one genre you locked, and a true zero everywhere else.
+    expect(shape.Horror).toBeGreaterThan(0);
+    expect(shape.Drama).toBe(0);
+    // The shuffled half is unaffected; it never had a minimum of its own.
     expect(shuffledShape(thin, axes).Drama).toBeDefined();
+  });
+
+  it("gives back nothing when you have locked nothing", () => {
+    // The one case with no membership to draw. The caller says so instead.
+    const none = Array.from({ length: 12 }, (_, i) => mk("d" + i, "Drama", 7000 - i, "soft"));
+    expect(lockedShape(none, axes)).toBeNull();
   });
 
   it("scores both populations on the SAME standings", () => {

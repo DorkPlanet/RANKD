@@ -169,13 +169,16 @@ export function tasteShape(films: readonly Film[], axes: readonly string[]): Tas
 }
 
 /**
- * Below this, a "locked" shape is noise rather than a shape.
- *
- * Three films can put a genre on an axis (`MIN_FOR_AXIS`) but they cannot
- * describe a taste, and a spike drawn from two locked horror films would invite
- * a reading the data cannot support. Ten is where it starts being a claim.
- */
-export const MIN_FOR_LOCKED = 10;
+/* `MIN_FOR_LOCKED = 10` used to live here. The argument was that three films can
+   put a genre on an axis but cannot describe a taste, so a spike drawn from two
+   locked horror films invites a reading the data will not support.
+
+   Reversed on the user's call, and the reversal is better. That argument treats
+   the gold line as a claim about your taste, which it is not — it is a drawing of
+   what you have locked, and "one horror film" is a true and complete answer to
+   that. Holding it back until ten also hid the thing most worth seeing: the line
+   growing a limb each time you settle something. A wall at ten shows nothing and
+   then everything; from one, it fills out. */
 
 /**
  * The films you LOCKED, shaped against the same standings as everything else.
@@ -186,12 +189,15 @@ export const MIN_FOR_LOCKED = 10;
  * two comparable at all; two separately-normalised shapes would be two charts
  * sharing a dial.
  *
- * Returns null below `MIN_FOR_LOCKED`, so the caller can leave the line off and
- * say why rather than drawing a shape nobody should read.
+ * Returns null only when you have locked NOTHING, because then there is no
+ * membership to draw and the caller should say so instead. One locked film gives
+ * a spike on one axis and zeros elsewhere, which looks sparse and is exactly
+ * right: `membershipShape` documents why an empty axis here means zero rather
+ * than no data.
  */
 export function lockedShape(films: readonly Film[], axes: readonly string[]): TasteShape | null {
   const locked = films.filter(isHard);
-  if (locked.length < MIN_FOR_LOCKED) return null;
+  if (locked.length === 0) return null;
   return membershipShape(locked, yourOrder(films), axes);
 }
 

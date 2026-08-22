@@ -321,8 +321,9 @@ export default function ProfileScreen({
     };
   }, []);
   // Where you and Rankd part company, for the caption.
-  // Where what you locked parts company with what Rankd placed. Only says
-  // anything once there are enough locks for the gold line to be real.
+  // Where what you locked parts company with what Rankd placed. Tied to the gold
+  // line existing at all, so it appears with your first lock — a disagreement
+  // over one film is still a disagreement, and it is the reason to lock a second.
   const disagree = useMemo(
     () => (locked ? biggestDisagreement(locked, rankd) : null),
     [locked, rankd],
@@ -1061,7 +1062,7 @@ export default function ProfileScreen({
               </div>
               <p className="mt-1.5 text-center text-label leading-snug text-dim">
                 {!locked
-                  ? "This is what Fast Shuffle worked out. Lock ten films and your own shape arrives in gold beside it."
+                  ? "This is what Fast Shuffle worked out. Lock a film and your own shape starts drawing itself in gold beside it."
                   : moved
                   ? `${moved.genre} moved this sitting.`
                   : disagree
