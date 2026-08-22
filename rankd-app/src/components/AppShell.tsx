@@ -1045,6 +1045,7 @@ export default function AppShell() {
           onProfile={() => go("profile")}
           onRibbon={ribbon}
           onRead={() => setUnread(false)}
+          onFindPeople={() => setOverlay({ kind: "people" })}
           // The feed carries a `slugId` and a title; the library lives here. A
           // film the reader does not own simply does not open, which is why the
           // card only offers the tap when it knows they have it.

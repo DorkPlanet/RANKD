@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   crossed,
   diffToActivity,
+  escapeForLike,
   DUEL_MARKS,
   MAX_CARDS,
   MIN_CLIMB,
@@ -209,5 +210,30 @@ describe("milestones in the diff", () => {
 
   it("stays silent when the caller gives no counts", () => {
     expect(diffToActivity(before, after, [film("a")]).filter((c) => c.kind === "milestone")).toEqual([]);
+  });
+});
+
+describe("escapeForLike", () => {
+  // Invisible until somebody with an underscore in their name starts getting
+  // another person's notifications, which is a horrible way to find out.
+  it("escapes the character that is both legal and a wildcard", () => {
+    expect(escapeForLike("sam_j")).toBe("sam\\_j");
+  });
+
+  it("escapes the other wildcard and the escape character itself", () => {
+    expect(escapeForLike("a%b")).toBe("a\\%b");
+    expect(escapeForLike("a\\b")).toBe("a\\\\b");
+  });
+
+  it("leaves an ordinary handle exactly as it was", () => {
+    expect(escapeForLike("donnie")).toBe("donnie");
+    expect(escapeForLike("rankd2")).toBe("rankd2");
+  });
+
+  it("stops one handle matching another", () => {
+    // The whole point: unescaped, `sam_j` as a LIKE pattern matches `samxj`.
+    const pattern = escapeForLike("sam_j");
+    expect(pattern.includes("\_")).toBe(true);
+    expect(pattern).not.toBe("sam_j");
   });
 });

@@ -173,6 +173,21 @@ export const MIN_CLIMB = 3;
  */
 export const MAX_CARDS = 4;
 
+/**
+ * Escape the LIKE wildcards inside a handle.
+ *
+ * `_` is a LIKE wildcard AND a legal handle character, so searching for
+ * `@sam_j` unescaped quietly also matches `@samxj`. `people.ts` escapes its
+ * search for exactly this reason and says so; this is the same rule.
+ *
+ * Lives here rather than beside the query so it can be tested without a
+ * database — the mistake it guards against is invisible until somebody with an
+ * underscore in their name gets another person's notifications.
+ */
+export function escapeForLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 /** Which star band a tier score sits in. Read from `TIER_RANGE` so it cannot drift. */
 export function ratingOfScore(score: number): number {
   for (const [rating, [low, high]] of Object.entries(TIER_RANGE)) {

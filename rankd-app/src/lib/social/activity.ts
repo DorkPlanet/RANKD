@@ -5,7 +5,7 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { activity, activityComments, db, follows, tasteSnapshots, users } from "@/lib/db";
-import { diffToActivity, type CommentItem, type FeedItem } from "@/lib/social/feed";
+import { diffToActivity, escapeForLike, type CommentItem, type FeedItem } from "@/lib/social/feed";
 import { mentionedHandles } from "@/lib/social/mentions";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
 
@@ -357,7 +357,15 @@ export async function unreadFor(user: {
         // Your own words are never news to you.
         sql`${activityComments.authorId} <> ${user.id}`,
         handle
-          ? or(eq(activity.actorId, user.id), sql`${activityComments.body} ILIKE ${"%@" + handle + "%"}`)
+          ? or(
+              eq(activity.actorId, user.id),
+              // Escaped for the same reason `people.ts` escapes its search: `_`
+              // is a LIKE wildcard AND a legal handle character, so an unescaped
+              // `@sam_j` quietly matches `@samxj`. The parser below would throw
+              // those out anyway, but a filter that over-matches by design is a
+              // filter nobody can reason about.
+              sql`${activityComments.body} ILIKE ${"%@" + escapeForLike(handle) + "%"} ESCAPE '\\'`,
+            )
           : eq(activity.actorId, user.id),
       ),
     )

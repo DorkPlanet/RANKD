@@ -348,6 +348,7 @@ export function FeedScreen({
   onRibbon,
   onRead,
   onFilm,
+  onFindPeople,
 }: {
   onSettings: () => void;
   onTrophies: () => void;
@@ -372,6 +373,8 @@ export function FeedScreen({
    * and does the lookup. Only ever offered for a film the reader has.
    */
   onFilm: (id: string) => void;
+  /** The way out of an empty feed. */
+  onFindPeople: () => void;
 }) {
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -454,6 +457,17 @@ export function FeedScreen({
             <p className="mt-2 text-sub leading-relaxed text-dim">
               Follow somebody and theirs will too.
             </p>
+            {/* An empty state that names the way out of itself. Saying "follow
+                somebody" without offering anywhere to do it is the same shape of
+                broken promise this cell used to make when it said "coming
+                soon". */}
+            <button
+              onClick={onFindPeople}
+              className="mx-auto mt-6 block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
+              style={{ background: "rgba(255,255,255,0.05)" }}
+            >
+              FIND PEOPLE
+            </button>
           </div>
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
