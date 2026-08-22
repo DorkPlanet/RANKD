@@ -58,9 +58,14 @@ export const RESERVED: ReadonlySet<string> = new Set([
   "images", "img", "fonts", "discover", "search", "report",
   // Impersonation.
   "rankd", "rnkd", "rnk", "admin", "administrator", "root", "official", "staff",
-  // House accounts, and the names next to them. `faulkner` is Rankd's own,
-  // and the neighbours are reserved so nobody can pass themselves off as it.
-  "faulkner", "williamfaulkner", "faulknr", "canon", "thecanon", "house", "bot",
+  // System accounts. The house account IS Rankd (handle `rankd`, already above),
+  // so nothing else needs holding for it. These two read as Rankd machinery to
+  // anybody scanning a follower list, which is the impersonation this set is for.
+  //
+  // `faulkner` and `canon` were briefly reserved here for a named house account
+  // that is not being built. Released, because reserving a real surname for a
+  // thing nobody is going to use refuses somebody their own name for nothing.
+  "house", "bot",
   "team", "mod", "mods", "moderator", "support", "help", "contact", "about",
   "terms", "privacy", "legal", "security", "abuse", "billing", "system",
   "me", "you", "null", "undefined", "none", "anonymous", "deleted", "unknown",

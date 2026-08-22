@@ -213,10 +213,15 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
         </span>
 
         {/* Said before the bio, because "this is not a person" changes how you
-            read everything under it. */}
+            read everything under it.
+
+            It does NOT say "a Rankd house account", which was the wording while
+            the account had a name of its own. The account is called rankd, so
+            that read as "rankd, a Rankd house account". This says what it holds
+            instead of restating whose it is. */}
         {profile.house && (
           <span className="mt-2 text-label font-extrabold tracking-[0.16em] text-dim">
-            A RANKD HOUSE ACCOUNT
+            THE HOUSE RANKING
           </span>
         )}
 
