@@ -59,9 +59,15 @@ export async function POST(request: Request) {
 
   const result = await follow(user.id, handle);
   if (!result.ok) {
-    return result.reason === "self"
-      ? NextResponse.json({ error: "You already know what you think." }, { status: 400 })
-      : NextResponse.json({ error: "No such person" }, { status: 404 });
+    if (result.reason === "self") {
+      return NextResponse.json({ error: "You already know what you think." }, { status: 400 });
+    }
+    // Unreachable through the app, since a house account has no session. Answered
+    // rather than assumed away: see the guard in lib/social/follow.ts.
+    if (result.reason === "house") {
+      return NextResponse.json({ error: "Rankd keeps its own counsel." }, { status: 403 });
+    }
+    return NextResponse.json({ error: "No such person" }, { status: 404 });
   }
 
   const targetId = await targetIdFor(request);

@@ -32,6 +32,7 @@
 import { eq } from "drizzle-orm";
 
 import { db, tasteSnapshots, users } from "@/lib/db";
+import { backdropsFor } from "@/lib/tmdb";
 import type { SnapshotSummary } from "@/lib/snapshot";
 
 /**
@@ -78,6 +79,39 @@ export interface PublicProfile extends ProfileIdentity {
 export type ProfileView =
   | { kind: "public"; profile: PublicProfile }
   | { kind: "private"; identity: ProfileIdentity };
+
+/**
+ * The two images the banner draws, best first.
+ *
+ * ── Frames if they exist, posters if not ──────────────────────────────────
+ *
+ * A frame from inside the film is the thing a profile can show that the list
+ * below cannot, so it is asked for first. A poster is the honest fallback: it is
+ * already in the snapshot, so it costs nothing and always exists.
+ *
+ * Server-side and day-cached, rather than stored on the snapshot. Two TMDb calls
+ * per profile render is far cheaper than two on every sync push while somebody
+ * is mid-run, and the artwork for a film does not change.
+ *
+ * Returns fewer than two, or none, without complaint. The banner degrades.
+ */
+export async function bannerImages(summary: SnapshotSummary | null): Promise<string[]> {
+  const top = summary?.topFilms.slice(0, 2) ?? [];
+  if (top.length === 0) return [];
+
+  const key = process.env.TMDB_API_KEY;
+  const images = await Promise.all(
+    top.map(async (film) => {
+      // No key on this deployment, or a film TMDb never matched. Either way the
+      // poster is already in hand.
+      if (!key || !film.tmdbId) return film.poster;
+      const [frame] = await backdropsFor(film.tmdbId, key);
+      return frame ?? film.poster;
+    }),
+  );
+
+  return images.filter((u): u is string => !!u);
+}
 
 /**
  * The profile at this handle, or null if there is nobody to show.

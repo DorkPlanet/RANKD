@@ -17,7 +17,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { getProfileView } from "@/lib/social/publicProfile";
+import { bannerImages, getProfileView } from "@/lib/social/publicProfile";
 import { PublicProfileView } from "@/components/PublicProfileView";
 import { PrivateProfileView } from "@/components/PrivateProfileView";
 
@@ -64,9 +64,11 @@ export default async function Page({ params }: Props) {
   // trade that was made deliberately.
   if (!view) notFound();
 
-  return view.kind === "public" ? (
-    <PublicProfileView profile={view.profile} />
-  ) : (
-    <PrivateProfileView identity={view.identity} />
-  );
+  if (view.kind === "private") return <PrivateProfileView identity={view.identity} />;
+
+  // Resolved here rather than inside the view, so the view stays a pure render
+  // of what it is handed and the two TMDb calls sit on the server where they can
+  // be cached for a day.
+  const banner = await bannerImages(view.profile.summary);
+  return <PublicProfileView profile={view.profile} banner={banner} />;
 }

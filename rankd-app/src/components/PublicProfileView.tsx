@@ -20,7 +20,7 @@
 // because it is, without being the same code.
 
 import { FollowButton } from "./FollowButton";
-import { avatarOf } from "@/lib/profile";
+import { ProfileBanner } from "./ProfileBanner";
 import { starsFor } from "@/lib/tiers";
 import type { PublicProfile } from "@/lib/social/publicProfile";
 import type { PersonStat } from "@/lib/profile";
@@ -172,40 +172,29 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
   );
 }
 
-export function PublicProfileView({ profile }: { profile: PublicProfile }) {
-  const avatar = avatarOf({
-    handle: profile.handle,
-    displayName: null,
-    avatarUrl: profile.avatarUrl,
-  });
+export function PublicProfileView({
+  profile,
+  banner,
+}: {
+  profile: PublicProfile;
+  /** Zero, one or two images. Resolved on the server; see `bannerImages`. */
+  banner: string[];
+}) {
   const summary = profile.summary;
 
   return (
     <main
-      className="mx-auto min-h-screen w-full max-w-md px-6 pb-16"
-      style={{
-        background: "var(--bg)",
-        paddingTop: "calc(env(safe-area-inset-top) + 2rem)",
-      }}
+      className="mx-auto min-h-screen w-full max-w-md pb-16"
+      style={{ background: "var(--bg)" }}
     >
-      <div className="flex flex-col items-center text-center">
-        {avatar.kind === "image" ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatar.url}
-            alt=""
-            className="h-20 w-20 rounded-full object-cover"
-            style={{ border: "1px solid var(--border)" }}
-          />
-        ) : (
-          <span
-            className="flex h-20 w-20 items-center justify-center rounded-full font-display text-3xl text-gold"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            {avatar.letter}
-          </span>
-        )}
+      {/* Full bleed, so the frames run to the edges of the phone. Everything
+          below it keeps the page's own gutter. */}
+      <ProfileBanner images={banner} identity={profile} />
 
+      {/* One gutter for the whole page below the banner. The banner itself is full
+          bleed so the frames reach the edges of the phone. */}
+      <div className="px-6">
+      <div className="flex flex-col items-center pt-10 text-center">
         {/* No `@`, matching the owner's own profile. The handle is a title here
             rather than an address being typed. */}
         <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
@@ -332,7 +321,9 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
           with the address, including people who have never heard of Rankd, which
           is the point at which TMDb's terms require the credit to be visible.
           It goes on every public surface, including share cards later. */}
-      <footer className="mt-12 text-center">
+      </div>
+
+      <footer className="mt-12 px-6 text-center">
         <div className="rule-fade mb-5" />
         <p className="text-label leading-snug text-dim">
           Ranked on Rankd. Film data and artwork from TMDb, which has not endorsed this.

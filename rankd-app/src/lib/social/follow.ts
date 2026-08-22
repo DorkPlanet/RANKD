@@ -14,9 +14,10 @@
 // Nothing to keep in step, nothing to migrate when somebody unfollows, and no
 // question about who ended it.
 
-import { and, count, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { db, follows, users } from "@/lib/db";
+import type { PersonResult } from "./people";
 
 /** Where a viewer stands with the person whose page they are on. */
 export interface FollowState {
@@ -101,7 +102,7 @@ export async function isFriend(a: string, b: string): Promise<boolean> {
   return edges.length === 2;
 }
 
-export type FollowResult = { ok: true } | { ok: false; reason: "self" | "gone" };
+export type FollowResult = { ok: true } | { ok: false; reason: "self" | "gone" | "house" };
 
 /**
  * Follow somebody.
@@ -118,6 +119,21 @@ export type FollowResult = { ok: true } | { ok: false; reason: "self" | "gone" }
  * returning the same null for "no such person" and "not for you".
  */
 export async function follow(followerId: string, handle: string): Promise<FollowResult> {
+  // ── A house account cannot follow anybody through here ──────────────────
+  //
+  // `@rankd` follows exactly one person, the creator, and that edge is written
+  // by the seeding script rather than by this function. Everything else it might
+  // ever follow would be a bot inflating its own reach, which is the difference
+  // between a reference object and astroturf.
+  //
+  // Seeded rather than blocked outright because following one person permanently
+  // is a signature, not a tactic. This is what stops it becoming a habit.
+  const follower = await db.query.users.findFirst({
+    where: eq(users.id, followerId),
+    columns: { kind: true },
+  });
+  if (follower?.kind === "house") return { ok: false, reason: "house" };
+
   const target = await db.query.users.findFirst({
     where: eq(users.handle, handle.toLowerCase()),
     columns: { id: true, profileVisibility: true, suspendedAt: true, deletedAt: true },
@@ -159,4 +175,92 @@ export async function unfollow(followerId: string, handle: string): Promise<Foll
     .where(and(eq(follows.followerId, followerId), eq(follows.followeeId, target.id)));
 
   return { ok: true };
+}
+
+// ── The lists ──────────────────────────────────────────────────────────────
+//
+// Anyone who can see a profile can see its lists. That is the user's call and
+// it is what makes the network grow: you browse the follows of somebody whose
+// taste you trust, and follow from there.
+//
+// They return `PersonResult`, the same shape people search returns, so the sheet
+// renders the SAME row with the same inline follow button. That reuse is the
+// feature rather than a convenience: a list you can only read is a dead end.
+
+/** Which direction of the edge to walk. */
+export type Direction = "followers" | "following";
+
+/** A screenful, matching search. Long enough to browse, short enough to end. */
+const LIST_LIMIT = 50;
+
+export async function followList(
+  userId: string,
+  direction: Direction,
+  viewerId: string | null,
+): Promise<PersonResult[]> {
+  // `followers` walks to the people pointing AT this user, `following` walks to
+  // the people they point at. One query either way, differing only in which
+  // column is matched and which is joined.
+  const matchOn = direction === "followers" ? follows.followeeId : follows.followerId;
+  const joinOn = direction === "followers" ? follows.followerId : follows.followeeId;
+
+  const rows = await db
+    .select({
+      id: users.id,
+      handle: users.handle,
+      bio: users.bio,
+      avatarUrl: users.avatarUrl,
+      kind: users.kind,
+      visibility: users.profileVisibility,
+      at: follows.createdAt,
+    })
+    .from(follows)
+    .innerJoin(users, eq(users.id, joinOn))
+    .where(
+      and(
+        eq(matchOn, userId),
+        isNotNull(users.handle),
+        // Gone accounts leave no trace in a list, the same way they do not
+        // appear in search. The edge survives; the row is simply not shown.
+        isNull(users.deletedAt),
+        isNull(users.suspendedAt),
+      ),
+    )
+    // Newest first. A follower list is a record of who arrived, and the most
+    // recent arrival is the one worth seeing.
+    .orderBy(desc(follows.createdAt))
+    .limit(LIST_LIMIT);
+
+  if (rows.length === 0) return [];
+
+  // One query for every edge rather than one per row, same as search.
+  const followed = new Set<string>();
+  if (viewerId) {
+    const edges = await db
+      .select({ followeeId: follows.followeeId })
+      .from(follows)
+      .where(
+        and(
+          eq(follows.followerId, viewerId),
+          inArray(
+            follows.followeeId,
+            rows.map((r) => r.id),
+          ),
+        ),
+      );
+    for (const e of edges) followed.add(e.followeeId);
+  }
+
+  return rows
+    // You are not a row in your own view of a list, the same reasoning as
+    // search: it is a row you can do nothing with.
+    .filter((r) => r.id !== viewerId)
+    .map((r) => ({
+      handle: r.handle!,
+      bio: r.bio,
+      avatarUrl: r.avatarUrl,
+      house: r.kind === "house",
+      private: r.visibility !== "public",
+      following: viewerId ? followed.has(r.id) : null,
+    }));
 }

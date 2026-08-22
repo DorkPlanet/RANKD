@@ -35,9 +35,9 @@
 // line of this is parsed. Nothing in this file can reorder itself into breaking
 // it, which a dotenv call at the top very much can.
 
-import { eq } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 
-import { client, db, rankingHistory, tasteSnapshots, users } from "../src/lib/db";
+import { client, db, follows, rankingHistory, tasteSnapshots, users } from "../src/lib/db";
 import { discoverPage, detailOf, type DiscoveredFilm } from "../src/lib/tmdb";
 import { placeCanon } from "../src/lib/canon/place";
 import { buildSnapshot } from "../src/lib/snapshot";
@@ -90,11 +90,22 @@ const PACE_MS = 120;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Midnight UTC, so "today" means the same thing wherever this is run from. */
+function startOfDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/** The one account the house follows, as a credit. */
+const CREATOR = "donnie";
+
 /** The account. `rankd` is in RESERVED, so it is guaranteed free. */
 const HOUSE = {
   handle: "rankd",
   email: "house@rankd.invalid", // RFC 2606 reserved: can never route anywhere.
-  bio: "The 250, as Rankd has them. It starts with what the world thinks and moves toward what we all do.",
+  // Every clause true in the present tense. The first two say what it IS, the
+  // third says what happens next rather than what is already happening. Revisit
+  // when the consensus lands and the third becomes present tense.
+  bio: "250 films in one order. Right now it's the world's list. The more people rank, the more it becomes ours.",
 };
 
 async function fetchPool(key: string): Promise<DiscoveredFilm[]> {
@@ -203,8 +214,25 @@ async function main() {
   await db.transaction(async (tx) => {
     // Idempotent: re-running refreshes the canon rather than failing on the
     // unique index or creating a second account.
+    // ── A refresh updates the account, not just the canon ─────────────────
+    //
+    // The first version took the existing row untouched, so changing the bio and
+    // re-running looked like it worked and changed nothing. The canon refreshed
+    // and the words above it did not.
+    //
+    // Only the fields this script OWNS. `handleClaimedAt` is not re-stamped,
+    // because the handle was claimed once and that date is a fact about when.
     const [account] = existing
-      ? [existing]
+      ? await tx
+          .update(users)
+          .set({
+            bio: HOUSE.bio,
+            kind: "house",
+            profileVisibility: "public",
+            tasteVisibility: "public",
+          })
+          .where(eq(users.id, existing.id))
+          .returning()
       : await tx
           .insert(users)
           .values({
@@ -233,22 +261,59 @@ async function main() {
       set: row,
     });
 
+    // ── One capture per day, not one per run ────────────────────────────
+    //
+    // The primary key is (user, capturedAt) and `capturedAt` is `new Date()`,
+    // so two runs an hour apart are two rows and `onConflictDoNothing` never
+    // fires. Re-running this script to pick up a new field is a normal thing to
+    // do and it was quietly writing a second capture each time: two rows
+    // seconds apart, both claiming to be the state at that moment, and
+    // retention would keep both inside its weekly window.
+    //
+    // Today's capture is replaced instead. A re-seed corrects the day's answer
+    // rather than adding a second one. Same idea as the cron's self-gate.
+    await tx
+      .delete(rankingHistory)
+      .where(
+        and(
+          eq(rankingHistory.userId, account.id),
+          gte(rankingHistory.capturedAt, startOfDay(capturedAt)),
+        ),
+      );
+
     // Written in the SAME transaction as the snapshot. A snapshot with no
     // matching history row breaks movement silently for that window.
-    await tx
-      .insert(rankingHistory)
-      .values({
-        userId: account.id,
-        capturedAt,
-        entries: snapshot.entries,
-        filmCount: snapshot.filmCount,
-        // Nobody has fed this yet. It is the honest denominator behind every
-        // movement number the profile will eventually show.
-        contributors: 0,
-      })
-      .onConflictDoNothing();
+    await tx.insert(rankingHistory).values({
+      userId: account.id,
+      capturedAt,
+      entries: snapshot.entries,
+      filmCount: snapshot.filmCount,
+      // Nobody has fed this yet. It is the honest denominator behind every
+      // movement number the profile will eventually show.
+      contributors: 0,
+    });
+
+    // ── The one person it follows ─────────────────────────────────────
+    //
+    // The creator, as a credit. Written here rather than through `follow()`,
+    // which refuses a house account outright: this is the deliberate exception
+    // and it should be visible in the script that makes it rather than be a
+    // hole in the rule.
+    //
+    // Idempotent, and silent if that account does not exist on this deployment.
+    const creator = await tx.query.users.findFirst({
+      where: eq(users.handle, CREATOR),
+      columns: { id: true },
+    });
+    if (creator && creator.id !== account.id) {
+      await tx
+        .insert(follows)
+        .values({ followerId: account.id, followeeId: creator.id })
+        .onConflictDoNothing();
+    }
 
     console.log(`${existing ? "Refreshed" : "Created"} @${HOUSE.handle} (${account.id.slice(0, 8)})`);
+    console.log(creator ? `  follows @${CREATOR}` : `  @${CREATOR} not on this deployment, no follow written`);
   });
 
   console.log(`\nDone. Open /@${HOUSE.handle}\n`);

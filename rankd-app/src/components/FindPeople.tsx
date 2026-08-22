@@ -19,53 +19,42 @@ import { useEffect, useRef, useState } from "react";
 
 import Sheet from "./Sheet";
 import { MIN_QUERY } from "@/lib/social/searchRules";
-import { avatarOf } from "@/lib/profile";
-
-interface Person {
-  handle: string;
-  bio: string | null;
-  avatarUrl: string | null;
-  house: boolean;
-  private: boolean;
-  following: boolean | null;
-}
+import { PersonRow, type Person } from "./PersonRow";
 
 /** Long enough that a fast typist finishes a word before anything is asked. */
 const DEBOUNCE_MS = 300;
 
-function Avatar({ person }: { person: Person }) {
-  const avatar = avatarOf({
-    handle: person.handle,
-    displayName: null,
-    avatarUrl: person.avatarUrl,
-  });
-  return avatar.kind === "image" ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={avatar.url}
-      alt=""
-      className="h-11 w-11 shrink-0 rounded-full object-cover"
-      style={{ border: "1px solid var(--border)" }}
-    />
-  ) : (
-    <span
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-display text-lg text-gold"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-    >
-      {avatar.letter}
-    </span>
-  );
-}
-
 export function FindPeople({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [people, setPeople] = useState<Person[] | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  // The house account, fetched rather than hand-written, so its row carries a
+  // real follow state and a real button. A hard-coded row would have no way to
+  // know whether you already follow it, and a button that cannot say is worse
+  // than none.
+  const [suggested, setSuggested] = useState<Person[] | null>(null);
 
   // Only the newest keystroke's answer may land. Same guard as `HandleGate`:
   // without it a slow response for "sam" arrives after a fast one for "samj"
   // and the list shows results for a query nobody is looking at.
   const asked = useRef(0);
+
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/people?q=rankd", { cache: "no-store" });
+        if (dead || !res.ok) return;
+        const body = (await res.json()) as { people: Person[] };
+        setSuggested(body.people.filter((x) => x.house));
+      } catch {
+        // The empty state simply stays a sentence. Nothing is broken by there
+        // being nothing to suggest.
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+  }, []);
 
   useEffect(() => {
     const q = query.trim();
@@ -88,30 +77,6 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const toggleFollow = async (person: Person) => {
-    if (busy) return;
-    setBusy(person.handle);
-    try {
-      const res = await fetch(`/api/follow?handle=${encodeURIComponent(person.handle)}`, {
-        method: person.following ? "DELETE" : "POST",
-      });
-      if (res.ok) {
-        // Only the row that changed. Re-running the search would reorder the
-        // list under a thumb that is still on it.
-        setPeople((list) =>
-          (list ?? []).map((p) =>
-            p.handle === person.handle ? { ...p, following: !p.following } : p,
-          ),
-        );
-      }
-    } catch {
-      // Left as it was. A button that claims to have worked is worse than one
-      // that visibly did nothing.
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const short = query.trim().length < MIN_QUERY;
 
   return (
@@ -132,9 +97,29 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
           A list that says "nobody by that name" while somebody has typed one
           letter is answering a question they have not finished asking. */}
       {short ? (
-        <p className="text-sub leading-snug text-dim">
-          Type someone&rsquo;s name to find them.
-        </p>
+        // ── The emptiest screen introduces the canon ────────────────────────
+        //
+        // It used to say "type someone's name" and sit blank, which is the least
+        // useful state any screen can be in. Today you have to already KNOW the
+        // house account exists to reach it, so the one place somebody arrives
+        // wanting to find people is exactly where it should be offered.
+        //
+        // A single suggested row, not a list of strangers. Suggesting people is
+        // discovery and discovery is its own decision; this is one account that
+        // everybody has a reason to see.
+        <>
+          <p className="mb-4 text-sub leading-snug text-dim">
+            Type someone&rsquo;s name to find them.
+            {suggested?.length ? " Or start here." : ""}
+          </p>
+          {suggested?.length ? (
+            <ul className="space-y-1">
+              {suggested.map((person) => (
+                <PersonRow key={person.handle} person={person} />
+              ))}
+            </ul>
+          ) : null}
+        </>
       ) : people === null ? (
         <p className="text-sub leading-snug text-dim">Looking&hellip;</p>
       ) : people.length === 0 ? (
@@ -142,43 +127,7 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
       ) : (
         <ul className="space-y-1">
           {people.map((person) => (
-            <li key={person.handle} className="flex items-center gap-3 py-2">
-              <a href={`/@${person.handle}`} className="flex min-w-0 flex-1 items-center gap-3 active:opacity-70">
-                <Avatar person={person} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-text-hi">{person.handle}</span>
-                  <span className="block truncate text-label leading-snug text-dim">
-                    {/* What the row says, in priority order. "Private" outranks a
-                        bio because it changes what the rest of the row means. */}
-                    {person.house
-                      ? "A Rankd house account"
-                      : person.private
-                        ? "This profile is private"
-                        : (person.bio ?? "")}
-                  </span>
-                </span>
-              </a>
-
-              {/* None for a private account: a follow would be refused
-                  server-side anyway, and offering one that cannot work is worse
-                  than offering none. You never appear in your own results, so
-                  there is no self case to handle here. */}
-              {!person.private && person.following !== null && (
-                <button
-                  onClick={() => void toggleFollow(person)}
-                  disabled={busy === person.handle}
-                  aria-pressed={person.following}
-                  className="shrink-0 rounded-full px-4 py-1.5 text-label font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
-                  style={
-                    person.following
-                      ? { background: "rgba(255,255,255,0.07)", color: "var(--text-hi)" }
-                      : { background: "var(--gold)", color: "#1c1405" }
-                  }
-                >
-                  {person.following ? "Following" : "Follow"}
-                </button>
-              )}
-            </li>
+            <PersonRow key={person.handle} person={person} />
           ))}
         </ul>
       )}

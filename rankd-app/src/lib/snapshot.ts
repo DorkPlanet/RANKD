@@ -73,6 +73,15 @@ export interface SnapshotFilm {
   year?: string;
   poster?: string;
   rating: number;
+  /**
+   * Only so a public profile can fetch a frame from it for the banner.
+   *
+   * Deliberately NOT the artwork itself. Two backdrops per profile render, cached
+   * for a day server-side, is far cheaper than two TMDb calls on every sync push
+   * while somebody is mid-run. Absent for a film TMDb never matched, which the
+   * banner treats as "no frame" and falls back from.
+   */
+  tmdbId?: number;
 }
 
 /**
@@ -203,6 +212,7 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
         year: f.year,
         poster: f.poster,
         rating: f.rating,
+        tmdbId: f.tmdbId,
       })),
       directors: people.directors,
       actors: people.actors,
@@ -214,6 +224,7 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
             year: genreFilm.year,
             poster: genreFilm.poster,
             rating: genreFilm.rating,
+            tmdbId: genreFilm.tmdbId,
           }
         : undefined,
       fingerprint: fingerprint(own),
