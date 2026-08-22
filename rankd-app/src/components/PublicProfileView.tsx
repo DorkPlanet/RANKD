@@ -172,14 +172,7 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
   );
 }
 
-export function PublicProfileView({
-  profile,
-  banner,
-}: {
-  profile: PublicProfile;
-  /** Zero, one or two images. Resolved on the server; see `bannerImages`. */
-  banner: string[];
-}) {
+export function PublicProfileView({ profile }: { profile: PublicProfile }) {
   const summary = profile.summary;
 
   return (
@@ -189,7 +182,7 @@ export function PublicProfileView({
     >
       {/* Full bleed, so the frames run to the edges of the phone. Everything
           below it keeps the page's own gutter. */}
-      <ProfileBanner images={banner} identity={profile} />
+      <ProfileBanner films={summary?.topFilms ?? []} identity={profile} />
 
       {/* One gutter for the whole page below the banner. The banner itself is full
           bleed so the frames reach the edges of the phone. */}

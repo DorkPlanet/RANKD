@@ -1,49 +1,57 @@
 // The top of somebody else's profile.
 //
-// ── Two frames, split corner to corner ─────────────────────────────────────
+// ── The header IS the ranking ──────────────────────────────────────────────
 //
-// The public profile started with a small avatar on a flat background, which is
-// the thinnest a page can be. The owner's own profile has a banner and it is the
-// best thing on that screen, so a visitor should get one too.
+// It was two film frames split diagonally, which looked like every other social
+// header: a photograph with a name on it. Any app can do that, and the two
+// frames said nothing except "these are two films".
 //
-// It is their top TWO films rather than one, because a profile is a claim about
-// taste and one film is an anecdote. Split diagonally rather than side by side:
-// a vertical seam reads as two panels, a diagonal reads as one image made of two
-// things, which is what a taste is.
+// This is their top ten, as ten vertical slices of the actual posters, in order,
+// widest first. It reads as an abstract band of colour at a glance and it is
+// literally the thing the profile is about: the shape of a ranking, left to
+// right, best to tenth. Nobody else's app can draw this because nobody else's
+// app has an ordered top ten as its primary object.
 //
-// ── Scenes, not posters, where a scene exists ──────────────────────────────
+// The widths are the point. Number one takes almost a third and each one after
+// takes less, so the header is a decay curve rather than a grid. That is what
+// stops it reading as a contact sheet.
 //
-// A poster is the library's currency and there are ten of them a few hundred
-// pixels below. A frame from inside the film is the thing the profile can show
-// that the list cannot. `backdropsFor` in lib/tmdb.ts sorts textless images
-// first, which matters more here than anywhere: a frame with the film's own
-// title baked across it would sit directly under somebody's name and fight it.
+// ── It costs nothing extra ─────────────────────────────────────────────────
 //
-// ── It degrades, and it never shows a hole ─────────────────────────────────
+// The posters are already in the snapshot, so the whole thing draws from data
+// the page has in hand. The version this replaced fetched two TMDb backdrops per
+// render, which measured at about 0.25s of the page's time.
 //
-// Two frames, then one frame full width, then two posters, then one poster, then
-// nothing at all. A library with a single placed film is a real state, and so is
-// a film TMDb has no art for. A grey box would be worse than no banner.
+// ── It degrades ────────────────────────────────────────────────────────────
+//
+// Fewer than ten films simply means fewer slices, sharing the width on the same
+// curve. A film with no artwork leaves a band of the page's own surface rather
+// than a hole. None at all leaves a quiet gradient, which is what a profile with
+// nothing ranked should look like: unfinished, not broken.
 
 import { avatarOf } from "@/lib/profile";
+import { blockFor } from "@/lib/card/palette";
 import type { ProfileIdentity } from "@/lib/social/publicProfile";
+import type { SnapshotFilm } from "@/lib/snapshot";
 
-// ── The cut ────────────────────────────────────────────────────────────────
-//
-// A shallow diagonal rather than a corner-to-corner one. At true 45 degrees on a
-// wide box the split runs off the top edge almost immediately, so the second
-// image is a thin wedge in one corner and the first is nearly everything. These
-// meet at the vertical midpoint of each side, which gives both films real estate
-// and reads as a deliberate cut rather than a crop that went wrong.
-const LEFT = "polygon(0 0, 62% 0, 38% 100%, 0 100%)";
-const RIGHT = "polygon(62% 0, 100% 0, 100% 100%, 38% 100%)";
+/** How many slices at most. Ten is a top ten. */
+const SLICES = 10;
+
+/**
+ * How much width each position gets, before normalising.
+ *
+ * Geometric rather than linear: linear makes the tenth film a third the width of
+ * the first, which still reads as a row of roughly equal columns. At 0.82 the
+ * first is about five times the last and the eye sees a run rather than a grid.
+ */
+const FALLOFF = 0.82;
 
 export function ProfileBanner({
-  images,
+  films,
   identity,
 }: {
-  /** Zero, one or two. Frames if they were available, posters otherwise. */
-  images: string[];
+  /** Their top ten, best first. Fewer is fine. Empty is fine. */
+  films: SnapshotFilm[];
   identity: ProfileIdentity;
 }) {
   const avatar = avatarOf({
@@ -52,80 +60,75 @@ export function ProfileBanner({
     avatarUrl: identity.avatarUrl,
   });
 
-  // Deliberately still rendered with no images: the avatar has to sit at the
-  // bottom of this block either way, and a profile with nothing placed yet
-  // should look like a quiet version of a full one rather than a broken one.
+  const top = films.slice(0, SLICES);
+  const weights = top.map((_, i) => FALLOFF ** i);
+  const total = weights.reduce((a, b) => a + b, 0) || 1;
+
   return (
-    // NOT `overflow-hidden` on this element. The avatar below deliberately hangs
-    // past the lower edge, and clipping here would cut the bottom off it.
+    // NOT `overflow-hidden` here. The avatar below deliberately hangs past the
+    // lower edge, and clipping on this element would cut the bottom off it.
     <div className="relative w-full" style={{ aspectRatio: "5 / 2" }}>
-      {/* The clipping belongs to the images, which is what actually needs it:
-          `object-cover` on a clip-path can otherwise bleed a pixel at the seam. */}
-      <div className="absolute inset-0 overflow-hidden">
-      {images.length >= 2 ? (
-        <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={images[0]}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{ clipPath: LEFT }}
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={images[1]}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{ clipPath: RIGHT }}
-          />
-          {/* ── The seam is a HIGHLIGHT, not a gap ─────────────────────────
-              It was a hairline of the page colour, which on this palette is
-              near-black: on a real profile it read as a crack down the middle
-              rather than as a cut. A faint warm line reads as an edge where two
-              things meet, which is what it is. */}
+      <div className="absolute inset-0 flex overflow-hidden">
+        {top.length === 0 ? (
           <div
-            aria-hidden
-            className="absolute inset-0"
+            className="w-full"
             style={{
               background:
-                "linear-gradient(102deg, transparent calc(50% - 0.5px), color-mix(in srgb, var(--gold) 45%, transparent) calc(50% - 0.5px), color-mix(in srgb, var(--gold) 45%, transparent) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
+                "linear-gradient(to bottom right, var(--surface), color-mix(in srgb, var(--gold) 8%, var(--surface)))",
             }}
           />
-        </>
-      ) : images.length === 1 ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={images[0]}
-          alt=""
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div className="absolute inset-0" style={{ background: "var(--surface)" }} />
-      )}
+        ) : (
+          top.map((film, i) => (
+            <div
+              key={film.id}
+              className="relative h-full shrink-0"
+              style={{
+                width: `${(weights[i] / total) * 100}%`,
+                // A film with no poster still holds its place, in a colour drawn
+                // from its own title so the band never repeats itself. Better a
+                // deliberate stripe than a gap where a film should be.
+                background: film.poster ? "var(--surface)" : blockFor(film.title),
+              }}
+            >
+              {film.poster && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={film.poster}
+                  alt=""
+                  aria-hidden
+                  className="h-full w-full object-cover"
+                  // Posters are portrait and these slices are narrow, so the
+                  // crop has to be chosen rather than defaulted. Upper-middle is
+                  // where a poster puts its subject.
+                  style={{ objectPosition: "50% 35%" }}
+                />
+              )}
+            </div>
+          ))
+        )}
+      </div>
 
-      {/* ── Two layers, and both are doing a job ─────────────────────────────
-          The wash sits under everything and takes the frames down to something
-          type can live on. Without it a bright still fights the status bar at the
-          top and the handle underneath.
+      {/* ── Three layers, and each is doing a job ────────────────────────────
+          A wash takes the whole band down to something type can live on: without
+          it a bright poster fights the status bar above and the handle below.
 
-          Then `.banner-fade`, which is the class the owner's own banner already
-          uses, so the two screens agree about how an image meets the page
-          without anybody choosing a gradient twice. */}
+          A gold seam along the bottom edge, because this band is a RANKING and
+          the app's one accent should touch the one thing that is.
+
+          Then `.banner-fade`, the class the owner's own banner already uses, so
+          the two screens agree about how an image meets the page rather than
+          each choosing a gradient. */}
       <div
         aria-hidden
         className="absolute inset-0"
-        style={{ background: "color-mix(in srgb, var(--bg) 42%, transparent)" }}
+        style={{ background: "color-mix(in srgb, var(--bg) 46%, transparent)" }}
       />
       <div className="banner-fade absolute inset-0" />
-      </div>
 
-      {/* A quarter into the lower edge, never half. `ProfileScreen`'s header
-          argues at length that a circle straddling a cover is every social
-          network's signature and is also what made the circle look clipped. A
-          quarter reads as tucked under the edge rather than pinned to it. */}
+      {/* The avatar sits a quarter into the lower edge, never half.
+          `ProfileScreen`'s header argues at length that a circle straddling a
+          cover is every social network's signature, and is also what made the
+          circle look clipped. A quarter reads as tucked under. */}
       <div className="absolute inset-x-0 -bottom-6 flex justify-center">
         {avatar.kind === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element

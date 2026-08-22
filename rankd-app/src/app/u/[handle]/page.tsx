@@ -17,7 +17,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import { bannerImages, getProfileView } from "@/lib/social/publicProfile";
+import { getProfileView } from "@/lib/social/publicProfile";
 import { PublicProfileView } from "@/components/PublicProfileView";
 import { PrivateProfileView } from "@/components/PrivateProfileView";
 
@@ -66,9 +66,7 @@ export default async function Page({ params }: Props) {
 
   if (view.kind === "private") return <PrivateProfileView identity={view.identity} />;
 
-  // Resolved here rather than inside the view, so the view stays a pure render
-  // of what it is handed and the two TMDb calls sit on the server where they can
-  // be cached for a day.
-  const banner = await bannerImages(view.profile.summary);
-  return <PublicProfileView profile={view.profile} banner={banner} />;
+  // No banner to resolve any more. The header is built from the top ten that
+  // is already on the snapshot, so the page makes no TMDb call at all.
+  return <PublicProfileView profile={view.profile} />;
 }
