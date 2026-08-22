@@ -148,6 +148,15 @@ export const users = pgTable(
     // Soft delete. A real DELETE follows after a grace period; until then this
     // is what hides someone from every public read.
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    // ── The last time they opened Activity ─────────────────────────────────
+    //
+    // One timestamp, not a notifications table. What the dot on the nav has to
+    // answer is "has anybody spoken to me since I last looked", and that is a
+    // comparison against a single moment — a row per notification would be a
+    // second copy of facts the comments already hold, kept in step by hand.
+    //
+    // Null means never opened, which correctly reads as "everything is new".
+    activitySeenAt: timestamp("activity_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -412,10 +421,50 @@ export const activity = pgTable(
   ],
 );
 
+/**
+ * Something somebody said on a card.
+ *
+ * ── The one place a person writes prose that another person reads ──────────
+ *
+ * Everything else on this server is derived: a ranking, a diff of a ranking, a
+ * projection of a library. This is typed by a human at somebody else, which is a
+ * different kind of object and carries the only moderation surface the app has.
+ * `body` is capped, run through `textIsClean`, and soft-deleted rather than
+ * removed so a thread keeps its shape when one line is taken out of it.
+ *
+ * Mentions are NOT a table. `@handle` is parsed out of `body` at render, because
+ * a mention is a fact about the text rather than a thing of its own — storing
+ * both means two truths about one sentence and an edit that updates one of them.
+ */
+export const activityComments = pgTable(
+  "activity_comment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => activity.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Soft, so removing a line does not silently renumber a conversation or
+    // orphan the replies that answered it.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [
+    // Reading one thread, oldest first — a conversation is read downward.
+    index("activity_comment_thread_idx").on(table.activityId, table.createdAt),
+    // "What has been said to me lately", which is what the unread dot counts.
+    index("activity_comment_author_idx").on(table.authorId, table.createdAt.desc()),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
 export type RankingCapture = typeof rankingHistory.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
+export type ActivityComment = typeof activityComments.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

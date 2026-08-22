@@ -71,6 +71,16 @@ export const LIMITS = {
    * far past anything a debounced field produces.
    */
   peopleSearch: { bucket: "people-search", max: 120, windowMs: MINUTE },
+
+  /**
+   * Saying something on somebody's card.
+   *
+   * The tightest allowance here, because it is the only one that puts a
+   * stranger's words on a page somebody else owns. Thirty an hour is a
+   * conversation — several threads, several replies each — and is nowhere near
+   * enough to flood a feed faster than a person can mute it.
+   */
+  comment: { bucket: "comment", max: 30, windowMs: HOUR },
 } as const satisfies Record<string, Limit>;
 
 export interface Verdict {

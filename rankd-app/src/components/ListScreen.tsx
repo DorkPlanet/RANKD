@@ -50,6 +50,7 @@ export default function ListScreen({
   onProfile,
   onRibbon,
   onActivity,
+  activityUnread,
   enterAtEnd = false,
   onPoster,
   onTrophies,
@@ -83,6 +84,8 @@ export default function ListScreen({
    */
   onRibbon: (dir: Dir, travelled?: number) => void;
   onActivity: () => void;
+  /** Somebody has spoken to you on Activity since you last looked. */
+  activityUnread?: boolean;
   /** Swiped into from the game, so land on the state nearest it. */
   enterAtEnd?: boolean;
   onPoster: (id: string, meta: FilmMeta) => void;
@@ -624,6 +627,7 @@ export default function ListScreen({
         }}
         onProfile={onProfile}
         onActivity={onActivity}
+        activityUnread={activityUnread}
         logging={logging}
         onToggleLog={onToggleLog}
       />

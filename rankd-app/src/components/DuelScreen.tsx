@@ -105,6 +105,7 @@ export default function DuelScreen({
   onPerson,
   greet = 0,
   onActivity,
+  activityUnread,
   onRibbon,
   swipeBlocked = false,
 }: {
@@ -147,6 +148,8 @@ export default function DuelScreen({
   greet?: number;
   /** The Activity screen. Optional so a caller that has none simply shows no destination. */
   onActivity?: () => void;
+  /** Somebody has spoken to you on Activity since you last looked. */
+  activityUnread?: boolean;
   /**
    * A horizontal swipe across the game, taken one step along the ribbon.
    *
@@ -1207,6 +1210,7 @@ export default function DuelScreen({
           <BottomNav
             screen="duel"
             onActivity={onActivity}
+            activityUnread={activityUnread}
             onSettings={onSettings}
             onModes={toggleModes}
             onList={onList}
@@ -1414,6 +1418,7 @@ export default function DuelScreen({
       <BottomNav
         screen="duel"
         onActivity={onActivity}
+        activityUnread={activityUnread}
         onSettings={onSettings}
         onModes={toggleModes}
         onList={onList}
@@ -1477,6 +1482,7 @@ export function BottomNav({
   onList,
   onProfile,
   onActivity,
+  activityUnread,
   logging,
   onToggleLog,
 }: {
@@ -1486,6 +1492,8 @@ export function BottomNav({
   onList: () => void;
   onProfile?: () => void;
   onActivity?: () => void;
+  /** Somebody has spoken to you since you last looked. Draws a dot, not a number. */
+  activityUnread?: boolean;
   /** Whether the log sheet is up, so the cell that opened it stays lit. */
   logging?: boolean;
   onToggleLog?: () => void;
@@ -1602,10 +1610,23 @@ export function BottomNav({
       {/* It is a screen now. The pill that used to apologise for it is gone, and
           so is the timer behind it — see the deleted `tease`. Closes D15. */}
       <NavItem
-        label="Activity"
+        label={activityUnread ? "Activity, something new" : "Activity"}
         active={screen === "activity"}
         onClick={onActivity}
-        icon={<ActivityIcon />}
+        icon={
+          <span className="relative inline-flex">
+            <ActivityIcon />
+            {/* A dot, not a count. A number invites you to clear it; a dot says
+                somebody spoke and lets the screen do the telling. */}
+            {activityUnread && (
+              <span
+                aria-hidden
+                className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full"
+                style={{ background: "var(--gold)" }}
+              />
+            )}
+          </span>
+        }
       />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}

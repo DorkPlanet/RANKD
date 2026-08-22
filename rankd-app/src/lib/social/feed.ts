@@ -38,6 +38,57 @@
 import type { SnapshotEntry, SnapshotFilm } from "@/lib/snapshot";
 import { TIER_RANGE } from "@/lib/tiers";
 
+/**
+ * The longest a comment may be.
+ *
+ * Lives HERE rather than beside the code that inserts it, and the reason is a
+ * bundling one this codebase has already been bitten by once: `FeedScreen` needs
+ * this number to count down as somebody types, `activity.ts` imports the
+ * database, and a client component importing a VALUE from that module drags the
+ * Postgres driver into the browser bundle. `searchRules.ts` exists for the same
+ * reason. Types are erased and cost nothing; values are not.
+ */
+export const COMMENT_MAX = 280;
+
+/** One thing somebody said, with enough of them attached to render it. */
+export interface CommentItem {
+  id: string;
+  body: string;
+  createdAt: string;
+  handle: string;
+  avatarUrl: string | null;
+  /** Yours, so it can be taken back. */
+  mine: boolean;
+}
+
+/** A card as the screen receives it. */
+export interface FeedItem {
+  id: string;
+  kind: string;
+  subjectId: string;
+  meta: Record<string, unknown>;
+  createdAt: string;
+  handle: string;
+  avatarUrl: string | null;
+  /** Yours, not theirs. */
+  mine: boolean;
+  /**
+   * Where the READER has this same film, if they have placed it.
+   *
+   * ── This is the line that makes a card an argument ─────────────────────
+   *
+   * A feed of "Heat climbed to #1" is a ticker: true, and nothing to say back
+   * to. "They have it #1, you have it #14" is a disagreement with a name on it,
+   * and it reads differently for every person who opens the card.
+   *
+   * No other app can draw this, and the reason is structural rather than clever:
+   * it needs two people's complete ordered lists, and an app built on star
+   * ratings has neither. Rankd already stores both, so it costs one lookup.
+   */
+  yourRank?: number;
+  comments: number;
+}
+
 /** One card, shaped for the row it becomes. */
 export interface ActivityRow {
   kind: ActivityKind;
@@ -154,4 +205,28 @@ export function diffToActivity(
     .sort((a, b) => b.weight - a.weight)
     .slice(0, MAX_CARDS)
     .map((c) => c.row);
+}
+
+/**
+ * "3m", "5h", "2d" — a feed's register, not a sentence's.
+ *
+ * `Account.tsx` says "3 minutes ago" and is right to: that screen is answering
+ * "is my work safe", where being explicit is worth the words. A feed stamps
+ * every row, so the same phrasing repeated forty times becomes furniture. The
+ * unit alone is enough once the reader has decoded one of them.
+ *
+ * Anything past a week gets a date instead. "63d" is not a length of time
+ * anybody feels, and by then WHEN it happened has stopped mattering more than
+ * roughly where in the year it sits.
+ */
+export function shortAgo(iso: string, now: number = Date.now()): string {
+  const secs = Math.max(0, Math.round((now - Date.parse(iso)) / 1000));
+  if (secs < 45) return "now";
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${Math.max(1, mins)}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days <= 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }

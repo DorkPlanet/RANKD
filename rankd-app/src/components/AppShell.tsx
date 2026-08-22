@@ -504,6 +504,14 @@ export default function AppShell() {
    * ends up trapped behind the nav.
    */
   const [slide, setSlide] = useState<{ dir: Dir; phase: "hold" | "run" } | null>(null);
+  /**
+   * Has anybody spoken to me since I last looked?
+   *
+   * Asked with `peek`, which is what stops the question answering itself: the
+   * feed route marks everything seen when it is READ, and the nav asking for a
+   * dot is not somebody reading anything.
+   */
+  const [unread, setUnread] = useState(false);
   // ── Arrivals at RNK ────────────────────────────────────────────────────────
   //
   // Bumped every time the user comes to the duel from somewhere else, and it
@@ -696,6 +704,26 @@ export default function AppShell() {
     });
     return () => cancelAnimationFrame(id);
   }, [slide]);
+
+  // Asked once on arrival and again whenever the game is returned to, which is
+  // the moment a person is most likely to want to know. Not polled: a dot that
+  // costs a request a minute is a dot nobody asked for.
+  useEffect(() => {
+    if (!splashGone) return;
+    let dead = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/feed?peek=1", { cache: "no-store" });
+        if (dead || !res.ok) return;
+        setUnread(((await res.json()) as { unread?: number }).unread ? true : false);
+      } catch {
+        // No signal, no dot. Silence is the honest default.
+      }
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [splashGone, greet]);
 
   const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
 
@@ -977,6 +1005,7 @@ export default function AppShell() {
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
           onActivity={() => go("activity")}
+          activityUnread={unread}
           onRibbon={ribbon}
           // A sheet over the game owns the finger. Swiping across an open
           // Settings panel is about that panel, not about leaving the game
@@ -1009,13 +1038,13 @@ export default function AppShell() {
         />
       ) : current === "activity" ? (
         <FeedScreen
-          handle={me?.handle ?? null}
           onSettings={() => setOverlay({ kind: "settings" })}
           onTrophies={() => setOverlay({ kind: "trophies" })}
           onList={() => go("list")}
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onRibbon={ribbon}
+          onRead={() => setUnread(false)}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}
         />
@@ -1029,6 +1058,7 @@ export default function AppShell() {
           onProfile={() => go("profile")}
           onRibbon={ribbon}
           onActivity={() => go("activity")}
+          activityUnread={unread}
           // Swiped in from the game, which sits to the RIGHT of the list, so the
           // state to land on is the one nearest it.
           enterAtEnd={slide?.dir === -1}

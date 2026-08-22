@@ -1,14 +1,14 @@
 // The feed: everybody you follow, and you.
 //
-// Read-only, and there is nothing to POST to. Cards are derived on the server
-// when a snapshot lands — see `lib/social/feed.ts` — so there is no route here
-// for a client to assert that something happened.
+// Cards are derived on the server when a snapshot lands — see
+// `lib/social/feed.ts` — so there is nothing here for a client to POST. What a
+// person CAN write is a comment, and that lives on its own route.
 
 import { NextResponse } from "next/server";
 
 import { requireHandle } from "@/lib/auth";
 import { LIMITS, take } from "@/lib/rateLimit";
-import { feedFor } from "@/lib/social/activity";
+import { feedFor, markSeen, unreadFor } from "@/lib/social/activity";
 
 /**
  * Signed in, with a handle.
@@ -16,7 +16,7 @@ import { feedFor } from "@/lib/social/activity";
  * Unlike a public profile this is not a page a stranger can land on: it is
  * assembled from who YOU follow, so it has no meaning without a viewer.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const user = await requireHandle();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
@@ -31,5 +31,18 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({ items: await feedFor(user.id) });
+  // ── The unread count is read BEFORE it is cleared ────────────────────────
+  //
+  // Opening the screen is what marks it seen, so the count has to be taken
+  // first or the reader is told "nothing new" by the very act of looking. The
+  // number returned is what was waiting for them when they arrived.
+  const unread = await unreadFor(user);
+  const items = await feedFor(user.id);
+
+  // `peek` is how the nav asks for the dot without the act of asking clearing
+  // it. Everything else is somebody actually opening the screen.
+  const peek = new URL(request.url).searchParams.get("peek") === "1";
+  if (!peek) await markSeen(user.id);
+
+  return NextResponse.json({ items, unread });
 }

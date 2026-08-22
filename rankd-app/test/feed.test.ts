@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { diffToActivity, MAX_CARDS, MIN_CLIMB, ratingOfScore } from "@/lib/social/feed";
+import { diffToActivity, MAX_CARDS, MIN_CLIMB, ratingOfScore, shortAgo } from "@/lib/social/feed";
 import type { SnapshotEntry, SnapshotFilm } from "@/lib/snapshot";
 import { seedScore, tierMax, tierMin } from "@/lib/tiers";
 
@@ -120,5 +120,28 @@ describe("diffToActivity", () => {
     const before = order(["a", "b", "c", "d"]);
     const after = order(["a", "b"]);
     expect(diffToActivity(before, after, [film("a"), film("b")]).some((c) => c.kind === "placed")).toBe(false);
+  });
+});
+
+describe("shortAgo", () => {
+  const at = (iso: string, now: string) => shortAgo(iso, Date.parse(now));
+
+  it("says now for anything just happened", () => {
+    expect(at("2026-08-23T10:00:00Z", "2026-08-23T10:00:10Z")).toBe("now");
+  });
+
+  it("counts in whole units", () => {
+    expect(at("2026-08-23T10:00:00Z", "2026-08-23T10:05:00Z")).toBe("5m");
+    expect(at("2026-08-23T10:00:00Z", "2026-08-23T13:00:00Z")).toBe("3h");
+    expect(at("2026-08-20T10:00:00Z", "2026-08-23T10:00:00Z")).toBe("3d");
+  });
+
+  it("never says 0m, because something that happened did happen", () => {
+    expect(at("2026-08-23T10:00:00Z", "2026-08-23T10:00:50Z")).toBe("1m");
+  });
+
+  it("switches to a date once days stop meaning anything", () => {
+    // "63d" is not a length of time anybody feels.
+    expect(at("2026-06-01T10:00:00Z", "2026-08-23T10:00:00Z")).not.toMatch(/^\d+d$/);
   });
 });
