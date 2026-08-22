@@ -70,3 +70,14 @@ export function pageAfterSwipe(
   if (dx < 0) return page < last ? page + 1 : "after";
   return page > 0 ? page - 1 : "before";
 }
+
+/** The app's one easing. Also `globals.css` — sheets, splash, coach marks. */
+export const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
+
+/**
+ * Half a page turn, in ms.
+ *
+ * The profile's track slides once, over 300ms. The list turns in two halves —
+ * out, then in — so each is half that and the two gestures take the same time.
+ */
+export const TURN_MS = 150;

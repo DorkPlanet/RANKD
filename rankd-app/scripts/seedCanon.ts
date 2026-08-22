@@ -106,6 +106,10 @@ const HOUSE = {
   // third says what happens next rather than what is already happening. Revisit
   // when the consensus lands and the third becomes present tense.
   bio: "250 films in one order. Right now it's the world's list. The more people rank, the more it becomes ours.",
+  // Served from `public/`, not blob storage. A person's avatar is content they
+  // uploaded; this one is app chrome, ships with the deploy, and needs no bucket.
+  // Relative on purpose — the app renders it on its own origin.
+  avatarUrl: "/rankd.png",
 };
 
 async function fetchPool(key: string): Promise<DiscoveredFilm[]> {
@@ -227,6 +231,7 @@ async function main() {
           .update(users)
           .set({
             bio: HOUSE.bio,
+            avatarUrl: HOUSE.avatarUrl,
             kind: "house",
             profileVisibility: "public",
             tasteVisibility: "public",
@@ -241,6 +246,7 @@ async function main() {
             handleClaimedAt: capturedAt,
             kind: "house",
             bio: HOUSE.bio,
+            avatarUrl: HOUSE.avatarUrl,
             // The only account in Rankd that is public by default, because
             // there is nobody to ask and being unreadable would defeat it.
             profileVisibility: "public",

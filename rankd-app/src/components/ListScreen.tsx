@@ -8,7 +8,7 @@
 // need goes to the detail card instead. A row is a poster, a title and a
 // position — nothing else.
 
-import { pageAfterSwipe, type Dir } from "@/lib/ribbon";
+import { EASE, pageAfterSwipe, TURN_MS, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
@@ -131,6 +131,47 @@ export default function ListScreen({
   // the other, and then the band would be highlighting a state the list is not
   // showing.
   const touch = useRef<{ x: number; y: number; axis: null | "x" | "y" } | null>(null);
+  // ── The turn ─────────────────────────────────────────────────────────────
+  //
+  // The profile turns its panels on a track: three panes side by side,
+  // translated under the finger. The list cannot. Four filtered copies of an
+  // 828-row list is the 748ms blocked render the metrics at the top of this file
+  // exist to avoid.
+  //
+  // So: one pane, moved. It follows the finger, leaves in the direction of
+  // travel, and the next one arrives from the far side. Same easing and same
+  // 300ms total as the profile, so the two read as one gesture.
+  //
+  // Transform only — no opacity. Compositing eight hundred rows costs; moving
+  // one layer does not.
+  const track = useRef<HTMLDivElement>(null);
+  const turning = useRef(false);
+
+  const slide = (to: string, ms: number) => {
+    const el = track.current;
+    if (!el) return;
+    el.style.transition = ms ? `transform ${ms}ms ${EASE}` : "none";
+    el.style.transform = `translateX(${to})`;
+  };
+  const turnTo = (next: (typeof segments)[number]["key"], dir: 1 | -1) => {
+    if (turning.current) return;
+    turning.current = true;
+    slide(`${dir * -100}%`, TURN_MS);
+    window.setTimeout(() => {
+      // Off-screen now, so the jump to the far side and the content swap are
+      // both invisible and their order does not matter.
+      slide(`${dir * 100}%`, 0);
+      setOnly(next);
+      // A page arriving already scrolled halfway down would look broken. The
+      // reset is free here because nothing is visible.
+      if (scroller.current) scroller.current.scrollTop = 0;
+      requestAnimationFrame(() => {
+        slide("0px", TURN_MS);
+        turning.current = false;
+      });
+    }, TURN_MS);
+  };
+
   const shown = useMemo(() => {
     if (!only) return films;
     return films.filter((f) =>
@@ -400,14 +441,24 @@ export default function ListScreen({
 
       <div
         ref={scroller}
-        className="min-h-0 flex-1 overflow-y-auto px-5 pb-6"
+        // overflow-x hidden as well as y: setting one axis to auto computes the
+        // other to auto, and the pane mid-turn would be reachable sideways.
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-6"
         onTouchStart={(e) => {
           const t = e.touches[0];
           touch.current = { x: t.clientX, y: t.clientY, axis: null };
         }}
         onTouchMove={(e) => {
           const from = touch.current;
-          if (!from || from.axis) return;
+          if (!from || turning.current) return;
+          if (from.axis === "x") {
+            const dx = e.touches[0].clientX - from.x;
+            // Resist only at the left end, where nothing is next door. The right
+            // end leads to the game and must not fight the reader on the way.
+            slide(`${page === 0 && dx > 0 ? dx * 0.25 : dx}px`, 0);
+            return;
+          }
+          if (from.axis) return;
           const t = e.touches[0];
           const dx = t.clientX - from.x;
           const dy = t.clientY - from.y;
@@ -421,15 +472,21 @@ export default function ListScreen({
         onTouchEnd={(e) => {
           const from = touch.current;
           touch.current = null;
-          if (!from || from.axis !== "x") return;
+          if (!from || from.axis !== "x" || turning.current) return;
           const dx = e.changedTouches[0].clientX - from.x;
           const landed = pageAfterSwipe(page, segments.length - 1, dx, e.currentTarget.clientWidth);
-          // Nothing to the left of everything-you-own, so that end simply holds.
-          if (landed === "before") return;
-          if (landed === "after") return onRibbon(1);
-          if (landed !== page) setOnly(segments[landed as number].key);
+          // Off an end: the shell takes it, and this pane springs back rather
+          // than sitting where the finger left it.
+          if (landed === "before" || landed === "after") {
+            slide("0px", TURN_MS);
+            if (landed === "after") onRibbon(1);
+            return;
+          }
+          if (landed === page) return slide("0px", TURN_MS);
+          turnTo(segments[landed as number].key, dx < 0 ? 1 : -1);
         }}
       >
+        <div ref={track} className="will-change-transform">
         {model.total === 0 && (
           <p className="mt-16 text-center text-sub leading-relaxed text-dim">
             Nothing here yet.
@@ -481,6 +538,7 @@ export default function ListScreen({
             );
           })
         )}
+        </div>
       </div>
 
       <BottomNav

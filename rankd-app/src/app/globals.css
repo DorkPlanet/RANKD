@@ -81,6 +81,9 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  /* A screen sliding in starts off the right edge. Without this the page can be
+     panned sideways for the 300ms it takes to arrive. */
+  overflow-x: hidden;
 }
 
 /* ── The strip below the app ────────────────────────────────────────────────
@@ -829,4 +832,26 @@ button * {
   .panel-in-right {
     animation: none;
   }
+}
+
+/* ── Screens arrive from the side they were swiped from ─────────────────────
+   The ribbon is horizontal, so a screen change should be too. A tap on the
+   bottom bar is a jump and keeps the veil it always had; only a swipe slides.
+
+   Applied by adding a class, not by remounting: the class going on is what
+   starts the animation, and `AppShell` takes it off again on animationend. That
+   matters — a transform left in place is a permanent stacking context over the
+   whole app, which is how sheets end up trapped behind the nav. */
+@keyframes page-in-r {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+@keyframes page-in-l {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+.page-in-r { animation: page-in-r 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.page-in-l { animation: page-in-l 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .page-in-r, .page-in-l { animation-duration: 0.01s; }
 }

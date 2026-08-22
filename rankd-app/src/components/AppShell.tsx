@@ -494,6 +494,15 @@ export default function AppShell() {
   // finished does not restart just because the component re-rendered. The
   // counter is the `key`, which is what makes it a new element each time.
   const [veil, setVeil] = useState(0);
+  /**
+   * Which way the arriving screen should slide in, or null when it should not.
+   *
+   * A class, not a remount: adding it starts the animation, and clearing it on
+   * animationend takes the transform away again. Leaving one in place would be
+   * a permanent stacking context over every screen, which is exactly how a sheet
+   * ends up trapped behind the nav.
+   */
+  const [slide, setSlide] = useState<Dir | null>(null);
   // ── Arrivals at RNK ────────────────────────────────────────────────────────
   //
   // Bumped every time the user comes to the duel from somewhere else, and it
@@ -805,8 +814,10 @@ export default function AppShell() {
    * one call site. The delay is the only thing standing between `Coach` and
    * measuring the outgoing screen.
    */
-  const go = (s: Screen) => {
-    const arriving = s === "duel" && current !== "duel";
+  const go = (s: Screen, swiped = false) => {
+    // A swipe already carries the motion. The veil on top of it is two
+    // transitions for one navigation.
+    const arriving = s === "duel" && current !== "duel" && !swiped;
     if (arriving) {
       setVeil((v) => v + 1);
       setGreet((g) => g + 1); // coming back to the game earns the overlay again
@@ -836,7 +847,9 @@ export default function AppShell() {
    */
   const ribbon = (dir: Dir) => {
     const next = stepScreen(current, dir);
-    if (next) go(next);
+    if (!next) return;
+    setSlide(dir);
+    go(next, true);
   };
 
   const goDuel = () => go("duel");
@@ -900,6 +913,15 @@ export default function AppShell() {
 
   return (
     <>
+      <div
+        className={slide === 1 ? "page-in-r" : slide === -1 ? "page-in-l" : undefined}
+        // Only THIS element's animation. Every animation inside a screen bubbles
+        // to here — the poster shake, the sheets, the coach marks — and any one
+        // of them would otherwise cut the slide short.
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) setSlide(null);
+        }}
+      >
       {current === "duel" ? (
         <DuelScreen
           state={state}
@@ -1076,6 +1098,7 @@ export default function AppShell() {
           }}
         />
       )}
+      </div>
 
       {/* Over the screens and the veil, under the splash. */}
       {showCoach && (
