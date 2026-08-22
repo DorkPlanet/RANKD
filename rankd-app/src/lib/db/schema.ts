@@ -34,10 +34,13 @@
 
 import { sql } from "drizzle-orm";
 import {
+  check,
+  index,
   integer,
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -188,7 +191,94 @@ export const tasteSnapshots = pgTable("taste_snapshot", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Who follows whom.
+//
+// ── One-way by construction, not by convention ─────────────────────────────
+//
+// The primary key is the ORDERED pair, so a follow is a single directed edge and
+// there is nowhere to record reciprocity. A mutual follow is simply two rows,
+// and "are we friends" is one existence check for the reverse edge rather than a
+// status column somebody has to keep in step.
+//
+// That matters because the two directions genuinely come apart: you can follow
+// somebody who never follows back, and they can stop following you without your
+// row changing. A single `friendship` row with a state on it would have to
+// answer "who ended it" and "what happens to the other half", and neither
+// question has a good answer.
+//
+// ── No counter columns ─────────────────────────────────────────────────────
+//
+// Follower counts are `COUNT(*)` against the indexes below. A denormalised
+// count is a second source of truth, and the first time it drifts nobody
+// notices because there is nothing to compare it against. Revisit only when a
+// count is measurably slow, which at this scale it is not.
+export const follows = pgTable(
+  "follow",
+  {
+    followerId: uuid("follower_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    followeeId: uuid("followee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The pair IS the identity, so following twice is not a duplicate row and
+    // does not need application-level de-duplication.
+    primaryKey({ columns: [table.followerId, table.followeeId] }),
+    // "Who do I follow", and the join the feed will run.
+    index("follow_follower_idx").on(table.followerId, table.createdAt.desc()),
+    // "Who follows them", and the follower count.
+    index("follow_followee_idx").on(table.followeeId, table.createdAt.desc()),
+    // Nobody follows themselves. Enforced here rather than in a route, so no
+    // future caller can invent a path around it.
+    check("follow_not_self", sql`${table.followerId} <> ${table.followeeId}`),
+  ],
+);
+
+// How many times this account has done this thing lately.
+//
+// ── Why there is a table for this at all ───────────────────────────────────
+//
+// There was no rate limiting anywhere in Rankd, which was fine while every
+// endpoint either read your own data or spent TMDb's quota behind `guard.ts`.
+// Following somebody is neither: it writes a row that appears on another
+// person's page, under a name they can read.
+//
+// Postgres rather than Redis, deliberately. A limiter is not worth a new piece
+// of infrastructure, a new connection string and a new thing that can be down;
+// this is one small table and one upsert, on a database every one of these
+// routes has already opened a connection to.
+//
+// ── One row per account per bucket, forever ────────────────────────────────
+//
+// The obvious shape keys on the window as well, which is simpler to write and
+// leaves a row behind for every window that ever passes: unbounded growth that
+// needs a sweeper nobody will remember to run. Here the window is a COLUMN, so
+// a roll-over overwrites its own row and the table stays exactly as large as
+// the number of people using it.
+//
+// Fixed windows, not a sliding log. A fixed window lets somebody spend two
+// windows' worth of budget across a boundary, and that is an acceptable answer
+// for a limiter whose job is to stop scripts rather than to be exact.
+export const rateLimits = pgTable(
+  "rate_limit",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** What is being counted: "follow", "handle-check", and so on. */
+    bucket: text("bucket").notNull(),
+    /** The start of the window these hits belong to. */
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(0),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.bucket] })],
+);
+
 export type User = typeof users.$inferSelect;
 export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
+export type Follow = typeof follows.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

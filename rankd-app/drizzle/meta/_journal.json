@@ -22,6 +22,20 @@
       "when": 1787363610248,
       "tag": "0002_known_jimmy_woo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787364734968,
+      "tag": "0003_left_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787364987653,
+      "tag": "0004_nosy_felicia_hardy",
+      "breakpoints": true
     }
   ]
 }

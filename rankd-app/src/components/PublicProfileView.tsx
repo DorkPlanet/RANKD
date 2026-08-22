@@ -19,6 +19,7 @@
 // face, the same faded rules, the same stat row. It should read as the same app
 // because it is, without being the same code.
 
+import { FollowButton } from "./FollowButton";
 import { avatarOf } from "@/lib/profile";
 import { starsFor } from "@/lib/tiers";
 import type { PublicProfile } from "@/lib/social/publicProfile";
@@ -95,6 +96,12 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
             {profile.bio}
           </p>
         )}
+
+        {/* The only client component on the page, and the only part that depends
+            on WHO is looking. Everything above renders the same for everybody,
+            which is what keeps this a public page rather than a private render
+            per visitor. */}
+        <FollowButton handle={profile.handle} />
       </div>
 
       <div className="mt-6 flex items-start justify-around text-center">

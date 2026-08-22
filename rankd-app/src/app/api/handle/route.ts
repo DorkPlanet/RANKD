@@ -18,6 +18,15 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { validateHandle } from "@/lib/handles";
 import { claimHandle, isHandleAvailable } from "@/lib/users";
+import { LIMITS, take } from "@/lib/rateLimit";
+
+/** A 429 with a sentence and a Retry-After, never a bare status. */
+function tooMany(retryAfter: number) {
+  return NextResponse.json(
+    { error: "Slow down a moment." },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } },
+  );
+}
 
 export async function GET(request: Request) {
   // Signed in only. Handle availability is a map of who exists, and an open
@@ -25,6 +34,12 @@ export async function GET(request: Request) {
   // find out which names are worth impersonating.
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+  // This endpoint answers "does this person exist", so without a bound it is a
+  // way to enumerate every handle on Rankd. Sized well above what the gate's
+  // own debounce can produce; see LIMITS.
+  const allowed = await take(user.id, LIMITS.handleCheck);
+  if (!allowed.ok) return tooMany(allowed.retryAfter);
 
   const raw = new URL(request.url).searchParams.get("h") ?? "";
   const check = validateHandle(raw);
@@ -46,6 +61,9 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "That request isn't valid JSON." }, { status: 400 });
   }
+
+  const allowed = await take(user.id, LIMITS.handleClaim);
+  if (!allowed.ok) return tooMany(allowed.retryAfter);
 
   const { handle } = (body ?? {}) as { handle?: unknown };
   if (typeof handle !== "string") {
