@@ -21,7 +21,15 @@
 // Nothing here writes storage or touches React. `beliefsFor` is pure; the idle
 // scheduling lives in `beliefsWhenIdle`, which is the only impure export.
 
-import { fitBeliefs, updateDecisive, updateDraw, type Belief, type FitComparison, type FitEntry } from "./bayes";
+import {
+  fitBeliefs,
+  fitBeliefsYielding,
+  updateDecisive,
+  updateDraw,
+  type Belief,
+  type FitComparison,
+  type FitEntry,
+} from "./bayes";
 import type { Judgement } from "./log";
 import type { Film } from "./types";
 
@@ -134,12 +142,30 @@ export function beliefsWhenIdle(
   const key = keyFor(films, log);
   if (cached && cached.key === key) return Promise.resolve(cached.beliefs);
   if (inFlight) return inFlight;
+  // ── Sliced, and warm-started from the last answer ─────────────────────────
+  //
+  // This used to be one synchronous `beliefsFor` inside the idle callback, and
+  // that was the Fast Shuffle seize. Measured on an 821-film library: a fit over
+  // a 5,000-judgement log is ~80ms on a desktop and climbs with the log — 24
+  // sweeps at a thousand judgements, 145 at five thousand. Four or five times
+  // that on a phone, every twelve answers, with the main thread shut.
+  //
+  // `onIdle` made it worse rather than better: somebody swiping continuously
+  // never produces idle time, so the callback was deferred to its 2000ms timeout
+  // and then landed mid-gesture.
+  //
+  // Two changes, and neither alters the answer. The previous beliefs are handed
+  // in as a starting point — the objective is strictly concave, so the maximum is
+  // the same and only the route to it is shorter. And the sweeps are sliced, so
+  // the thread comes back between them.
+  const previous = cached?.beliefs;
   inFlight = new Promise<Map<string, Belief>>((resolve) => {
     onIdle(() => {
-      const beliefs = beliefsFor(films, log);
-      cached = { key, beliefs };
-      inFlight = null;
-      resolve(beliefs);
+      void fitBeliefsYielding(toEntries(films), toComparisons(log), previous).then((beliefs) => {
+        cached = { key, beliefs };
+        inFlight = null;
+        resolve(beliefs);
+      });
     });
   });
   return inFlight;

@@ -4,6 +4,7 @@ import {
   PRIOR_SPREAD,
   confidenceFromSpread,
   fitBeliefs,
+  fitBeliefsYielding,
   updateDecisive,
   updateDraw,
   type Belief,
@@ -252,5 +253,58 @@ describe("fitBeliefs", () => {
     }));
     const out = fitBeliefs(mixed, log);
     expect(out.get("low")!.mean).toBeGreaterThan(out.get("high")!.mean);
+  });
+});
+
+describe("the fit is the same answer however it is driven", () => {
+  // Fast Shuffle seized because the fit ran as one synchronous block whose cost
+  // climbs with the log. Two changes fixed it — warm-starting from the previous
+  // answer, and slicing the sweeps so the thread comes back. Neither may move
+  // the result, and these are what say so.
+  //
+  // The licence for warm-starting is in `fitBeliefs`'s own header: the objective
+  // is strictly concave, so it has ONE maximum and the starting point cannot
+  // change where the climb ends.
+  const many = Array.from({ length: 24 }, (_, i) => seed(`f${i}`, 3 + (i % 3)));
+  const log: FitComparison[] = [];
+  for (let i = 0; i < 24; i++) {
+    for (const step of [1, 5, 11]) {
+      const j = (i + step) % 24;
+      if (i !== j) log.push({ aId: `f${i}`, bId: `f${j}`, outcome: i % 4 === 0 ? "draw" : "a" });
+    }
+  }
+
+  const near = (a: Map<string, Belief>, b: Map<string, Belief>) => {
+    let worst = 0;
+    for (const [id, belief] of a) {
+      worst = Math.max(worst, Math.abs(belief.mean - b.get(id)!.mean));
+      worst = Math.max(worst, Math.abs(belief.spread - b.get(id)!.spread));
+    }
+    return worst;
+  };
+
+  it("lands in the same place when started from a previous answer", () => {
+    const cold = fitBeliefs(many, log);
+    // A warm start from a DIFFERENT, deliberately wrong set of means. Even from
+    // there it has to climb to the same maximum, or the licence does not hold.
+    const wrong = new Map([...cold].map(([id, b]) => [id, { mean: b.mean + 4, spread: b.spread }]));
+    expect(near(fitBeliefs(many, log, wrong), cold)).toBeLessThan(1e-3);
+    // And from the right one, which is what the app actually passes.
+    expect(near(fitBeliefs(many, log, cold), cold)).toBeLessThan(1e-3);
+  });
+
+  it("lands in the same place when the sweeps are sliced", async () => {
+    const cold = fitBeliefs(many, log);
+    expect(near(await fitBeliefsYielding(many, log), cold)).toBeLessThan(1e-3);
+    // Slice size must not matter either — one sweep at a time is the extreme.
+    expect(near(await fitBeliefsYielding(many, log, undefined, 1), cold)).toBeLessThan(1e-3);
+  });
+
+  it("still separates the strong from the weak after both changes", () => {
+    // A guard against the above passing because everything collapsed to a
+    // constant, which would also be "the same answer" by the measure above.
+    const cold = fitBeliefs(many, log);
+    const means = [...cold.values()].map((b) => b.mean);
+    expect(Math.max(...means) - Math.min(...means)).toBeGreaterThan(0.5);
   });
 });
