@@ -300,8 +300,56 @@ export const rateLimits = pgTable(
   (table) => [primaryKey({ columns: [table.userId, table.bucket] })],
 );
 
+// One periodic archive of somebody's published order.
+//
+// ── Deliberately NOT `taste_snapshot` with a date on it ────────────────────
+//
+// That table's header says there is no history there and there should not be,
+// and it is right: a snapshot is the CURRENT answer, and last week's guess about
+// a person's taste is of no use to anybody including them.
+//
+// This is a different object. The house account's ranking is a public artefact
+// whose CHANGE is the interesting part, and "where it is against where it was"
+// is the thing that was actually asked for. Nothing resets; the old orders are
+// simply kept.
+//
+// ── Keyed on user, written only for the house account ──────────────────────
+//
+// Keying on `user_id` rather than on a bot constant costs nothing today and
+// means "your ranking moved too" is later a decision about who writes rows
+// rather than a migration.
+//
+// ── Full orders, not deltas ────────────────────────────────────────────────
+//
+// A delta chain needs an unbroken base to replay from, and pruning is exactly
+// what the retention policy does, so one removed middle row would silently break
+// everything after it. A full capture is self-describing, prunable in any order,
+// and costs about 30KB. Deltas would be an optimisation for a storage problem
+// that does not exist: logarithmic retention holds roughly 35 rows per user,
+// forever.
+export const rankingHistory = pgTable(
+  "ranking_history",
+  {
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+    entries: jsonb("entries").$type<SnapshotEntry[]>().notNull(),
+    filmCount: integer("film_count").notNull(),
+    // How many published snapshots fed this capture. The honest denominator
+    // behind every movement number, and the thing that says whether a week's
+    // change meant anything or was three people.
+    contributors: integer("contributors").notNull().default(0),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.capturedAt] }),
+    index("ranking_history_user_idx").on(table.userId, table.capturedAt.desc()),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
+export type RankingCapture = typeof rankingHistory.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;
