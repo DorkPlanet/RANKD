@@ -153,3 +153,31 @@ export function exitScreen(dir: Dir, travelled: number, done: () => void): void 
   // far worse failure than one that happens a frame early.
   window.setTimeout(done, ms);
 }
+
+/**
+ * Does this gesture belong to a sideways scroller rather than to the page?
+ *
+ * A flick that starts inside a horizontal strip is about that strip. The profile
+ * has argued this since its shelves landed: without it, every flick at the end of
+ * a shelf is ambiguous, and the reader has no way to know whether they are about
+ * to reach the next poster or the next screen.
+ *
+ * The duel screen needed it too and did not have it. The check made before
+ * putting a listener there was "no `onTouch*` handlers and no horizontal
+ * scrollers in `DuelScreen`, `ShuffleDuel` or `RoughCut`", and all three were
+ * clean — but the film strip lives in `Rolodex.tsx`, which was never looked at.
+ * It is an `overflow-x-auto` scroll-snap track, and the page swipe was taking
+ * flicks meant for it.
+ *
+ * Matching the CLASS rather than the computed style on purpose: it is one string
+ * to search the codebase for, and reading `overflow-x` off every ancestor on
+ * every touchstart would be work on the gesture path to learn something the
+ * markup already states.
+ */
+export function inShelf(target: EventTarget | null): boolean {
+  // Duck-typed rather than `instanceof Element`. The suite runs in node with no
+  // DOM, where that global does not exist and the check would throw rather than
+  // answer — and asking "can you do closest?" is the honest question anyway.
+  const el = target as { closest?: (selector: string) => unknown } | null;
+  return typeof el?.closest === "function" && el.closest(".overflow-x-auto") != null;
+}

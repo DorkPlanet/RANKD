@@ -42,7 +42,6 @@ export function TasteChart({
   was,
   rankd,
   locked,
-  noLocks = false,
 }: {
   axes: TasteAxis[];
   /** Your shape when this sitting began. Absent on a first sitting. */
@@ -62,37 +61,37 @@ export function TasteChart({
    * to the whole placed list — which is `axes` and what it always drew.
    */
   locked?: TasteShape;
-  /**
-   * Nothing is locked at all, so the one line drawn is entirely Rankd's work.
-   *
-   * It has to be BLUE then, not gold. Gold means "you settled this" everywhere
-   * else in the app, and a gold web on a library with no locks in it names a
-   * population that does not exist — reported exactly that way. The line is
-   * honest about its shape and was lying about whose it was.
-   *
-   * Only true at zero. With a handful of locks the line is a genuine mix and
-   * gold is fair, because gold is the app's colour for what you made.
-   */
-  noLocks?: boolean;
 }) {
-  // What the single line is made of decides its colour. See `noLocks`.
-  const soleTone = noLocks ? "var(--accent)" : "var(--gold)";
   const n = axes.length;
   // Three axes is the fewest that encloses an area. Two would draw a line and
   // call it a shape, which is worse than saying nothing.
   if (n < 3) return null;
 
-  // Gold is what you locked when that is a real shape, and your whole placed
-  // list otherwise. Same axes and the same standings either way, so the two
-  // cases are the same chart with a different membership rather than two
-  // charts sharing a dial.
-  const now =
-    locked && axes.every((a) => locked[a.genre] !== undefined)
-      ? axes.map((a) => locked[a.genre])
-      : axes.map((a) => a.standing);
-  // Rankd's answer, drawn only where it has one for every axis, so the polygon
-  // can never close across a gap and imply a value it does not hold.
-  const theirs = rankd && axes.every((a) => rankd[a.genre] !== undefined) ? axes.map((a) => rankd[a.genre]) : null;
+  // ── One line, or two, and the colour follows the population ───────────────
+  //
+  // Gold means "you settled this" everywhere in the app, so it may only ever be
+  // drawn over films you actually locked. Below `MIN_FOR_LOCKED` there is no
+  // locked shape, and what used to happen then was that gold fell back to your
+  // whole placed list — which with 82 shuffled films and one lock drew a gold
+  // web labelled YOUR LIST over data that was 82/83 Rankd's. Reported exactly
+  // that way, and it made no sense because it was not true.
+  //
+  // So the single line below the threshold is the SHUFFLED shape itself, in
+  // blue, named for what it is. No fallback to the placed list at all: that
+  // fallback was the whole bug, and it was drawing a third population that had
+  // no name and no colour of its own.
+  //
+  // Each is drawn only where it has a value for every axis, so no polygon can
+  // close across a gap and imply a number it does not hold.
+  const mine = locked && axes.every((a) => locked[a.genre] !== undefined) ? axes.map((a) => locked[a.genre]) : null;
+  const shuffled = rankd && axes.every((a) => rankd[a.genre] !== undefined) ? axes.map((a) => rankd[a.genre]) : null;
+
+  // The filled hero line. Yours when you have earned one, Rankd's otherwise.
+  const now = mine ?? shuffled ?? axes.map((a) => a.standing);
+  const soleTone = mine ? "var(--gold)" : "var(--accent)";
+  // The second opinion exists only when the hero is yours. Without a gold line
+  // to compare it WITH, blue would be drawn twice in the same place.
+  const theirs = mine ? shuffled : null;
   // Only draw the earlier shape where every axis existed then too, and only if
   // something actually moved. A dashed outline sitting exactly under the filled
   // one reads as a rendering fault rather than as "nothing changed".

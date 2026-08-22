@@ -8,7 +8,7 @@
 // need goes to the detail card instead. A row is a poster, a title and a
 // position — nothing else.
 
-import { EASE, pageAfterSwipe, TURN_MS, type Dir } from "@/lib/ribbon";
+import { EASE, inShelf, pageAfterSwipe, TURN_MS, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
@@ -502,6 +502,10 @@ export default function ListScreen({
         // other to auto, and the pane mid-turn would be reachable sideways.
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6"
         onTouchStart={(e) => {
+          // Same guard as everywhere else. The list has no sideways strips today
+          // and the rolodex proved what happens when one appears and the screen
+          // that hosts it was never told.
+          if (inShelf(e.target)) return (touch.current = null);
           const t = e.touches[0];
           touch.current = { x: t.clientX, y: t.clientY, axis: null };
         }}

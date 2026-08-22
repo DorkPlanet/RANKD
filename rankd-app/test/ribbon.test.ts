@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { pageAfterSwipe, RIBBON, stepScreen, TURN_AT } from "@/lib/ribbon";
+import { inShelf, pageAfterSwipe, RIBBON, stepScreen, TURN_AT } from "@/lib/ribbon";
 
 describe("stepScreen", () => {
   it("walks the ribbon in bottom-bar order", () => {
@@ -72,5 +72,29 @@ describe("landing on the far page", () => {
     expect(fromRight).toBe("unrnkd");
     // And a swipe onward from there leaves the screen rather than wrapping.
     expect(pageAfterSwipe(states.length - 1, states.length - 1, -1000, 400)).toBe("after");
+  });
+});
+
+describe("inShelf", () => {
+  // Guards the exact miss that let the page swipe steal the film strips flicks.
+  // The check was made against `DuelScreen`, `ShuffleDuel` and `RoughCut`, all
+  // three clean — and the strip lives in `Rolodex.tsx`, which was never opened.
+  //
+  // Faked rather than rendered: the suite has no DOM, and the only thing this
+  // needs from an element is whether `closest` finds a shelf above it.
+  const target = (found: boolean) => ({ closest: (sel: string) => (found && sel === ".overflow-x-auto" ? {} : null) });
+
+  it("claims a gesture that started inside a sideways scroller", () => {
+    expect(inShelf(target(true) as unknown as EventTarget)).toBe(true);
+  });
+
+  it("leaves the pages own gestures alone", () => {
+    expect(inShelf(target(false) as unknown as EventTarget)).toBe(false);
+  });
+
+  it("says no rather than throwing on something that is not an element", () => {
+    // Touch targets are typed `EventTarget`, which promises none of this.
+    expect(inShelf(null)).toBe(false);
+    expect(inShelf({} as EventTarget)).toBe(false);
   });
 });

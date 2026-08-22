@@ -1,6 +1,6 @@
 "use client";
 
-import { dragScreen, TURN_AT, type Dir } from "@/lib/ribbon";
+import { dragScreen, inShelf, TURN_AT, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_PACE_S, etaLabel, etaSeconds, paceSeconds } from "@/lib/progress";
@@ -241,6 +241,9 @@ export default function DuelScreen({
     if (!onRibbon || swipeBlocked) return;
     let from: { x: number; y: number; axis: null | "x" | "y" } | null = null;
     const start = (e: TouchEvent) => {
+      // A flick that starts in the film strip belongs to the film strip. See
+      // `inShelf` — this is the one guard the duel screen was missing.
+      if (inShelf(e.target)) return;
       const t = e.touches[0];
       from = { x: t.clientX, y: t.clientY, axis: null };
     };
