@@ -12,9 +12,9 @@
 // right, best to tenth. Nobody else's app can draw this because nobody else's
 // app has an ordered top ten as its primary object.
 //
-// The widths are the point. Number one takes almost a third and each one after
-// takes less, so the header is a decay curve rather than a grid. That is what
-// stops it reading as a contact sheet.
+// The widths are the point. Number one takes about a fifth of the band and each
+// one after takes less, down to a sliver for the tenth, so the header is a decay
+// curve rather than a grid. That is what stops it reading as a contact sheet.
 //
 // ── It costs nothing extra ─────────────────────────────────────────────────
 //
@@ -42,7 +42,8 @@ const SLICES = 10;
  *
  * Geometric rather than linear: linear makes the tenth film a third the width of
  * the first, which still reads as a row of roughly equal columns. At 0.82 the
- * first is about five times the last and the eye sees a run rather than a grid.
+ * band runs 20.9% down to 3.5% — the first is six times the last, and the eye
+ * sees a run rather than a grid.
  */
 const FALLOFF = 0.82;
 
