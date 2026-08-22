@@ -45,6 +45,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import type { SavedEntry } from "../lists";
+import type { SnapshotEntry, SnapshotSummary } from "../snapshot";
 
 // Private until the owner chooses otherwise. A default of "public" would expose
 // people who never asked to be, so the safe value is the one you get for free.
@@ -163,6 +164,31 @@ export const savedLists = pgTable("saved_list", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// What another person is allowed to read, derived from the library and never
+// the other way round. See the header of lib/snapshot.ts for why this exists
+// instead of the relational migration POTENTIAL-FEATURES.md predicted.
+//
+// One row per user, replaced whole on every push. There is no history here and
+// there should not be: a snapshot is the current answer, and yesterday's answer
+// about somebody's taste is of no interest to anybody including them.
+export const tasteSnapshots = pgTable("taste_snapshot", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // The rank order, for comparison. Small keys, one object per placed film.
+  entries: jsonb("entries").$type<SnapshotEntry[]>().notNull(),
+  // Lifted out of the summary into columns because they are the two numbers a
+  // profile shows above everything else, and a future "who has ranked the most"
+  // wants to sort on them without opening every blob in the table. Same
+  // reasoning as `library.format`.
+  filmCount: integer("film_count").notNull(),
+  duelCount: integer("duel_count").notNull(),
+  // Everything the page draws: titles, artwork, names, the fingerprint.
+  summary: jsonb("summary").$type<SnapshotSummary>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
+export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

@@ -23,6 +23,8 @@ import { fetchAccount } from "@/lib/account";
 import { withdrawSoftLocks } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
+import { Visibility } from "./Visibility";
+import type { Me } from "@/lib/account";
 import { Feedback } from "./Feedback";
 import { ImportGuide } from "./ImportGuide";
 import { ImportButton, RestoreButton, Sheet } from "./ui";
@@ -83,7 +85,7 @@ function Row({
   );
 }
 
-type RowId = "library" | "account" | "install" | "help" | "say" | "reset";
+type RowId = "library" | "account" | "visibility" | "install" | "help" | "say" | "reset";
 
 export function Settings({
   brightness,
@@ -94,6 +96,8 @@ export function Settings({
   films,
   onImport,
   onTour,
+  me,
+  onMe,
 }: {
   brightness: number;
   onChange: (t: number) => void;
@@ -103,6 +107,8 @@ export function Settings({
   films: Film[];
   onImport: (films: Film[]) => void;
   onTour?: () => void;
+  me: Me;
+  onMe: (patch: Partial<Me>) => void;
 }) {
   // One at a time. Two open rows is the wall of text this replaced.
   // Open on the import when there is nothing to import INTO. Every row is shut
@@ -255,6 +261,20 @@ export function Settings({
         onToggle={() => toggle("account")}
       >
         <Account onConflict={setConflict} />
+      </Row>
+
+      {/* ── Its own row, not a corner of Account ────────────────────────────
+          Account is about BACKUP: what is safe, when it last synced, and how to
+          get it back. This is about who else can see it, which is a different
+          question with a different worst case. Filed together, the switch that
+          publishes a profile would sit under a heading nobody opens unless
+          something has gone wrong with syncing. */}
+      <Row
+        title="Who can see you"
+        open={open === "visibility"}
+        onToggle={() => toggle("visibility")}
+      >
+        <Visibility me={me} onMe={onMe} />
       </Row>
 
       <InstallRow open={open === "install"} onToggle={() => toggle("install")} />

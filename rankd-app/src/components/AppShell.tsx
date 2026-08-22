@@ -1015,6 +1015,8 @@ export default function AppShell() {
 
       {overlay?.kind === "settings" && (
         <Settings
+          me={me}
+          onMe={changeMe}
           brightness={brightness}
           onChange={changeBrightness}
           prefs={prefs}
