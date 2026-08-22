@@ -28,9 +28,15 @@
 import { avatarOf } from "@/lib/profile";
 import type { ProfileIdentity } from "@/lib/social/publicProfile";
 
-/** Where the diagonal cuts. Top-left triangle, then bottom-right. */
-const LEFT = "polygon(0 0, 100% 0, 0 100%)";
-const RIGHT = "polygon(100% 0, 100% 100%, 0 100%)";
+// ── The cut ────────────────────────────────────────────────────────────────
+//
+// A shallow diagonal rather than a corner-to-corner one. At true 45 degrees on a
+// wide box the split runs off the top edge almost immediately, so the second
+// image is a thin wedge in one corner and the first is nearly everything. These
+// meet at the vertical midpoint of each side, which gives both films real estate
+// and reads as a deliberate cut rather than a crop that went wrong.
+const LEFT = "polygon(0 0, 62% 0, 38% 100%, 0 100%)";
+const RIGHT = "polygon(62% 0, 100% 0, 100% 100%, 38% 100%)";
 
 export function ProfileBanner({
   images,
@@ -50,7 +56,12 @@ export function ProfileBanner({
   // bottom of this block either way, and a profile with nothing placed yet
   // should look like a quiet version of a full one rather than a broken one.
   return (
-    <div className="relative w-full" style={{ aspectRatio: "16 / 7" }}>
+    // NOT `overflow-hidden` on this element. The avatar below deliberately hangs
+    // past the lower edge, and clipping here would cut the bottom off it.
+    <div className="relative w-full" style={{ aspectRatio: "5 / 2" }}>
+      {/* The clipping belongs to the images, which is what actually needs it:
+          `object-cover` on a clip-path can otherwise bleed a pixel at the seam. */}
+      <div className="absolute inset-0 overflow-hidden">
       {images.length >= 2 ? (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -69,14 +80,17 @@ export function ProfileBanner({
             className="absolute inset-0 h-full w-full object-cover"
             style={{ clipPath: RIGHT }}
           />
-          {/* The seam. A hairline of the page colour, so the two frames read as
-              deliberately cut rather than as one image failing to load. */}
+          {/* ── The seam is a HIGHLIGHT, not a gap ─────────────────────────
+              It was a hairline of the page colour, which on this palette is
+              near-black: on a real profile it read as a crack down the middle
+              rather than as a cut. A faint warm line reads as an edge where two
+              things meet, which is what it is. */}
           <div
             aria-hidden
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(to bottom left, transparent calc(50% - 1px), var(--bg) calc(50% - 1px), var(--bg) calc(50% + 1px), transparent calc(50% + 1px))",
+                "linear-gradient(102deg, transparent calc(50% - 0.5px), color-mix(in srgb, var(--gold) 45%, transparent) calc(50% - 0.5px), color-mix(in srgb, var(--gold) 45%, transparent) calc(50% + 0.5px), transparent calc(50% + 0.5px))",
             }}
           />
         </>
@@ -92,17 +106,27 @@ export function ProfileBanner({
         <div className="absolute inset-0" style={{ background: "var(--surface)" }} />
       )}
 
-      {/* The same class the owner's banner uses, so the two screens agree about
-          how an image meets the page without anybody choosing a gradient twice.
-          It is what makes this read as part of the page rather than a photograph
-          stuck on top of one. */}
-      <div className="banner-fade absolute inset-0" />
+      {/* ── Two layers, and both are doing a job ─────────────────────────────
+          The wash sits under everything and takes the frames down to something
+          type can live on. Without it a bright still fights the status bar at the
+          top and the handle underneath.
 
-      {/* The avatar sits a quarter into the banner's lower edge. Not straddling
-          it: `ProfileScreen`'s header argues at length that a circle half in and
-          half out is every social network's signature and also what makes the
-          circle look clipped. A quarter reads as tucked under. */}
-      <div className="absolute inset-x-0 -bottom-7 flex justify-center">
+          Then `.banner-fade`, which is the class the owner's own banner already
+          uses, so the two screens agree about how an image meets the page
+          without anybody choosing a gradient twice. */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{ background: "color-mix(in srgb, var(--bg) 42%, transparent)" }}
+      />
+      <div className="banner-fade absolute inset-0" />
+      </div>
+
+      {/* A quarter into the lower edge, never half. `ProfileScreen`'s header
+          argues at length that a circle straddling a cover is every social
+          network's signature and is also what made the circle look clipped. A
+          quarter reads as tucked under the edge rather than pinned to it. */}
+      <div className="absolute inset-x-0 -bottom-6 flex justify-center">
         {avatar.kind === "image" ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

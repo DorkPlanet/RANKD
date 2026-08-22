@@ -36,6 +36,7 @@ import {
   type Profile,
 } from "@/lib/profile";
 import { fetchAccount, type Me } from "@/lib/account";
+import { FollowCounts } from "./FollowCounts";
 import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
@@ -483,10 +484,19 @@ export default function ProfileScreen({
             <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
               {publicName(me)}
             </span>
-            {/* Nothing goes under it. A second line held the display name, which
-                on a real account read "Jarrad Bishop (UnknownEntity)" directly
-                beneath the same words in gold: the provider's value, printed
-                twice, neither of them chosen here. See `publicName`. */}
+            {/* Nothing else goes under it. A second line held the display name,
+                which on a real account read "Jarrad Bishop (UnknownEntity)"
+                directly beneath the same words in gold: the provider's value,
+                printed twice, neither chosen here. See `publicName`. */}
+
+            {/* Your own counts, which only existed on other people's profiles
+                until now. This is the first place anybody looks for them. Only
+                once a handle exists, since there is nothing to count before. */}
+            {me.handle && (
+              <span className="mt-2 block">
+                <FollowCounts handle={me.handle} />
+              </span>
+            )}
           </div>
 
           {/* ── WHERE YOU ARE ───────────────────────────────────────────────

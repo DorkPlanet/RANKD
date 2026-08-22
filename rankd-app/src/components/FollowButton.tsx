@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from "react";
 
-import { FollowList, type Direction } from "./FollowList";
+import { FollowCounts } from "./FollowCounts";
 
 interface State {
   following: boolean;
@@ -38,9 +38,7 @@ export function FollowButton({ handle }: { handle: string }) {
   // who you are, and offering a sign-in to somebody already signed in is worse
   // than offering nothing.
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  // Which list is open over the profile, if any. One at a time, matching the
-  // shell's own overlay rule.
-  const [list, setList] = useState<Direction | null>(null);
+
 
   useEffect(() => {
     let dead = false;
@@ -87,8 +85,6 @@ export function FollowButton({ handle }: { handle: string }) {
   // reserved height stops the page shifting under a thumb when it arrives.
   if (!state) return <div className="mt-5 h-16" aria-hidden />;
 
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
   return (
     <div className="mt-5 flex flex-col items-center gap-2">
       {/* ── Counts come first, and they are shown to EVERYBODY ───────────────
@@ -100,18 +96,16 @@ export function FollowButton({ handle }: { handle: string }) {
           Rendered here rather than in the stat row above so they stay live: the
           server answers every follow and unfollow with the whole state, so the
           number moves with the button instead of waiting for a reload. */}
-      {/* Tappable, because a count you cannot walk into is a dead end. This is
-          the only path Rankd has to somebody you did not already know the name
-          of: search needs a name, this needs one person you trust. */}
-      <span className="text-label text-dim">
-        <button onClick={() => setList("followers")} className="active:opacity-70">
-          {plural(state.followerCount, "follower")}
-        </button>
-        {" · "}
-        <button onClick={() => setList("following")} className="active:opacity-70">
-          {state.followingCount} following
-        </button>
-      </span>
+      {/* Handed down rather than fetched again: this component already asked
+          the same endpoint for the relationship, and the counts came back with
+          it. */}
+      <FollowCounts
+        handle={handle}
+        counts={{
+          followerCount: state.followerCount,
+          followingCount: state.followingCount,
+        }}
+      />
 
       {/* Nothing to offer yourself. Your own counts still show, because they
           are the reason to look at your own page. */}
@@ -142,8 +136,6 @@ export function FollowButton({ handle }: { handle: string }) {
           )}
         </>
       )}
-
-      {list && <FollowList handle={handle} direction={list} onClose={() => setList(null)} />}
     </div>
   );
 }

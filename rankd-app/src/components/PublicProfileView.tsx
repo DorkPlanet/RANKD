@@ -194,7 +194,7 @@ export function PublicProfileView({
       {/* One gutter for the whole page below the banner. The banner itself is full
           bleed so the frames reach the edges of the phone. */}
       <div className="px-6">
-      <div className="flex flex-col items-center pt-10 text-center">
+      <div className="flex flex-col items-center pt-9 text-center">
         {/* No `@`, matching the owner's own profile. The handle is a title here
             rather than an address being typed. */}
         <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
