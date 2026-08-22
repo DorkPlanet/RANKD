@@ -81,10 +81,18 @@ body {
   font-family: var(--font-inter), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
-  /* A screen sliding in starts off the right edge. Without this the page can be
-     panned sideways for the 300ms it takes to arrive. */
-  overflow-x: hidden;
 }
+
+/* No `overflow-x: hidden` here, and it must not come back.
+   It was added when a screen slide moved `main` itself, to stop the page being
+   panned sideways while one travelled. That approach is gone — only `main`'s
+   CHILDREN move now, and `main` is `overflow-hidden`, so it does the clipping.
+
+   The rule outlived its reason and broke every page outside the app. Setting
+   overflow-x on `html` forces overflow-y to compute to `auto`, which turns both
+   `html` and `body` into scroll containers; with `html { height: 100% }` from the
+   layout, a public profile taller than the viewport simply would not scroll.
+   Reported as "I cannot scroll the house account profile - it seems stuck". */
 
 /* ── The strip below the app ────────────────────────────────────────────────
    `.h-app` is `100svh` on purpose (see its note below), which means every
