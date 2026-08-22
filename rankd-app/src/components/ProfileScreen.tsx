@@ -471,8 +471,14 @@ export default function ProfileScreen({
                 Not a button, because a handle is permanent. The bio underneath
                 is still the way into the edit sheet, and its placeholder has
                 always been the thing that invites the tap. */}
+            {/* No `@`. It is a sigil for ADDRESSING somebody, and this is the
+                one page where you are not being addressed. On your own profile
+                the name is a title, so it is set like one. The `@` still leads
+                the field in `HandleGate`, where it says what kind of thing you
+                are typing, and it belongs anywhere a handle is quoted in a
+                sentence. */}
             <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
-              {me.handle ? `@${me.handle}` : publicName(me)}
+              {publicName(me)}
             </span>
             {/* A display name, and ONLY if they set one. Absent by default, so
                 nobody is introduced by a name they did not pick. */}
