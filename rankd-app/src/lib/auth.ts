@@ -66,5 +66,35 @@ export async function requireUser(): Promise<User | null> {
   if (!email) return null;
   // Deferred for the same reason as the sign-in event above.
   const { findUserByEmail } = await import("./users");
-  return (await findUserByEmail(email)) ?? null;
+  const user = (await findUserByEmail(email)) ?? null;
+  // A suspended or deleted account is not a signed-in one, and saying so HERE
+  // rather than at each route means acting on a report is a single UPDATE with
+  // no deploy behind it. Every existing caller inherits this for free, which is
+  // the whole argument for the seam.
+  if (user && (user.suspendedAt || user.deletedAt)) return null;
+  return user;
+}
+
+/**
+ * The account making this request, and it has a public name.
+ *
+ * ── Why this is separate from `requireUser` ────────────────────────────────
+ *
+ * `HandleGate` stops somebody without a handle from reaching the app, and that
+ * is a courtesy rather than a boundary: it runs in a browser, so it is the
+ * reader's to bypass. This is the boundary.
+ *
+ * Anything that CREATES SOMETHING PUBLIC asks this instead. A follow, a
+ * published list, a reply, a reaction: each one attaches an action to a person
+ * other people can see and name, and a null handle means there is nobody to
+ * name. Reading your own private library still asks `requireUser`, because a
+ * handle has nothing to do with whether your own data is yours.
+ *
+ * Returns null for both "not signed in" and "no handle", which is deliberate.
+ * They are the same answer to the only question a public write is asking, and
+ * two nulls that mean different things is how a route grows a weaker check.
+ */
+export async function requireHandle(): Promise<User | null> {
+  const user = await requireUser();
+  return user?.handle ? user : null;
 }

@@ -29,11 +29,13 @@ import {
   MAX_PINNED,
   MAX_PINNED_PEOPLE,
   personKey,
+  publicName,
   superlatives,
   topPeople,
+  type Identity,
   type Profile,
 } from "@/lib/profile";
-import { fetchAccount } from "@/lib/account";
+import { fetchAccount, type Me } from "@/lib/account";
 import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
@@ -106,8 +108,10 @@ interface Collection {
 export default function ProfileScreen({
   films,
   profile,
+  me,
   wasShape,
   onProfile,
+  onMe,
   onInfo,
   onSettings,
   onDuel,
@@ -118,10 +122,17 @@ export default function ProfileScreen({
 }: {
   films: Film[];
   profile: Profile;
+  /**
+   * Your public identity. Lives on the account rather than the device now, so
+   * it is handed down rather than read from storage. See lib/profile.ts.
+   */
+  me: Me;
   /** What the previous sitting amounted to, or null when there is nothing to say. */
   /** The taste shape when this sitting began. Absent on a first sitting. */
   wasShape?: Record<string, number>;
   onProfile: (p: Profile) => void;
+  /** Change the public half. Optimistic in `AppShell`; the write is its job. */
+  onMe: (patch: Partial<Me>) => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -444,7 +455,7 @@ export default function ProfileScreen({
           <div className="flex flex-col items-center text-center">
             <span className="relative z-10 -mt-[26px]">
               <AvatarSlot
-                profile={profile}
+                identity={me}
                 accountImage={accountImage}
                 onOpen={() => setAvatarMenu(true)}
               />
@@ -460,7 +471,7 @@ export default function ProfileScreen({
               className="mt-3 block max-w-full active:opacity-70"
             >
               <span className="block truncate font-display text-[26px] leading-none tracking-wide text-gold">
-                {profile.name}
+                {publicName(me)}
               </span>
             </button>
           </div>
@@ -526,7 +537,7 @@ export default function ProfileScreen({
             className="mt-3.5 block w-full active:opacity-70"
           >
             <span className="mx-auto block max-w-[280px] whitespace-pre-line text-center font-serif text-sub italic leading-snug text-dim">
-              {profile.bio || "Add a line about your taste"}
+              {me.bio || "Add a line about your taste"}
             </span>
           </button>
 
@@ -1179,12 +1190,12 @@ export default function ProfileScreen({
         />
       )}
 
-      {editing && <EditIdentity profile={profile} onSave={onProfile} onClose={() => setEditing(false)} />}
+      {editing && <EditIdentity me={me} onSave={onMe} onClose={() => setEditing(false)} />}
 
 
       {avatarMenu && (
         <AvatarMenu
-          profile={profile}
+          identity={me}
           signedIn={signedIn}
           onClose={() => setAvatarMenu(false)}
           onPickFromFilms={() => {
@@ -1197,12 +1208,10 @@ export default function ProfileScreen({
           }}
           onRemove={() => {
             setAvatarMenu(false);
-            // Deleted, not blanked. An empty string is still a value, and
-            // absence is the state `avatarOf` reads as "fall back to the
-            // account photo, then to the initial".
-            const next = { ...profile };
-            delete next.avatarUrl;
-            onProfile(next);
+            // Null, not blank. An empty string is still a value, and absence is
+            // the state `avatarOf` reads as "fall back to the account photo,
+            // then to the initial".
+            onMe({ avatarUrl: null });
           }}
         />
       )}
@@ -1216,7 +1225,9 @@ export default function ProfileScreen({
           onCancel={() => setPendingAvatar(null)}
           onUploaded={(url) => {
             setPendingAvatar(null);
-            onProfile({ ...profile, avatarUrl: url });
+            // /api/avatar has already written the row. This only catches the
+            // screen up, so the new picture does not wait for the next open.
+            onMe({ avatarUrl: url });
           }}
         />
       )}
@@ -1249,11 +1260,14 @@ export default function ProfileScreen({
             // signed out and adds nothing to the server. `avatarUrl` is read
             // first by `avatarOf`, so choosing one also overrides the Google
             // picture for anyone who has both.
-            onProfile(
-              stillsFor.target === "banner"
-                ? { ...profile, bannerFilmId: stillsFor.film.id, bannerStill: url }
-                : { ...profile, avatarUrl: url },
-            );
+            // The banner stays on the device and the avatar does not, which is
+            // the whole split: a banner says something about this library, a
+            // picture says who you are. Two calls now, not one.
+            if (stillsFor.target === "banner") {
+              onProfile({ ...profile, bannerFilmId: stillsFor.film.id, bannerStill: url });
+            } else {
+              onMe({ avatarUrl: url });
+            }
             setStillsFor(null);
           }}
         />
@@ -1283,17 +1297,17 @@ export default function ProfileScreen({
  * to press.
  */
 function AvatarSlot({
-  profile,
+  identity,
   accountImage,
   onOpen,
 }: {
-  profile: Profile;
+  identity: Identity;
   accountImage: string | null;
   onOpen: () => void;
 }) {
   // The file waiting to be cropped. Picking one no longer uploads it — see
   // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
-  const avatar = avatarOf(profile, accountImage);
+  const avatar = avatarOf(identity, accountImage);
   // Big enough to be the face of the card rather than a bullet point beside the
   // name. Everything else here is derived from it so the badge and the fallback
   // initial keep their proportions. Stays under AVATAR_SIZE at 3× density, so
@@ -1353,14 +1367,14 @@ function AvatarSlot({
  * the control that opens them.
  */
 function AvatarMenu({
-  profile,
+  identity,
   signedIn,
   onPickFromFilms,
   onUploadFile,
   onRemove,
   onClose,
 }: {
-  profile: Profile;
+  identity: Identity;
   signedIn: boolean;
   onPickFromFilms: () => void;
   onUploadFile: (file: File) => void;
@@ -1412,7 +1426,7 @@ function AvatarMenu({
       {/* Only when there is something to undo. `avatarOf` falls back to the
           account photo and then to the initial, so removing never leaves an
           empty circle. */}
-      {profile.avatarUrl && (
+      {identity.avatarUrl && (
         <button
           onClick={onRemove}
           className="w-full rounded-xl border border-border px-4 py-3 text-left text-sm text-dim active:scale-[0.99]"
@@ -1938,16 +1952,19 @@ function Section({
 
 
 function EditIdentity({
-  profile,
+  me,
   onSave,
   onClose,
 }: {
-  profile: Profile;
-  onSave: (p: Profile) => void;
+  me: Me;
+  onSave: (patch: Partial<Me>) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(profile.name);
-  const [bio, setBio] = useState(profile.bio);
+  // Seeded from the account rather than from storage, and `publicName` supplies
+  // the same "You" the field has always defaulted to, so an account that has
+  // never set a name still opens on something rather than on an empty box.
+  const [name, setName] = useState(publicName(me));
+  const [bio, setBio] = useState(me.bio ?? "");
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
@@ -1984,11 +2001,13 @@ function EditIdentity({
           <p className="mt-1 text-right text-label text-dim">{300 - bio.length} left</p>
         )}
         <p className="mt-3 text-label leading-snug text-dim">
-          A profile picture arrives with accounts. Until then it&rsquo;s your initial.
+          Tap your picture to change it.
         </p>
         <button
           onClick={() => {
-            onSave({ ...profile, name: name.trim() || "You", bio: bio.trim() });
+            // Only the two fields this sheet owns. A patch rather than a whole
+            // object, so editing a bio cannot carry a stale avatar back with it.
+            onSave({ displayName: name.trim() || "You", bio: bio.trim() || null });
             onClose();
           }}
           className="mt-3 w-full rounded-full bg-gold py-3 text-sm font-bold text-[#1c1405] active:scale-[0.99]"

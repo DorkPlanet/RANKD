@@ -1,5 +1,20 @@
 // Who the library belongs to.
 //
+// ── Three fields left this file, and why ──────────────────────────────────
+//
+// `name`, `bio` and `avatarUrl` used to live here, in localStorage, synced only
+// as part of the library blob. They are PUBLIC now: a stranger reads them off a
+// profile. A public field held only on a phone has no uniqueness, no moderation
+// surface, and no way for a second person to read it at all, so all three moved
+// to the `user` row. See `Me` in lib/account.ts.
+//
+// What stayed is everything relative to a LIBRARY rather than to a person: a
+// banner is a frame from a film you own, a pin names a ranking or a director you
+// rate. Those describe this library. They are not your identity.
+//
+// `takeLegacyIdentity` at the bottom is the one-way door between the two, run
+// once per browser by `HandleGate`.
+//
 // Nothing here stores an image — only ever a reference to one. A banner is a
 // film id and a still URL; an avatar is a URL too. The poster art is already in
 // the library, uploads live in blob storage, and the whole profile costs a few
@@ -13,16 +28,6 @@ import { markDirty } from "./syncState";
 const KEY = "rankd-profile-v1";
 
 export interface Profile {
-  name: string;
-  bio: string;
-  /**
-   * An uploaded picture, hosted in blob storage. See `lib/avatar.ts`.
-   *
-   * Wins over everything else when set, because it is the only one the user
-   * chose deliberately. Falls back to the account photo from Google, and then to
-   * the initial — see `avatarOf`.
-   */
-  avatarUrl?: string;
   bannerFilmId?: string;
   // A frame from a scene, not a poster — posters are the library's currency and
   // seeing one more of them at the top of your own profile goes stale fast. Held
@@ -70,7 +75,10 @@ export const MAX_PINNED = 3;
  */
 export const MAX_PINNED_PEOPLE = 6;
 
-export const EMPTY_PROFILE: Profile = { name: "You", bio: "" };
+// Every field is optional now that identity has moved out, so an empty profile
+// really is empty. Kept as a shared constant rather than an inline `{}` so the
+// "nothing set yet" state has one identity and reference equality still holds.
+export const EMPTY_PROFILE: Profile = {};
 
 export function loadProfile(): Profile {
   if (typeof window === "undefined") return EMPTY_PROFILE;
@@ -112,10 +120,83 @@ export function saveProfile(p: Profile): void {
  */
 export type Avatar = { kind: "image"; url: string } | { kind: "initial"; letter: string };
 
-export function avatarOf(profile: Profile, accountImage?: string | null): Avatar {
-  if (profile.avatarUrl) return { kind: "image", url: profile.avatarUrl };
+/**
+ * The public half of a person, as this module needs to see it.
+ *
+ * Structural on purpose. `Me` in lib/account.ts satisfies it, and so does a
+ * `user` row read on the server, so one function draws an avatar for your own
+ * profile and for a stranger's without this module importing either. That also
+ * keeps profile.ts free of anything that fetches, which is what lets it stay
+ * testable without a network.
+ */
+export interface Identity {
+  displayName: string | null;
+  avatarUrl: string | null;
+}
+
+/** What to call somebody. The fallback is the one the app has always used. */
+export function publicName(identity: Identity): string {
+  return identity.displayName?.trim() || "You";
+}
+
+export function avatarOf(identity: Identity, accountImage?: string | null): Avatar {
+  if (identity.avatarUrl) return { kind: "image", url: identity.avatarUrl };
   if (accountImage) return { kind: "image", url: accountImage };
-  return { kind: "initial", letter: profile.name.trim().charAt(0).toUpperCase() || "?" };
+  return { kind: "initial", letter: publicName(identity).charAt(0).toUpperCase() || "?" };
+}
+
+// ── The one-way door ───────────────────────────────────────────────────────
+
+/** What an older build of Rankd kept on this device. Any of it may be absent. */
+export interface LegacyIdentity {
+  name?: string;
+  bio?: string;
+  avatarUrl?: string;
+}
+
+/**
+ * Take the identity fields an older build left in localStorage, and remove them.
+ *
+ * Read RAW rather than through `loadProfile`, because these keys no longer exist
+ * on `Profile` and the point is to see what the type has stopped describing.
+ *
+ * ── Why it strips as it reads ──────────────────────────────────────────────
+ *
+ * Leaving them behind would be harmless right up until somebody edits their name
+ * on the web and then restores a backup taken today, at which point a stale
+ * local `name` is sitting next to a server one with no rule about which wins.
+ * That is exactly the "can disagree forever" problem this move was made to end,
+ * so the local copy goes at the moment it has been handed over.
+ *
+ * Idempotent. A second call finds nothing and returns an empty object, which is
+ * what makes it safe on the path `HandleGate` runs it from.
+ */
+export function takeLegacyIdentity(): LegacyIdentity {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return {};
+    const stored = JSON.parse(raw) as Record<string, unknown>;
+    const taken: LegacyIdentity = {};
+    if (typeof stored.name === "string") taken.name = stored.name;
+    if (typeof stored.bio === "string") taken.bio = stored.bio;
+    if (typeof stored.avatarUrl === "string") taken.avatarUrl = stored.avatarUrl;
+    if (Object.keys(taken).length === 0) return {};
+
+    delete stored.name;
+    delete stored.bio;
+    delete stored.avatarUrl;
+    // Written back through the same key rather than through `saveProfile`, so
+    // the object keeps any field a NEWER build might have added and this one
+    // does not know about. A round trip through `Profile` would drop it.
+    localStorage.setItem(KEY, JSON.stringify(stored));
+    markDirty();
+    return taken;
+  } catch {
+    // Corrupt or unavailable. Nothing to hand over is a fine answer, and it is
+    // the same answer a fresh install gives.
+    return {};
+  }
 }
 
 export interface PersonStat {

@@ -98,6 +98,11 @@ export const FILE_KEYS = FILE_2;
 //    gate while offline, which is the one thing it exists to decide. It is not
 //    a credential and is not treated as one: every route re-checks the real
 //    session server-side. See `fetchSession` in lib/account.ts.
+//  · `rankd-me-v1` — the public identity this browser last HEARD about, cached
+//    so the handle gate has something to trust when the network cannot be
+//    asked. It is a record of an answer, not the answer. Restoring it from a
+//    file would plant a stale handle on a device that never asked for one, and
+//    on an account it may not even belong to. See `fetchMe` in lib/account.ts.
 //
 // ── Every key this app stores, and who owns it ─────────────────────────────
 //
@@ -127,6 +132,7 @@ export const FILE_KEYS = FILE_2;
 //   `rankd-tour-v1`               tour.ts     which coach marks have run
 //   `rankd-install-hint-v1`       install.ts  install nudge dismissed
 //   `rankd-signed-in-v1`          account.ts  has ever signed in on this browser
+//   `rankd-me-v1`                 account.ts  handle, name and visibility, cached
 //   `rankd-review-dismissed-v1`   nowhere     dead; see FILE_2 above
 //
 // BOOKKEEPING — never backed up, never synced.

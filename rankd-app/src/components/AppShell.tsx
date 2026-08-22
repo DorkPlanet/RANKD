@@ -33,7 +33,17 @@ import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
 import Coach from "./Coach";
 import { InstallPrompt } from "./InstallPrompt";
 import SignInGate from "./SignInGate";
-import { fetchSession, hasSignedInBefore } from "@/lib/account";
+import HandleGate from "./HandleGate";
+import {
+  fetchMe,
+  fetchSession,
+  hasSignedInBefore,
+  needsHandle,
+  saveMe,
+  EMPTY_ME,
+  type Me,
+  type MeState,
+} from "@/lib/account";
 import { forgetTours, markTourSeen, onTourRequested, seenTours, TOURS, type TourId } from "@/lib/tour";
 import { loadLog } from "@/lib/log";
 import { openVisit, snapshotOf } from "@/lib/visit";
@@ -208,6 +218,19 @@ export default function AppShell() {
   // then replaced by the other. A flash of a sign-in wall at somebody already
   // signed in is worse than a slightly longer splash.
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  // ── Who you are in public ──────────────────────────────────────────────────
+  //
+  // `null` while the answer is still being asked about, and the splash covers
+  // that window for the same reason it covers the session lookup: a reader must
+  // never see the app and then a wall, or a wall and then the app.
+  //
+  // Three states rather than two once it lands, and the difference is the whole
+  // point. Only `kind: "me"` is Rankd having ANSWERED, and only an answered
+  // "no handle" is allowed to put the gate on screen. `unknown` means the
+  // network could not be asked, which says nothing about whether a handle
+  // exists and must therefore let the reader through to their own library. See
+  // `fetchMe` in lib/account.ts.
+  const [meState, setMeState] = useState<MeState | null>(null);
   // Which tour is on screen. Set one tick AFTER a navigation, never during it:
   // `Coach` resolves its targets as it renders, so mounting it in the same
   // commit as a screen change measures the screen the user is leaving.
@@ -290,6 +313,12 @@ export default function AppShell() {
     void fetchSession().then((s) => {
       setSignedIn(s.kind === "in" || (s.kind === "unknown" && hasSignedInBefore()));
     });
+
+    // Asked ALONGSIDE the session rather than after it, so the two answers race
+    // each other instead of queueing and the splash covers one window and not
+    // two. A signed-out visitor gets a cheap 401 here, which is the answer this
+    // needs anyway.
+    void fetchMe().then(setMeState);
 
     // ── Why the visit marker advances HERE and not on the profile ────────────
     //
@@ -459,6 +488,39 @@ export default function AppShell() {
     saveProfile(p);
   };
 
+  /**
+   * Change the public half of the profile.
+   *
+   * ── Optimistic, and it has to be ───────────────────────────────────────────
+   *
+   * The local sibling above is synchronous, because `saveProfile` writes to
+   * localStorage. This one is a network round trip, and waiting for it would
+   * mean a name you just typed sits unchanged on screen until a server answers.
+   * That reads as a broken field rather than a slow one, and it is the exact
+   * gap between how the two halves of the same sheet feel.
+   *
+   * So the screen updates first and the write follows. On failure the server's
+   * answer wins, which puts the old value back rather than leaving the reader
+   * looking at a change that did not happen.
+   */
+  const changeMe = (patch: Partial<Me>) => {
+    setMeState((s) => {
+      // Only ever refines an identity we already hold. There is nothing sensible
+      // to merge a patch into before the first answer has landed, and inventing
+      // a base here would be inventing an account.
+      const base = s && (s.kind === "me" || s.kind === "unknown") ? s.me : null;
+      if (!base) return s;
+      return { kind: "me", me: { ...base, ...patch } };
+    });
+    void saveMe(patch).then((result) => {
+      if (result.ok) setMeState({ kind: "me", me: result.me });
+      // A failure leaves the optimistic value on screen for now. Re-reading here
+      // would be the correct-looking fix and the wrong one: it would clobber a
+      // SECOND edit the reader has made in the meantime with a stale row. The
+      // next open re-reads, which is soon enough for a display name.
+    });
+  };
+
   const changeBrightness = (t: number) => {
     setBrightness(t);
     applyBrightness(t);
@@ -577,7 +639,10 @@ export default function AppShell() {
   // `signedIn !== null` joined the condition when the gate landed: the splash
   // now also covers the session lookup, so the reader never sees the app and
   // then the wall, or the wall and then the app.
-  const splashLeaving = held && !!state && signedIn !== null;
+  // `meState !== null` joined it for the handle gate, on the same argument. Both
+  // requests were sent together, so this waits for the slower of two rather than
+  // for one after the other.
+  const splashLeaving = held && !!state && signedIn !== null && meState !== null;
 
   useEffect(() => {
     if (!splashLeaving) return;
@@ -588,7 +653,7 @@ export default function AppShell() {
   const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
 
   // Still nothing to show behind it — the splash IS the screen for now.
-  if (!state || signedIn === null) return splash;
+  if (!state || signedIn === null || meState === null) return splash;
 
   // ── The gate ───────────────────────────────────────────────────────────────
   //
@@ -605,6 +670,44 @@ export default function AppShell() {
       </>
     );
   }
+
+  // ── The second gate ────────────────────────────────────────────────────────
+  //
+  // Read this condition as the safety property it is: the gate appears when
+  // Rankd ANSWERED and the answer was "this account has no handle". Nothing
+  // else. `meState.kind === "unknown"` is the offline case and falls straight
+  // through to the app, deliberately, because a handle cannot be claimed
+  // without a network anyway — so blocking buys nothing and costs somebody
+  // access to a library already sitting on the device in their hand. That is
+  // the exact failure `fetchSession` was written to prevent, and it would be a
+  // poor way to reintroduce it.
+  //
+  // `needsHandle` is the predicate and it lives in lib/account.ts, where it is
+  // tested. The `kind` check is repeated here only to narrow `meState.me` down
+  // to a `Me` for the prop; it is not a second opinion about whether to show it.
+  if (needsHandle(meState) && meState.kind === "me") {
+    return (
+      <>
+        <HandleGate
+          me={meState.me}
+          // Straight into the app, with no reload and no second request. The
+          // library was loaded before either gate and has been sitting behind
+          // both of them the whole time.
+          onDone={(me: Me) => setMeState({ kind: "me", me })}
+        />
+        {splash}
+      </>
+    );
+  }
+
+  // ── Who you are, whichever way the question was answered ──────────────────
+  //
+  // Past both gates, so `unknown` is the offline reader who was deliberately
+  // let through: their cached identity is the right thing to draw, and it is
+  // the same identity they saw last time. `EMPTY_ME` only covers a first-ever
+  // open with no network and nothing cached, where it renders exactly what a
+  // signed-out reader has always seen: the word You, and a letter.
+  const me: Me = (meState.kind === "out" ? null : meState.me) ?? EMPTY_ME;
 
   // What the user actually owns. A person run merges borrowed films into
   // `state.films` so the engine can duel them, and the duel screen is the only
@@ -822,8 +925,10 @@ export default function AppShell() {
         <ProfileScreen
           films={library}
           profile={profile}
+          me={me}
           wasShape={wasShape}
           onProfile={changeProfile}
+          onMe={changeMe}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}
           onSettings={() => setOverlay({ kind: "settings" })}
           onTrophies={() => setOverlay({ kind: "trophies" })}

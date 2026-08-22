@@ -12,6 +12,7 @@
 import { put } from "@vercel/blob";
 
 import { requireUser } from "@/lib/auth";
+import { updateProfile } from "@/lib/users";
 
 /**
  * The ceiling on what the route will accept.
@@ -95,7 +96,22 @@ export async function POST(req: Request) {
     // resource, and the stored profile URL changes with each upload — so the
     // new face is fetched immediately rather than waited for. It also fixes the
     // FIRST upload, where the same URL had already been cached as a 404.
-    return Response.json({ url: `${url}?v=${Date.now().toString(36)}` });
+    const versioned = `${url}?v=${Date.now().toString(36)}`;
+
+    // ── The row is written HERE, not by the client ────────────────────────
+    //
+    // An avatar is public now, so where it is stored is the same question as
+    // who is allowed to set one. This route already knows the answer: it
+    // authenticated the request and it produced the URL, so it is the only
+    // caller that can say "this picture belongs to this account" without being
+    // asked to trust a string.
+    //
+    // `avatarSource` records that a person chose this one. That is what lets a
+    // future re-provision refresh a Google photo for everybody who never picked
+    // anything, without reaching into the accounts of people who did.
+    await updateProfile(user.id, { avatarUrl: versioned, avatarSource: "upload" });
+
+    return Response.json({ url: versioned });
   } catch (e) {
     // Configured is not the same as reachable: OIDC is enabled PER ENVIRONMENT,
     // so a project whose Preview and Production work can still refuse
