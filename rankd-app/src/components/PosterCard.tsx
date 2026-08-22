@@ -239,6 +239,31 @@ export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster
       ], { duration: 340, easing: "cubic-bezier(.4,0,.2,1)" });
 }
 
+/**
+ * How far sideways a finger may travel and still count as a tap.
+ *
+ * ── This closes a hole that was always here ────────────────────────────────
+ *
+ * The vertical throw is guarded — `|dy| > 45` and steeper than it is wide — but
+ * the branch underneath it was a plain `else`, so ANY release that was not a
+ * throw picked a winner. Drag a poster right across the screen and let go, and
+ * the duel was answered. Nothing in the card is horizontal, so nobody had ever
+ * had a reason to drag it that way and the hole went unnoticed.
+ *
+ * Screen-level swipe gives them a reason: swiping between the list, the game and
+ * the profile starts on a poster, because the posters are the screen. Without
+ * this the navigation and the judgement would race, and the judgement would win.
+ *
+ * The same 45px as the vertical throw, deliberately. One number for "this was
+ * movement, not a tap" reads as one rule rather than two tuned constants, and
+ * the card already treats the two axes as equals when it decides which won.
+ *
+ * A sideways drag lands on NOTHING. Springing back with no pick is the honest
+ * answer for the same reason a throw with nowhere to go springs back rather than
+ * falling through to `onPick`: a gesture the card cannot honour is not a vote.
+ */
+const SIDEWAYS = 45;
+
 export function PosterCard({
   film,
   badge,
@@ -345,9 +370,10 @@ export function PosterCard({
       const img = e.currentTarget.querySelector("img");
       if (img) flyPosterAway(img, film.poster ?? "", dx, dy, tilt);
       setTimeout(() => land(film.id), 170);
-    } else {
+    } else if (Math.abs(dx) < SIDEWAYS) {
       onPick(film.id); // tap = pick winner
     }
+    // Dragged sideways and let go: nothing happens, on purpose. See `SIDEWAYS`.
   };
 
   const onPointerCancel = () => {

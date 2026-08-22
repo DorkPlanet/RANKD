@@ -1,5 +1,6 @@
 "use client";
 
+import { TURN_AT, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_PACE_S, etaLabel, etaSeconds, paceSeconds } from "@/lib/progress";
@@ -103,6 +104,8 @@ export default function DuelScreen({
   onRoughCutBegan,
   onPerson,
   greet = 0,
+  onRibbon,
+  swipeBlocked = false,
 }: {
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
@@ -141,6 +144,15 @@ export default function DuelScreen({
    * twice and a boolean already true is indistinguishable from one nobody reset.
    */
   greet?: number;
+  /**
+   * A horizontal swipe across the game, taken one step along the ribbon.
+   *
+   * See `lib/ribbon.ts`. The duel is the middle of it, so both directions lead
+   * somewhere: right to the list, left to the profile.
+   */
+  onRibbon?: (dir: Dir) => void;
+  /** A sheet is open over the game and owns the finger. */
+  swipeBlocked?: boolean;
 }) {
   const [modeOpen, setModeOpen] = useState(false);
   // Playing the Play sheet's exit before it unmounts, when the nav closes it.
@@ -203,6 +215,64 @@ export default function DuelScreen({
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
+
+  // ── Swiping off the game ─────────────────────────────────────────────────
+  //
+  // The list and the profile own their swipe, because each has pages to turn
+  // before the gesture is about the screen at all. The game has none, so this is
+  // the whole of it.
+  //
+  // On the WINDOW rather than a wrapper, because this screen has three quite
+  // different trees underneath it — the duel itself, Fast Shuffle and Rough Cut
+  // — and one of them, `PosterCard`, is the protected compare screen. A listener
+  // up here reaches all three and touches none of them. Checked before writing
+  // it: there is not one `onTouch*` handler and not one horizontal scroller
+  // anywhere in those components, so it competes with nothing.
+  //
+  // `PosterCard` did need one change and it was a bug fix. Its release handler
+  // was `else { onPick }`, so any drag that was not a vertical throw picked a
+  // winner — including a swipe straight across the screen. See `SIDEWAYS` there.
+  //
+  // In THIS component rather than `AppShell` because the shell's sign-in and
+  // handle gates return early, so a hook added there would be called on some
+  // renders and not others. This component only mounts while the game is
+  // showing, which is also exactly the condition the listener wanted.
+  useEffect(() => {
+    if (!onRibbon || swipeBlocked) return;
+    let from: { x: number; y: number; axis: null | "x" | "y" } | null = null;
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      from = { x: t.clientX, y: t.clientY, axis: null };
+    };
+    const move = (e: TouchEvent) => {
+      if (!from || from.axis) return;
+      const t = e.touches[0];
+      const dx = t.clientX - from.x;
+      const dy = t.clientY - from.y;
+      // Waiting until the finger commits to an axis. Guessing early turns a
+      // scroll that drifted sideways into a navigation.
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      from.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    };
+    const end = (e: TouchEvent) => {
+      const f = from;
+      from = null;
+      if (!f || f.axis !== "x") return;
+      const dx = e.changedTouches[0].clientX - f.x;
+      // The same fraction a page turn costs on the list and the profile, so the
+      // app asks for one amount of finger rather than three tuned numbers.
+      if (Math.abs(dx) <= window.innerWidth * TURN_AT) return;
+      onRibbon(dx < 0 ? 1 : -1);
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+    };
+  }, [onRibbon, swipeBlocked]);
 
   // ── The greeting ───────────────────────────────────────────────────────────
   //

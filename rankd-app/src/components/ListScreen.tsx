@@ -8,6 +8,7 @@
 // need goes to the detail card instead. A row is a poster, a title and a
 // position — nothing else.
 
+import { pageAfterSwipe, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
@@ -42,6 +43,7 @@ export default function ListScreen({
   onSettings,
   onDuel,
   onProfile,
+  onRibbon,
   onPoster,
   onTrophies,
   logging,
@@ -66,6 +68,13 @@ export default function ListScreen({
   onSettings: () => void;
   onDuel: () => void;
   onProfile: () => void;
+  /**
+   * A swipe that ran past the first or last state.
+   *
+   * The list is the left-hand end of the ribbon, so only `1` ever leads
+   * anywhere — off the end of un-rnkd and into the game. See `lib/ribbon.ts`.
+   */
+  onRibbon: (dir: Dir) => void;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
@@ -110,6 +119,20 @@ export default function ListScreen({
   // smaller library keeps all three consistent — filtering its OUTPUT would
   // leave the offsets describing rows that are no longer there.
   const [only, setOnly] = useState<null | "locked" | "shuffled" | "unrnkd">(null);
+  // ── The same three states, as pages you can swipe between ────────────────
+  //
+  // Tapping a count is still the way in, and still the obvious one. This is the
+  // way ACROSS: the user asked to be able to swipe the whole app end to end, and
+  // the list has to turn its own pages before a swipe there can be about leaving
+  // the list at all.
+  //
+  // Derived from `only` rather than held as a second piece of state. Two sources
+  // of truth for the same fact drift the moment a tap sets one and a swipe sets
+  // the other, and then the band would be highlighting a state the list is not
+  // showing.
+  const STATES = [null, "locked", "shuffled", "unrnkd"] as const;
+  const page = STATES.indexOf(only);
+  const touch = useRef<{ x: number; y: number; axis: null | "x" | "y" } | null>(null);
   const shown = useMemo(() => {
     if (!only) return films;
     return films.filter((f) =>
@@ -370,7 +393,38 @@ export default function ListScreen({
         </div>
       </div>
 
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-y-auto px-5 pb-6"
+        onTouchStart={(e) => {
+          const t = e.touches[0];
+          touch.current = { x: t.clientX, y: t.clientY, axis: null };
+        }}
+        onTouchMove={(e) => {
+          const from = touch.current;
+          if (!from || from.axis) return;
+          const t = e.touches[0];
+          const dx = t.clientX - from.x;
+          const dy = t.clientY - from.y;
+          // The list is a tall vertical scroller, so the axis test matters more
+          // here than anywhere: a flick down the library drifts sideways by a
+          // few pixels every time, and claiming those would make the screen
+          // change under a reader who was only scrolling.
+          if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+          from.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        }}
+        onTouchEnd={(e) => {
+          const from = touch.current;
+          touch.current = null;
+          if (!from || from.axis !== "x") return;
+          const dx = e.changedTouches[0].clientX - from.x;
+          const landed = pageAfterSwipe(page, STATES.length - 1, dx, e.currentTarget.clientWidth);
+          // Nothing to the left of everything-you-own, so that end simply holds.
+          if (landed === "before") return;
+          if (landed === "after") return onRibbon(1);
+          if (landed !== page) setOnly(STATES[landed as number]);
+        }}
+      >
         {model.total === 0 && (
           <p className="mt-16 text-center text-sub leading-relaxed text-dim">
             Nothing here yet.

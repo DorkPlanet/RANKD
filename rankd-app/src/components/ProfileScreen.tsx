@@ -13,6 +13,7 @@
 // goes stale. There's no circular avatar straddling a cover either — that shape
 // belongs to every social network, and this isn't one.
 
+import { pageAfterSwipe, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header, tierCounts } from "./DuelScreen";
 import { FilmPicker } from "./FilmPicker";
@@ -106,8 +107,10 @@ const LAST_TAB = (PANELS.length - 1) as Tab;
 /** Matches the sheets. One easing across the app or the motion reads as two apps. */
 const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
 
-/** Past this fraction of the width, letting go turns the page rather than snapping back. */
-const TURN_AT = 0.22;
+// `TURN_AT` moved to `lib/ribbon.ts`. It was defined here first, and the list now
+// asks the same question of the same gesture, so it belongs where both can see
+// it: two copies of "how far is a page turn" drift, and a swipe that means one
+// thing on the profile and another on the list is worse than either number.
 
 interface Collection {
   title: string;
@@ -128,6 +131,7 @@ export default function ProfileScreen({
   onSettings,
   onDuel,
   onList,
+  onRibbon,
   onTrophies,
   logging,
   onToggleLog,
@@ -151,6 +155,14 @@ export default function ProfileScreen({
   onSettings: () => void;
   onDuel: () => void;
   onList: () => void;
+  /**
+   * A swipe that ran past the first or last panel.
+   *
+   * The profile is the right-hand end of the ribbon, so only `-1` ever leads
+   * anywhere. Passing the direction rather than calling `onList` keeps the
+   * knowledge of what is next door in one place — see `lib/ribbon.ts`.
+   */
+  onRibbon: (dir: Dir) => void;
   onTrophies: () => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
   logging?: boolean;
@@ -404,10 +416,11 @@ export default function ProfileScreen({
             start.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
           }
           if (start.axis !== "x") return;
-          // Resist at the ends rather than refusing, so the edge is felt.
-          // Resist at the ends rather than sliding past them. `LAST_TAB`
-          // rather than a literal, so adding a page cannot leave this behind.
-          const off = (tab === 0 && dx > 0) || (tab === LAST_TAB && dx < 0) ? dx * 0.25 : dx;
+          // Resist only where there is nothing next door. The profile is the
+          // right-hand end of the ribbon, so a swipe off the LAST panel has
+          // nowhere to go and should feel like it — while a swipe off the FIRST
+          // one now leads to the game and must not fight the reader on the way.
+          const off = tab === LAST_TAB && dx < 0 ? dx * 0.25 : dx;
           slideTo(off, false);
         }}
         onTouchEnd={(e) => {
@@ -416,12 +429,15 @@ export default function ProfileScreen({
           if (!start || start.inShelf || start.axis !== "x") return;
           const dx = e.changedTouches[0].clientX - start.x;
           const width = trackRef.current?.clientWidth ?? 1;
-          const turn = Math.abs(dx) > width * TURN_AT;
-          const next = (turn ? (dx < 0 ? Math.min(LAST_TAB, tab + 1) : Math.max(0, tab - 1)) : tab) as Tab;
+          const landed = pageAfterSwipe(tab, LAST_TAB, dx, width);
           // Always animate back to a whole page, whether that is the next one or
           // the one it started on.
           slideTo(0, true);
-          if (next !== tab) setTab(next);
+          // Ran off an end. The screen is not this gesture's subject any more, so
+          // it goes up to the shell — which is what carries you to the game.
+          if (landed === "before") return onRibbon(-1);
+          if (landed === "after") return onRibbon(1);
+          if (landed !== tab) setTab(landed as Tab);
         }}
       >
         {/* 16/9 is a TMDb backdrop's native shape. Forcing one into a shorter

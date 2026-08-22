@@ -9,6 +9,7 @@
 // lives in memory, and navigating away would destroy it mid-run. When sessions
 // are persisted this becomes the one place to swap in real routing.
 
+import { stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
 import { useEffect, useRef, useState } from "react";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
@@ -62,7 +63,9 @@ const SWEEP_GAP_MS = 400;
 // How many films land before the library is written to disk. See the sweep.
 const SWEEP_BATCH = 10;
 
-type Screen = "duel" | "list" | "profile";
+// The ribbon IS the screen list. Aliased rather than restated, so adding
+// Activity to `RIBBON` adds it here and to every swipe in the app at once.
+type Screen = RibbonScreen;
 
 /**
  * What is open OVER the current screen. At most one, ever.
@@ -821,6 +824,21 @@ export default function AppShell() {
     if (due) setTimeout(() => setTourDue(due), arriving ? VEIL_MS + 20 : 20);
   };
 
+  /**
+   * A swipe that ran off the edge of a screen, taken one step along the ribbon.
+   *
+   * Every screen hands its gesture here once it has no page of its own left to
+   * turn. Going through `go` rather than `setScreen` is what makes the continue
+   * screen work for free: `go` bumps `greet`, and `DuelScreen` shows
+   * `ResumeOverlay` on a greeting when a run is waiting. So swiping back into a
+   * game mid-flight lands on the offer to continue rather than dropping you into
+   * a duel you had walked away from.
+   */
+  const ribbon = (dir: Dir) => {
+    const next = stepScreen(current, dir);
+    if (next) go(next);
+  };
+
   const goDuel = () => go("duel");
 
   const toggleLog = () => {
@@ -900,6 +918,11 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
+          onRibbon={ribbon}
+          // A sheet over the game owns the finger. Swiping across an open
+          // Settings panel is about that panel, not about leaving the game
+          // behind it.
+          swipeBlocked={overlay !== null || !splashGone}
           onImportFile={(file) => {
             void filmsFromFile(file).then((r) => {
               if ('error' in r) return;
@@ -933,6 +956,7 @@ export default function AppShell() {
           onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onProfile={() => go("profile")}
+          onRibbon={ribbon}
           onPoster={setMeta}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}
@@ -954,6 +978,7 @@ export default function AppShell() {
           onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onList={() => go("list")}
+          onRibbon={ribbon}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}
         />
