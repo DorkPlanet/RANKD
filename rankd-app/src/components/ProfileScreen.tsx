@@ -37,6 +37,7 @@ import {
 } from "@/lib/profile";
 import { fetchAccount, type Me } from "@/lib/account";
 import { FollowCounts } from "./FollowCounts";
+import { PeoplePanel } from "./PeoplePanel";
 import { AvatarCropper } from "./AvatarCropper";
 import { loadLists, subjectOf, type SavedList } from "@/lib/lists";
 import SavedListSheet from "./SavedListSheet";
@@ -91,7 +92,16 @@ type StillTarget = "banner" | "avatar";
 // panel is derived — the app telling you about yourself — while the results
 // panel is what you MADE. Landing on the thing you made is the better greeting,
 // and it is the half you would show somebody.
-const PANELS = ["Your results", "Your taste"] as const;
+// A third page landed on 22 Aug 2026, and the paragraph above is still the test
+// it had to pass. The one that was cut held a tier chart, which restated the
+// counts in the band above it: filler dressed as a page. Who you follow is not
+// carried anywhere else on this screen, and it is the same KIND of thing as the
+// other two — something with a name and a face that you would show somebody.
+const PANELS = ["Your results", "Your taste", "Your people"] as const;
+
+/** Which page is showing. Widened when the third arrived. */
+type Tab = 0 | 1 | 2;
+const LAST_TAB = (PANELS.length - 1) as Tab;
 
 /** Matches the sheets. One easing across the app or the motion reads as two apps. */
 const EASE = "cubic-bezier(0.2, 0.8, 0.3, 1)";
@@ -147,9 +157,9 @@ export default function ProfileScreen({
   onToggleLog?: () => void;
 }) {
   // Which of the three zones is showing. See the tab bar for why.
-  const [tab, setTab] = useState<0 | 1>(0);
+  const [tab, setTab] = useState<Tab>(0);
   const trackRef = useRef<HTMLDivElement>(null);
-  const goTo = (next: 0 | 1) => setTab(next);
+  const goTo = (next: Tab) => setTab(next);
 
   // ── The drag ───────────────────────────────────────────────────────────────
   //
@@ -395,7 +405,9 @@ export default function ProfileScreen({
           }
           if (start.axis !== "x") return;
           // Resist at the ends rather than refusing, so the edge is felt.
-          const off = (tab === 0 && dx > 0) || (tab === 1 && dx < 0) ? dx * 0.25 : dx;
+          // Resist at the ends rather than sliding past them. `LAST_TAB`
+          // rather than a literal, so adding a page cannot leave this behind.
+          const off = (tab === 0 && dx > 0) || (tab === LAST_TAB && dx < 0) ? dx * 0.25 : dx;
           slideTo(off, false);
         }}
         onTouchEnd={(e) => {
@@ -405,7 +417,7 @@ export default function ProfileScreen({
           const dx = e.changedTouches[0].clientX - start.x;
           const width = trackRef.current?.clientWidth ?? 1;
           const turn = Math.abs(dx) > width * TURN_AT;
-          const next = (turn ? (dx < 0 ? Math.min(1, tab + 1) : Math.max(0, tab - 1)) : tab) as 0 | 1;
+          const next = (turn ? (dx < 0 ? Math.min(LAST_TAB, tab + 1) : Math.max(0, tab - 1)) : tab) as Tab;
           // Always animate back to a whole page, whether that is the next one or
           // the one it started on.
           slideTo(0, true);
@@ -494,7 +506,10 @@ export default function ProfileScreen({
                 once a handle exists, since there is nothing to count before. */}
             {me.handle && (
               <span className="mt-2 block">
-                <FollowCounts handle={me.handle} />
+                {/* Turns to the page rather than opening a sheet over it. Same
+                    reason the panel exists at all: a sheet from in here loses to
+                    the nav's stacking context. */}
+                <FollowCounts handle={me.handle} onOpen={() => goTo(2)} />
               </span>
             )}
           </div>
@@ -608,7 +623,7 @@ export default function ProfileScreen({
             {PANELS.map((label, i) => (
               <button
                 key={label}
-                onClick={() => goTo(i as 0 | 1)}
+                onClick={() => goTo(i as Tab)}
                 className="-mb-px pb-2.5 text-sub transition-colors"
                 style={{
                   color: tab === i ? "var(--text-hi)" : "var(--dim)",
@@ -1160,6 +1175,17 @@ export default function ProfileScreen({
               }
             />
           </Section>
+            </div>
+
+            {/* ── Page three ────────────────────────────────────────────────
+                A sheet first, which worked on a public profile and not here:
+                the bottom nav is `relative z-40` and therefore a stacking
+                context, so a sheet rendered from inside a screen is z-ordered
+                within it and the nav paints over the top. `AppShell`'s overlay
+                comment records the same trap costing the log sheet. A page
+                sidesteps it entirely, and reads better besides. */}
+            <div className="w-full flex-shrink-0">
+              <PeoplePanel handle={me.handle} onFindPeople={onFindPeople} />
             </div>
           </div>
 

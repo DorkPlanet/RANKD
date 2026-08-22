@@ -27,6 +27,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 export function FollowCounts({
   handle,
   counts,
+  onOpen,
 }: {
   handle: string;
   /**
@@ -37,12 +38,26 @@ export function FollowCounts({
    * profile has nobody to be in a relationship with, so it asks for itself.
    */
   counts?: Counts;
+  /**
+   * Where a tap should GO, when the caller has somewhere better than a sheet.
+   *
+   * The public profile has no navigation, so a sheet over the page is the right
+   * answer there. The app's own profile has pages, and a sheet rendered from
+   * inside a screen loses to the bottom nav's stacking context anyway. Given
+   * this, the sheet is never opened and the caller turns its own page.
+   */
+  onOpen?: (direction: Direction) => void;
 }) {
-  const [own, setOwn] = useState<Counts | null>(counts ?? null);
+  // Derived, not mirrored. Copying a prop into state inside an effect is a
+  // synchronous setState in an effect body, and it is not needed: when the
+  // caller has the counts they ARE the answer, and only the other case fetches.
+  const [fetched, setFetched] = useState<Counts | null>(null);
+  const own = counts ?? fetched;
   const [list, setList] = useState<Direction | null>(null);
 
   useEffect(() => {
-    if (counts) return setOwn(counts);
+    // Already in hand. Nothing to ask for.
+    if (counts) return;
     let dead = false;
     void (async () => {
       try {
@@ -50,7 +65,7 @@ export function FollowCounts({
           cache: "no-store",
         });
         if (dead || !res.ok) return;
-        setOwn((await res.json()) as Counts);
+        setFetched((await res.json()) as Counts);
       } catch {
         // Offline. Nothing is drawn rather than a zero, because zero is a claim
         // and "could not ask" is not.
@@ -71,11 +86,11 @@ export function FollowCounts({
           the only path Rankd has to somebody whose name you did not already
           know: search needs a name, this needs one person you trust. */}
       <span className="text-label text-dim">
-        <button onClick={() => setList("followers")} className="active:opacity-70">
+        <button onClick={() => (onOpen ? onOpen("followers") : setList("followers"))} className="active:opacity-70">
           {plural(own.followerCount, "follower")}
         </button>
         {" · "}
-        <button onClick={() => setList("following")} className="active:opacity-70">
+        <button onClick={() => (onOpen ? onOpen("following") : setList("following"))} className="active:opacity-70">
           {own.followingCount} following
         </button>
       </span>
