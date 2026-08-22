@@ -50,6 +50,13 @@
       "when": 1787380689148,
       "tag": "0006_overconfident_skreet",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787439666960,
+      "tag": "0007_fearless_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }

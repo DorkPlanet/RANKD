@@ -11,6 +11,7 @@
 
 import { dragScreen, exitScreen, stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
 import { useEffect, useRef, useState } from "react";
+import { FeedScreen } from "./FeedScreen";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
 import { SCRIM_ARM_MS, SHEET_EXIT_MS } from "./ui";
@@ -975,6 +976,7 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
+          onActivity={() => go("activity")}
           onRibbon={ribbon}
           // A sheet over the game owns the finger. Swiping across an open
           // Settings panel is about that panel, not about leaving the game
@@ -1005,6 +1007,18 @@ export default function AppShell() {
           refine={refine}
           onRefineHandled={() => setRefine(null)}
         />
+      ) : current === "activity" ? (
+        <FeedScreen
+          handle={me?.handle ?? null}
+          onSettings={() => setOverlay({ kind: "settings" })}
+          onTrophies={() => setOverlay({ kind: "trophies" })}
+          onList={() => go("list")}
+          onDuel={goDuel}
+          onProfile={() => go("profile")}
+          onRibbon={ribbon}
+          logging={overlay?.kind === "log"}
+          onToggleLog={toggleLog}
+        />
       ) : current === "list" ? (
         <ListScreen
           films={library}
@@ -1014,6 +1028,7 @@ export default function AppShell() {
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onRibbon={ribbon}
+          onActivity={() => go("activity")}
           // Swiped in from the game, which sits to the RIGHT of the list, so the
           // state to land on is the one nearest it.
           enterAtEnd={slide?.dir === -1}
@@ -1038,6 +1053,7 @@ export default function AppShell() {
           onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onList={() => go("list")}
+          onActivity={() => go("activity")}
           onRibbon={ribbon}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}

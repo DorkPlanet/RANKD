@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import { requireHandle } from "@/lib/auth";
 import { db, tasteSnapshots } from "@/lib/db";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
+import { writeFeedCards } from "@/lib/social/activity";
 
 /**
  * A ceiling on what will be stored.
@@ -62,6 +63,19 @@ export async function PUT(request: Request) {
   }
 
   const updatedAt = new Date();
+
+  // ── The feed is written HERE, from the diff, and nowhere else ─────────────
+  //
+  // Read the stored order before it is overwritten. That is the only moment the
+  // server holds both what somebody's ranking WAS and what it now is, and every
+  // card in the feed falls out of comparing the two.
+  //
+  // Doing it here is what lets the client stay out of it entirely: it pushes its
+  // ranking exactly as it always did and asserts nothing, so there is no event
+  // anybody can fake and no emission route to rate limit. It is also idempotent
+  // by construction — pushing the same library twice diffs to nothing.
+  await writeFeedCards(user, entries as SnapshotEntry[], summary as SnapshotSummary);
+
   // Replaced whole. There is no history and there should not be: a snapshot is
   // the CURRENT answer, and last week's guess about somebody's taste is of no
   // use to anybody, including them.

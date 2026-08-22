@@ -7,8 +7,10 @@ import { inShelf, pageAfterSwipe, RIBBON, stepScreen, TURN_AT } from "@/lib/ribb
 describe("stepScreen", () => {
   it("walks the ribbon in bottom-bar order", () => {
     expect(stepScreen("list", 1)).toBe("duel");
-    expect(stepScreen("duel", 1)).toBe("profile");
-    expect(stepScreen("profile", -1)).toBe("duel");
+    expect(stepScreen("duel", 1)).toBe("activity");
+    expect(stepScreen("activity", 1)).toBe("profile");
+    expect(stepScreen("profile", -1)).toBe("activity");
+    expect(stepScreen("activity", -1)).toBe("duel");
     expect(stepScreen("duel", -1)).toBe("list");
   });
 
@@ -19,8 +21,12 @@ describe("stepScreen", () => {
     expect(stepScreen("profile", 1)).toBeNull();
   });
 
-  it("has the duel in the middle, because the bottom bar does", () => {
-    expect(RIBBON[Math.floor(RIBBON.length / 2)]).toBe("duel");
+  it("matches the bottom bar, minus the cell that is a sheet", () => {
+    // The bar is Your list / Log a film / Rank / Activity / You. "Log a film"
+    // opens over whatever you were on rather than going anywhere, so it is not a
+    // place and is not on the ribbon. Everything else is, in the same order —
+    // that correspondence is the whole reason a swipe feels like the bar.
+    expect([...RIBBON]).toEqual(["list", "duel", "activity", "profile"]);
   });
 });
 

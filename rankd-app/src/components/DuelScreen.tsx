@@ -104,6 +104,7 @@ export default function DuelScreen({
   onRoughCutBegan,
   onPerson,
   greet = 0,
+  onActivity,
   onRibbon,
   swipeBlocked = false,
 }: {
@@ -144,6 +145,8 @@ export default function DuelScreen({
    * twice and a boolean already true is indistinguishable from one nobody reset.
    */
   greet?: number;
+  /** The Activity screen. Optional so a caller that has none simply shows no destination. */
+  onActivity?: () => void;
   /**
    * A horizontal swipe across the game, taken one step along the ribbon.
    *
@@ -863,6 +866,7 @@ export default function DuelScreen({
           setRoughCutTier(null);
           if (to === "list") onList();
           else if (to === "profile") onProfile();
+          else if (to === "activity") onActivity?.();
           else setModeOpen(true);
         }}
       />
@@ -1202,6 +1206,7 @@ export default function DuelScreen({
           </div>
           <BottomNav
             screen="duel"
+            onActivity={onActivity}
             onSettings={onSettings}
             onModes={toggleModes}
             onList={onList}
@@ -1408,6 +1413,7 @@ export default function DuelScreen({
 
       <BottomNav
         screen="duel"
+        onActivity={onActivity}
         onSettings={onSettings}
         onModes={toggleModes}
         onList={onList}
@@ -1470,14 +1476,16 @@ export function BottomNav({
   onModes,
   onList,
   onProfile,
+  onActivity,
   logging,
   onToggleLog,
 }: {
-  screen: "duel" | "list" | "profile";
+  screen: "duel" | "list" | "profile" | "activity";
   onSettings: () => void;
   onModes?: () => void;
   onList: () => void;
   onProfile?: () => void;
+  onActivity?: () => void;
   /** Whether the log sheet is up, so the cell that opened it stays lit. */
   logging?: boolean;
   onToggleLog?: () => void;
@@ -1492,13 +1500,6 @@ export function BottomNav({
   // correctly beneath. Its state moved to `AppShell` alongside the rest of the
   // overlays; this keeps the lit flag and the toggle, which is all a control
   // needs. Do not move it back, and do not render anything else here.
-  // The Activity cell has no screen behind it yet. See `teaseTimer` below.
-  const [teasing, setTeasing] = useState(false);
-  const teaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (teaseTimer.current) clearTimeout(teaseTimer.current);
-  }, []);
-
   // ── `--nav-h` is a POSITION, not a height ──────────────────────────────────
   //
   // It is what `Sheet` sits its `bottom` on, so what it has to answer is "how
@@ -1575,15 +1576,6 @@ export function BottomNav({
   // A tap that produces no response anywhere on screen is the one interaction
   // users retry, and then stop trusting.
   //
-  // So it says so. A pill rather than a sheet: there is nothing to read and
-  // nothing to decide, and making someone dismiss a panel to learn that a
-  // feature does not exist yet would be worse than the silence it replaces.
-  // Re-tapping restarts the timer rather than stacking a second one.
-  const tease = () => {
-    setTeasing(true);
-    if (teaseTimer.current) clearTimeout(teaseTimer.current);
-    teaseTimer.current = setTimeout(() => setTeasing(false), 1900);
-  };
   return (
     <nav
       ref={navRef}
@@ -1597,29 +1589,6 @@ export function BottomNav({
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Sits above the bar rather than over it, so the cell you just pressed
-          is still visible underneath and the pill reads as an answer to it.
-          `pointer-events-none` so it can never swallow the next tap — it is a
-          notice, not a control, and it is directly over two nav cells. */}
-      <div
-        aria-live="polite"
-        className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2"
-        style={{
-          opacity: teasing ? 1 : 0,
-          transform: teasing ? "translateY(0)" : "translateY(4px)",
-          transition: "opacity 0.2s var(--ease), transform 0.2s var(--ease)",
-        }}
-      >
-        <span
-          className="rounded-full border px-3 py-1.5 text-label font-extrabold uppercase tracking-[0.16em] text-gold"
-          style={{
-            borderColor: "color-mix(in srgb, var(--gold) 35%, transparent)",
-            background: "color-mix(in srgb, var(--bg) 92%, transparent)",
-          }}
-        >
-          {teasing ? "Activity is coming soon" : ""}
-        </span>
-      </div>
       {/* Five equal cells so RNK sits dead centre — it's the core loop. */}
       <NavItem label="Your list" active={screen === "list"} onClick={onList} icon={<ListIcon />} />
       {/* Was End session, which is now Done inside the duel where it belongs —
@@ -1630,7 +1599,14 @@ export function BottomNav({
           unlike the control it replaced. */}
       <NavItem label="Log a film" active={logging} onClick={onToggleLog} icon={<AddFilmIcon />} />
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
-      <NavItem label="Activity, coming soon" onClick={tease} icon={<ActivityIcon />} />
+      {/* It is a screen now. The pill that used to apologise for it is gone, and
+          so is the timer behind it — see the deleted `tease`. Closes D15. */}
+      <NavItem
+        label="Activity"
+        active={screen === "activity"}
+        onClick={onActivity}
+        icon={<ActivityIcon />}
+      />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
       <NavItem

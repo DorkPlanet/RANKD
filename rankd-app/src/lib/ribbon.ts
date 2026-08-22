@@ -30,7 +30,7 @@
 // nothing new had to be written for it.
 
 /** The screens you can swipe between, left to right. */
-export const RIBBON = ["list", "duel", "profile"] as const;
+export const RIBBON = ["list", "duel", "activity", "profile"] as const;
 
 export type RibbonScreen = (typeof RIBBON)[number];
 

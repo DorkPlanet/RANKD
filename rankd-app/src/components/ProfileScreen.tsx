@@ -131,6 +131,7 @@ export default function ProfileScreen({
   onSettings,
   onDuel,
   onList,
+  onActivity,
   onRibbon,
   onTrophies,
   logging,
@@ -155,6 +156,7 @@ export default function ProfileScreen({
   onSettings: () => void;
   onDuel: () => void;
   onList: () => void;
+  onActivity: () => void;
   /**
    * A swipe that ran past the first or last panel.
    *
@@ -1215,6 +1217,7 @@ export default function ProfileScreen({
         onModes={onDuel}
         onList={onList}
         onProfile={() => goTo(LAST_TAB)}
+        onActivity={onActivity}
         logging={logging}
         onToggleLog={onToggleLog}
       />

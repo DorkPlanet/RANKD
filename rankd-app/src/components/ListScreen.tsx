@@ -49,6 +49,7 @@ export default function ListScreen({
   onDuel,
   onProfile,
   onRibbon,
+  onActivity,
   enterAtEnd = false,
   onPoster,
   onTrophies,
@@ -81,6 +82,7 @@ export default function ListScreen({
    * anywhere — off the end of un-rnkd and into the game. See `lib/ribbon.ts`.
    */
   onRibbon: (dir: Dir, travelled?: number) => void;
+  onActivity: () => void;
   /** Swiped into from the game, so land on the state nearest it. */
   enterAtEnd?: boolean;
   onPoster: (id: string, meta: FilmMeta) => void;
@@ -621,6 +623,7 @@ export default function ListScreen({
           searchRef.current?.select();
         }}
         onProfile={onProfile}
+        onActivity={onActivity}
         logging={logging}
         onToggleLog={onToggleLog}
       />

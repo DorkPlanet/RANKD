@@ -83,6 +83,20 @@ export const profileVisibility = pgEnum("profile_visibility", ["private", "publi
 // user, and cannot be reported or suspended by readers.
 export const accountKind = pgEnum("account_kind", ["person", "house"]);
 
+/**
+ * What a feed card is about.
+ *
+ * Every one is DERIVED, on the server, by diffing a pushed snapshot against the
+ * stored one — see `lib/social/feed.ts`. No client writes this table, which is
+ * why there is no trust boundary to police here and no emission route to rate
+ * limit.
+ *
+ * There is no `upset`. That card would need the duel log, which is local by
+ * architecture; the reasoning is written out in `feed.ts` and the omission is
+ * deliberate rather than pending.
+ */
+export const activityKind = pgEnum("activity_kind", ["climb", "promotion", "arrival", "placed"]);
+
 export const users = pgTable(
   "user",
   {
@@ -347,9 +361,61 @@ export const rankingHistory = pgTable(
   ],
 );
 
+/**
+ * One thing that happened to a ranking, ready to render.
+ *
+ * ── `meta` is denormalised on purpose ──────────────────────────────────────
+ *
+ * Title, artwork and the numbers are copied in rather than joined. A card has to
+ * draw in a single read, and it has to survive its film leaving the library it
+ * came from — a feed that quietly loses its own history the moment somebody
+ * re-ranks is not a feed.
+ *
+ * `subject_id` is a `slugId`, not a foreign key, for the same reason the
+ * snapshot uses one: there is no global film table and this must not invent one.
+ */
+export const activity = pgTable(
+  "activity",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: activityKind("kind").notNull(),
+    /** The film, as a `slugId`. Empty for a card about no single film. */
+    subjectId: text("subject_id").notNull().default(""),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The feed's only query: everyone you follow, newest first.
+    index("activity_actor_idx").on(table.actorId, table.createdAt.desc()),
+    // ── There is no daily dedupe index, and that is deliberate ──────────────
+    //
+    // The plan called for `UNIQUE (actor, kind, subject, date_trunc('day',
+    // created_at))` to stop a re-sync becoming a firehose. Two things killed it.
+    //
+    // It cannot be built. `date_trunc` on a `timestamptz` is STABLE rather than
+    // IMMUTABLE — the answer depends on the session's TimeZone — so Postgres
+    // refuses it in an index expression (42P17). Forcing it would mean picking
+    // an arbitrary zone to truncate in, which is a fiction about somebody's day.
+    //
+    // And it was never needed. Cards are derived by diffing a pushed snapshot
+    // against the stored one, so a re-sync of an unchanged library diffs to
+    // nothing — the firehose it was guarding against cannot form. What the index
+    // WOULD have done is throw away real news: rank in the morning and again at
+    // night, and Heat climbing in both sessions is two true things, of which it
+    // would have kept one.
+    //
+    // The bound that remains is `MAX_CARDS` in `lib/social/feed.ts`, applied per
+    // push, on a push that must actually differ to say anything at all.
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
 export type RankingCapture = typeof rankingHistory.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
+export type Activity = typeof activity.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;
