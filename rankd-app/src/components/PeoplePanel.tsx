@@ -20,22 +20,9 @@
 // many" because the third held a chart that restated the counts above it. That
 // reasoning does not apply to content the page does not otherwise carry.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PersonRow, type Person } from "./PersonRow";
-
-/** Matches `Section` on the rest of the profile: a faded rule, then a label. */
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-7">
-      <div className="rule-fade mb-6" />
-      <div className="mb-2.5 text-label font-extrabold tracking-[0.18em] text-dim">
-        {title.toUpperCase()}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 function List({
   people,
@@ -64,6 +51,10 @@ export function PeoplePanel({
   handle: string | null;
   onFindPeople: () => void;
 }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  // Which half is showing. Driven by the scroll position rather than by the
+  // buttons, so a flick and a tap agree without either telling the other.
+  const [at, setAt] = useState(0);
   const [followers, setFollowers] = useState<Person[] | null>(null);
   const [following, setFollowing] = useState<Person[] | null>(null);
 
@@ -104,20 +95,67 @@ export function PeoplePanel({
     );
   }
 
-  return (
-    <div className="px-6 pb-4">
-      <Group title="Following">
-        <List people={following} empty="You don't follow anyone yet." />
-      </Group>
+  const sides = [
+    { key: "following" as const, label: "Following", people: following, empty: "You don't follow anyone yet." },
+    { key: "followers" as const, label: "Followers", people: followers, empty: "Nobody follows you yet." },
+  ];
 
-      <Group title="Followers">
-        <List people={followers} empty="Nobody follows you yet." />
-      </Group>
+  const goTo = (i: number) => {
+    const el = trackRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
+
+  return (
+    <div className="pb-4">
+      {/* The two labels, which are also the position. Same treatment as the
+          page tabs above, one level down and quieter, so it reads as a division
+          WITHIN this page rather than as a second row of pages. */}
+      <div className="flex justify-center gap-6 px-6 pt-6">
+        {sides.map((side, i) => (
+          <button
+            key={side.key}
+            onClick={() => goTo(i)}
+            className="pb-2 text-label font-extrabold tracking-[0.14em] transition-colors"
+            style={{
+              color: at === i ? "var(--gold)" : "var(--dim)",
+              borderBottom: `2px solid ${at === i ? "var(--gold)" : "transparent"}`,
+            }}
+          >
+            {side.label.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {/* ── A native scroll-snap track, not a second gesture handler ──────────
+          The page this sits on already swipes sideways, so a hand-rolled drag in
+          here would be two listeners fighting over the same finger.
+          `ProfileScreen`'s own touch handler ignores anything starting inside
+          `.overflow-x-auto` — that guard exists for the shelves on the results
+          page — so a real scroller is invisible to it by construction.
+
+          Scroll snap does the rest with no JavaScript: it flicks, it rubber-bands
+          at the ends for free, and it cannot get out of step with the outer page
+          because it is not pretending to be a page. */}
+      <div
+        ref={trackRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          setAt(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+        }}
+        className="mt-4 flex snap-x snap-mandatory overflow-x-auto"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {sides.map((side) => (
+          <div key={side.key} className="w-full shrink-0 snap-center px-6">
+            <List people={side.people} empty={side.empty} />
+          </div>
+        ))}
+      </div>
 
       {/* The way out of an empty page. Both lists start empty for everybody, so
-          this is the state most people see first and it should offer something
-          rather than just report a fact. */}
-      <div className="mt-8">
+          this is the state most people see first, and it should offer something
+          rather than only report a fact. */}
+      <div className="mt-8 px-6">
         <div className="rule-fade mb-6" />
         <button
           onClick={onFindPeople}

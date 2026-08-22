@@ -580,22 +580,10 @@ export default function ProfileScreen({
           </button>
 
 
-          {/* ── The way to somebody else ────────────────────────────────────
-            On the profile rather than in the header, whose two corners are
-            already spoken for by Settings and the trophy case, and rather than
-            on the Activity nav cell, which is reserved for the feed and would
-            have to mean something different once that lands.
-
-            It sits under your own name because that is where the question comes
-            up: this screen is the one that says who you are, and "who else is
-            here" is the next thing you want to know. */}
-        <button
-          onClick={onFindPeople}
-          className="mx-auto mt-4 block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
-          style={{ background: "rgba(255,255,255,0.05)" }}
-        >
-          FIND PEOPLE
-        </button>
+          {/* The way to somebody else used to sit here, above the tabs. It is on
+            the Your people page now, which is where somebody goes when that is
+            the question they have. Two entrances to one door was one too many
+            once the page existed. */}
 
         {/* ── Three pages, not one scroll ──────────────────────────────────
               The zones were always the right grouping. The problem was that all
@@ -619,7 +607,11 @@ export default function ProfileScreen({
               The rule stands under the WORD, not the cell, so the mark is the
               width of the thing it belongs to rather than of a column nobody
               drew. */}
-          <div className="mt-6 flex gap-6 border-b border-border">
+          {/* Centred, because three labels left-aligned under a centred name
+              and a centred avatar read as a column that had drifted. The rule
+              still stands under the WORD rather than a cell, so the mark stays
+              the width of the label it belongs to. */}
+          <div className="mt-6 flex justify-center gap-6 border-b border-border">
             {PANELS.map((label, i) => (
               <button
                 key={label}
@@ -1191,7 +1183,19 @@ export default function ProfileScreen({
 
       </div>
 
-      <BottomNav screen="profile" onSettings={onSettings} onModes={onDuel} onList={onList} onProfile={() => {}} logging={logging} onToggleLog={onToggleLog} />
+      {/* Pressing You while already on You turns to your people, the same way
+          pressing Your list while already there focuses the search box. The cell
+          for the screen you are on should do the thing that screen is for rather
+          than nothing at all. */}
+      <BottomNav
+        screen="profile"
+        onSettings={onSettings}
+        onModes={onDuel}
+        onList={onList}
+        onProfile={() => goTo(LAST_TAB)}
+        logging={logging}
+        onToggleLog={onToggleLog}
+      />
 
       {/* Closes itself on the way through. `onInfo` opens a film card in
           `AppShell`, which renders over this sheet rather than inside it, so
