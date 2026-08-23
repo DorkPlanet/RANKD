@@ -34,27 +34,16 @@ import type { NamedFilm, SnapshotEntry } from "@/lib/snapshot";
 import { TIER_RANGE } from "@/lib/tiers";
 
 /**
- * The longest a written line may be.
+ * The longest a message may be.
  *
  * Lives HERE rather than beside the code that stores it, and the reason is a
  * bundling one this codebase has been bitten by twice: a client component needs
- * this number to count down as somebody types, the storage module imports the
+ * this number to cap what somebody types, the storage module imports the
  * database, and a client importing a VALUE from that module drags the Postgres
  * driver into the browser bundle. `searchRules.ts` exists for the same reason.
  * Types are erased and cost nothing; values are not.
  */
-export const COMMENT_MAX = 280;
-
-/** One thing somebody said, with enough of them attached to render it. */
-export interface CommentItem {
-  id: string;
-  body: string;
-  createdAt: string;
-  handle: string;
-  avatarUrl: string | null;
-  /** Yours, so it can be taken back. */
-  mine: boolean;
-}
+export const MESSAGE_MAX = 500;
 
 /** A card as the screen receives it. */
 export interface FeedItem {

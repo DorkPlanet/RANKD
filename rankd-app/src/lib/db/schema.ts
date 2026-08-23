@@ -516,6 +516,75 @@ export const activityComments = pgTable(
 );
 
 /**
+ * A conversation between two people about one film.
+ *
+ * ── Never a wall ───────────────────────────────────────────────────────────
+ *
+ * A public thread per film was considered and rejected: with five people it is
+ * empty and with five thousand it is a cesspit, and there is no moderation
+ * capacity for either. This is the opposite shape — two people who have each
+ * chosen the other, talking about one thing.
+ *
+ * That choosing is what makes it safe. Both sides follow each other (`isFriend`
+ * in `social/follow.ts`), so there is no unsolicited message and nothing for a
+ * stranger to walk into. It is the smallest surface that still counts as talking.
+ *
+ * ── The pair is stored in a fixed order ────────────────────────────────────
+ *
+ * Lower uuid first, always. Otherwise A→B and B→A are two rows and the two of
+ * them end up in different halves of the same conversation — the bug is silent,
+ * and each person simply thinks the other never replied.
+ */
+export const threads = pgTable(
+  "thread",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** The lower of the two ids. See above — this ordering is load-bearing. */
+    lowId: uuid("low_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    highId: uuid("high_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The film, as a `slugId`. Not a foreign key: there is no global film table. */
+    subjectId: text("subject_id").notNull(),
+    /** Denormalised title and artwork, so a list of threads draws in one read. */
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Bumped on every message, so the list sorts by life rather than by birth. */
+    lastAt: timestamp("last_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("thread_ordered", sql`${table.lowId} < ${table.highId}`),
+    // One thread per two people per film. A second one would split a
+    // conversation in half with no way to tell which half anybody is reading.
+    uniqueIndex("thread_pair_idx").on(table.lowId, table.highId, table.subjectId),
+    index("thread_low_idx").on(table.lowId, table.lastAt.desc()),
+    index("thread_high_idx").on(table.highId, table.lastAt.desc()),
+  ],
+);
+
+/** One line in a conversation. */
+export const threadMessages = pgTable(
+  "thread_message",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Soft, so removing a line does not renumber a conversation or orphan the
+    // replies that answered it.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [index("thread_message_idx").on(table.threadId, table.createdAt)],
+);
+
+/**
  * Somebody flagged something.
  *
  * ── Why this exists before anybody needs it ────────────────────────────────
@@ -539,16 +608,16 @@ export const reports = pgTable(
     reporterId: uuid("reporter_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** The comment complained about. Cascades, so deleting it closes the report. */
-    commentId: uuid("comment_id")
+    /** The message complained about. Cascades, so deleting it closes the report. */
+    messageId: uuid("message_id")
       .notNull()
-      .references(() => activityComments.id, { onDelete: "cascade" }),
+      .references(() => threadMessages.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     // One person, one objection. Reporting twice is the same objection, and
     // counting it twice would make a single annoyed reader look like a crowd.
-    uniqueIndex("report_once_idx").on(table.reporterId, table.commentId),
+    uniqueIndex("report_once_idx").on(table.reporterId, table.messageId),
   ],
 );
 
@@ -560,4 +629,6 @@ export type Library = typeof libraries.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
 export type ActivityComment = typeof activityComments.$inferSelect;
 export type ActivityLike = typeof activityLikes.$inferSelect;
+export type Thread = typeof threads.$inferSelect;
+export type ThreadMessage = typeof threadMessages.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

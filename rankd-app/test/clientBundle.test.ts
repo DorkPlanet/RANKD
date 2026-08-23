@@ -29,6 +29,7 @@ const DB_BACKED = [
   "@/lib/social/people",
   "@/lib/social/follow",
   "@/lib/social/publicProfile",
+  "@/lib/social/threads",
 ];
 
 function walk(dir: string): string[] {

@@ -29,8 +29,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import { BottomNav, Header } from "./DuelScreen";
+import { TalkPanel } from "./TalkPanel";
 import { shortAgo, type FeedItem } from "@/lib/social/feed";
-import { dragScreen, inShelf, TURN_AT, type Dir } from "@/lib/ribbon";
+import { inShelf, pageAfterSwipe, type Dir } from "@/lib/ribbon";
 
 /** What kind of thing happened, in the card's own small caps. */
 function eyebrowFor(item: FeedItem): string {
@@ -77,7 +78,18 @@ function titleFor(item: FeedItem): string {
   return "";
 }
 
-function Card({ item, onFilm, onLike }: { item: FeedItem; onFilm: (id: string) => void; onLike: (on: boolean) => void }) {
+function Card({
+  item,
+  onFilm,
+  onLike,
+  onTell,
+}: {
+  item: FeedItem;
+  onFilm: (id: string) => void;
+  onLike: (on: boolean) => void;
+  /** Start a conversation about this film with the person whose card it is. */
+  onTell: () => void;
+}) {
   const meta = item.meta as {
     title?: string;
     year?: string;
@@ -173,18 +185,25 @@ function Card({ item, onFilm, onLike }: { item: FeedItem; onFilm: (id: string) =
             Only on somebody else's card, and only when you have the film
             placed. This is the whole reason to read the feed rather than a
             statistic — and it is yours alone. */}
-        {item.yourRank !== undefined && (
-          <span className="text-label tracking-[0.08em]">
-            {meta.rank !== undefined && item.yourRank === meta.rank ? (
-              <span className="text-gold">SAME AS YOURS</span>
-            ) : (
-              <>
-                <span className="text-dim">YOU HAVE IT </span>
-                <span className="font-semibold text-text-hi">#{item.yourRank}</span>
-              </>
-            )}
-          </span>
-        )}
+        {item.yourRank !== undefined &&
+          (meta.rank !== undefined && item.yourRank === meta.rank ? (
+            <span className="text-label tracking-[0.08em] text-gold">SAME AS YOURS</span>
+          ) : (
+            // ── Disagreeing is a button, not a fact ────────────────────────
+            //
+            // The line alone was a dead end: it tells you that you differ and
+            // gives you nothing to do about it. This is the moment of maximum
+            // motivation, so it is where a conversation starts — refused
+            // politely by the server if the two of you are not mutual.
+            <button
+              onClick={onTell}
+              className="text-label tracking-[0.08em] active:opacity-70"
+            >
+              <span className="text-dim">YOU HAVE IT </span>
+              <span className="font-semibold text-text-hi">#{item.yourRank}</span>
+              <span className="text-gold"> · TELL THEM</span>
+            </button>
+          ))}
       </div>
     </article>
   );
@@ -230,7 +249,47 @@ export function FeedScreen({
   onFindPeople: () => void;
 }) {
   const [items, setItems] = useState<FeedItem[] | null>(null);
+  // Which half is showing. The same two-panel idiom the profile uses, because
+  // this screen has the same shape of problem: two things that belong together
+  // and do not belong on top of each other.
+  const [tab, setTab] = useState<0 | 1>(0);
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null);
+  const [tellError, setTellError] = useState<string | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const touch = useRef<{ x: number; y: number; axis: null | "x" | "y" } | null>(null);
+
+  const slideTo = (px: number, animate: boolean) => {
+    const el = trackRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 0.3s var(--ease)" : "none";
+    el.style.transform = `translateX(calc(${tab * -100}% + ${px}px))`;
+  };
+
+  /**
+   * Open a conversation about this film with the person whose card it is.
+   *
+   * Refused politely by the server when the two of you are not mutual, which is
+   * a thing the reader can act on — so it is said rather than hidden.
+   */
+  const tell = async (item: FeedItem) => {
+    setTellError(null);
+    try {
+      const res = await fetch("/api/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ handle: item.handle, subjectId: item.subjectId, meta: item.meta }),
+      });
+      const json = (await res.json()) as { threadId?: string; error?: string };
+      if (!res.ok || !json.threadId) {
+        setTellError(json.error ?? "That didn't work.");
+        return;
+      }
+      setOpenThreadId(json.threadId);
+      setTab(1);
+    } catch {
+      setTellError("You look offline.");
+    }
+  };
 
   useEffect(() => {
     let dead = false;
@@ -281,12 +340,29 @@ export function FeedScreen({
 
       {/* `chrome-hold` so this band stays put while the page slides under it —
           see the ribbon notes in globals.css. */}
-      <div className="chrome-hold flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--band)" }}>
-        <div className="text-label font-extrabold tracking-[0.18em] text-dim">TAKES</div>
+      <div className="chrome-hold flex-shrink-0 px-5 pb-2 pt-3" style={{ background: "var(--band)" }}>
+        {/* Two halves of one screen: what everybody can see, and what only the
+            two of you can. Same treatment as the profile's panels, because it is
+            the same idiom doing the same job. */}
+        <div className="flex justify-center gap-6">
+          {(["TAKES", "TALK"] as const).map((label, i) => (
+            <button
+              key={label}
+              onClick={() => setTab(i as 0 | 1)}
+              className="pb-2 text-label font-extrabold tracking-[0.14em] transition-colors"
+              style={{
+                color: tab === i ? "var(--gold)" : "var(--dim)",
+                borderBottom: `2px solid ${tab === i ? "var(--gold)" : "transparent"}`,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-6"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-6"
         onTouchStart={(e) => {
           if (inShelf(e.target)) return (touch.current = null);
           const t = e.touches[0];
@@ -296,7 +372,9 @@ export function FeedScreen({
           const from = touch.current;
           if (!from) return;
           const dx = e.touches[0].clientX - from.x;
-          if (from.axis === "x") return dragScreen(dx);
+          // The track follows the finger; only a swipe that has run out of pages
+          // moves the whole screen, and that is decided on release.
+          if (from.axis === "x") return slideTo(dx, false);
           if (from.axis) return;
           const dy = e.touches[0].clientY - from.y;
           if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
@@ -308,10 +386,20 @@ export function FeedScreen({
           if (!from || from.axis !== "x") return;
           const dx = e.changedTouches[0].clientX - from.x;
           const width = e.currentTarget.clientWidth;
-          if (Math.abs(dx) <= width * TURN_AT) return dragScreen(null);
-          onRibbon(dx < 0 ? 1 : -1, Math.abs(dx) / width);
+          const landed = pageAfterSwipe(tab, 1, dx, width);
+          // Ran off an end, so the screen is no longer this gesture's subject.
+          if (landed === "before" || landed === "after") {
+            slideTo(0, true);
+            return onRibbon(landed === "after" ? 1 : -1, Math.abs(dx) / width);
+          }
+          slideTo(0, true);
+          if (landed !== tab) setTab(landed as 0 | 1);
         }}
       >
+        <div ref={trackRef} className="flex" style={{ transform: `translateX(${tab * -100}%)` }}>
+        {/* The gutter lives on each panel rather than the scroller, or the track
+            would be inset and the off-screen half would peek at the edge. */}
+        <div className="w-full flex-shrink-0 px-5">
         {items === null ? (
           <p className="mt-16 text-center text-sub text-dim">Looking&hellip;</p>
         ) : items.length === 0 ? (
@@ -334,10 +422,23 @@ export function FeedScreen({
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
             {items.map((item) => (
-              <Card key={item.id} item={item} onFilm={onFilm} onLike={(on) => void like(item, on)} />
+              <Card
+                key={item.id}
+                item={item}
+                onFilm={onFilm}
+                onLike={(on) => void like(item, on)}
+                onTell={() => void tell(item)}
+              />
             ))}
           </div>
         )}
+        {tellError && <p className="mt-3 text-center text-label text-dim">{tellError}</p>}
+        </div>
+
+        <div className="w-full flex-shrink-0">
+          <TalkPanel openId={openThreadId} onOpen={setOpenThreadId} />
+        </div>
+        </div>
       </div>
 
       <BottomNav

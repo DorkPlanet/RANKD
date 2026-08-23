@@ -22,9 +22,9 @@ const PAGE = 40;
  */
 const SITTING_MS = 2 * 60 * 60 * 1000;
 
-// Shapes live in `feed.ts`, which imports no database — see `COMMENT_MAX` there
+// Shapes live in `feed.ts`, which imports no database — see `MESSAGE_MAX` there
 // for why that matters. Re-exported so server callers have one place to look.
-export type { CommentItem, FeedItem } from "@/lib/social/feed";
+export type { FeedItem } from "@/lib/social/feed";
 
 /**
  * Turn a push into cards, if this account is one that should produce any.
