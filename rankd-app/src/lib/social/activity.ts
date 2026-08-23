@@ -2,11 +2,10 @@
 //
 // The deciding is in `feed.ts` and is pure. This is the database half.
 
-import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
-import { activity, activityComments, activityLikes, db, follows, tasteSnapshots, users } from "@/lib/db";
-import { diffToActivity, escapeForLike, type FeedItem } from "@/lib/social/feed";
-import { mentionedHandles } from "@/lib/social/mentions";
+import { activity, activityLikes, db, follows, tasteSnapshots, threadMessages, threads, users } from "@/lib/db";
+import { diffToActivity, type FeedItem } from "@/lib/social/feed";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
 
 /** How far back the feed reaches in one read. */
@@ -288,14 +287,14 @@ export async function canSee(activityId: string, viewerId: string): Promise<bool
 /**
  * How many things have been said TO this reader since they last looked.
  *
- * Two ways to be spoken to: somebody commented on a card of yours, or somebody
- * named you anywhere. Both are answered against one timestamp on the user rather
- * than a notifications table — see `activitySeenAt` in the schema.
+ * A message in one of their conversations, written by the other person. That is
+ * the only way somebody can now speak to you directly: cards take agreement,
+ * which is a tap and not a thing that needs answering, and there is no wall
+ * anywhere for a stranger to post on.
  *
- * The mention half is narrowed in SQL with a LIKE and then decided in JS by
- * `mentionedHandles`, because only the parser knows that `sam@example.com` is an
- * email and `@sammy` is somebody else. The LIKE is the cheap filter; the parser
- * is the correct one.
+ * Answered against one timestamp on the user rather than a notifications table —
+ * see `activitySeenAt` in the schema. A row per notification would be a second
+ * copy of facts the messages already hold, kept in step by hand.
  */
 export async function unreadFor(user: {
   id: string;
@@ -303,30 +302,24 @@ export async function unreadFor(user: {
   activitySeenAt: Date | null;
 }): Promise<number> {
   const since = user.activitySeenAt ?? new Date(0);
-  const handle = user.handle;
 
   const rows = await db
-    .select({ body: activityComments.body, cardOwner: activity.actorId })
-    .from(activityComments)
-    .innerJoin(activity, eq(activity.id, activityComments.activityId))
+    .select({ id: threadMessages.id })
+    .from(threadMessages)
+    .innerJoin(threads, eq(threads.id, threadMessages.threadId))
     .where(
       and(
-        gt(activityComments.createdAt, since),
-        isNull(activityComments.deletedAt),
+        gt(threadMessages.createdAt, since),
+        isNull(threadMessages.deletedAt),
         // Your own words are never news to you.
-        sql`${activityComments.authorId} <> ${user.id}`,
-        handle
-          ? or(
-              eq(activity.actorId, user.id),
-              sql`${activityComments.body} ILIKE ${"%@" + escapeForLike(handle) + "%"} ESCAPE '\\'`,
-            )
-          : eq(activity.actorId, user.id),
+        ne(threadMessages.authorId, user.id),
+        // One of yours, either side of the pair.
+        or(eq(threads.lowId, user.id), eq(threads.highId, user.id)),
       ),
     )
     .limit(50);
 
-  if (!handle) return rows.length;
-  return rows.filter((r) => r.cardOwner === user.id || mentionedHandles(r.body).includes(handle)).length;
+  return rows.length;
 }
 
 /** They have looked. Anything older stops being news. */
