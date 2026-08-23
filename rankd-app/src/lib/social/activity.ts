@@ -276,6 +276,22 @@ export async function canSee(activityId: string, viewerId: string): Promise<bool
   return !!follow;
 }
 
+/**
+ * Whether this reader was entitled to read this comment.
+ *
+ * Asked of the CARD it hangs off, because that is what grants sight in the first
+ * place. Reporting has to check it or the route becomes a way to discover
+ * whether a comment id exists.
+ */
+export async function canSeeComment(commentId: string, viewerId: string): Promise<boolean> {
+  const row = await db.query.activityComments.findFirst({
+    where: eq(activityComments.id, commentId),
+    columns: { activityId: true, deletedAt: true },
+  });
+  if (!row || row.deletedAt) return false;
+  return canSee(row.activityId, viewerId);
+}
+
 export type SaidResult = { ok: true; comment: CommentItem } | { ok: false; error: string };
 
 /** Say something on a card. The caller has already checked the rate limit and the text. */

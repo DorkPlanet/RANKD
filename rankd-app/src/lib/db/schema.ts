@@ -468,6 +468,43 @@ export const activityComments = pgTable(
   ],
 );
 
+/**
+ * Somebody flagged something.
+ *
+ * ── Why this exists before anybody needs it ────────────────────────────────
+ *
+ * Comments are the only place in Rankd where one person's words appear on
+ * another person's page. Shipping that with no way to flag it means the only
+ * available response to abuse is a deploy, and the schema already made the
+ * opposite argument for `suspended_at`: acting should be a row, not a release.
+ *
+ * Deliberately thin. No reason text — that would be a second free-text field to
+ * moderate, on a surface that exists because free text is hard. A report is "a
+ * person looked at this and objected", which is the whole signal; the thing
+ * itself is right there to read.
+ *
+ * Read by hand. A queue with no reviewer is a queue that lies about being one.
+ */
+export const reports = pgTable(
+  "report",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reporterId: uuid("reporter_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The comment complained about. Cascades, so deleting it closes the report. */
+    commentId: uuid("comment_id")
+      .notNull()
+      .references(() => activityComments.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One person, one objection. Reporting twice is the same objection, and
+    // counting it twice would make a single annoyed reader look like a crowd.
+    uniqueIndex("report_once_idx").on(table.reporterId, table.commentId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type TasteSnapshot = typeof tasteSnapshots.$inferSelect;
 export type Follow = typeof follows.$inferSelect;

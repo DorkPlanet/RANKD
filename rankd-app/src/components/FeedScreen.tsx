@@ -94,6 +94,7 @@ function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => voi
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reported, setReported] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let dead = false;
@@ -137,6 +138,27 @@ function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => voi
     }
   };
 
+  /**
+   * Flag somebody's line.
+   *
+   * The button says REPORTED straight away and never asks again. There is
+   * nothing for the reader to wait for — whether the row landed is not their
+   * problem, and a spinner on a moral act is worse than an optimistic one.
+   */
+  const report = async (id: string) => {
+    setReported((r) => new Set(r).add(id));
+    try {
+      await fetch("/api/report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ commentId: id }),
+      });
+    } catch {
+      // Reporting twice is the same objection, so a failure that is retried
+      // later costs nothing. See `report_once_idx`.
+    }
+  };
+
   const drop = async (id: string) => {
     setComments((c) => (c ?? []).filter((x) => x.id !== id));
     onCount(Math.max(0, (comments?.length ?? 1) - 1));
@@ -168,9 +190,19 @@ function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => voi
               {/* Only ever your own line. The owner of a card cannot delete
                   comments on it — that is moderation, and handing it to whoever
                   owns the post turns every disagreement into a race to delete. */}
-              {c.mine && (
+              {c.mine ? (
                 <button onClick={() => void drop(c.id)} className="tracking-[0.1em] active:opacity-70">
                   DELETE
+                </button>
+              ) : (
+                // Somebody else's line. Reporting is the only thing you may do
+                // to it — you cannot delete what you did not write, which is
+                // what stops a disagreement becoming a race to delete.
+                <button
+                  onClick={() => void report(c.id)}
+                  className="tracking-[0.1em] active:opacity-70"
+                >
+                  {reported.has(c.id) ? "REPORTED" : "REPORT"}
                 </button>
               )}
             </div>
