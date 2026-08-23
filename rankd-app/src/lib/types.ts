@@ -15,6 +15,18 @@ export interface Film {
   // model's own, which counts but stays open to revision. Absent means unplaced,
   // and an unplaced film shows no number in the list.
   lock?: Lock;
+  // ── Why a film is where it is ────────────────────────────────────────────
+  //
+  // Up to three from the fixed set in lib/tags.ts, plus one short line. They sit
+  // HERE, beside `lock`, because they are the same kind of thing: your judgement
+  // of a film rather than a fact about it. That keeps them local, synchronous,
+  // backed up with everything else, and out of the duel loop.
+  //
+  // A ranking says WHERE something sits and nothing about why. This is the why,
+  // and it is deliberately not a review — see the header of lib/tags.ts for what
+  // that distinction buys.
+  tags?: string[];
+  note?: string;
   // Kept so a film can be found by who made it. These arrive on the very same
   // response as the poster and used to be thrown away, so storing them costs no
   // extra requests — only the bytes. Absent until that film's artwork is fetched.

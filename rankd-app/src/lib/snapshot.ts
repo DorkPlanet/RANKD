@@ -32,6 +32,7 @@ import {
   type PersonStat,
   type Superlative,
 } from "./profile";
+import { signatureOf, type SignatureEntry } from "./tags";
 import type { Film } from "./types";
 
 /**
@@ -148,6 +149,17 @@ export interface SnapshotSummary {
   genreFilm?: SnapshotFilm;
   fingerprint: Fingerprint;
   superlatives: Superlative[];
+  /**
+   * What they rank things highly FOR, from the tags on their best films.
+   *
+   * The one thing here that is directly comparable between two people — "you
+   * rank for cinematography, they rank for score" — which is what a ranked order
+   * makes possible and a pile of reviews does not. See lib/tags.ts.
+   *
+   * Optional and often empty: it refuses to draw below a floor, and an honest
+   * nothing beats a shape built from three taps.
+   */
+  signature?: SignatureEntry[];
 }
 
 export interface Snapshot {
@@ -267,6 +279,9 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
         ...(f.year ? { y: f.year } : {}),
         ...(i < NAMED_ART && f.poster ? { p: f.poster } : {}),
       })),
+      // Read off the order that is already computed above, so the signature and
+      // the ranking can never disagree about which films are the best ones.
+      signature: signatureOf(placed),
       directors: people.directors,
       actors: people.actors,
       genre: topGenre,

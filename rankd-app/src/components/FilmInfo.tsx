@@ -7,6 +7,7 @@
 // carries the one honest statement about how much a placement rests on, which
 // lives here rather than on a list row because rows are height-locked.
 
+import { cleanTags } from "@/lib/tags";
 import { useEffect, useMemo, useState } from "react";
 
 import { beliefsWhenIdle, seedOf } from "@/lib/beliefs";
@@ -50,6 +51,7 @@ export function FilmInfo({
   onRemove,
   onFixMatch,
   onRefine,
+  onTags,
 }: {
   film: Film;
   films?: Film[];
@@ -68,7 +70,10 @@ export function FilmInfo({
    * because it is the one thing here that can undo a decision somebody made.
    */
   onRefine?: (film: Film, duels: number, movePlaced: boolean) => void;
+  /** Open the tag sheet for this film. Absent where editing makes no sense. */
+  onTags?: (film: Film) => void;
 }) {
+  const tags = cleanTags(film.tags);
   const [meta, setMeta] = useState<FilmMeta | null>(null);
   const [refining, setRefining] = useState(false);
   // Off by default, and deliberately not remembered between opens: letting a
@@ -250,6 +255,41 @@ export function FilmInfo({
 
         {meta?.synopsis && (
           <p className="px-4 pb-3 text-sub leading-relaxed text-text">{meta.synopsis}</p>
+        )}
+
+        {/* ── Your reasons, and the way to change them ────────────────────
+            Offered at the lock and edited here, which is the only other place
+            somebody is already looking at one film and thinking about it. A
+            film with nothing said about it shows the invitation instead, so
+            the feature is discoverable without a tour. */}
+        {onTags && (
+          <div className="px-4 pb-3">
+            {tags.length > 0 || film.note ? (
+              <button onClick={() => onTags(film)} className="block w-full text-left active:opacity-70">
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full px-2.5 py-1 text-label tracking-[0.08em] text-gold"
+                      style={{ background: "rgba(255,255,255,0.05)" }}
+                    >
+                      {tag.toUpperCase()}
+                    </span>
+                  ))}
+                </div>
+                {film.note && (
+                  <p className="mt-2 font-serif text-sub italic leading-snug text-text">{film.note}</p>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => onTags(film)}
+                className="text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
+              >
+                SAY WHY IT IS HERE
+              </button>
+            )}
+          </div>
         )}
 
         {/* Names are the way in to a person's filmography, so they are controls

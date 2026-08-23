@@ -11,6 +11,7 @@
 
 import { dragScreen, exitScreen, stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
 import { useEffect, useRef, useState } from "react";
+import { TagSheet } from "./TagSheet";
 import { FeedScreen } from "./FeedScreen";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
@@ -81,6 +82,7 @@ type Overlay =
   | { kind: "person"; person: Person }
   | { kind: "settings" }
   | { kind: "trophies" }
+  | { kind: "tags"; film: Film }
   | { kind: "log" }
   | { kind: "people" };
 
@@ -1006,6 +1008,10 @@ export default function AppShell() {
           greet={splashGone ? greet : 0}
           onActivity={() => go("activity")}
           activityUnread={unread}
+          onLocked={(id) => {
+            const film = library.find((f) => f.id === id);
+            if (film) setOverlay({ kind: "tags", film });
+          }}
           onRibbon={ribbon}
           // A sheet over the game owns the finger. Swiping across an open
           // Settings panel is about that panel, not about leaving the game
@@ -1103,6 +1109,23 @@ export default function AppShell() {
           rather than asserted in a comment. Every hand-off between two of them
           — a film card to a person, a person to a film card — is now a single
           assignment, because replacing is all the slot can do. */}
+      {overlay?.kind === "tags" && (
+        <TagSheet
+          film={overlay.film}
+          onClose={() => setOverlay(null)}
+          onSave={(tags, note) => {
+            // Written straight into the library, beside the lock it explains.
+            // Same path every other film edit takes, so it syncs and backs up
+            // without anything new being taught about it.
+            const next = library.map((f) =>
+              f.id === overlay.film.id ? { ...f, tags, ...(note ? { note } : { note: undefined }) } : f,
+            );
+            saveFilms(next);
+            setState((s) => (s ? { ...s, films: next } : s));
+          }}
+        />
+      )}
+
       {overlay?.kind === "trophies" && (
         <Trophies films={library} onClose={() => setOverlay(null)} />
       )}
@@ -1115,6 +1138,8 @@ export default function AppShell() {
           films={library}
           onClose={() => setOverlay(null)}
           onPerson={(p) => setOverlay({ kind: "person", person: p })}
+          // A guest is not in the library, so there is nothing to write tags to.
+          onTags={overlay.film.guest ? undefined : (f) => setOverlay({ kind: "tags", film: f })}
           // Guests are not in the library, so there is nothing to remove them
           // from - offering it would be a button that silently does nothing.
           onRemove={overlay.film.guest ? undefined : (f) => removeFilm(f.id)}

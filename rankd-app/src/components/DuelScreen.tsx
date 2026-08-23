@@ -105,6 +105,7 @@ export default function DuelScreen({
   onPerson,
   greet = 0,
   onActivity,
+  onLocked,
   activityUnread,
   onRibbon,
   swipeBlocked = false,
@@ -148,6 +149,14 @@ export default function DuelScreen({
   greet?: number;
   /** The Activity screen. Optional so a caller that has none simply shows no destination. */
   onActivity?: () => void;
+  /**
+   * A film was just locked.
+   *
+   * The shell decides what to do about it — today that is offering the tag
+   * sheet, which has to live up there because a sheet rendered inside a screen
+   * is z-ordered within it and the nav paints over the top.
+   */
+  onLocked?: (filmId: string) => void;
   /** Somebody has spoken to you on Takes since you last looked. */
   activityUnread?: boolean;
   /**
@@ -679,8 +688,14 @@ export default function DuelScreen({
     st.films.some((f) => f.guest) ? { ...st, films: st.films.filter((f) => !f.guest) } : st;
 
   const lockIn = () => {
+    // Which film this was about, read BEFORE confirming — `confirm` clears the
+    // session, and the contender is what the tag prompt is for.
+    const locked = session?.contenderId ?? null;
     // Winning the promotion duels banks a new star rating instead of a position.
     const next = promotionWon(state) ? completePromotion(state) : confirm(state);
+    // Offered after the commit, so the placement is already safe. A prompt that
+    // could cost somebody their lock would be worse than no prompt.
+    if (locked) setTimeout(() => onLocked?.(locked), 0);
     if (session?.crossTier && !next.session) {
       endCrossTier([...session.confirmed, session.contenderId], true);
       commit(dropGuests(next));
