@@ -128,8 +128,13 @@ function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => voi
         setError(json.error ?? "That didn't send.");
         return;
       }
-      setComments((c) => [...(c ?? []), json.comment!]);
-      onCount((comments?.length ?? 0) + 1);
+      // The list and the count are computed from ONE expression, so they cannot
+      // disagree. Reading `comments.length` separately meant two reads of the
+      // same closure, and a second reply landing between them left the card
+      // wearing a number one short of its own thread.
+      const next = [...(comments ?? []), json.comment];
+      setComments(next);
+      onCount(next.length);
       setDraft("");
     } catch {
       setError("You look offline.");
@@ -160,8 +165,10 @@ function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => voi
   };
 
   const drop = async (id: string) => {
-    setComments((c) => (c ?? []).filter((x) => x.id !== id));
-    onCount(Math.max(0, (comments?.length ?? 1) - 1));
+    // One expression, for the same reason as `say`.
+    const next = (comments ?? []).filter((x) => x.id !== id);
+    setComments(next);
+    onCount(next.length);
     try {
       await fetch(`/api/activity/comment/${id}`, { method: "DELETE" });
     } catch {

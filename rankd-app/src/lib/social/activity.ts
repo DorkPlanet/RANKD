@@ -95,19 +95,6 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
       actorId: activity.actorId,
       handle: users.handle,
       avatarUrl: users.avatarUrl,
-      // ── When this card last had a pulse ────────────────────────────────
-      //
-      // A card sorted purely by when it was CREATED buries a conversation the
-      // moment it is a day old. Somebody replies to a week-old climb, the reader
-      // gets a dot on the nav, opens Activity, and the thing they were told
-      // about is forty rows down — which is the dot lying by omission.
-      //
-      // So a comment lifts its card. That is what makes a thread findable, and
-      // it is the difference between a comment box and a conversation.
-      lastAt: sql<Date>`GREATEST(${activity.createdAt}, COALESCE((
-        SELECT MAX(c.created_at) FROM activity_comment c
-        WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
-      ), ${activity.createdAt}))`,
     })
     .from(activity)
     .innerJoin(users, eq(users.id, activity.actorId))
@@ -120,10 +107,25 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
         isNull(users.deletedAt),
       ),
     )
-    .orderBy(desc(sql`GREATEST(${activity.createdAt}, COALESCE((
-      SELECT MAX(c.created_at) FROM activity_comment c
-      WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
-    ), ${activity.createdAt}))`))
+    // ── Ordered by when the card last had a pulse ──────────────────────────
+    //
+    // Sorting purely by when a card was CREATED buries a conversation the moment
+    // it is a day old. Somebody replies to a week-old climb, the reader gets a
+    // dot on the nav, opens Activity, and the thing they were told about is
+    // forty rows down — which is the dot lying by omission.
+    //
+    // So a comment lifts its card. That is what makes a thread findable, and it
+    // is the difference between a comment box and a conversation.
+    //
+    // Only in the ORDER BY. This was briefly selected as a column too, which ran
+    // the correlated subquery a second time for every row to produce a value
+    // nothing read.
+    .orderBy(
+      desc(sql`GREATEST(${activity.createdAt}, COALESCE((
+        SELECT MAX(c.created_at) FROM activity_comment c
+        WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
+      ), ${activity.createdAt}))`),
+    )
     .limit(limit);
 
   if (rows.length === 0) return [];
