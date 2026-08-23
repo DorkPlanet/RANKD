@@ -18,10 +18,23 @@ export function ListIcon() {
   );
 }
 
+/**
+ * TAKES — two positions, one above the other.
+ *
+ * Was a heartbeat polyline, which is the mark Letterboxd uses for its activity
+ * feed, on a cell sitting in the same place doing an adjacent job. Copying the
+ * shape as well as the slot was too much.
+ *
+ * Two bars of different lengths, the upper one longer: a ranking, at the
+ * smallest scale it can be drawn. It says ORDER rather than pulse, which is what
+ * this screen is actually about — a pulse belongs to a feed of events, and these
+ * are placements.
+ */
 export function ActivityIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="4" y1="8" x2="20" y2="8" />
+      <line x1="4" y1="16" x2="13" y2="16" />
     </svg>
   );
 }

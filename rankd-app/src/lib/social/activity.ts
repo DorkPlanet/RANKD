@@ -1,16 +1,26 @@
-// Writing feed cards, reading them back, and everything said on them.
+// Writing feed cards, reading them back, and who agreed with them.
 //
 // The deciding is in `feed.ts` and is pure. This is the database half.
 
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 
-import { activity, activityComments, db, follows, tasteSnapshots, users } from "@/lib/db";
-import { diffToActivity, escapeForLike, type CommentItem, type FeedItem } from "@/lib/social/feed";
+import { activity, activityComments, activityLikes, db, follows, tasteSnapshots, users } from "@/lib/db";
+import { diffToActivity, escapeForLike, type FeedItem } from "@/lib/social/feed";
 import { mentionedHandles } from "@/lib/social/mentions";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
 
 /** How far back the feed reaches in one read. */
 const PAGE = 40;
+
+/**
+ * How long a sitting stays open.
+ *
+ * Sync pushes every ten seconds while somebody is ranking, so an evening is
+ * dozens of pushes, and each one produces a session card unless they are folded
+ * together. Two hours is long enough to cover an evening with breaks in it and
+ * short enough that tomorrow is a new sitting.
+ */
+const SITTING_MS = 2 * 60 * 60 * 1000;
 
 // Shapes live in `feed.ts`, which imports no database — see `COMMENT_MAX` there
 // for why that matters. Re-exported so server callers have one place to look.
@@ -21,7 +31,7 @@ export type { CommentItem, FeedItem } from "@/lib/social/feed";
  *
  * Called from the snapshot route with the INCOMING order, before the stored one
  * is overwritten. Never throws into the caller: a feed is decoration on top of a
- * sync, and failing to work out that a film climbed must not cost somebody the
+ * sync, and failing to work out that a film was added must not cost somebody the
  * push of their actual ranking.
  */
 export async function writeFeedCards(
@@ -33,7 +43,7 @@ export async function writeFeedCards(
   // ── A house account publishes nothing ────────────────────────────────────
   //
   // `@rankd` re-derives its canon on a schedule, so without this it would post a
-  // fistful of climbs into every follower's feed every time the cron ran — the
+  // fistful of cards into every follower's feed every time the cron ran — the
   // astroturf the `accountKind` enum exists to prevent, arriving by the back
   // door. Its ranking is a place you visit, not a thing that shouts.
   if (user.kind !== "person") return;
@@ -46,7 +56,7 @@ export async function writeFeedCards(
     const rows = diffToActivity(
       stored?.entries ?? [],
       entries,
-      summary.topFilms ?? [],
+      summary.named ?? [],
       // Placed films are counted from the orders themselves rather than taken
       // from `filmCount`, which is the whole LIBRARY including everything still
       // un-rnkd. A milestone is about work done, not films owned.
@@ -59,12 +69,67 @@ export async function writeFeedCards(
     );
     if (rows.length === 0) return;
 
-    await db
-      .insert(activity)
-      .values(rows.map((r) => ({ actorId: user.id, kind: r.kind, subjectId: r.subjectId, meta: r.meta })));
+    // ── One session card per sitting, not per push ────────────────────────
+    //
+    // The rest are events that happened once. A session is a description of
+    // ongoing work, so a second push during the same evening should UPDATE the
+    // running total rather than post a second card — otherwise a marathon
+    // buries everybody else's feed under its own progress bar.
+    const session = rows.find((r) => r.kind === "session");
+    const rest = rows.filter((r) => r.kind !== "session");
+
+    if (rest.length > 0) {
+      await db
+        .insert(activity)
+        .values(rest.map((r) => ({ actorId: user.id, kind: r.kind, subjectId: r.subjectId, meta: r.meta })));
+    }
+
+    if (session) await foldSession(user.id, session.meta);
   } catch {
     // See above: the sync is the job, this is not.
   }
+}
+
+/** Add this push's work to the sitting already in progress, or open a new one. */
+async function foldSession(actorId: string, meta: Record<string, unknown>): Promise<void> {
+  const open = await db.query.activity.findFirst({
+    where: and(
+      eq(activity.actorId, actorId),
+      eq(activity.kind, "session"),
+      gt(activity.createdAt, new Date(Date.now() - SITTING_MS)),
+    ),
+    orderBy: desc(activity.createdAt),
+    columns: { id: true, meta: true },
+  });
+
+  if (!open) {
+    await db.insert(activity).values({ actorId, kind: "session", subjectId: "", meta });
+    return;
+  }
+
+  const was = open.meta as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" ? v : 0);
+  await db
+    .update(activity)
+    .set({
+      meta: {
+        ...was,
+        added: num(was.added) + num(meta.added),
+        moved: num(was.moved) + num(meta.moved),
+        // The best result of the SITTING, not of the last ten seconds. A lower
+        // rank number is a better placement.
+        ...(meta.bestRank !== undefined &&
+        (was.bestRank === undefined || num(meta.bestRank) < num(was.bestRank))
+          ? {
+              bestTitle: meta.bestTitle,
+              bestPoster: meta.bestPoster,
+              bestRank: meta.bestRank,
+              bestId: meta.bestId,
+            }
+          : {}),
+      },
+    })
+    .where(eq(activity.id, open.id));
 }
 
 /**
@@ -73,8 +138,8 @@ export async function writeFeedCards(
  * ── Yourself is in it, and that is the empty state ───────────────────────
  *
  * Following nobody would otherwise be a blank screen telling you to go and find
- * people, which is the same broken promise the Activity cell used to make. Your
- * own cards mean the screen always demonstrates what it is FOR.
+ * people, which is the same broken promise the cell used to make. Your own cards
+ * mean the screen always demonstrates what it is FOR.
  *
  * ── Fanned out on READ ───────────────────────────────────────────────────
  *
@@ -107,25 +172,7 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
         isNull(users.deletedAt),
       ),
     )
-    // ── Ordered by when the card last had a pulse ──────────────────────────
-    //
-    // Sorting purely by when a card was CREATED buries a conversation the moment
-    // it is a day old. Somebody replies to a week-old climb, the reader gets a
-    // dot on the nav, opens Activity, and the thing they were told about is
-    // forty rows down — which is the dot lying by omission.
-    //
-    // So a comment lifts its card. That is what makes a thread findable, and it
-    // is the difference between a comment box and a conversation.
-    //
-    // Only in the ORDER BY. This was briefly selected as a column too, which ran
-    // the correlated subquery a second time for every row to produce a value
-    // nothing read.
-    .orderBy(
-      desc(sql`GREATEST(${activity.createdAt}, COALESCE((
-        SELECT MAX(c.created_at) FROM activity_comment c
-        WHERE c.activity_id = ${activity.id} AND c.deleted_at IS NULL
-      ), ${activity.createdAt}))`),
-    )
+    .orderBy(desc(activity.createdAt))
     .limit(limit);
 
   if (rows.length === 0) return [];
@@ -138,8 +185,7 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
   const myRank = new Map((mine?.entries ?? []).map((e) => [e.i, e.r]));
 
   const ids = rows.map((r) => r.id);
-  const counts = await commentCounts(ids);
-  const latest = await latestComments(ids);
+  const { counts, mineSet } = await likeState(ids, viewerId);
 
   return rows
     .filter((r) => r.handle !== null)
@@ -155,44 +201,9 @@ export async function feedFor(viewerId: string, limit = PAGE): Promise<FeedItem[
       // Only ever offered about somebody ELSE's card. "They have it #1, you have
       // it #1" on your own is the app agreeing with itself out loud.
       yourRank: r.actorId === viewerId ? undefined : (myRank.get(r.subjectId) ?? undefined),
-      comments: counts.get(r.id) ?? 0,
-      latest: latest.get(r.id),
+      likes: counts.get(r.id) ?? 0,
+      liked: mineSet.has(r.id),
     }));
-}
-
-/**
- * The newest line on each card, for the preview under it.
- *
- * A count alone ("3 replies") says a conversation exists and nothing about
- * whether it is worth opening. One line of it is what makes somebody tap, and on
- * a feed this size it is also most of the reason the screen feels inhabited.
- */
-async function latestComments(ids: string[]): Promise<Map<string, { handle: string; body: string }>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select({
-      activityId: activityComments.activityId,
-      body: activityComments.body,
-      createdAt: activityComments.createdAt,
-      handle: users.handle,
-    })
-    .from(activityComments)
-    .innerJoin(users, eq(users.id, activityComments.authorId))
-    .where(
-      and(
-        inArray(activityComments.activityId, ids),
-        isNull(activityComments.deletedAt),
-        isNull(users.suspendedAt),
-        isNull(users.deletedAt),
-      ),
-    )
-    .orderBy(activityComments.createdAt);
-
-  // Last write wins, and the rows arrive oldest first, so this ends up holding
-  // the newest of each without a window function.
-  const out = new Map<string, { handle: string; body: string }>();
-  for (const r of rows) if (r.handle) out.set(r.activityId, { handle: r.handle, body: r.body });
-  return out;
 }
 
 /** Everyone whose cards this reader is entitled to see. */
@@ -204,57 +215,53 @@ async function visibleActors(viewerId: string): Promise<string[]> {
   return [...new Set([viewerId, ...following.map((f) => f.id)])];
 }
 
-async function commentCounts(ids: string[]): Promise<Map<string, number>> {
-  if (ids.length === 0) return new Map();
+/** How many agreed with each card, and whether the reader is one of them. */
+async function likeState(
+  ids: string[],
+  viewerId: string,
+): Promise<{ counts: Map<string, number>; mineSet: Set<string> }> {
+  if (ids.length === 0) return { counts: new Map(), mineSet: new Set() };
   const rows = await db
-    .select({ id: activityComments.activityId, n: sql<number>`count(*)::int` })
-    .from(activityComments)
-    .where(and(inArray(activityComments.activityId, ids), isNull(activityComments.deletedAt)))
-    .groupBy(activityComments.activityId);
-  return new Map(rows.map((r) => [r.id, r.n]));
+    .select({ id: activityLikes.activityId, actorId: activityLikes.actorId })
+    .from(activityLikes)
+    .where(inArray(activityLikes.activityId, ids));
+
+  const counts = new Map<string, number>();
+  const mineSet = new Set<string>();
+  for (const r of rows) {
+    counts.set(r.id, (counts.get(r.id) ?? 0) + 1);
+    if (r.actorId === viewerId) mineSet.add(r.id);
+  }
+  return { counts, mineSet };
 }
 
 /**
- * One thread, oldest first, because a conversation is read downward.
+ * Agree with a placement, or take it back.
  *
- * Returns null when the reader is not entitled to the card it hangs off — the
- * same answer as "no such card", so a thread cannot be used to confirm one
- * exists.
+ * Returns the count afterwards so the screen never has to guess. Idempotent in
+ * both directions: the row IS the pair, so agreeing twice is one agreement and
+ * un-agreeing something you never agreed with is a no-op.
  */
-export async function commentsFor(activityId: string, viewerId: string): Promise<CommentItem[] | null> {
+export async function setLike(
+  activityId: string,
+  viewerId: string,
+  on: boolean,
+): Promise<{ likes: number } | null> {
   if (!(await canSee(activityId, viewerId))) return null;
 
-  const rows = await db
-    .select({
-      id: activityComments.id,
-      body: activityComments.body,
-      createdAt: activityComments.createdAt,
-      authorId: activityComments.authorId,
-      handle: users.handle,
-      avatarUrl: users.avatarUrl,
-    })
-    .from(activityComments)
-    .innerJoin(users, eq(users.id, activityComments.authorId))
-    .where(
-      and(
-        eq(activityComments.activityId, activityId),
-        isNull(activityComments.deletedAt),
-        isNull(users.suspendedAt),
-        isNull(users.deletedAt),
-      ),
-    )
-    .orderBy(activityComments.createdAt);
+  if (on) {
+    await db.insert(activityLikes).values({ activityId, actorId: viewerId }).onConflictDoNothing();
+  } else {
+    await db
+      .delete(activityLikes)
+      .where(and(eq(activityLikes.activityId, activityId), eq(activityLikes.actorId, viewerId)));
+  }
 
-  return rows
-    .filter((r) => r.handle !== null)
-    .map((r) => ({
-      id: r.id,
-      body: r.body,
-      createdAt: r.createdAt.toISOString(),
-      handle: r.handle as string,
-      avatarUrl: r.avatarUrl,
-      mine: r.authorId === viewerId,
-    }));
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(activityLikes)
+    .where(eq(activityLikes.activityId, activityId));
+  return { likes: row?.n ?? 0 };
 }
 
 /**
@@ -262,7 +269,7 @@ export async function commentsFor(activityId: string, viewerId: string): Promise
  *
  * The same rule the feed uses, asked of a single row: it is yours, or it belongs
  * to somebody you follow. Following is what grants sight, so unfollowing takes
- * it away — including the right to keep talking.
+ * it away — including the right to keep agreeing.
  */
 export async function canSee(activityId: string, viewerId: string): Promise<boolean> {
   const row = await db.query.activity.findFirst({
@@ -276,72 +283,6 @@ export async function canSee(activityId: string, viewerId: string): Promise<bool
     columns: { followerId: true },
   });
   return !!follow;
-}
-
-/**
- * Whether this reader was entitled to read this comment.
- *
- * Asked of the CARD it hangs off, because that is what grants sight in the first
- * place. Reporting has to check it or the route becomes a way to discover
- * whether a comment id exists.
- */
-export async function canSeeComment(commentId: string, viewerId: string): Promise<boolean> {
-  const row = await db.query.activityComments.findFirst({
-    where: eq(activityComments.id, commentId),
-    columns: { activityId: true, deletedAt: true },
-  });
-  if (!row || row.deletedAt) return false;
-  return canSee(row.activityId, viewerId);
-}
-
-export type SaidResult = { ok: true; comment: CommentItem } | { ok: false; error: string };
-
-/** Say something on a card. The caller has already checked the rate limit and the text. */
-export async function addComment(
-  activityId: string,
-  author: { id: string; handle: string | null; avatarUrl: string | null },
-  body: string,
-): Promise<SaidResult> {
-  if (!(await canSee(activityId, author.id))) return { ok: false, error: "No such card" };
-
-  const [row] = await db
-    .insert(activityComments)
-    .values({ activityId, authorId: author.id, body })
-    .returning({ id: activityComments.id, createdAt: activityComments.createdAt });
-
-  return {
-    ok: true,
-    comment: {
-      id: row.id,
-      body,
-      createdAt: row.createdAt.toISOString(),
-      handle: author.handle ?? "",
-      avatarUrl: author.avatarUrl,
-      mine: true,
-    },
-  };
-}
-
-/**
- * Take back something you said.
- *
- * Only ever your own line, and soft — see the schema. The owner of a CARD
- * cannot delete comments on it: that is moderation, and handing it to whoever
- * happens to own the post turns every disagreement into a race to delete.
- */
-export async function removeComment(commentId: string, authorId: string): Promise<boolean> {
-  const done = await db
-    .update(activityComments)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(activityComments.id, commentId),
-        eq(activityComments.authorId, authorId),
-        isNull(activityComments.deletedAt),
-      ),
-    )
-    .returning({ id: activityComments.id });
-  return done.length > 0;
 }
 
 /**
@@ -377,11 +318,6 @@ export async function unreadFor(user: {
         handle
           ? or(
               eq(activity.actorId, user.id),
-              // Escaped for the same reason `people.ts` escapes its search: `_`
-              // is a LIKE wildcard AND a legal handle character, so an unescaped
-              // `@sam_j` quietly matches `@samxj`. The parser below would throw
-              // those out anyway, but a filter that over-matches by design is a
-              // filter nobody can reason about.
               sql`${activityComments.body} ILIKE ${"%@" + escapeForLike(handle) + "%"} ESCAPE '\\'`,
             )
           : eq(activity.actorId, user.id),

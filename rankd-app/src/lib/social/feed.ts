@@ -1,52 +1,47 @@
-// What changed in somebody's ranking, as things worth reading.
+// What a push is worth saying about.
 //
 // ── Derived on the server, never asserted by the client ────────────────────
 //
-// The original plan had the phone POST activity rows on the sync debounce, with
-// a daily dedupe index to stop a re-sync becoming a firehose. That is not built,
-// and does not need to be.
+// `POST /api/snapshot` receives the whole ranked order and UPSERTS it, so at the
+// instant of every push the server holds both the stored order and the incoming
+// one. Diffing them there gives every card below. A client cannot claim an event
+// that did not happen, because it never claims anything — it pushes its ranking,
+// exactly as it already did, and the facts fall out. It is idempotent for free:
+// pushing the same library twice diffs to nothing.
 //
-// `POST /api/snapshot` already receives the whole ranked order and UPSERTS it, so
-// at the instant of every push the server is holding both the stored order and
-// the incoming one. Diffing them there gives every card below directly. A client
-// cannot claim an event that did not happen, because it never claims anything —
-// it pushes its ranking, exactly as it already did, and the facts fall out.
+// ── The cards are placements, not deltas ───────────────────────────────────
 //
-// It is also idempotent for free: pushing the same library twice diffs to
-// nothing, so there is no firehose to guard against in the first place.
+// The first version reported changes — "Heat climbed 4 places" — and that reads
+// as a changelog, because a delta is interesting exactly once. What lasts is the
+// PLACEMENT: "Heat is sam's #1" is checkable a year later, where "Heat beat
+// Collateral" stops mattering the moment both films are sorted.
 //
-// ── Why there is no upset card ─────────────────────────────────────────────
+// The duel is the mechanism. The position is the product. Cards are about the
+// product.
 //
-// "Picked Drive over Heat" is the best card this app could show and it is not
-// here. Tier bands do not overlap (`lib/tiers.ts`), so a lower-rated film can
-// never outrank a higher-rated one in the published order — an upset exists only
-// in the duel log, which is local by architecture and has never left the device.
+// ── And a shuffled position is not the person's doing ──────────────────────
 //
-// `lib/notes.ts` can already phrase one as a bounded aggregate — "picked 28 Days
-// Later over 4 films they rated higher" — if that door is ever opened. Opening it
-// is a decision about what leaves the phone, not a feature, and it is not taken
-// here.
+// Fast Shuffle places films from your duels, but the specific rank is the
+// model's, and that mode reserves the right to change its mind. A card saying
+// "sam moved Heat to #40" credits somebody with a choice they did not make, and
+// the hard/soft distinction is load-bearing everywhere else in this app.
 //
-// ── Only films the snapshot can name ───────────────────────────────────────
-//
-// `entries` carries ids and nothing else; titles live on `summary.topFilms`, of
-// which there are ten. That reads like a limitation and is the right editorial
-// rule anyway: a film climbing into somebody's top ten is a story, and one
-// moving from 400th to 380th is churn. The constraint and the taste agree, so
-// the code follows both.
+// So the work gets ONE card that says what was done and names the best of it,
+// and only the two things a person genuinely decided — adding a film, and
+// locking one — get a card of their own.
 
-import type { SnapshotEntry, SnapshotFilm } from "@/lib/snapshot";
+import type { NamedFilm, SnapshotEntry } from "@/lib/snapshot";
 import { TIER_RANGE } from "@/lib/tiers";
 
 /**
- * The longest a comment may be.
+ * The longest a written line may be.
  *
- * Lives HERE rather than beside the code that inserts it, and the reason is a
- * bundling one this codebase has already been bitten by once: `FeedScreen` needs
- * this number to count down as somebody types, `activity.ts` imports the
- * database, and a client component importing a VALUE from that module drags the
- * Postgres driver into the browser bundle. `searchRules.ts` exists for the same
- * reason. Types are erased and cost nothing; values are not.
+ * Lives HERE rather than beside the code that stores it, and the reason is a
+ * bundling one this codebase has been bitten by twice: a client component needs
+ * this number to count down as somebody types, the storage module imports the
+ * database, and a client importing a VALUE from that module drags the Postgres
+ * driver into the browser bundle. `searchRules.ts` exists for the same reason.
+ * Types are erased and cost nothing; values are not.
  */
 export const COMMENT_MAX = 280;
 
@@ -75,27 +70,25 @@ export interface FeedItem {
   /**
    * Where the READER has this same film, if they have placed it.
    *
-   * ── This is the line that makes a card an argument ─────────────────────
+   * ── The line that makes a card an argument ─────────────────────────────
    *
-   * A feed of "Heat climbed to #1" is a ticker: true, and nothing to say back
-   * to. "They have it #1, you have it #14" is a disagreement with a name on it,
-   * and it reads differently for every person who opens the card.
+   * "Sinners went in at #3" is a fact you can only nod at. "They have it #3,
+   * you have it #14" is a disagreement with a name on it, and it reads
+   * differently for every person who opens the card.
    *
-   * No other app can draw this, and the reason is structural rather than clever:
-   * it needs two people's complete ordered lists, and an app built on star
-   * ratings has neither. Rankd already stores both, so it costs one lookup.
+   * Shown ONLY to the reader. A public disagree counter, among a handful of
+   * people who know each other, builds a scoreboard of who got dunked on — and
+   * then people stop posting the placements that generate the feed at all.
+   *
+   * No other app can draw this line, for a structural reason rather than a
+   * clever one: it needs two people's complete ordered lists, and an app built
+   * on star ratings has neither.
    */
   yourRank?: number;
-  comments: number;
-  /**
-   * The newest thing said on this card.
-   *
-   * A count says a conversation exists and nothing about whether it is worth
-   * opening. One line of it is what makes somebody tap — and on a feed this
-   * size it is most of the reason the screen feels inhabited rather than
-   * generated.
-   */
-  latest?: { handle: string; body: string };
+  /** How many people agreed with this placement. */
+  likes: number;
+  /** Whether the reader is one of them. */
+  liked: boolean;
 }
 
 /** One card, shaped for the row it becomes. */
@@ -113,22 +106,24 @@ export interface ActivityRow {
   meta: Record<string, unknown>;
 }
 
-export type ActivityKind = "climb" | "promotion" | "arrival" | "placed" | "milestone";
+export type ActivityKind = "added" | "locked" | "session" | "milestone";
+
+/**
+ * How far down the list a lock is still news.
+ *
+ * Locking is the strongest signal a person gives — they stopped, looked, and
+ * committed to a position. But a commitment at 400th is a filing decision, and
+ * the feed is not a filing cabinet. A hundred is roughly where a list stops
+ * being "films I love" and starts being "films I own".
+ */
+export const LOCK_DEPTH = 100;
 
 /**
  * The counts a milestone is crossed on.
  *
- * ── Why milestones are here at all ─────────────────────────────────────────
- *
- * Every other card is about the top ten, because that is the only place the
- * snapshot carries titles. Somebody who ranks hard for an evening and shifts
- * nothing up there gets one quiet "40 more ranked" line, which undersells a real
- * session — and somebody with a settled top ten could rank for a month and never
- * appear.
- *
- * A milestone is the one thing that says the work happened rather than what it
- * moved. It is also the only card in the feed that is purely about persistence,
- * which is the thing this app actually asks of people.
+ * The only card purely about persistence, which is the thing this app actually
+ * asks of people. Without it somebody with a settled top ten could rank for a
+ * month and never appear.
  */
 export interface Counts {
   /** Duels fought, ever. */
@@ -141,7 +136,7 @@ export interface Counts {
  * Where a milestone sits.
  *
  * Round numbers a person would notice, spaced so they arrive rarely enough to
- * still mean something. Doubling roughly each step: hitting 500 duels should
+ * still mean something. Roughly doubling each step: hitting 500 duels should
  * feel like a longer walk than hitting 250 did, because it was.
  */
 export const DUEL_MARKS = [100, 250, 500, 1000, 2500, 5000, 10000];
@@ -155,30 +150,28 @@ export function crossed(marks: readonly number[], was: number, now: number): num
 }
 
 /**
- * How many places a film must gain before it is worth saying.
+ * How far a film must climb before the session card bothers naming it.
  *
- * One or two is the ranking breathing. `MOVED` in `lib/taste.ts` exists for the
- * same reason and its comment puts it best: a small move is "noise wearing a
- * fact's clothes".
+ * One or two places is the ranking breathing. `MOVED` in `lib/taste.ts` exists
+ * for the same reason and its comment puts it best: a small move is "noise
+ * wearing a fact's clothes".
  */
-export const MIN_CLIMB = 3;
+export const MIN_MOVE = 3;
 
 /**
  * The most cards one push may produce.
  *
- * A Fast Shuffle session moves hundreds of films. Every one of them is a fact
- * and almost none are worth reading, which is the same judgement the plan makes
- * about individual duels: a feed of everything is noise. Four is enough for a
- * session to have something to say and few enough that it never becomes a log.
+ * The session card carries the bulk of a sitting, so this is a ceiling on the
+ * NAMED events beside it rather than on the work itself.
  */
 export const MAX_CARDS = 4;
 
 /**
  * Escape the LIKE wildcards inside a handle.
  *
- * `_` is a LIKE wildcard AND a legal handle character, so searching for
- * `@sam_j` unescaped quietly also matches `@samxj`. `people.ts` escapes its
- * search for exactly this reason and says so; this is the same rule.
+ * `_` is a LIKE wildcard AND a legal handle character, so searching for `@sam_j`
+ * unescaped quietly also matches `@samxj`. `people.ts` escapes its search for
+ * exactly this reason and says so; this is the same rule.
  *
  * Lives here rather than beside the query so it can be tested without a
  * database — the mistake it guards against is invisible until somebody with an
@@ -200,74 +193,116 @@ export function ratingOfScore(score: number): number {
  * The cards a push earns, best first and capped.
  *
  * `before` is what the server had stored, `after` is what just arrived, and
- * `top` is the incoming top ten — the only films that can be named.
+ * `named` is everything the incoming snapshot can put a title to — the top 250,
+ * see `NamedFilm`. A film outside that folds into the session card, which needs
+ * no titles.
  *
- * Pure, so the interesting cases are testable without a database: an identical
- * re-push producing nothing, and a five-hundred-film shuffle producing four
- * cards rather than five hundred.
+ * Pure, so the interesting cases are testable without a database.
  */
 export function diffToActivity(
   before: readonly SnapshotEntry[],
   after: readonly SnapshotEntry[],
-  top: readonly SnapshotFilm[],
+  named: readonly NamedFilm[],
   counts?: { was: Counts; now: Counts },
 ): ActivityRow[] {
   // A first-ever snapshot is not news. Everything would read as an arrival, and
   // somebody importing a library would fill their followers' feeds with the
-  // contents of a CSV — which is bookkeeping, not a statement.
+  // contents of a spreadsheet — bookkeeping, not a statement.
   if (before.length === 0) return [];
 
   const was = new Map(before.map((e) => [e.i, e]));
-  const now = new Map(after.map((e) => [e.i, e]));
+  const byId = new Map(named.map((n) => [n.i, n]));
   const cards: { row: ActivityRow; weight: number }[] = [];
 
-  for (const film of top) {
-    const nowEntry = now.get(film.id);
-    if (!nowEntry) continue;
-    const wasEntry = was.get(film.id);
-    const shared = { title: film.title, year: film.year, poster: film.poster, rank: nowEntry.r };
+  // Everything the sitting did, whether or not any of it can be named.
+  let addedCount = 0;
+  let movedCount = 0;
+  let best: { film: NamedFilm; to: number; gained: number } | null = null;
 
-    if (!wasEntry) {
-      // Newly placed AND straight into the top ten, which is the only way a film
-      // arrives here worth mentioning.
-      cards.push({
-        row: { kind: "arrival", subjectId: film.id, meta: { ...shared, rating: film.rating } },
-        weight: 100 - nowEntry.r,
-      });
+  for (const entry of after) {
+    const previous = was.get(entry.i);
+    const film = byId.get(entry.i);
+
+    if (!previous) {
+      addedCount++;
+      // ── Added: the engine ───────────────────────────────────────────────
+      //
+      // You watched something, you ranked it, it landed somewhere. That is the
+      // recurring act for the life of the app, and the payload — a position in a
+      // total order — is the thing no ratings app can produce. Letterboxd's
+      // version of this card ends at the watch; ours ends at a rank.
+      if (film) {
+        cards.push({
+          row: {
+            kind: "added",
+            subjectId: entry.i,
+            meta: {
+              title: film.t,
+              year: film.y,
+              poster: film.p,
+              rank: entry.r,
+              rating: ratingOfScore(entry.s),
+            },
+          },
+          weight: 500 - entry.r,
+        });
+      }
       continue;
     }
 
-    // Ranks count DOWN toward the top, so a gain is a decrease — the same
-    // convention `canon/movement.ts` documents.
-    const gained = wasEntry.r - nowEntry.r;
-    if (gained >= MIN_CLIMB) {
-      cards.push({
-        row: { kind: "climb", subjectId: film.id, meta: { ...shared, from: wasEntry.r, places: gained } },
-        weight: 200 + gained,
-      });
+    const gained = previous.r - entry.r;
+    if (gained >= MIN_MOVE) {
+      movedCount++;
+      if (film && (!best || gained > best.gained)) best = { film, to: entry.r, gained };
     }
 
-    const before5 = ratingOfScore(wasEntry.s);
-    const after5 = ratingOfScore(nowEntry.s);
-    if (after5 > before5) {
+    // ── Locked: the strongest signal a person gives ─────────────────────
+    //
+    // They stopped, looked, and committed to a position. `t` is the held-firmly
+    // flag, so this fires on the transition and never again.
+    if (previous.t === 0 && entry.t === 1 && entry.r <= LOCK_DEPTH && film) {
       cards.push({
-        row: { kind: "promotion", subjectId: film.id, meta: { ...shared, from: before5, to: after5 } },
-        weight: 300 + (after5 - before5) * 10,
+        row: {
+          kind: "locked",
+          subjectId: entry.i,
+          meta: {
+            title: film.t,
+            year: film.y,
+            poster: film.p,
+            rank: entry.r,
+            rating: ratingOfScore(entry.s),
+          },
+        },
+        weight: 700 - entry.r,
       });
     }
   }
 
-  // The one card about no single film, and the quietest. It exists so an evening
-  // of Fast Shuffle that shifted nothing at the top still says something, rather
-  // than the feed implying nobody did anything.
-  const placed = after.length - before.length;
-  if (placed > 0) {
-    cards.push({ row: { kind: "placed", subjectId: "", meta: { count: placed } }, weight: 1 });
+  // ── The session: the work, credited to the person who did it ───────────
+  //
+  // One card for a sitting however much it moved, naming the single best result.
+  // `activity.ts` folds repeat pushes into this same row — sync fires every ten
+  // seconds while somebody is ranking, so without that a marathon would be fifty
+  // of these rather than one.
+  if (movedCount > 0 || addedCount > 0) {
+    cards.push({
+      row: {
+        kind: "session",
+        subjectId: "",
+        meta: {
+          added: addedCount,
+          moved: movedCount,
+          ...(best
+            ? { bestTitle: best.film.t, bestPoster: best.film.p, bestRank: best.to, bestId: best.film.i }
+            : {}),
+        },
+      },
+      // Lowest, so a sitting that also produced a lock leads with the lock. The
+      // session is the floor of the feed, not its headline.
+      weight: 10,
+    });
   }
 
-  // Milestones outrank everything. They are rare by construction, and a card
-  // saying somebody just passed a thousand duels is worth more than the third
-  // climb of the same evening.
   if (counts) {
     const duels = crossed(DUEL_MARKS, counts.was.duels, counts.now.duels);
     if (duels) {

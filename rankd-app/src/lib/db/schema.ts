@@ -91,18 +91,30 @@ export const accountKind = pgEnum("account_kind", ["person", "house"]);
  * why there is no trust boundary to police here and no emission route to rate
  * limit.
  *
- * There is no `upset`. That card would need the duel log, which is local by
- * architecture; the reasoning is written out in `feed.ts` and the omission is
- * deliberate rather than pending.
+ * ── These are placements, not deltas ─────────────────────────────────────
+ *
+ * The first four values were `climb`, `promotion`, `arrival` and `placed` — all
+ * reports of CHANGE, which is interesting exactly once and reads as a changelog.
+ * What lasts is the placement: "Heat is sam's #1" is checkable a year later.
+ * The old values stay in the enum because Postgres cannot drop one, and a
+ * handful of rows still carry them; nothing writes them any more.
+ *
+ * `added` and `locked` are the two things a person genuinely decided. `session`
+ * is the work itself, credited to them, with the placement left to the model —
+ * see the note in `feed.ts` about why a shuffled rank is not somebody's choice.
  */
 export const activityKind = pgEnum("activity_kind", [
+  // Retired. Kept because an enum value cannot be dropped.
   "climb",
   "promotion",
   "arrival",
   "placed",
-  // Not about the top ten, and the only card that is purely about persistence —
-  // see `Counts` in `lib/social/feed.ts` for why the feed needed one.
+  // The only card purely about persistence, which is what this app asks of
+  // people — see `Counts` in `lib/social/feed.ts`.
   "milestone",
+  "added",
+  "locked",
+  "session",
 ]);
 
 export const users = pgTable(
@@ -430,6 +442,41 @@ export const activity = pgTable(
 );
 
 /**
+ * Somebody agreed with a placement.
+ *
+ * ── Why a like and not a comment ───────────────────────────────────────────
+ *
+ * A comment is expensive to write, so it is rare, so most people receive
+ * nothing. A like costs one tap, so it happens in volume, so everybody gets
+ * something back — and reciprocity is what actually brings people to open an
+ * app. That is the mechanism underneath every feed that works, stated plainly.
+ *
+ * There is no dislike, deliberately. The reader is already shown privately where
+ * they differ ("you have it #14"), which is the honest half; a public
+ * disagreement counter, among a handful of people who know each other, builds a
+ * scoreboard of who got dunked on, and then people stop posting the placements
+ * that generate the feed at all.
+ */
+export const activityLikes = pgTable(
+  "activity_like",
+  {
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => activity.id, { onDelete: "cascade" }),
+    actorId: uuid("actor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The pair IS the row: agreeing twice is the same agreement.
+    primaryKey({ columns: [table.activityId, table.actorId] }),
+    // "What have I agreed with", for a later profile surface.
+    index("activity_like_actor_idx").on(table.actorId, table.createdAt.desc()),
+  ],
+);
+
+/**
  * Something somebody said on a card.
  *
  * ── The one place a person writes prose that another person reads ──────────
@@ -512,4 +559,5 @@ export type RankingCapture = typeof rankingHistory.$inferSelect;
 export type Library = typeof libraries.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
 export type ActivityComment = typeof activityComments.$inferSelect;
+export type ActivityLike = typeof activityLikes.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

@@ -148,7 +148,7 @@ export default function DuelScreen({
   greet?: number;
   /** The Activity screen. Optional so a caller that has none simply shows no destination. */
   onActivity?: () => void;
-  /** Somebody has spoken to you on Activity since you last looked. */
+  /** Somebody has spoken to you on Takes since you last looked. */
   activityUnread?: boolean;
   /**
    * A horizontal swipe across the game, taken one step along the ribbon.
@@ -1610,7 +1610,7 @@ export function BottomNav({
       {/* It is a screen now. The pill that used to apologise for it is gone, and
           so is the timer behind it — see the deleted `tease`. Closes D15. */}
       <NavItem
-        label={activityUnread ? "Activity, something new" : "Activity"}
+        label={activityUnread ? "Takes, something new" : "Takes"}
         active={screen === "activity"}
         onClick={onActivity}
         icon={

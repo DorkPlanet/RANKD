@@ -66,6 +66,32 @@ export interface SnapshotEntry {
   t: 0 | 1;
 }
 
+/**
+ * Enough to NAME a film, and no more.
+ *
+ * ── Why this exists beside `topFilms` ──────────────────────────────────────
+ *
+ * `entries` carries ids and nothing else, and `topFilms` carries ten. So a feed
+ * card about anything below tenth place had no title to print — which made the
+ * "locked inside the top 100" rule unbuildable, and quietly forced every card in
+ * the first version of the feed to be about the top ten.
+ *
+ * Short keys for the same reason `SnapshotEntry` uses them: two hundred and
+ * fifty of these are carried on every push, and `i`/`t` against `id`/`title` is
+ * the difference between a payload somebody notices and one they do not.
+ *
+ * Artwork only for the first `NAMED_ART`. Poster URLs are the bulk of this
+ * structure, and a card about a film sitting at 180th does not need to be
+ * pretty — it needs to be able to say which film it is.
+ */
+export interface NamedFilm {
+  /** `slugId`, matching `SnapshotEntry.i`. */
+  i: string;
+  t: string;
+  y?: string;
+  p?: string;
+}
+
 /** A film with enough on it to draw, for the profile rather than the maths. */
 export interface SnapshotFilm {
   id: string;
@@ -95,6 +121,14 @@ export interface SnapshotFilm {
 export interface SnapshotSummary {
   /** The films they would show you. Not the whole order, just the top of it. */
   topFilms: SnapshotFilm[];
+  /**
+   * Everything a feed card is allowed to name, best first.
+   *
+   * Separate from `topFilms`, which is for the profile and carries full artwork
+   * for ten. This is a long, thin list whose only job is turning an id in a diff
+   * into a title somebody can read. See `NamedFilm`.
+   */
+  named?: NamedFilm[];
   directors: PersonStat[];
   actors: PersonStat[];
   genre?: PersonStat;
@@ -129,6 +163,19 @@ const avgOf = (rs: readonly number[]): number => rs.reduce((a, b) => a + b, 0) /
 
 /** How many films the profile shows. Ten is a top ten. */
 const TOP_FILMS = 10;
+
+/**
+ * How deep a feed card may name a film.
+ *
+ * Two hundred and fifty because that is the deepest rule the feed has — a lock
+ * inside the top 100 has to be nameable, and the extra headroom means a film
+ * added at 180th is still a card rather than a line in a session summary.
+ * Anything below this folds into the session card, which needs no titles.
+ */
+const NAMED = 250;
+
+/** How many of those carry artwork. Poster URLs are the bulk of the payload. */
+const NAMED_ART = 50;
 
 /**
  * Build the answer.
@@ -213,6 +260,12 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
         poster: f.poster,
         rating: f.rating,
         tmdbId: f.tmdbId,
+      })),
+      named: placed.slice(0, NAMED).map((f, i) => ({
+        i: f.id,
+        t: f.title,
+        ...(f.year ? { y: f.year } : {}),
+        ...(i < NAMED_ART && f.poster ? { p: f.poster } : {}),
       })),
       directors: people.directors,
       actors: people.actors,

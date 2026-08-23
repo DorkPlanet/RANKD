@@ -5,22 +5,23 @@ import { describe, expect, it } from "vitest";
 import {
   crossed,
   diffToActivity,
-  escapeForLike,
   DUEL_MARKS,
+  escapeForLike,
+  LOCK_DEPTH,
   MAX_CARDS,
-  MIN_CLIMB,
+  MIN_MOVE,
   ratingOfScore,
   shortAgo,
 } from "@/lib/social/feed";
-import type { SnapshotEntry, SnapshotFilm } from "@/lib/snapshot";
+import type { NamedFilm, SnapshotEntry } from "@/lib/snapshot";
 import { seedScore, tierMax, tierMin } from "@/lib/tiers";
 
-const entry = (i: string, r: number, s = seedScore(4)): SnapshotEntry => ({ i, r, s, t: 0 });
-const film = (id: string, rating = 4): SnapshotFilm => ({ id, title: id.toUpperCase(), rating });
+const entry = (i: string, r: number, s = seedScore(4), t: 0 | 1 = 0): SnapshotEntry => ({ i, r, s, t });
+const name = (i: string): NamedFilm => ({ i, t: i.toUpperCase() });
 
 /** A run of films at ranks 1..n, so a diff has something to be a diff against. */
-const order = (ids: string[], score = seedScore(4)): SnapshotEntry[] =>
-  ids.map((id, i) => entry(id, i + 1, score));
+const order = (ids: string[], s = seedScore(4)): SnapshotEntry[] => ids.map((id, i) => entry(id, i + 1, s));
+const names = (ids: string[]): NamedFilm[] => ids.map(name);
 
 describe("ratingOfScore", () => {
   it("reads every band off TIER_RANGE rather than guessing", () => {
@@ -34,101 +35,175 @@ describe("ratingOfScore", () => {
 
 describe("diffToActivity", () => {
   it("says nothing about a first-ever snapshot", () => {
-    // Otherwise importing a CSV fills your followers' feeds with the contents of
-    // a spreadsheet. Bookkeeping, not a statement.
-    const after = order(["a", "b", "c"]);
-    expect(diffToActivity([], after, [film("a"), film("b"), film("c")])).toEqual([]);
+    // Otherwise importing a library fills your followers' feeds with the
+    // contents of a spreadsheet. Bookkeeping, not a statement.
+    expect(diffToActivity([], order(["a", "b"]), names(["a", "b"]))).toEqual([]);
   });
 
   it("says nothing when the same library is pushed twice", () => {
-    // THE property that removes the need for a dedupe index: the diff of a thing
+    // THE property that removes any need for a dedupe index: the diff of a thing
     // against itself is empty, so a re-sync cannot become a firehose.
     const same = order(["a", "b", "c"]);
-    expect(diffToActivity(same, same, [film("a"), film("b"), film("c")])).toEqual([]);
+    expect(diffToActivity(same, same, names(["a", "b", "c"]))).toEqual([]);
   });
 
-  it("reports a climb, with where it came from", () => {
-    const before = order(["a", "b", "c", "d", "e"]);
-    const after = order(["e", "a", "b", "c", "d"]);
-    const cards = diffToActivity(before, after, [film("e")]);
-    expect(cards).toHaveLength(1);
-    expect(cards[0].kind).toBe("climb");
-    expect(cards[0].subjectId).toBe("e");
-    expect(cards[0].meta).toMatchObject({ from: 5, rank: 1, places: 4, title: "E" });
+  describe("added — the engine", () => {
+    it("names the film and where it landed", () => {
+      const cards = diffToActivity(order(["a", "b"]), order(["a", "new", "b"]), names(["a", "new", "b"]));
+      const added = cards.find((c) => c.kind === "added");
+      expect(added?.subjectId).toBe("new");
+      expect(added?.meta).toMatchObject({ title: "NEW", rank: 2 });
+    });
+
+    it("carries the star band, not just the rank", () => {
+      const after = [entry("new", 1, seedScore(5))];
+      const cards = diffToActivity(order(["old"]), after, names(["new"]));
+      expect(cards.find((c) => c.kind === "added")?.meta).toMatchObject({ rating: 5 });
+    });
+
+    it("fires at ANY depth, not only the top ten", () => {
+      // The whole reason the snapshot now names 250 films.
+      const before = order(Array.from({ length: 200 }, (_, i) => `f${i}`));
+      const after = order([...Array.from({ length: 180 }, (_, i) => `f${i}`), "late"]);
+      const cards = diffToActivity(before, after, names(["late"]));
+      expect(cards.some((c) => c.kind === "added" && c.subjectId === "late")).toBe(true);
+    });
+
+    it("stays quiet about a film it cannot name, but still counts the work", () => {
+      const cards = diffToActivity(order(["a"]), order(["a", "unnamed"]), names(["a"]));
+      expect(cards.some((c) => c.kind === "added")).toBe(false);
+      expect(cards.find((c) => c.kind === "session")?.meta).toMatchObject({ added: 1 });
+    });
   });
 
-  it("ignores a move too small to mean anything", () => {
-    const before = order(["a", "b", "c", "d", "e"]);
-    // b moves up one. The ranking breathing, not news.
-    const after = order(["b", "a", "c", "d", "e"]);
-    expect(diffToActivity(before, after, [film("b")]).filter((c) => c.kind === "climb")).toEqual([]);
-    expect(MIN_CLIMB).toBeGreaterThan(1);
+  describe("locked — the strongest signal", () => {
+    const soft = entry("a", 5, seedScore(4), 0);
+    const hard = entry("a", 5, seedScore(4), 1);
+
+    it("fires on the transition to held-firmly", () => {
+      const cards = diffToActivity([soft], [hard], names(["a"]));
+      expect(cards.find((c) => c.kind === "locked")?.meta).toMatchObject({ title: "A", rank: 5 });
+    });
+
+    it("never fires twice for the same film", () => {
+      expect(diffToActivity([hard], [hard], names(["a"])).some((c) => c.kind === "locked")).toBe(false);
+    });
+
+    it("ignores a commitment made deep in the list", () => {
+      // A lock at 400th is a filing decision, and the feed is not a cabinet.
+      const deepSoft = entry("a", LOCK_DEPTH + 1, seedScore(4), 0);
+      const deepHard = entry("a", LOCK_DEPTH + 1, seedScore(4), 1);
+      expect(diffToActivity([deepSoft], [deepHard], names(["a"])).some((c) => c.kind === "locked")).toBe(false);
+    });
+
+    it("leads the feed when a sitting produced both a lock and work", () => {
+      const before = [soft, ...order(["b", "c", "d", "e"]).map((e) => ({ ...e, r: e.r + 10 }))];
+      const after = [hard, ...order(["e", "b", "c", "d"]).map((e) => ({ ...e, r: e.r + 10 }))];
+      const cards = diffToActivity(before, after, names(["a", "b", "c", "d", "e"]));
+      expect(cards[0].kind).toBe("locked");
+    });
   });
 
-  it("reports a tier promotion by band, not by score", () => {
-    // Same rank throughout — only the band changed, which is the whole event.
-    const before = [entry("a", 1, seedScore(4))];
-    const after = [entry("a", 1, seedScore(5))];
-    const cards = diffToActivity(before, after, [film("a", 5)]);
-    expect(cards).toHaveLength(1);
-    expect(cards[0].kind).toBe("promotion");
-    expect(cards[0].meta).toMatchObject({ from: 4, to: 5 });
+  describe("session — the work, credited to the person", () => {
+    it("is ONE card however much moved", () => {
+      const ids = Array.from({ length: 300 }, (_, i) => `f${i}`);
+      const after = order([...ids.slice(250), ...ids.slice(0, 250)]);
+      const cards = diffToActivity(order(ids), after, names(ids));
+      expect(cards.filter((c) => c.kind === "session")).toHaveLength(1);
+    });
+
+    it("names the single biggest riser", () => {
+      const before = order(["a", "b", "c", "d", "e"]);
+      const after = order(["e", "a", "b", "c", "d"]);
+      const cards = diffToActivity(before, after, names(["a", "b", "c", "d", "e"]));
+      expect(cards.find((c) => c.kind === "session")?.meta).toMatchObject({ bestTitle: "E", bestRank: 1 });
+    });
+
+    it("does not appear at all for a sitting that only nudged things", () => {
+      // Two films swapping is one place each — the ranking breathing. It earns
+      // no card rather than a card announcing that nothing happened.
+      const cards = diffToActivity(order(["a", "b"]), order(["b", "a"]), names(["a", "b"]));
+      expect(cards).toEqual([]);
+      expect(MIN_MOVE).toBeGreaterThan(1);
+    });
+
+    it("is absent when nothing happened at all", () => {
+      const same = order(["a", "b"]);
+      expect(diffToActivity(same, same, names(["a", "b"]))).toEqual([]);
+    });
+
+    it("never counts films disappearing as work", () => {
+      const cards = diffToActivity(order(["a", "b", "c"]), order(["a"]), names(["a"]));
+      expect(cards.some((c) => c.kind === "session")).toBe(false);
+    });
   });
 
-  it("does not call a nudge inside one band a promotion", () => {
-    const before = [entry("a", 1, tierMin(4))];
-    const after = [entry("a", 1, tierMax(4))];
-    expect(diffToActivity(before, after, [film("a")])).toEqual([]);
-  });
-
-  it("reports a film arriving straight into the top ten", () => {
-    const before = order(["a", "b"]);
-    const after = order(["a", "new", "b"]);
-    const cards = diffToActivity(before, after, [film("new")]);
-    expect(cards.some((c) => c.kind === "arrival" && c.subjectId === "new")).toBe(true);
-  });
-
-  it("only names films the snapshot can name", () => {
-    // `entries` carries ids alone; titles live on the top ten. A film that
-    // climbed but is not up there has no title to print, and is not news anyway.
-    const before = order(["a", "b", "c", "d", "e"]);
-    const after = order(["e", "a", "b", "c", "d"]);
-    expect(diffToActivity(before, after, [])).toEqual([]);
-  });
-
-  it("caps a five-hundred-film shuffle at a readable handful", () => {
-    const ids = Array.from({ length: 500 }, (_, i) => `f${i}`);
-    const before = order(ids);
-    // Everything moves: the last fifty all vault to the front.
-    const after = order([...ids.slice(450), ...ids.slice(0, 450)]);
-    const top = ids.slice(450).map((id) => film(id));
-    const cards = diffToActivity(before, after, top);
+  it("caps a marathon at a readable handful", () => {
+    const ids = Array.from({ length: 400 }, (_, i) => `f${i}`);
+    const after = [...ids.map((id, i) => entry(id, i + 1)), entry("x1", 401), entry("x2", 402)];
+    const cards = diffToActivity(order(ids), after, names([...ids, "x1", "x2"]));
     expect(cards.length).toBeLessThanOrEqual(MAX_CARDS);
-    expect(cards.length).toBeGreaterThan(0);
   });
 
-  it("puts the biggest news first", () => {
-    const before = [entry("a", 10, seedScore(4)), entry("b", 11, seedScore(4))];
-    const after = [entry("a", 2, seedScore(4)), entry("b", 1, seedScore(5))];
-    const cards = diffToActivity(before, after, [film("b", 5), film("a")]);
-    // A tier crossing outranks a climb; both outrank the quiet count card.
-    expect(cards[0].kind).toBe("promotion");
-    expect(cards.map((c) => c.kind)).toContain("climb");
+  it("has no changelog cards left", () => {
+    // The kinds that started all this: deltas rather than placements.
+    const before = order(["a", "b", "c", "d", "e"]);
+    const after = order(["e", "a", "b", "c", "d"]);
+    const kinds = diffToActivity(before, after, names(["a", "b", "c", "d", "e"])).map((c) => c.kind);
+    for (const gone of ["climb", "arrival", "placed", "promotion"]) {
+      expect(kinds).not.toContain(gone);
+    }
+  });
+});
+
+describe("crossed", () => {
+  it("only fires on the step that passes the mark", () => {
+    expect(crossed(DUEL_MARKS, 99, 100)).toBe(100);
+    expect(crossed(DUEL_MARKS, 100, 140)).toBeNull();
+    expect(crossed(DUEL_MARKS, 40, 90)).toBeNull();
   });
 
-  it("still says something when nothing moved at the top but films were placed", () => {
-    const before = order(["a", "b"]);
-    const after = order(["a", "b", "c", "d", "e"]);
-    const cards = diffToActivity(before, after, [film("a"), film("b")]);
-    const placed = cards.find((c) => c.kind === "placed");
-    expect(placed?.meta).toMatchObject({ count: 3 });
+  it("reports the biggest mark when a session vaults several", () => {
+    // Telling somebody who just passed a thousand that they passed a hundred
+    // undersells it.
+    expect(crossed(DUEL_MARKS, 50, 1200)).toBe(1000);
   });
 
-  it("never reports films disappearing as a placement", () => {
-    // Deleting films must not read as ranking them.
-    const before = order(["a", "b", "c", "d"]);
-    const after = order(["a", "b"]);
-    expect(diffToActivity(before, after, [film("a"), film("b")]).some((c) => c.kind === "placed")).toBe(false);
+  it("never fires backwards", () => {
+    expect(crossed(DUEL_MARKS, 500, 200)).toBeNull();
+  });
+});
+
+describe("milestones", () => {
+  it("outrank everything, being rare by construction", () => {
+    const cards = diffToActivity(order(["a", "b"]), order(["b", "a", "c"]), names(["a", "b", "c"]), {
+      was: { duels: 990, placed: 2 },
+      now: { duels: 1010, placed: 3 },
+    });
+    expect(cards[0].kind).toBe("milestone");
+    expect(cards[0].meta).toMatchObject({ of: "duels", at: 1000 });
+  });
+
+  it("stay silent when the caller gives no counts", () => {
+    const cards = diffToActivity(order(["a"]), order(["a", "b"]), names(["a", "b"]));
+    expect(cards.some((c) => c.kind === "milestone")).toBe(false);
+  });
+});
+
+describe("escapeForLike", () => {
+  // Invisible until somebody with an underscore in their name starts getting
+  // another person's notifications, which is a horrible way to find out.
+  it("escapes the character that is both legal and a wildcard", () => {
+    expect(escapeForLike("sam_j")).toBe("sam\\_j");
+  });
+
+  it("escapes the other wildcard and the escape character itself", () => {
+    expect(escapeForLike("a%b")).toBe("a\\%b");
+    expect(escapeForLike("a\\b")).toBe("a\\\\b");
+  });
+
+  it("leaves an ordinary handle exactly as it was", () => {
+    expect(escapeForLike("donnie")).toBe("donnie");
   });
 });
 
@@ -150,90 +225,6 @@ describe("shortAgo", () => {
   });
 
   it("switches to a date once days stop meaning anything", () => {
-    // "63d" is not a length of time anybody feels.
     expect(at("2026-06-01T10:00:00Z", "2026-08-23T10:00:00Z")).not.toMatch(/^\d+d$/);
-  });
-});
-
-describe("crossed", () => {
-  it("only fires on the step that passes the mark", () => {
-    expect(crossed(DUEL_MARKS, 99, 100)).toBe(100);
-    expect(crossed(DUEL_MARKS, 100, 140)).toBeNull(); // already past it
-    expect(crossed(DUEL_MARKS, 40, 90)).toBeNull(); // never reached one
-  });
-
-  it("reports the biggest mark when a session vaults several", () => {
-    // A long import or a marathon can cross more than one. Announcing "you
-    // passed 100" to somebody who just passed 1000 undersells it.
-    expect(crossed(DUEL_MARKS, 50, 1200)).toBe(1000);
-  });
-
-  it("never fires backwards", () => {
-    expect(crossed(DUEL_MARKS, 500, 200)).toBeNull();
-  });
-});
-
-describe("milestones in the diff", () => {
-  const before = order(["a", "b"]);
-  const after = order(["a", "b"]);
-
-  it("says nothing when no mark was passed", () => {
-    const cards = diffToActivity(before, after, [film("a")], {
-      was: { duels: 10, placed: 2 },
-      now: { duels: 20, placed: 2 },
-    });
-    expect(cards.filter((c) => c.kind === "milestone")).toEqual([]);
-  });
-
-  it("announces a duel milestone, and puts it first", () => {
-    const climbBefore = order(["a", "b", "c", "d", "e"]);
-    const climbAfter = order(["e", "a", "b", "c", "d"]);
-    const cards = diffToActivity(climbBefore, climbAfter, [film("e")], {
-      was: { duels: 990, placed: 5 },
-      now: { duels: 1010, placed: 5 },
-    });
-    // Rare by construction, so it outranks the third climb of the evening.
-    expect(cards[0].kind).toBe("milestone");
-    expect(cards[0].meta).toMatchObject({ of: "duels", at: 1000 });
-  });
-
-  it("counts PLACED films, not the whole library", () => {
-    // `filmCount` includes everything still un-rnkd. A milestone is about work
-    // done, not films owned.
-    const wide = order(Array.from({ length: 25 }, (_, i) => `f${i}`));
-    const cards = diffToActivity(order(["f0"]), wide, [], {
-      was: { duels: 0, placed: 1 },
-      now: { duels: 0, placed: 25 },
-    });
-    expect(cards.some((c) => c.kind === "milestone" && (c.meta as { at: number }).at === 25)).toBe(true);
-  });
-
-  it("stays silent when the caller gives no counts", () => {
-    expect(diffToActivity(before, after, [film("a")]).filter((c) => c.kind === "milestone")).toEqual([]);
-  });
-});
-
-describe("escapeForLike", () => {
-  // Invisible until somebody with an underscore in their name starts getting
-  // another person's notifications, which is a horrible way to find out.
-  it("escapes the character that is both legal and a wildcard", () => {
-    expect(escapeForLike("sam_j")).toBe("sam\\_j");
-  });
-
-  it("escapes the other wildcard and the escape character itself", () => {
-    expect(escapeForLike("a%b")).toBe("a\\%b");
-    expect(escapeForLike("a\\b")).toBe("a\\\\b");
-  });
-
-  it("leaves an ordinary handle exactly as it was", () => {
-    expect(escapeForLike("donnie")).toBe("donnie");
-    expect(escapeForLike("rankd2")).toBe("rankd2");
-  });
-
-  it("stops one handle matching another", () => {
-    // The whole point: unescaped, `sam_j` as a LIKE pattern matches `samxj`.
-    const pattern = escapeForLike("sam_j");
-    expect(pattern.includes("\_")).toBe(true);
-    expect(pattern).not.toBe("sam_j");
   });
 });

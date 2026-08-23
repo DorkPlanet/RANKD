@@ -1,282 +1,109 @@
 "use client";
 
-// Activity — what the people you follow have been doing to their rankings, and
-// what anybody had to say about it.
+// TAKES — where people's lists are moving, and whether you agree.
 //
-// ── Familiar in shape, unfamiliar in substance ─────────────────────────────
+// ── Why this is not an activity feed ───────────────────────────────────────
 //
-// Every other film app's feed is built on WATCHING: X watched a film, X rated a
-// film. Rankd's unit is a judgement and its consequence is movement — a film
-// climbing, a film crossing a tier. That is what these cards are, and no
-// competitor can show it because none of them holds an ordered list as its
-// primary object.
+// The first version was one, and it read as somebody else's: same nav slot, same
+// heartbeat icon, same reverse-chronological list of things that happened. The
+// deeper fault was what the cards WERE. Letterboxd's feed works because a review
+// is content — something to read. State changes are not content: "Heat climbed 4
+// places" is a statistic you can only nod at, and forty of them is a changelog.
 //
-// ── The line that makes it a place rather than a ticker ────────────────────
+// So the cards are PLACEMENTS, not deltas. "Sinners went in at #3" is a claim
+// that is still true and still checkable a year later, where "Heat beat
+// Collateral" stops meaning anything the moment both films are sorted. The duel
+// is the mechanism; the position is the product.
 //
-// "Heat climbed to #1" is true and there is nothing to say back to it. Under it,
-// this screen prints where YOU have the same film — "they have it #1, you have
-// it #14" — and that is a disagreement with a name on it. It reads differently
-// for every person who opens the card, and it is the reason the comment box
-// underneath has something to be about.
+// ── And the interaction is agreement, not conversation ─────────────────────
 //
-// That comparison needs two people's complete ordered lists. An app built on
-// star ratings does not have them; this one already stores both.
+// A comment is expensive to write, so it is rare, so most people receive nothing
+// and stop coming back. A tap costs nothing, so it happens in volume, so
+// everybody gets something. That is the engine under every feed that works.
 //
-// ── Threads open inline, and that is not a style choice ────────────────────
-//
-// `AppShell` and `PeoplePanel` both record the trap: `BottomNav` is `relative
-// z-40`, which makes it a stacking context, so a sheet rendered from INSIDE a
-// screen is z-ordered within that screen and the nav paints over it. A thread
-// that expands in place sidesteps the whole problem and reads better in a feed
-// anyway — the card you are arguing with stays on screen while you argue.
+// Disagreement is shown to the reader ALONE — "you have it #14" — and never
+// counted in public. Among a handful of people who know each other a visible
+// disagree tally builds a scoreboard of who got dunked on, and then nobody posts
+// the placements that make the feed exist.
 
 import { useEffect, useRef, useState } from "react";
 
 import { BottomNav, Header } from "./DuelScreen";
-import { COMMENT_MAX, shortAgo, type CommentItem, type FeedItem } from "@/lib/social/feed";
-import { splitMentions } from "@/lib/social/mentions";
+import { shortAgo, type FeedItem } from "@/lib/social/feed";
 import { dragScreen, inShelf, TURN_AT, type Dir } from "@/lib/ribbon";
 
 /** What kind of thing happened, in the card's own small caps. */
 function eyebrowFor(item: FeedItem): string {
-  const meta = item.meta as { to?: number; places?: number; count?: number; of?: string; at?: number };
+  const meta = item.meta as { rank?: number; of?: string; at?: number; added?: number; moved?: number };
   switch (item.kind) {
-    case "climb":
-      return `UP ${meta.places} PLACES`;
-    case "promotion":
-      return `NOW A ${meta.to}`;
-    case "arrival":
-      return "NEW IN THE TOP TEN";
+    case "added":
+      return `IN AT #${meta.rank}`;
+    case "locked":
+      return `LOCKED AT #${meta.rank}`;
     case "milestone":
       return meta.of === "duels" ? `${meta.at} DUELS` : `${meta.at} FILMS RANKED`;
+    case "session":
+      return "A SITTING";
     default:
-      return `${meta.count} MORE RANKED`;
+      // A card written by an older version. Named rather than hidden — a feed
+      // that silently drops its own history is worse than one showing a row it
+      // no longer produces.
+      return item.kind.toUpperCase();
   }
 }
 
-/** The line under the eyebrow — a title, or what the milestone actually means. */
+/** The line under the eyebrow. */
 function titleFor(item: FeedItem): string {
-  const meta = item.meta as { title?: string; of?: string; at?: number };
+  const meta = item.meta as {
+    title?: string;
+    of?: string;
+    added?: number;
+    moved?: number;
+    bestTitle?: string;
+  };
   if (meta.title) return meta.title;
   if (item.kind === "milestone") {
-    // Said as a sentence rather than repeated as a number. The eyebrow already
-    // carried the figure; this says why anybody should care about it.
     return meta.of === "duels" ? "That is a lot of deciding" : "The list keeps growing";
   }
-  return "Films placed";
+  if (item.kind === "session") {
+    const added = meta.added ?? 0;
+    const moved = meta.moved ?? 0;
+    // Said as work done, because that is the part the person actually did. The
+    // resulting positions are the model's — see the note in `feed.ts`.
+    if (added && moved) return `${added} added, ${moved} shifted`;
+    if (added) return `${added} film${added === 1 ? "" : "s"} added`;
+    return `${moved} film${moved === 1 ? "" : "s"} shifted`;
+  }
+  return "";
 }
 
-/**
- * A comment's text, with every `@handle` turned into a way to go there.
- *
- * Real anchors to `/@handle`, the same address `PersonRow` uses. A profile is a
- * page rather than a panel, so a mention is a link rather than a handler — which
- * also means it opens in a new tab if somebody wants it to.
- */
-function Body({ text }: { text: string }) {
-  return (
-    <>
-      {splitMentions(text).map((piece, i) =>
-        piece.kind === "text" ? (
-          <span key={i}>{piece.text}</span>
-        ) : (
-          <a key={i} href={`/@${piece.handle}`} className="font-semibold text-gold active:opacity-70">
-            @{piece.handle}
-          </a>
-        ),
-      )}
-    </>
-  );
-}
-
-function Thread({ item, onCount }: { item: FeedItem; onCount: (n: number) => void }) {
-  const [comments, setComments] = useState<CommentItem[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reported, setReported] = useState<ReadonlySet<string>>(new Set());
-
-  useEffect(() => {
-    let dead = false;
-    void (async () => {
-      try {
-        const res = await fetch(`/api/activity/${item.id}/comment`, { cache: "no-store" });
-        if (dead) return;
-        setComments(res.ok ? ((await res.json()) as { comments: CommentItem[] }).comments : []);
-      } catch {
-        if (!dead) setComments([]);
-      }
-    })();
-    return () => {
-      dead = true;
-    };
-  }, [item.id]);
-
-  const say = async () => {
-    const text = draft.trim();
-    if (!text || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/activity/${item.id}/comment`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ body: text }),
-      });
-      const json = (await res.json()) as { comment?: CommentItem; error?: string };
-      if (!res.ok || !json.comment) {
-        setError(json.error ?? "That didn't send.");
-        return;
-      }
-      // The list and the count are computed from ONE expression, so they cannot
-      // disagree. Reading `comments.length` separately meant two reads of the
-      // same closure, and a second reply landing between them left the card
-      // wearing a number one short of its own thread.
-      const next = [...(comments ?? []), json.comment];
-      setComments(next);
-      onCount(next.length);
-      setDraft("");
-    } catch {
-      setError("You look offline.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Flag somebody's line.
-   *
-   * The button says REPORTED straight away and never asks again. There is
-   * nothing for the reader to wait for — whether the row landed is not their
-   * problem, and a spinner on a moral act is worse than an optimistic one.
-   */
-  const report = async (id: string) => {
-    setReported((r) => new Set(r).add(id));
-    try {
-      await fetch("/api/report", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ commentId: id }),
-      });
-    } catch {
-      // Reporting twice is the same objection, so a failure that is retried
-      // later costs nothing. See `report_once_idx`.
-    }
-  };
-
-  const drop = async (id: string) => {
-    // One expression, for the same reason as `say`.
-    const next = (comments ?? []).filter((x) => x.id !== id);
-    setComments(next);
-    onCount(next.length);
-    try {
-      await fetch(`/api/activity/comment/${id}`, { method: "DELETE" });
-    } catch {
-      // It is gone from the screen either way; a failed delete resurfaces on the
-      // next read, which is a better outcome than blocking the tap on a network.
-    }
-  };
-
-  const left = COMMENT_MAX - draft.trim().length;
-
-  return (
-    <div className="mt-1 pb-2 pl-[60px]">
-      {comments === null ? (
-        <p className="py-2 text-sub text-dim">Looking&hellip;</p>
-      ) : (
-        comments.map((c) => (
-          <div key={c.id} className="py-1.5">
-            <div className="text-sub leading-snug text-text">
-              <a href={`/@${c.handle}`} className="font-semibold text-text-hi active:opacity-70">
-                {c.handle}
-              </a>{" "}
-              <Body text={c.body} />
-            </div>
-            <div className="mt-0.5 flex items-center gap-3 text-label text-dim">
-              <span>{shortAgo(c.createdAt)}</span>
-              {/* Only ever your own line. The owner of a card cannot delete
-                  comments on it — that is moderation, and handing it to whoever
-                  owns the post turns every disagreement into a race to delete. */}
-              {c.mine ? (
-                <button onClick={() => void drop(c.id)} className="tracking-[0.1em] active:opacity-70">
-                  DELETE
-                </button>
-              ) : (
-                // Somebody else's line. Reporting is the only thing you may do
-                // to it — you cannot delete what you did not write, which is
-                // what stops a disagreement becoming a race to delete.
-                <button
-                  onClick={() => void report(c.id)}
-                  className="tracking-[0.1em] active:opacity-70"
-                >
-                  {reported.has(c.id) ? "REPORTED" : "REPORT"}
-                </button>
-              )}
-            </div>
-          </div>
-        ))
-      )}
-
-      <div className="mt-2 flex items-end gap-2">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={1}
-          placeholder="Say something"
-          className="min-h-[38px] w-full flex-1 resize-none rounded-xl border border-border bg-bg px-3 py-2 text-sub text-text-hi outline-none placeholder:text-dim"
-        />
-        <button
-          onClick={() => void say()}
-          disabled={busy || draft.trim().length === 0 || left < 0}
-          className="mb-[3px] flex-shrink-0 rounded-full px-3 py-1.5 text-label font-extrabold tracking-[0.14em] text-gold disabled:opacity-35"
-          style={{ background: "rgba(255,255,255,0.05)" }}
-        >
-          SEND
-        </button>
-      </div>
-      {/* The count only appears once it is worth knowing about, so the box is
-          not permanently wearing a number nobody is near. */}
-      {(left < 40 || error) && (
-        <div className="mt-1 text-label text-dim">
-          {error ?? `${left} left`}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Card({
-  item,
-  open,
-  onToggle,
-  onCount,
-  onFilm,
-}: {
-  item: FeedItem;
-  open: boolean;
-  onToggle: () => void;
-  onCount: (n: number) => void;
-  onFilm: (id: string) => void;
-}) {
+function Card({ item, onFilm, onLike }: { item: FeedItem; onFilm: (id: string) => void; onLike: (on: boolean) => void }) {
   const meta = item.meta as {
     title?: string;
     year?: string;
     poster?: string;
     rank?: number;
-    from?: number;
-    count?: number;
+    rating?: number;
     at?: number;
+    added?: number;
+    bestTitle?: string;
+    bestPoster?: string;
+    bestRank?: number;
+    bestId?: string;
   };
+
+  // A session borrows the artwork of its best result, which is the one thing in
+  // it anybody wants to look at.
+  const poster = meta.poster ?? meta.bestPoster;
+  const openable = meta.title ? item.subjectId : meta.bestId;
 
   return (
     <article className="py-3.5">
       <div className="flex items-center gap-3.5">
-        {/* The artwork is the card. A feed of text is a log, and the posters are
-            why this reads as somebody's taste rather than an audit trail. */}
-        {meta.poster ? (
+        {poster ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={meta.poster}
+            src={poster}
             alt=""
             aria-hidden
             className="h-[68px] w-[46px] flex-shrink-0 rounded-md object-cover"
@@ -290,18 +117,15 @@ function Card({
             className="flex h-[68px] w-[46px] flex-shrink-0 items-center justify-center rounded-md font-serif text-lg font-bold text-gold"
             style={{ background: "var(--surface)" }}
           >
-            {(meta.at ?? meta.count ?? "·").toString()}
+            {(meta.at ?? meta.added ?? "·").toString()}
           </div>
         )}
 
         <div className="min-w-0 flex-1">
           <div className="text-label font-extrabold tracking-[0.14em] text-gold">{eyebrowFor(item)}</div>
-          {/* Tappable only when the reader OWNS the film. Offering to open
-              something that is not in your library is a promise the app cannot
-              keep, and the same check already decides the rank line below. */}
-          {meta.title && item.yourRank !== undefined ? (
+          {openable && item.yourRank !== undefined ? (
             <button
-              onClick={() => onFilm(item.subjectId)}
+              onClick={() => onFilm(openable)}
               className="mt-1 block max-w-full truncate text-left text-body font-semibold text-text-hi active:opacity-70"
             >
               {titleFor(item)}
@@ -310,8 +134,6 @@ function Card({
             <div className="mt-1 truncate text-body font-semibold text-text-hi">{titleFor(item)}</div>
           )}
           <div className="mt-0.5 truncate text-sub text-dim">
-            {/* Your own cards say "You", because "@donnie climbed" reads as a
-                stranger when the stranger is you. */}
             {item.mine ? (
               <span>You</span>
             ) : (
@@ -319,59 +141,51 @@ function Card({
                 {item.handle}
               </a>
             )}
-            {meta.rank !== undefined && ` · now #${meta.rank}`}
+            {meta.rating !== undefined && ` · ${meta.rating}★`}
+            {item.kind === "session" && meta.bestTitle && ` · best: ${meta.bestTitle} at #${meta.bestRank}`}
             <span className="ml-1">· {shortAgo(item.createdAt)}</span>
           </div>
         </div>
       </div>
 
-      {/* ── Where YOU have it, which is the whole point ────────────────────
-          Only on somebody else's card, and only when you have the film placed.
-          A blank where a disagreement would be is worse than no line at all. */}
-      {item.yourRank !== undefined && (
-        <div className="mt-2 pl-[60px]">
-          <span
-            className="inline-block rounded-full px-2.5 py-1 text-label tracking-[0.08em]"
-            style={{ background: "rgba(255,255,255,0.05)" }}
+      <div className="mt-2 flex items-center gap-4 pl-[60px]">
+        {/* ── Agree ────────────────────────────────────────────────────────
+            One tap, and the only public interaction on a card. Your own
+            placement is not something to agree with — it is yours. */}
+        {!item.mine && (
+          <button
+            onClick={() => onLike(!item.liked)}
+            aria-pressed={item.liked}
+            className="text-label font-extrabold tracking-[0.12em] active:opacity-70"
+            style={{ color: item.liked ? "var(--gold)" : "var(--dim)" }}
           >
+            {item.liked ? "AGREED" : "AGREE"}
+            {item.likes > 0 && ` · ${item.likes}`}
+          </button>
+        )}
+        {item.mine && item.likes > 0 && (
+          <span className="text-label font-extrabold tracking-[0.12em] text-dim">
+            {item.likes} AGREED
+          </span>
+        )}
+
+        {/* ── Where YOU have it ──────────────────────────────────────────
+            Only on somebody else's card, and only when you have the film
+            placed. This is the whole reason to read the feed rather than a
+            statistic — and it is yours alone. */}
+        {item.yourRank !== undefined && (
+          <span className="text-label tracking-[0.08em]">
             {meta.rank !== undefined && item.yourRank === meta.rank ? (
-              <span className="text-gold">You have it there too</span>
+              <span className="text-gold">SAME AS YOURS</span>
             ) : (
               <>
-                <span className="text-dim">You have it </span>
+                <span className="text-dim">YOU HAVE IT </span>
                 <span className="font-semibold text-text-hi">#{item.yourRank}</span>
               </>
             )}
           </span>
-        </div>
-      )}
-
-      <div className="mt-2 pl-[60px]">
-        <button
-          onClick={onToggle}
-          className="text-label font-extrabold tracking-[0.12em] text-dim active:opacity-70"
-        >
-          {item.comments === 0
-            ? open
-              ? "CLOSE"
-              : "SAY SOMETHING"
-            : `${item.comments} ${item.comments === 1 ? "REPLY" : "REPLIES"}`}
-        </button>
-
-        {/* One line of the argument, so the count is not the only thing on
-            offer. Hidden once the thread is open, where it would be the same
-            sentence twice. */}
-        {!open && item.latest && (
-          <button onClick={onToggle} className="mt-1 block max-w-full text-left active:opacity-70">
-            <span className="line-clamp-2 text-sub leading-snug text-dim">
-              <span className="font-semibold text-text-hi">{item.latest.handle}</span>{" "}
-              {item.latest.body}
-            </span>
-          </button>
         )}
       </div>
-
-      {open && <Thread item={item} onCount={onCount} />}
     </article>
   );
 }
@@ -399,7 +213,7 @@ export function FeedScreen({
   /**
    * A swipe off this screen.
    *
-   * The feed has no pages of its own, so every horizontal swipe here is about
+   * TAKES has no pages of its own yet, so every horizontal swipe here is about
    * leaving — the same situation the duel screen is in, and the same handling.
    */
   onRibbon: (dir: Dir, travelled?: number) => void;
@@ -416,7 +230,6 @@ export function FeedScreen({
   onFindPeople: () => void;
 }) {
   const [items, setItems] = useState<FeedItem[] | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
   const touch = useRef<{ x: number; y: number; axis: null | "x" | "y" } | null>(null);
 
   useEffect(() => {
@@ -429,8 +242,8 @@ export function FeedScreen({
         setItems(res.ok ? ((await res.json()) as { items: FeedItem[] }).items : []);
         onRead();
       } catch {
-        // Offline. An empty list rather than an error: the feed is not the app,
-        // and failing to reach it should read as quiet rather than as broken.
+        // Offline. An empty list rather than an error: this is not the app, and
+        // failing to reach it should read as quiet rather than as broken.
         if (!dead) setItems([]);
       }
     })();
@@ -440,6 +253,28 @@ export function FeedScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Agree, or take it back.
+   *
+   * Moved on screen before the request goes out. A tap on a feed has to feel
+   * instant or nobody taps twice, and the server returns the true count so a
+   * disagreement between the two resolves in the server's favour.
+   */
+  const like = async (item: FeedItem, on: boolean) => {
+    setItems((all) =>
+      (all ?? []).map((x) => (x.id === item.id ? { ...x, liked: on, likes: x.likes + (on ? 1 : -1) } : x)),
+    );
+    try {
+      const res = await fetch(`/api/activity/${item.id}/like`, { method: on ? "POST" : "DELETE" });
+      if (!res.ok) return;
+      const { likes } = (await res.json()) as { likes: number };
+      setItems((all) => (all ?? []).map((x) => (x.id === item.id ? { ...x, likes } : x)));
+    } catch {
+      // Offline. The tap stands locally and the next read corrects it, which is
+      // a better outcome than a button that refuses to move.
+    }
+  };
+
   return (
     <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
@@ -447,16 +282,13 @@ export function FeedScreen({
       {/* `chrome-hold` so this band stays put while the page slides under it —
           see the ribbon notes in globals.css. */}
       <div className="chrome-hold flex-shrink-0 px-5 pb-3 pt-3" style={{ background: "var(--band)" }}>
-        <div className="text-label font-extrabold tracking-[0.18em] text-dim">ACTIVITY</div>
+        <div className="text-label font-extrabold tracking-[0.18em] text-dim">TAKES</div>
       </div>
 
       <div
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 pb-6"
         onTouchStart={(e) => {
-          // A gesture that starts in the compose box belongs to the compose box.
-          if (inShelf(e.target) || (e.target as HTMLElement).closest?.("textarea")) {
-            return (touch.current = null);
-          }
+          if (inShelf(e.target)) return (touch.current = null);
           const t = e.touches[0];
           touch.current = { x: t.clientX, y: t.clientY, axis: null };
         }}
@@ -483,23 +315,14 @@ export function FeedScreen({
         {items === null ? (
           <p className="mt-16 text-center text-sub text-dim">Looking&hellip;</p>
         ) : items.length === 0 ? (
-          // ── The empty state offers something ────────────────────────────
-          //
-          // The feed already includes your OWN cards, so this only shows when
-          // nobody — including you — has moved anything yet. Saying "go follow
-          // someone" to a person looking at an empty screen is the same broken
-          // promise this cell used to make.
           <div className="mt-16 text-center">
             <p className="text-sub leading-relaxed text-dim">
-              Nothing yet. Rank a few films and what moves shows up here.
+              Nothing yet. Rank a film and where it lands shows up here.
             </p>
             <p className="mt-2 text-sub leading-relaxed text-dim">
-              Follow somebody and theirs will too.
+              Follow somebody and their placements will too.
             </p>
-            {/* An empty state that names the way out of itself. Saying "follow
-                somebody" without offering anywhere to do it is the same shape of
-                broken promise this cell used to make when it said "coming
-                soon". */}
+            {/* An empty state that names the way out of itself. */}
             <button
               onClick={onFindPeople}
               className="mx-auto mt-6 block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
@@ -511,16 +334,7 @@ export function FeedScreen({
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>
             {items.map((item) => (
-              <Card
-                key={item.id}
-                item={item}
-                open={open === item.id}
-                onToggle={() => setOpen((o) => (o === item.id ? null : item.id))}
-                onFilm={onFilm}
-                onCount={(n) =>
-                  setItems((all) => (all ?? []).map((x) => (x.id === item.id ? { ...x, comments: n } : x)))
-                }
-              />
+              <Card key={item.id} item={item} onFilm={onFilm} onLike={(on) => void like(item, on)} />
             ))}
           </div>
         )}
