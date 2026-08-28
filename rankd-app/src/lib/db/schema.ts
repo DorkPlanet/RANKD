@@ -516,6 +516,66 @@ export const activityComments = pgTable(
 );
 
 /**
+ * Why a film somebody locked is where it is, published.
+ *
+ * ── Its own table, and not a kind of `activity` ───────────────────────
+ *
+ * The first build made a take an `activity` row with a new `take` kind, which
+ * read well: it would inherit the feed's query, its likes and its comments for
+ * nothing. Two things killed it, and the second is the one that matters.
+ *
+ * A take is not the same KIND of object as everything else in that table. Every
+ * activity row is derived — the server diffs a pushed ranking against the stored
+ * one and the facts fall out, which is why `writeFeedCards` can say a client
+ * “asserts nothing”. A take is typed by a person about a film. It is the same
+ * kind of thing as a comment, not the same kind of thing as “Heat was added”.
+ *
+ * And it could not be built anyway. Enforcing one take per person per film needs
+ * a unique index partial on `kind = 'take'`, and `drizzle-orm`'s migrator runs
+ * every pending migration inside ONE transaction (`pg-core/dialect.cjs`). A
+ * transaction may add a value to an enum or use one, never both, so the index
+ * fails with 55P04 on any database that has not already got the value — which is
+ * every fresh one. Splitting the two across files does not help; they are still
+ * the same transaction. A real table needs no enum value and gets an ordinary
+ * unique constraint.
+ *
+ * ── One row per person per film, edited in place ─────────────────────
+ *
+ * A take is edited far more often than it is written, and every edit arrives as
+ * a whole-library push. Without the unique pair each push would leave another
+ * row and a profile shelf would fill with one film saying slightly different
+ * things. Keeping the id stable across an edit is also what will keep replies
+ * attached to the take they answer rather than to a version of it.
+ *
+ * `createdAt` is written once and never touched again: a take belongs where it
+ * was first said, and refreshing it on every sync would march every take anybody
+ * has ever written back to the top of the feed on each push.
+ *
+ * See lib/social/takes.ts for why publishing is a separate act from tagging.
+ */
+export const takes = pgTable(
+  "take",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The film, as a `slugId` — cross-user stable. See lib/snapshot.ts. */
+    subjectId: text("subject_id").notNull(),
+    /** Title, artwork, the tags, the line, and both ranks. */
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // The pair IS the identity. What `syncTakes` upserts against.
+    uniqueIndex("take_once_idx").on(table.authorId, table.subjectId),
+    // A profile shelf, and the feed: everything one person has said, newest first.
+    index("take_author_idx").on(table.authorId, table.createdAt.desc()),
+  ],
+);
+
+/**
  * A conversation between two people about one film.
  *
  * ── Never a wall ───────────────────────────────────────────────────────────
@@ -631,4 +691,5 @@ export type ActivityComment = typeof activityComments.$inferSelect;
 export type ActivityLike = typeof activityLikes.$inferSelect;
 export type Thread = typeof threads.$inferSelect;
 export type ThreadMessage = typeof threadMessages.$inferSelect;
+export type TakeRow = typeof takes.$inferSelect;
 export type SavedListRow = typeof savedLists.$inferSelect;

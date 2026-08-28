@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { requireHandle } from "@/lib/auth";
 import { db, tasteSnapshots } from "@/lib/db";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
-import { writeFeedCards } from "@/lib/social/activity";
+import { syncTakes, writeFeedCards } from "@/lib/social/activity";
 
 /**
  * A ceiling on what will be stored.
@@ -79,6 +79,15 @@ export async function PUT(request: Request) {
     duelCount: Math.max(0, Math.floor(duelCount)),
   });
 
+
+  // ── Takes, which are the one thing here the client asserts ───────────────
+  //
+  // Everything above is derived from the diff. A take is typed by a person, so
+  // it arrives rather than falls out, and `syncTakes` validates it instead of
+  // computing it. It rides the summary because a take is a fixed handful of
+  // things with writing attached, which is what that half of the payload is
+  // for — and because it means publishing costs no request of its own.
+  await syncTakes(user, (summary as SnapshotSummary).takes ?? []);
   // Replaced whole. There is no history and there should not be: a snapshot is
   // the CURRENT answer, and last week's guess about somebody's taste is of no
   // use to anybody, including them.

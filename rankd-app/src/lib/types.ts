@@ -1,6 +1,7 @@
 import type { Rating } from "./tiers";
 import type { Judgement } from "./log";
 import type { Lock } from "./lock";
+import type { Take } from "./social/takes";
 
 export interface Film {
   id: string;
@@ -27,6 +28,19 @@ export interface Film {
   // that distinction buys.
   tags?: string[];
   note?: string;
+  // The moment you would point at, and whether pointing at it gives the film
+  // away. `spoiler` covers the scene AND the note, because a line about a
+  // scene is usually the same disclosure as the scene. See lib/tags.ts.
+  scene?: string;
+  spoiler?: boolean;
+  // Published, and when, and where it sat at the time.
+  //
+  // The tags and note above are private by default and always have been. This
+  // records the moment somebody chose to publish them, which is what turns them
+  // into a take other people can read and reply to. Its ABSENCE means private,
+  // so every film tagged before takes existed stays private, with no migration
+  // and no promise broken retroactively. See lib/social/takes.ts.
+  take?: Take;
   // Kept so a film can be found by who made it. These arrive on the very same
   // response as the poster and used to be thrown away, so storing them costs no
   // extra requests — only the bytes. Absent until that film's artwork is fetched.

@@ -2,11 +2,14 @@
 //
 // The deciding is in `feed.ts` and is pure. This is the database half.
 
-import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 
-import { activity, activityLikes, db, follows, tasteSnapshots, threadMessages, threads, users } from "@/lib/db";
+import { activity, activityLikes, db, follows, takes, tasteSnapshots, threadMessages, threads, users } from "@/lib/db";
 import { diffToActivity, type FeedItem } from "@/lib/social/feed";
 import type { SnapshotEntry, SnapshotSummary } from "@/lib/snapshot";
+import { textIsClean } from "@/lib/profanity";
+import { cleanNote, cleanScene, cleanTags } from "@/lib/tags";
+import type { SnapshotTake } from "@/lib/social/takes";
 
 /** How far back the feed reaches in one read. */
 const PAGE = 40;
@@ -325,4 +328,124 @@ export async function unreadFor(user: {
 /** They have looked. Anything older stops being news. */
 export async function markSeen(userId: string): Promise<void> {
   await db.update(users).set({ activitySeenAt: new Date() }).where(eq(users.id, userId));
+}
+
+/**
+ * How many takes one account may publish.
+ *
+ * Far past anything a person writes by hand and low enough that a bad client
+ * cannot turn the feed table into a dumping ground. `MAX_ENTRIES` on the
+ * snapshot route exists for the same reason and picks its number the same way.
+ */
+const MAX_TAKES = 500;
+
+/**
+ * Bring the stored takes into line with what just arrived.
+ *
+ * ── The one thing on this server a client ASSERTS ─────────────────────────
+ *
+ * Every other card is derived here, by diffing a pushed ranking against the
+ * stored one, and `writeFeedCards` says why at length: a client that claims
+ * nothing cannot claim anything false. A take breaks that rule and has to,
+ * because it is typed by a person — there is no ranking to derive "the diner"
+ * from.
+ *
+ * So this is the one place that validates rather than computes. Tags are read
+ * against the fixed vocabulary, the note is trimmed to its cap, and both are
+ * rebuilt from the incoming values rather than trusted as sent.
+ *
+ * ── A refused note is dropped here and refused at the BUTTON ──────────────
+ *
+ * `textIsClean` runs, and when it fails the note is left off while the take and
+ * its tags still publish. That looks like swallowing an error and is not: this
+ * runs inside a background sync that fires every ten seconds with nobody
+ * watching and nowhere to draw a message, so it is the wrong place to tell
+ * somebody their words were refused. The client refuses at the publish control,
+ * where there is a person to tell. This is the backstop behind that, and a
+ * backstop's job is to hold rather than to explain.
+ *
+ * ── Absent means unpublished, and that has to delete ──────────────────────
+ *
+ * A take missing from the push is one somebody took down. Leaving the row would
+ * make unpublishing impossible — the same bug the snapshot DELETE route exists
+ * to avoid, where a cleared ranking kept showing a top ten its owner had thrown
+ * away. Comments cascade with it, which is right: taking your take down takes
+ * the conversation about it with you.
+ */
+export async function syncTakes(
+  user: { id: string; kind: "person" | "house" },
+  incoming: readonly SnapshotTake[],
+): Promise<void> {
+  // Same rule as the feed cards: the house ranking is a place you visit, not a
+  // thing that shouts. It has no tags to publish either way.
+  if (user.kind !== "person") return;
+
+  try {
+    const clean: { subjectId: string; meta: Record<string, unknown> }[] = [];
+    const seen = new Set<string>();
+
+    for (const take of incoming.slice(0, MAX_TAKES)) {
+      if (!take || typeof take.i !== "string" || !take.i) continue;
+      if (typeof take.t !== "string" || !take.t) continue;
+      // A duplicate id would break the upsert against the unique index by
+      // conflicting with a row from this same statement.
+      if (seen.has(take.i)) continue;
+
+      const tags = cleanTags(take.g);
+      const note = cleanNote(take.n);
+      const scene = cleanScene(take.c);
+      const passed = note && textIsClean(note).clean ? note : undefined;
+      const passedScene = scene && textIsClean(scene).clean ? scene : undefined;
+      // Nothing left to say. Same floor the client publishes against.
+      if (tags.length === 0 && !passed && !passedScene) continue;
+
+      seen.add(take.i);
+      clean.push({
+        subjectId: take.i,
+        meta: {
+          title: take.t,
+          ...(take.y ? { year: take.y } : {}),
+          ...(take.p ? { poster: take.p } : {}),
+          // Both numbers, because the move is the content. See takes.ts.
+          rank: Math.max(1, Math.floor(take.r)),
+          wasRank: Math.max(1, Math.floor(take.w)),
+          ...(tags.length ? { tags } : {}),
+          ...(passed ? { note: passed } : {}),
+          ...(passedScene ? { scene: passedScene } : {}),
+          // Only alongside something it could hide. A warning about nothing
+          // is worse than no warning, because it teaches people to ignore the
+          // next one that means something.
+          ...(take.x && (passed || passedScene) ? { spoiler: true } : {}),
+        },
+      });
+    }
+
+    // Taken down. Done before the upsert so a take republished under a changed
+    // id cannot be deleted by the same pass that just wrote it.
+    const keep = [...seen];
+    await db
+      .delete(takes)
+      .where(
+        and(
+          eq(takes.authorId, user.id),
+          keep.length > 0 ? notInArray(takes.subjectId, keep) : undefined,
+        ),
+      );
+
+    if (clean.length === 0) return;
+
+    await db
+      .insert(takes)
+      .values(clean.map((c) => ({ authorId: user.id, ...c })))
+      // The id survives an edit, which is what will keep replies attached to the
+      // take they answer rather than to a version of it. `createdAt` is left
+      // alone deliberately — see the table's own note.
+      .onConflictDoUpdate({
+        target: [takes.authorId, takes.subjectId],
+        set: { meta: sql`excluded.meta`, updatedAt: new Date() },
+      });
+  } catch {
+    // A take is decoration on top of a sync, exactly as the feed cards are.
+    // Failing to publish one must not cost somebody the push of their ranking.
+  }
 }

@@ -33,6 +33,7 @@ import {
   type Superlative,
 } from "./profile";
 import { signatureOf, type SignatureEntry } from "./tags";
+import { takesFrom, type SnapshotTake } from "./social/takes";
 import type { Film } from "./types";
 
 /**
@@ -160,6 +161,17 @@ export interface SnapshotSummary {
    * nothing beats a shape built from three taps.
    */
   signature?: SignatureEntry[];
+  /**
+   * The takes they have published, in the order the ranking holds them now.
+   *
+   * Rides here rather than in `entries` because a take is a fixed handful of
+   * things with writing and artwork attached, which is exactly what this half
+   * of the payload is for. It does not grow with the library: it grows with how
+   * much somebody has chosen to say, which is a much slower number.
+   *
+   * See lib/social/takes.ts for why publishing is a separate act from tagging.
+   */
+  takes?: SnapshotTake[];
 }
 
 export interface Snapshot {
@@ -190,6 +202,33 @@ const NAMED = 250;
 const NAMED_ART = 50;
 
 /**
+ * The order a position is quoted in, and the only one.
+ *
+ * ── Not `rankedFilms`, and the difference is a real bug waiting ─────────
+ *
+ * `ladder.ts`'s `rankedFilms` sorts the WHOLE library, unplaced films included,
+ * so `overallRank` counts films that have no position at all. That is right for
+ * the list screen, which shows them. It is wrong for anything another person
+ * reads: a snapshot ranks only placed films, so the same film has two different
+ * “ranks” depending on which function you happened to call.
+ *
+ * This was inline inside `buildSnapshot` and is lifted out because a take has to
+ * store the position it was written at, and a take quoting one number while the
+ * feed prints another is precisely the kind of disagreement nobody notices until
+ * two screens are side by side.
+ *
+ * Ties broken by title so the order is stable across rebuilds: without it two
+ * films on the same score swap places between pushes and an unchanged library
+ * produces a different snapshot.
+ */
+export function placedOrder(films: readonly Film[]): Film[] {
+  return films
+    .filter(isPlaced)
+    .slice()
+    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+}
+
+/**
  * Build the answer.
  *
  * Pure, and takes plain arrays rather than reading storage, so it runs on the
@@ -210,13 +249,7 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
   // array. Dropped here so a borrowed film can never be published as yours.
   const own = films.filter((f) => !f.guest);
 
-  const placed = own
-    .filter(isPlaced)
-    .slice()
-    // Highest score first. Ties broken by title so the order is stable across
-    // rebuilds: without it, two films on the same score can swap places between
-    // pushes and produce a different snapshot from an unchanged library.
-    .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+  const placed = placedOrder(own);
 
   const entries: SnapshotEntry[] = placed.map((film, index) => ({
     i: film.id,
@@ -282,6 +315,9 @@ export function buildSnapshot(films: readonly Film[], logRows: number): Snapshot
       // Read off the order that is already computed above, so the signature and
       // the ranking can never disagree about which films are the best ones.
       signature: signatureOf(placed),
+      // Same `placed` ordering as the signature, so a take’s “now” and the
+      // rank the feed prints for the same film can never disagree.
+      takes: takesFrom(placed),
       directors: people.directors,
       actors: people.actors,
       genre: topGenre,

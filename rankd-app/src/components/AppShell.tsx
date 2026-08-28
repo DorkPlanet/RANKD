@@ -12,6 +12,7 @@
 import { dragScreen, exitScreen, stepScreen, type Dir, type RibbonScreen } from "@/lib/ribbon";
 import { useEffect, useRef, useState } from "react";
 import { TagSheet } from "./TagSheet";
+import { placedOrder } from "@/lib/snapshot";
 import { FeedScreen } from "./FeedScreen";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
@@ -1113,12 +1114,42 @@ export default function AppShell() {
         <TagSheet
           film={overlay.film}
           onClose={() => setOverlay(null)}
-          onSave={(tags, note) => {
+          onSave={(draft) => {
+            // ── The rank is captured HERE, at the moment of publishing ──────
+            //
+            // A take stores the position its film held when it was written, so
+            // it can say "was #3 · now #40" later. That number cannot be
+            // recovered afterwards, because the ranking is a live order and the
+            // old position is gone the instant it changes.
+            //
+            // `placedOrder` and not `overallRank`: the latter counts un-rnkd
+            // films, so it answers a different question from the one every
+            // other person's screen is asking. See the note on `placedOrder`.
+            const already = overlay.film.take;
+            const at = already?.at ?? Date.now();
+            const rank =
+              already?.rank ??
+              placedOrder(library).findIndex((f) => f.id === overlay.film.id) + 1;
+
             // Written straight into the library, beside the lock it explains.
             // Same path every other film edit takes, so it syncs and backs up
             // without anything new being taught about it.
             const next = library.map((f) =>
-              f.id === overlay.film.id ? { ...f, tags, ...(note ? { note } : { note: undefined }) } : f,
+              f.id === overlay.film.id
+                ? {
+                    ...f,
+                    tags: draft.tags,
+                    note: draft.note,
+                    scene: draft.scene,
+                    // Never stored as `false`. An absent flag and a false one
+                    // mean the same thing, and only one of them costs bytes in
+                    // a store that shares a 5MB budget with the log.
+                    spoiler: draft.spoiler ? true : undefined,
+                    // Unpublishing clears the marker, which is what makes the
+                    // take disappear from the next push. See `syncTakes`.
+                    take: draft.publish && rank > 0 ? { at, rank } : undefined,
+                  }
+                : f,
             );
             saveFilms(next);
             setState((s) => (s ? { ...s, films: next } : s));

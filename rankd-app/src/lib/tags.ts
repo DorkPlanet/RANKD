@@ -60,6 +60,24 @@ export type Tag = (typeof TAGS)[number];
  */
 export const MAX_TAGS = 3;
 
+/**
+ * The longest a favourite scene may be.
+ *
+ * ── This prompt was argued against, and the argument is answered ────────
+ *
+ * `TagSheet` chose “what stood out?” over a scene on purpose, and its header
+ * said why: “a scene needs plot to explain it, which is how a prompt becomes a
+ * spoiler.” That is a real objection and it was right to raise it. It is
+ * answered by `spoiler` on the film rather than by refusing the prompt — the
+ * user's call, 28 Aug 2026 — so a scene can be named and still be hidden until
+ * a reader asks for it.
+ *
+ * Short because it should NAME a moment rather than recount one. Eighty
+ * characters fits “the diner, both of them just talking” and does not fit a
+ * synopsis, which is the distinction the cap is enforcing.
+ */
+export const SCENE_MAX = 80;
+
 /** The longest a note may be. One thought, not a paragraph. */
 export const NOTE_MAX = 140;
 
@@ -104,6 +122,12 @@ export function cleanNote(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
   const text = raw.replace(/\s+/g, " ").trim();
   return text ? text.slice(0, NOTE_MAX) : undefined;
+}
+
+/** Trim a scene to something that names a moment rather than retelling it. */
+export function cleanScene(raw: string | undefined): string | undefined {
+  const text = (raw ?? "").replace(/\s+/g, " ").trim();
+  return text ? text.slice(0, SCENE_MAX) : undefined;
 }
 
 export interface SignatureEntry {

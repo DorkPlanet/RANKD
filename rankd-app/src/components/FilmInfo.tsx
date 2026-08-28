@@ -265,7 +265,7 @@ export function FilmInfo({
             the feature is discoverable without a tour. */}
         {onTags && (
           <div className="px-4 pb-3">
-            {tags.length > 0 || film.note ? (
+            {tags.length > 0 || film.note || film.scene ? (
               <button onClick={() => onTags(film)} className="block w-full text-left active:opacity-70">
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map((tag) => (
@@ -278,6 +278,20 @@ export function FilmInfo({
                     </span>
                   ))}
                 </div>
+                {/* The scene first, because it is the concrete one: it names a
+                    moment, where the line below is a thought about the film.
+                    Marked when it gives something away, so the person who wrote
+                    it can see the warning their readers will get. */}
+                {film.scene && (
+                  <p className="mt-2 text-sub leading-snug text-text">
+                    {film.spoiler && (
+                      <span className="mr-1.5 text-label font-extrabold tracking-[0.14em] text-dim">
+                        SPOILER
+                      </span>
+                    )}
+                    {film.scene}
+                  </p>
+                )}
                 {film.note && (
                   <p className="mt-2 font-serif text-sub italic leading-snug text-text">{film.note}</p>
                 )}
