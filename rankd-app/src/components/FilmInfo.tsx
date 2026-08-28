@@ -20,6 +20,7 @@ import { isHard } from "@/lib/lock";
 import { rankMap } from "@/lib/list";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
+import { Eyebrow } from "./ui";
 
 // ── Why this is a percentage now, when it deliberately was not ─────────────
 //
@@ -173,7 +174,7 @@ export function FilmInfo({
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm"
-      style={{ background: "rgba(0,0,0,0.7)", padding: "1.5rem" }}
+      style={{ background: "rgba(0, 0, 0, 0.7)", padding: "1.5rem" }}
       onClick={onClose}
     >
       <div
@@ -189,8 +190,8 @@ export function FilmInfo({
             style={{ width: 88, flexShrink: 0, aspectRatio: "2 / 3", objectFit: "cover", borderRadius: 8 }}
           />
           <div className="min-w-0 flex-1">
-            <div className="font-display text-xl leading-none tracking-wide text-text-hi">{film.title}</div>
-            <div className="mt-1.5 text-label font-bold tracking-[0.1em] text-gold">
+            <div className="font-display text-title leading-none tracking-wide text-text-hi">{film.title}</div>
+            <div className="mt-1.5 text-label font-bold tracking-[0.14em] text-gold">
               {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
             </div>
             {/* Where it sits, and WHO PUT IT THERE.
@@ -270,8 +271,8 @@ export function FilmInfo({
                   {tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full px-2.5 py-1 text-label tracking-[0.08em] text-gold"
-                      style={{ background: "rgba(255,255,255,0.05)" }}
+                      className="rounded-full px-2.5 py-1 text-label tracking-[0.14em] text-gold"
+                      style={{ background: "var(--wash)" }}
                     >
                       {tag.toUpperCase()}
                     </span>
@@ -282,12 +283,9 @@ export function FilmInfo({
                 )}
               </button>
             ) : (
-              <button
-                onClick={() => onTags(film)}
-                className="text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
-              >
-                SAY WHY IT IS HERE
-              </button>
+              <button onClick={() => onTags(film)} className="active:opacity-70">
+                  <Eyebrow>Say why it is here</Eyebrow>
+                </button>
             )}
           </div>
         )}
@@ -297,7 +295,7 @@ export function FilmInfo({
             you who made a film and then gave you nowhere to go with it. */}
         {meta?.cast?.length ? (
           <div className="px-4 pb-3">
-            <div className="text-label font-extrabold tracking-[0.12em] text-dim">STARRING</div>
+            <Eyebrow>Starring</Eyebrow>
             <div className="mt-1 text-sub leading-snug text-text">
               {meta.cast.map((name, i) => (
                 <span key={name}>
@@ -403,9 +401,7 @@ export function FilmInfo({
           <div className="border-t border-border px-4 py-3">
             {refining ? (
               <>
-                <div className="text-label font-extrabold tracking-[0.12em] text-dim">
-                  HOW MANY DUELS
-                </div>
+                <Eyebrow>How many duels</Eyebrow>
                 <div className="mt-2 flex gap-2">
                   {[10, 25, 50].map((d) => (
                     <button
@@ -449,26 +445,33 @@ export function FilmInfo({
 
         {onRemove && (
           <div className="border-t border-border px-4 py-3">
+            {/* ── Safe on the LEFT, always ──────────────────────────────────
+                The two buttons below were the other way round, and Settings' two
+                identical confirmations — "Clear my ranking" and "Delete
+                everything" — both put Keep it first. So the same two words in
+                the same two slots meant opposite things depending on which sheet
+                you were in, and the one where the LEFT-hand button destroyed
+                something was the one reached by long-pressing a poster mid-duel.
+
+                A thumb learns a position long before it learns a label. There is
+                no version of this where the answer differs by screen. */}
             {armed ? (
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    onRemove(film);
-                    onClose();
-                  }}
-                  // The app has no danger colour — nothing else in it destroys
-                  // anything — so this borrows the wordmark bar's red directly
-                  // rather than inventing a token for one button.
-                  style={{ color: "#D81E26", borderColor: "#D81E26" }}
-                  className="flex-1 rounded-lg border py-2 text-sub font-bold active:scale-95"
-                >
-                  Remove it
-                </button>
                 <button
                   onClick={() => setArmed(false)}
                   className="flex-1 rounded-lg border border-border py-2 text-sub font-bold text-dim active:scale-95"
                 >
                   Keep it
+                </button>
+                <button
+                  onClick={() => {
+                    onRemove(film);
+                    onClose();
+                  }}
+                  style={{ color: "var(--danger)", borderColor: "var(--danger)" }}
+                  className="flex-1 rounded-lg border py-2 text-sub font-bold active:scale-95"
+                >
+                  Remove it
                 </button>
               </div>
             ) : (

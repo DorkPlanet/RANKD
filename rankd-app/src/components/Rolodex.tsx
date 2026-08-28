@@ -181,7 +181,7 @@ export function Rolodex({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="font-serif text-label font-extrabold tracking-wide text-gold">YOU</span>
+              <span className="font-serif text-label font-bold tracking-wide text-gold">YOU</span>
             </div>
           ) : (
             // Every film in the pile is a live opponent: a climb rules nothing
@@ -210,7 +210,7 @@ export function Rolodex({
                 The strip's job is "this is settled"; the real number belongs
                 where it can say "#2 overall, #1 in 4★" (overallRank exists for
                 that). */}
-            <LockIcon />
+            <span className="text-gold"><LockIcon /></span>
             <div
               className="w-full overflow-hidden rounded-md bg-surface"
               style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}

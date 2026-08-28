@@ -27,13 +27,16 @@ import { Visibility } from "./Visibility";
 import type { Me } from "@/lib/account";
 import { Feedback } from "./Feedback";
 import { ImportGuide } from "./ImportGuide";
-import { ImportButton, RestoreButton, Sheet } from "./ui";
+import { ImportButton, RestoreButton, SecondaryButton, SettingRow, Sheet } from "./ui";
+import { ChevronIcon } from "./Icons";
 
 /** Stable reference for `useSyncExternalStore`. */
 const noSubscribe = () => () => {};
 
-const BTN =
-  "flex-1 rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]";
+// The BTN constant that used to live here is gone. It was `rounded-xl … text-xs`
+// — neither of the two shapes the rest of the app uses — so every control in this
+// sheet was a third thing sitting beside file-picker labels that were a fourth.
+// `SecondaryButton` in ui.tsx is the shape now, for this sheet and everywhere.
 
 /** One collapsed row. `note` is the only thing shown while shut. */
 function Row({
@@ -63,11 +66,8 @@ function Row({
           {note && (
             <span className={urgent ? "text-label font-bold text-gold" : "text-label text-dim"}>{note}</span>
           )}
-          <span
-            className="text-label text-dim"
-            style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s var(--ease)" }}
-          >
-            ▾
+          <span className="text-dim">
+            <ChevronIcon open={open} />
           </span>
         </span>
       </button>
@@ -119,7 +119,14 @@ export function Settings({
   const toggle = (id: RowId) => setOpen((o) => (o === id ? null : id));
 
   const [conflict, setConflict] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  // ── A note that says WHICH kind of thing just happened ────────────────────
+  //
+  // This was a bare string painted gold, and the same slot carried "Imported 861
+  // films" and "That file couldn't be read." in the identical colour. Gold is how
+  // the app says a thing WORKED, so a failure wearing it read as a success the
+  // reader had simply not finished parsing. The flag is what lets the one line
+  // choose between `--gold` and `--danger`.
+  const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const [evidence, setEvidence] = useState<{ rows: number; bytes: number } | null>(null);
   useEffect(() => {
     void loadLog().then((log) => setEvidence(logSize(log)));
@@ -137,12 +144,14 @@ export function Settings({
     // sorts of types for the same file, and the first four bytes never lie.
     const result = await filmsFromFile(file);
     if ("error" in result) {
-      setNote(result.error);
+      setNote({ text: result.error, bad: true });
       return;
     }
     const { films: parsed, skipped } = result;
     onImport(merge ? mergeFilms(films, parsed) : parsed);
-    setNote(`${merge ? "Merged" : "Imported"} ${parsed.length} films${skipped ? `, skipped ${skipped}` : ""}.`);
+    setNote({
+      text: `${merge ? "Merged" : "Imported"} ${parsed.length} films${skipped ? `, skipped ${skipped}` : ""}.`,
+    });
   };
 
   return (
@@ -157,8 +166,8 @@ export function Settings({
         max={100}
         value={Math.round(brightness * 100)}
         onChange={(e) => onChange(parseInt(e.target.value, 10) / 100)}
-        className="mb-3 w-full"
-        style={{ accentColor: "var(--accent)" }}
+        aria-label="Brightness"
+        className="range mb-1"
       />
 
       {/* Beside brightness rather than inside a row, because it is the same
@@ -172,20 +181,19 @@ export function Settings({
           rather than restful. `useDriftScroll` already stands down for
           `prefers-reduced-motion`; this is for the people who want it still
           without turning motion off across their whole phone. */}
-      <label className="mb-4 flex cursor-pointer items-center justify-between gap-3 active:scale-[0.99]">
-        <span className="min-w-0">
-          <span className="block text-body text-text-hi">Let the list drift</span>
-          <span className="block text-sub leading-snug text-dim">
-            Scrolls slowly on its own when you stop touching it
-          </span>
-        </span>
-        <input
-          type="checkbox"
-          className="tickbox flex-shrink-0"
-          checked={prefs.listDrift}
-          onChange={(e) => onPrefs({ listDrift: e.target.checked })}
-        />
-      </label>
+      {/* A switch, not a tick. This is a SETTING — it persists and it changes
+          how the app behaves from now on — and it sat four rows above the two
+          switches under "Who can see you" wearing a completely different
+          control. Same sheet, same kind of question, two idioms. The tick is
+          still the right shape for a run OPTION (shuffle this run, let this
+          refine move a locked film); see `Switch` in ui.tsx for the line. */}
+      <SettingRow
+        className="mb-4"
+        title="Let the list drift"
+        blurb="Scrolls slowly on its own when you stop touching it"
+        on={prefs.listDrift}
+        onToggle={() => onPrefs({ listDrift: !prefs.listDrift })}
+      />
 
       <Row
         title="Your films"
@@ -206,28 +214,35 @@ export function Settings({
           Back up everything to one file, or move it to another device.
         </p>
         <div className="flex gap-2">
-          <button
+          <SecondaryButton
             onClick={() => {
               exportBackup();
-              setNote("Saved.");
+              setNote({ text: "Saved." });
             }}
-            className={BTN}
-          >
-            Save
-          </button>
+            className="flex-1"
+            >
+              Save
+            </SecondaryButton>
           <RestoreButton
             onFile={async (file) => {
               try {
                 const r = importBackup(await file.text());
-                setNote(`Restored ${r.films} films. Reloading…`);
+                setNote({ text: `Restored ${r.films} films. Reloading…` });
                 setTimeout(() => location.reload(), 900);
               } catch (e) {
-                setNote(e instanceof Error ? e.message : "That file couldn't be read.");
+                setNote({
+                  text: e instanceof Error ? e.message : "That file couldn't be read.",
+                  bad: true,
+                });
               }
             }}
           />
         </div>
-        {note && <p className="mt-3 text-sub text-gold">{note}</p>}
+        {note && (
+          <p className={`mt-3 text-sub leading-snug ${note.bad ? "text-danger" : "text-gold"}`}>
+            {note.text}
+          </p>
+        )}
       </Row>
 
       {/* ── Why this row no longer opens itself ────────────────────────────
@@ -290,9 +305,9 @@ export function Settings({
             Every screen explains itself the first time you see it. This makes them all
             new again, so the notes come back as you go.
           </p>
-          <button onClick={onTour} className={`${BTN} w-full`}>
+          <SecondaryButton wide onClick={onTour}>
             Refresh me
-          </button>
+          </SecondaryButton>
         </Row>
       )}
 
@@ -381,37 +396,39 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
       <p className="mb-3 text-sub text-dim">Your films and stars are kept. Only the ranking goes.</p>
 
       {soft > 0 && (
-        <button
+        <SecondaryButton
+          wide
+          className="mb-2"
           onClick={() => {
             onReset(withdrawSoftLocks(films));
             setArming(false);
           }}
-          className={`${BTN} mb-2 w-full`}
         >
           Drop the {soft.toLocaleString()} Fast Shuffle placed
-        </button>
+        </SecondaryButton>
       )}
 
       {!arming ? (
-        <button
-          onClick={() => setArming(true)}
-          disabled={placed === 0 && duels === 0}
-          className={`${BTN} w-full text-dim disabled:opacity-35`}
-        >
+        <SecondaryButton wide onClick={() => setArming(true)} disabled={placed === 0 && duels === 0}>
           Clear my ranking
-        </button>
+        </SecondaryButton>
       ) : (
         <>
           {/* The number, not "are you sure?" — it is the thing you would miss. */}
-          <p className="mb-2 text-sub leading-snug text-gold">
+          {/* Danger, not gold. Gold is how this app says a thing SUCCEEDED, and
+              spending it on the sentence that names what is about to be
+              destroyed made a warning look like a receipt. */}
+          <p className="mb-2 text-sub leading-snug text-danger">
             Erases {placed.toLocaleString()} placements and {duels.toLocaleString()} duels. Cannot be
             undone.
           </p>
           <div className="flex gap-2">
-            <button onClick={() => setArming(false)} className={BTN}>
+            <SecondaryButton className="flex-1" onClick={() => setArming(false)}>
               Keep it
-            </button>
-            <button
+            </SecondaryButton>
+            <SecondaryButton
+              danger
+              className="flex-1"
               onClick={() => {
                 // Log first: if the write below fails the evidence is already
                 // gone and a retry finishes the job. The other order can leave a
@@ -425,10 +442,9 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
                 onReset(resetRanking(films));
                 setArming(false);
               }}
-              className="flex-1 rounded-xl border border-gold/50 py-2.5 text-center text-xs font-bold text-gold active:scale-[0.98]"
             >
               Erase it
-            </button>
+            </SecondaryButton>
           </div>
         </>
       )}
@@ -444,16 +460,16 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           so it sits last, dimmest, and behind its own arming. */}
       <div className="mt-4 border-t border-border pt-3">
         {!wiping ? (
-          <button
-            onClick={() => setWiping(true)}
-            disabled={films.length === 0}
-            className="w-full text-center text-sub text-dim active:scale-95 disabled:opacity-35"
-          >
+          // A bordered button, not bare text. This is the MORE destructive of
+          // the two resets in this row and it was drawn as the weaker of the
+          // two: "Clear my ranking" above it had a border and this one did not,
+          // so the affordance ran opposite to the consequence.
+          <SecondaryButton wide onClick={() => setWiping(true)} disabled={films.length === 0}>
             Delete everything and start fresh
-          </button>
+          </SecondaryButton>
         ) : (
           <>
-            <p className="mb-2 text-sub leading-snug text-gold">
+            <p className="mb-2 text-sub leading-snug text-danger">
               Removes all {films.length.toLocaleString()} films, every placement, every duel and
               your profile. The app opens as if you had just installed it. Save a backup first if
               you want any of it back.
@@ -463,21 +479,23 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
                 account touches, and burying it in the same sentence would let
                 it be skimmed. */}
             {hasAccount && (
-              <p className="mb-2 text-sub leading-snug text-gold">
+              <p className="mb-2 text-sub leading-snug text-danger">
                 Your saved copy goes too, so it will not come back on your other devices.
               </p>
             )}
             {wipeFailed && (
-              <p className="mb-2 text-sub leading-snug" style={{ color: "#D81E26" }}>
+              <p className="mb-2 text-sub leading-snug text-danger">
                 Your saved copy could not be reached, so nothing was deleted. Check your connection
                 and try again.
               </p>
             )}
             <div className="flex gap-2">
-              <button onClick={() => setWiping(false)} className={BTN}>
+              <SecondaryButton className="flex-1" onClick={() => setWiping(false)}>
                 Keep it
-              </button>
-              <button
+              </SecondaryButton>
+              <SecondaryButton
+                danger
+                className="flex-1"
                 disabled={wipeBusy}
                 onClick={() => {
                   void (async () => {
@@ -502,11 +520,9 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
                     location.reload();
                   })();
                 }}
-                style={{ color: "#D81E26", borderColor: "#D81E26" }}
-                className="flex-1 rounded-xl border py-2.5 text-center text-xs font-bold active:scale-[0.98] disabled:opacity-50"
               >
-                {wipeBusy ? "Deleting" : "Delete it all"}
-              </button>
+                {wipeBusy ? "Deleting…" : "Delete it all"}
+              </SecondaryButton>
             </div>
           </>
         )}

@@ -19,6 +19,8 @@ import { useDriftScroll } from "@/lib/useDriftScroll";
 import { starsFor, ORDERED_TIERS, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
+import { FIELD } from "./ui";
+import { ChevronIcon } from "./Icons";
 
 // Fixed row metrics. Building all 828 rows at once measured a 748ms blocked
 // main thread — content-visibility skips their layout and paint but React still
@@ -378,9 +380,17 @@ export default function ListScreen({
             contrast, which is the whole reason the first attempt looked wrong
             on a phone. It was a flat 10px line sitting directly under another
             flat 11px line, so two dim greys of near-identical size stacked into
-            mush and the longer one read as a runt paragraph. The numbers are in
-            the display face at 13px now and the words are 9px small caps, which
-            is the same label treatment the profile band uses.
+            mush and the longer one read as a runt paragraph.
+
+            It is deliberately the same treatment as `Stat` in `ProfileBits` —
+            a serif numeral over a small-caps label — but not the component
+            itself: a segment also carries a tone colour and an underline that
+            say which filter is on, and neither belongs on a profile stat.
+
+            The numbers here are serif at 18px and the labels 10px small caps.
+            This note used to claim "the display face at 13px" over "9px small
+            caps", which had not been true of the code for some time. A comment
+            describing type it does not control is a comment that will lie.
 
             Hidden unless both states are actually present. A library with no
             soft locks would otherwise be taught a distinction it cannot see. */}
@@ -400,7 +410,7 @@ export default function ListScreen({
                     <span className="block font-serif text-lg font-bold leading-none tabular-nums">
                       {seg.n}
                     </span>
-                    <span className="mt-1 block text-label font-extrabold uppercase tracking-[0.14em]">
+                    <span className="mt-1 block text-label font-bold uppercase tracking-[0.14em]">
                       {seg.label}
                     </span>
                     {/* The active column is underlined in its own colour. The
@@ -446,7 +456,7 @@ export default function ListScreen({
             placeholder="Film, director or actor"
             // `pr-12` is the arrow's room. Without it a long query runs under
             // the glyph and the last characters are unreadable.
-            className="w-full rounded-xl border border-border bg-bg py-2 pl-3 pr-12 text-sm text-text-hi outline-none placeholder:text-dim"
+            className={`${FIELD} pr-12`}
           />
           <button
             onClick={() => setJumpOpen((v) => !v)}
@@ -456,23 +466,9 @@ export default function ListScreen({
             className="absolute inset-y-1 right-1 flex items-center pl-2.5 pr-3 text-dim active:scale-95"
             style={{ borderLeft: "1px solid var(--border)" }}
           >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-              style={{
-                transform: jumpOpen ? "rotate(180deg)" : "none",
-                transition: "transform 0.2s var(--ease)",
-              }}
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
+            {/* This was the only chevron in the app drawn properly, and it is
+                now the one every other chevron is drawn from — see `ChevronIcon`. */}
+            <ChevronIcon open={jumpOpen} />
           </button>
           {jumpOpen && (
             <>
@@ -484,7 +480,7 @@ export default function ListScreen({
                     onClick={() => jumpTo(t)}
                     className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left active:scale-[0.98]"
                   >
-                    <span className="text-sm text-gold">{starsFor(t)}</span>
+                    <span className="text-sub text-gold">{starsFor(t)}</span>
                     {/* "12/134", not "134". The count alone said how big the
                         tier is; the pair says how much of it is left, which is
                         the thing you are actually choosing on. A finished tier
@@ -600,7 +596,7 @@ export default function ListScreen({
                     style={{ height: DIVIDER_H }}
                   >
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
-                    <span className="text-label font-extrabold tracking-[0.18em] text-dim">UN-RNKD</span>
+                    <span className="text-label font-bold tracking-[0.18em] text-dim">UN-RNKD</span>
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
                   </div>
                 )}
@@ -644,7 +640,7 @@ function TierRule({ stars, count }: { stars: string; count: number }) {
         className="h-px flex-1"
         style={{ background: "linear-gradient(to right, transparent, var(--border))" }}
       />
-      <span className="text-base tracking-[0.08em] text-gold">{stars}</span>
+      <span className="text-body tracking-[0.08em] text-gold">{stars}</span>
       <span className="text-label text-dim">{count}</span>
       <span
         className="h-px flex-1"
@@ -772,7 +768,7 @@ function Row({
           where it is NAMED. It was drawn without ever being named for several
           sessions, which is the whole of N2. */}
       {rank === undefined ? (
-        <span className="flex-shrink-0 text-label font-extrabold tracking-[0.14em] text-dim">UN-RNKD</span>
+        <span className="flex-shrink-0 text-label font-bold tracking-[0.14em] text-dim">UN-RNKD</span>
       ) : (
         /* `title` is kept as a desktop pointer, but it is no longer where the
            distinction LIVES — the legend in the header says it out loud. The

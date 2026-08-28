@@ -85,7 +85,7 @@ export default function LiveCardSheet({
       {data && (
         <button
           onClick={() => setShowCard(true)}
-          className="mt-3 w-full rounded-xl border border-gold/50 py-2.5 text-center text-xs font-bold text-gold active:scale-[0.98]"
+          className="mt-3 w-full rounded-full border border-gold/40 py-2.5 text-center text-sub font-bold text-gold active:scale-[0.98] disabled:opacity-40"
         >
           Make the card
         </button>

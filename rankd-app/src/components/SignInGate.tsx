@@ -29,6 +29,7 @@ import { useState } from "react";
 
 import { signInWithGoogle } from "@/lib/account";
 import { BARS } from "@/lib/brand";
+import { PrimaryButton } from "./ui";
 
 export default function SignInGate() {
   // Sign-in is a full navigation to Google, which on a slow connection leaves
@@ -69,17 +70,17 @@ export default function SignInGate() {
         Sign in so your ranking is yours to keep, on every device you use.
       </p>
 
-      <button
+      <PrimaryButton
+        wide
+        className="mt-8 max-w-[300px]"
+        disabled={going}
         onClick={() => {
           setGoing(true);
           void signInWithGoogle();
         }}
-        disabled={going}
-        className="mt-8 w-full max-w-[300px] rounded-full py-3.5 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-60"
-        style={{ color: "#1c1405", background: "var(--gold)" }}
       >
         {going ? "Taking you to Google…" : "Continue with Google"}
-      </button>
+      </PrimaryButton>
 
       <p className="mt-5 max-w-[280px] text-label leading-snug text-dim">
         Rankd asks Google for your name and email, nothing else.

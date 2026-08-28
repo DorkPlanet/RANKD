@@ -18,7 +18,8 @@ import { useRef, useState } from "react";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
-import { IconToggle, Sheet } from "./ui";
+import { FIELD, IconToggle, Sheet } from "./ui";
+import { ChevronIcon, ChevronRightIcon } from "./Icons";
 
 // How many rows the picker builds per pass.
 const PICKER_PAGE = 60;
@@ -170,7 +171,7 @@ export function FilmPicker({
         placeholder={
           mode === "film" ? "Search all films" : mode === "director" ? "Search directors" : "Search actors"
         }
-        className="mb-2 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+        className={`${FIELD} mb-2`}
       />
 
       {/* Searching a director and then tapping one of their films re-places that
@@ -183,15 +184,15 @@ export function FilmPicker({
         <button
           onClick={() => onPerson({ name: matchedName, role: mode, count: 0 })}
           className="mb-2 flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-left active:scale-[0.99]"
-          style={{ color: "#1c1405", background: "var(--gold)" }}
+          style={{ color: "var(--gold-ink)", background: "var(--gold)" }}
         >
           <span className="min-w-0">
-            <span className="block truncate text-sm font-extrabold">Rank {matchedName}</span>
+            <span className="block truncate text-body font-bold">Rank {matchedName}</span>
             <span className="block truncate text-sub opacity-75">
               All {shown.length} against each other, across tiers
             </span>
           </span>
-          <span className="flex-shrink-0 text-lg leading-none">›</span>
+          <span className="flex-shrink-0"><ChevronRightIcon /></span>
         </button>
       )}
 
@@ -206,11 +207,11 @@ export function FilmPicker({
             filter === "all" ? "border-border text-dim" : "border-gold text-gold"
           }`}
         >
-          <span className={filter === "all" ? "" : "text-sm"}>
+          <span className={filter === "all" ? "" : "text-body"}>
             {filter === "all" ? "All tiers" : starsFor(filter)}
           </span>
           <span className="opacity-60">{shown.length}</span>
-          <span className="opacity-60">▾</span>
+          <span className="opacity-60"><ChevronIcon open={tierOpen} size={11} /></span>
         </button>
 
         <span className="flex-1" />
@@ -272,7 +273,7 @@ export function FilmPicker({
               key={f.id}
               disabled={peers < 1}
               onClick={() => onPick(f.id)}
-              className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99] disabled:opacity-30"
+              className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99] disabled:opacity-40"
             >
               {/* Most of the library has no artwork yet — backfill only covers
                   the tier being played — so an empty <img> would just be a
@@ -283,16 +284,16 @@ export function FilmPicker({
                   src={f.poster}
                   alt=""
                   loading="lazy"
-                  style={{ width: 26, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }}
+                  style={{ width: 26, aspectRatio: "2 / 3", objectFit: "cover", borderRadius: 3 }}
                 />
               ) : (
                 <span
                   className="shrink-0 bg-border"
-                  style={{ width: 26, aspectRatio: "2/3", borderRadius: 3 }}
+                  style={{ width: 26, aspectRatio: "2 / 3", borderRadius: 3 }}
                 />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-text-hi">{f.title}</span>
+                <span className="block truncate text-body text-text-hi">{f.title}</span>
                 {/* In a people search, show who matched — otherwise the row gives
                     no clue why it's in the results. */}
                 {mode !== "film" && query !== "" && (
@@ -344,7 +345,7 @@ function TierOption({
         active ? "bg-border/40" : ""
       }`}
     >
-      <span className={active ? "text-sm text-gold" : "text-sm text-text-hi"}>{label}</span>
+      <span className={active ? "text-body text-gold" : "text-body text-text-hi"}>{label}</span>
       <span className="text-sub text-dim">{count}</span>
     </button>
   );

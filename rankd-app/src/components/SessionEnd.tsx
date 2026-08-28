@@ -18,6 +18,7 @@
 
 import type { Film } from "@/lib/types";
 import { isHard } from "@/lib/lock";
+import { Eyebrow, PrimaryButton, SecondaryButton } from "./ui";
 
 export function SessionEnd({
   title,
@@ -68,7 +69,7 @@ export function SessionEnd({
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-7 py-6 text-center">
       <div>
-        <div className="font-display text-2xl leading-none tracking-wide text-gold">{title}</div>
+        <div className="font-display text-[26px] leading-none tracking-wide text-gold">{title}</div>
         <p className="mt-2 font-serif text-sub italic leading-snug text-dim">{blurb}</p>
       </div>
 
@@ -84,10 +85,10 @@ export function SessionEnd({
                   src={f.poster}
                   alt={f.title}
                   className="w-full rounded-md object-cover"
-                  style={{ aspectRatio: "2/3", boxShadow: i === 0 ? "0 0 0 2px var(--gold)" : "0 4px 14px rgba(0,0,0,.5)" }}
+                  style={{ aspectRatio: "2 / 3", boxShadow: i === 0 ? "0 0 0 2px var(--gold)" : "0 4px 14px rgba(0, 0, 0, 0.5)" }}
                 />
               ) : (
-                <span className="w-full rounded-md bg-border" style={{ aspectRatio: "2/3" }} />
+                <span className="w-full rounded-md bg-border" style={{ aspectRatio: "2 / 3" }} />
               )}
               <span
                 className={`font-serif text-sub leading-none ${isHard(f) ? "font-bold text-gold" : "text-dim"}`}
@@ -114,37 +115,24 @@ export function SessionEnd({
       {/* The way out. The list is primary because that is where what you just
           made now lives — the old screen's only exit was starting more work. */}
       <div className="flex w-full max-w-[260px] flex-col gap-2">
-        <button
-          onClick={onList}
-          className="w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95"
-          style={{ color: "#1c1405", background: "var(--gold)" }}
-        >
+        <PrimaryButton wide onClick={onList}>
           See your list
-        </button>
+        </PrimaryButton>
         {againSizes && onAgainSize ? (
           <>
-            <div className="mt-1 text-center text-label font-bold uppercase tracking-[0.12em] text-dim">
-              {againLabel}
-            </div>
+            <Eyebrow className="mt-1 text-center">{againLabel}</Eyebrow>
             <div className="flex gap-2">
               {againSizes.map((size) => (
-                <button
-                  key={size}
-                  onClick={() => onAgainSize(size)}
-                  className="flex-1 rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-dim active:scale-95"
-                >
+                <SecondaryButton key={size} className="flex-1" onClick={() => onAgainSize(size)}>
                   {size}
-                </button>
+                </SecondaryButton>
               ))}
             </div>
           </>
         ) : (
-          <button
-            onClick={onAgain}
-            className="w-full rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-dim active:scale-95"
-          >
+          <SecondaryButton wide onClick={onAgain}>
             {againLabel}
-          </button>
+          </SecondaryButton>
         )}
       </div>
     </div>

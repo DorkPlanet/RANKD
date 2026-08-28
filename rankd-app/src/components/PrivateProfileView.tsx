@@ -23,40 +23,21 @@
 // picture, their bio. That is the whole of it, and `ProfileIdentity` is shaped so
 // there is nothing else in scope to render by accident.
 
-import { avatarOf } from "@/lib/profile";
+import { Avatar } from "./Avatar";
 import type { ProfileIdentity } from "@/lib/social/publicProfile";
 
 export function PrivateProfileView({ identity }: { identity: ProfileIdentity }) {
-  const avatar = avatarOf({
-    handle: identity.handle,
-    displayName: null,
-    avatarUrl: identity.avatarUrl,
-  });
-
   return (
     <main
-      className="mx-auto flex min-h-screen w-full max-w-md flex-col items-center px-6 pb-16 text-center"
+      className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center px-6 pb-16 text-center"
       style={{
         background: "var(--bg)",
         paddingTop: "calc(env(safe-area-inset-top) + 4rem)",
       }}
     >
-      {avatar.kind === "image" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={avatar.url}
-          alt=""
-          className="h-20 w-20 rounded-full object-cover"
-          style={{ border: "1px solid var(--border)" }}
-        />
-      ) : (
-        <span
-          className="flex h-20 w-20 items-center justify-center rounded-full font-display text-3xl text-gold"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-        >
-          {avatar.letter}
-        </span>
-      )}
+      <Avatar
+        identity={{ handle: identity.handle, displayName: null, avatarUrl: identity.avatarUrl }}
+      />
 
       <span className="mt-3 block max-w-full truncate font-display text-[26px] leading-none tracking-wide text-gold">
         {identity.handle}
@@ -71,8 +52,8 @@ export function PrivateProfileView({ identity }: { identity: ProfileIdentity }) 
       {/* Says what is true and does not apologise for it. No "request to
           follow", because Rankd has no request flow and offering a button that
           does nothing is worse than offering none. */}
-      <div className="mt-8 w-full max-w-[300px] rounded-2xl px-5 py-6" style={{ background: "rgba(255,255,255,0.04)" }}>
-        <p className="text-sm leading-snug text-text-hi">This profile is private.</p>
+      <div className="mt-8 w-full max-w-[300px] rounded-2xl px-5 py-6" style={{ background: "var(--wash)" }}>
+        <p className="text-body leading-snug text-text-hi">This profile is private.</p>
         <p className="mt-1.5 text-sub leading-snug text-dim">
           {identity.handle} keeps their ranking to themselves.
         </p>

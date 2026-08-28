@@ -31,6 +31,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { designName, designs, renderCard } from "@/lib/card/render";
 import { cardFilename, shareCard } from "@/lib/card/share";
 import type { CardData, CardDesign } from "@/lib/card/types";
+import { PrimaryButton } from "./ui";
 
 type Made = { blob: Blob; url: string };
 
@@ -180,14 +181,9 @@ export function CardPicker({ data }: { data: CardData }) {
         <span className="ml-1.5 text-sub font-semibold text-dim">{designName[active]}</span>
       </div>
 
-      <button
-        onClick={download}
-        disabled={!made[active]}
-        className="w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
-        style={{ color: "#1c1405", background: "var(--gold)" }}
-      >
+      <PrimaryButton wide onClick={download} disabled={!made[active]}>
         {sent === active ? `Saved the ${designName[active]} card ✓` : `Download the ${designName[active]} card`}
-      </button>
+      </PrimaryButton>
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { claimHandle, handleAvailable, saveMe, type Me } from "@/lib/account";
 import { HANDLE_MAX, HANDLE_MIN, normalizeHandle, validateHandle } from "@/lib/handles";
 import { takeLegacyIdentity } from "@/lib/profile";
 import { BARS } from "@/lib/brand";
+import { PrimaryButton, SecondaryButton } from "./ui";
 
 /**
  * Long enough that a fast typist finishes a word first, short enough that the
@@ -255,7 +256,7 @@ export default function HandleGate({
 
           <div
             className="mt-7 flex w-full max-w-[300px] items-center gap-1.5 rounded-full px-4 py-3"
-            style={{ background: "rgba(255,255,255,0.07)" }}
+            style={{ background: "var(--wash)" }}
           >
             <span aria-hidden className="text-body font-bold text-dim">
               @
@@ -287,19 +288,19 @@ export default function HandleGate({
               never moves under a thumb already on its way down. */}
           <p
             className="mt-2.5 h-4 text-label leading-snug"
-            style={{ color: hint.bad ? "#e0705a" : "var(--dim)" }}
+            style={{ color: hint.bad ? "var(--danger)" : "var(--dim)" }}
           >
             {hint.text}
           </p>
 
-          <button
+          <PrimaryButton
+            wide
+            className="mt-4 max-w-[300px]"
             onClick={() => void submitName()}
             disabled={busy || !ready}
-            className="mt-4 w-full max-w-[300px] rounded-full py-3.5 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-40"
-            style={{ color: "#1c1405", background: "var(--gold)" }}
           >
             {busy ? "Claiming…" : "That's me"}
-          </button>
+          </PrimaryButton>
 
           {/* The standing rule, and it stands DOWN the moment the line above has
               something specific to say. Both were on screen at once and said
@@ -324,22 +325,16 @@ export default function HandleGate({
             you&rsquo;ve ranked. Either way, you can change your mind in Settings.
           </p>
 
-          <button
-            onClick={() => void choose(true)}
-            disabled={busy}
-            className="mt-8 w-full max-w-[300px] rounded-full py-3.5 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-60"
-            style={{ color: "#1c1405", background: "var(--gold)" }}
-          >
+          {/* Two answers, and only one of them is the app's recommendation — so
+              one is the primary and the other is not. They used to differ only
+              in fill, at the same size and weight, which read as a pair of
+              equals where the second happened to be greyer. */}
+          <PrimaryButton wide className="mt-8 max-w-[300px]" onClick={() => void choose(true)} disabled={busy}>
             {busy ? "Saving…" : "Make it public"}
-          </button>
-          <button
-            onClick={() => void choose(false)}
-            disabled={busy}
-            className="mt-3 w-full max-w-[300px] rounded-full py-3.5 text-sm font-extrabold tracking-wide text-text-hi active:scale-95 disabled:opacity-60"
-            style={{ background: "rgba(255,255,255,0.07)" }}
-          >
+          </PrimaryButton>
+          <SecondaryButton wide className="mt-3 max-w-[300px]" onClick={() => void choose(false)} disabled={busy}>
             Keep it private
-          </button>
+          </SecondaryButton>
 
           <p className="mt-5 max-w-[280px] text-label leading-snug text-dim">
             You&rsquo;re @{(claimed ?? me).handle}.

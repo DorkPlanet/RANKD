@@ -26,7 +26,9 @@ import {
 } from "@/lib/sync";
 import { isDirty, readSyncState, subscribeSync, clearSyncState } from "@/lib/syncState";
 
-const BUTTON = "rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98]";
+// Account's own button constant, pointed at the shared shape. It was a third
+// button (`rounded-xl … text-xs`) sitting inside a sheet that already had two.
+const BUTTON = "rounded-full border border-border py-2.5 text-center text-sub font-bold text-text-hi active:scale-[0.98] disabled:opacity-40";
 
 /** "3 minutes ago" — precise enough to trust, vague enough not to nag. */
 function ago(iso: string | null): string {
@@ -50,7 +52,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   // setter, which would be a new function every render.
   const [conflict, setConflict] = useState<ConflictSides | null>(null);
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   // Bumped by the sync layer so "last synced" and the unsent-work line stay
   // honest while a duel is being fought behind this sheet.
   const [, bump] = useState(0);
@@ -96,7 +98,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
         return; // `resolve` starts sync once the user has decided
       }
       if (outcome.kind === "offline") {
-        setNote("Can't reach your account right now.");
+        setNote({ text: "Can't reach your account right now.", bad: true });
         return; // and nothing is pushed at a server we could not read
       }
       startSync();
@@ -120,7 +122,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
       // and send them. Reached solely on the "keep this device" path, since
       // `pull` has already reloaded away on the other.
       startSync();
-      setNote("Kept this device's library.");
+      setNote({ text: "Kept this device's library." });
     } finally {
       setBusy(false);
     }
@@ -143,7 +145,7 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
   // control underneath stays reachable whether or not the question is answered.
   const chooser = conflict ? (
     <div className="mb-4 rounded-xl border border-gold/40 p-3">
-      <span className="text-xs font-extrabold tracking-[0.12em] text-gold">TWO LIBRARIES</span>
+      <span className="block text-label font-bold uppercase tracking-[0.14em] text-gold">Two libraries</span>
         <p className="mb-3 mt-1 text-sub leading-snug text-dim">
           This browser and your account have both been used since they last agreed. Nothing is
           merged — combining two rankings would invent judgements you never made — so pick the one
@@ -184,7 +186,9 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
         <button onClick={() => void signInWithGoogle()} className={`w-full ${BUTTON}`}>
           Continue with Google
         </button>
-        {note && <p className="mt-3 text-sub leading-snug text-gold">{note}</p>}
+        {note && (
+        <p className={`mt-3 text-sub leading-snug ${note.bad ? "text-danger" : "text-gold"}`}>{note.text}</p>
+      )}
       </div>
     );
   }
@@ -206,7 +210,13 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
             setBusy(true);
             try {
               await syncNow();
-              setNote(isDirty() ? "Couldn't reach your account. It'll retry." : "Backed up.");
+              // A failed sync is not a successful one worded differently, so it
+              // does not wear the colour a successful one wears.
+              setNote(
+                isDirty()
+                  ? { text: "Couldn't reach your account. It'll retry.", bad: true }
+                  : { text: "Backed up." },
+              );
             } finally {
               setBusy(false);
             }
@@ -229,7 +239,9 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
           Sign out
         </button>
       </div>
-      {note && <p className="mt-3 text-sub leading-snug text-gold">{note}</p>}
+      {note && (
+        <p className={`mt-3 text-sub leading-snug ${note.bad ? "text-danger" : "text-gold"}`}>{note.text}</p>
+      )}
     </div>
   );
 }

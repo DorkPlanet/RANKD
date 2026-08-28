@@ -29,27 +29,34 @@
 import { useEffect, useRef, useState } from "react";
 
 import { BottomNav, Header } from "./DuelScreen";
+import { Eyebrow, SecondaryButton, Tabs } from "./ui";
 import { TalkPanel } from "./TalkPanel";
 import { shortAgo, type FeedItem } from "@/lib/social/feed";
 import { inShelf, pageAfterSwipe, type Dir } from "@/lib/ribbon";
 
-/** What kind of thing happened, in the card's own small caps. */
+/**
+ * What kind of thing happened, for the card's eyebrow.
+ *
+ * Sentence case, and the capitals are CSS. These were typed in caps, which a
+ * screen reader spells out one letter at a time — "IN AT #3" was being read as
+ * I-N-A-T. `Eyebrow` does the shouting with `text-transform`.
+ */
 function eyebrowFor(item: FeedItem): string {
   const meta = item.meta as { rank?: number; of?: string; at?: number; added?: number; moved?: number };
   switch (item.kind) {
     case "added":
-      return `IN AT #${meta.rank}`;
+      return `In at #${meta.rank}`;
     case "locked":
-      return `LOCKED AT #${meta.rank}`;
+      return `Locked at #${meta.rank}`;
     case "milestone":
-      return meta.of === "duels" ? `${meta.at} DUELS` : `${meta.at} FILMS RANKED`;
+      return meta.of === "duels" ? `${meta.at} duels` : `${meta.at} films ranked`;
     case "session":
-      return "A SITTING";
+      return "A sitting";
     default:
       // A card written by an older version. Named rather than hidden — a feed
       // that silently drops its own history is worse than one showing a row it
       // no longer produces.
-      return item.kind.toUpperCase();
+      return item.kind;
   }
 }
 
@@ -119,7 +126,7 @@ function Card({
             alt=""
             aria-hidden
             className="h-[68px] w-[46px] flex-shrink-0 rounded-md object-cover"
-            style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.5)" }}
+            style={{ boxShadow: "0 2px 6px rgba(0, 0, 0, 0.5)" }}
           />
         ) : (
           // A card about no single film still occupies the same column, or the
@@ -134,7 +141,7 @@ function Card({
         )}
 
         <div className="min-w-0 flex-1">
-          <div className="text-label font-extrabold tracking-[0.14em] text-gold">{eyebrowFor(item)}</div>
+          <Eyebrow className="!text-gold">{eyebrowFor(item)}</Eyebrow>
           {openable && item.yourRank !== undefined ? (
             <button
               onClick={() => onFilm(openable)}
@@ -168,16 +175,16 @@ function Card({
           <button
             onClick={() => onLike(!item.liked)}
             aria-pressed={item.liked}
-            className="text-label font-extrabold tracking-[0.12em] active:opacity-70"
+            className="text-label font-bold uppercase tracking-[0.14em] active:opacity-70"
             style={{ color: item.liked ? "var(--gold)" : "var(--dim)" }}
           >
-            {item.liked ? "AGREED" : "AGREE"}
+            {item.liked ? "Agreed" : "Agree"}
             {item.likes > 0 && ` · ${item.likes}`}
           </button>
         )}
         {item.mine && item.likes > 0 && (
-          <span className="text-label font-extrabold tracking-[0.12em] text-dim">
-            {item.likes} AGREED
+          <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
+            {item.likes} agreed
           </span>
         )}
 
@@ -187,7 +194,9 @@ function Card({
             statistic — and it is yours alone. */}
         {item.yourRank !== undefined &&
           (meta.rank !== undefined && item.yourRank === meta.rank ? (
-            <span className="text-label tracking-[0.08em] text-gold">SAME AS YOURS</span>
+            <span className="text-label font-bold uppercase tracking-[0.14em] text-gold">
+              Same as yours
+            </span>
           ) : (
             // ── Disagreeing is a button, not a fact ────────────────────────
             //
@@ -197,11 +206,11 @@ function Card({
             // politely by the server if the two of you are not mutual.
             <button
               onClick={onTell}
-              className="text-label tracking-[0.08em] active:opacity-70"
+              className="text-label font-bold uppercase tracking-[0.14em] active:opacity-70"
             >
-              <span className="text-dim">YOU HAVE IT </span>
-              <span className="font-semibold text-text-hi">#{item.yourRank}</span>
-              <span className="text-gold"> · TELL THEM</span>
+              <span className="text-dim">You have it </span>
+              <span className="text-text-hi">#{item.yourRank}</span>
+              <span className="text-gold"> · Tell them</span>
             </button>
           ))}
       </div>
@@ -344,21 +353,7 @@ export function FeedScreen({
         {/* Two halves of one screen: what everybody can see, and what only the
             two of you can. Same treatment as the profile's panels, because it is
             the same idiom doing the same job. */}
-        <div className="flex justify-center gap-6">
-          {(["TAKES", "TALK"] as const).map((label, i) => (
-            <button
-              key={label}
-              onClick={() => setTab(i as 0 | 1)}
-              className="pb-2 text-label font-extrabold tracking-[0.14em] transition-colors"
-              style={{
-                color: tab === i ? "var(--gold)" : "var(--dim)",
-                borderBottom: `2px solid ${tab === i ? "var(--gold)" : "transparent"}`,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs labels={["Takes", "Talk"] as const} at={tab} onPick={(i) => setTab(i as 0 | 1)} />
       </div>
 
       <div
@@ -410,14 +405,15 @@ export function FeedScreen({
             <p className="mt-2 text-sub leading-relaxed text-dim">
               Follow somebody and their placements will too.
             </p>
-            {/* An empty state that names the way out of itself. */}
-            <button
-              onClick={onFindPeople}
-              className="mx-auto mt-6 block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
-              style={{ background: "rgba(255,255,255,0.05)" }}
-            >
-              FIND PEOPLE
-            </button>
+            {/* An empty state that names the way out of itself — and now looks
+                like it. This was 10px caps in `--dim` on a 5% white wash, which
+                is the exact recipe the app uses elsewhere to mark a control as
+                the QUIETEST thing on screen. On a screen whose only purpose in
+                this state is to offer one way forward, the one way forward read
+                as disabled. */}
+            <SecondaryButton onClick={onFindPeople} className="mx-auto mt-6 block">
+              Find people
+            </SecondaryButton>
           </div>
         ) : (
           <div className="divide-y" style={{ borderColor: "var(--border)" }}>

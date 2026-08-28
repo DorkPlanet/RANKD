@@ -20,7 +20,7 @@ import { filmsBy, mergeCredits, rankByBelief, type CreditRow, type Person } from
 import { isHard } from "@/lib/lock";
 import { seedScore, starsFor } from "@/lib/tiers";
 import { slugId } from "@/lib/importCsv";
-import { Sheet } from "./ui";
+import { PrimaryButton, Sheet } from "./ui";
 import { loadLog, type Judgement } from "@/lib/log";
 import type { Film } from "@/lib/types";
 
@@ -163,18 +163,18 @@ export function PersonSheet({
             className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
           >
             <span
-              className={`w-6 flex-shrink-0 text-center font-serif text-sm ${isHard(f) ? "font-bold text-gold" : "text-dim"}`}
+              className={`w-6 flex-shrink-0 text-center font-serif text-sub ${isHard(f) ? "font-bold text-gold" : "text-dim"}`}
             >
               {i + 1}
             </span>
             {f.poster ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={f.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2/3" }} />
+              <img src={f.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2 / 3" }} />
             ) : (
-              <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2/3" }} />
+              <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2 / 3" }} />
             )}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-text-hi">{f.title}</span>
+              <span className="block truncate text-body text-text-hi">{f.title}</span>
               <span className="block truncate text-sub text-dim">
                 {f.year} · {starsFor(f.rating)}
               </span>
@@ -194,7 +194,7 @@ export function PersonSheet({
           lib/types.ts for why that distinction is enforced rather than trusted. */}
       <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
         <span className="min-w-0">
-          <span className="block text-sm text-text-hi">Include films I haven&rsquo;t seen</span>
+          <span className="block text-body text-text-hi">Include films I haven&rsquo;t seen</span>
           <span className="block text-sub leading-snug text-dim">
             {credits
               ? `${missing.length} more by ${person.name}. They won't be added to your library.`
@@ -210,14 +210,14 @@ export function PersonSheet({
       </label>
 
       {total >= 2 && (
-        <button
+        <PrimaryButton
+          wide
+          className="mt-2"
           onClick={() => onRank(person, showMissing ? guests : [], portrait)}
           disabled={showMissing && !credits}
-          className="mt-2 w-full rounded-full py-3 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
-          style={{ color: "#1c1405", background: "var(--gold)" }}
         >
           {showMissing && !credits ? "Finding their films…" : `Rank these ${total}`}
-        </button>
+        </PrimaryButton>
       )}
 
       {showMissing && (
@@ -246,12 +246,12 @@ export function PersonSheet({
             >
               {c.poster ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2/3" }} />
+                <img src={c.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2 / 3" }} />
               ) : (
-                <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2/3" }} />
+                <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2 / 3" }} />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-text-hi">{c.title}</span>
+                <span className="block truncate text-body text-text-hi">{c.title}</span>
                 <span className="block truncate text-sub text-dim">{c.year} · tap to log at ★★★</span>
               </span>
             </button>

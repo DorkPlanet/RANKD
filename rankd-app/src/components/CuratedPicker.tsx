@@ -18,7 +18,7 @@
 import { useMemo, useState } from "react";
 import { genresIn, MIN_GENRE_RUN, type GenreTally } from "@/lib/genres";
 import { peopleIn, type Person } from "@/lib/people";
-import { ScopeTab, Sheet, StartButton } from "./ui";
+import { Eyebrow, FIELD, ScopeTab, Sheet, StartButton } from "./ui";
 import type { Film } from "@/lib/types";
 
 type Tab = "director" | "actor" | "genre";
@@ -71,7 +71,7 @@ export function CuratedPicker({
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={tab === "genre" ? "Search genres" : "Search names"}
-        className="mb-3 w-full rounded-xl border border-border bg-transparent px-4 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+        className={`${FIELD} mb-3`}
       />
 
       {/* Once a genre is chosen the list gives way to its one remaining
@@ -85,13 +85,13 @@ export function CuratedPicker({
             ‹ All genres
           </button>
           <div className="mb-3 rounded-xl border border-border px-4 py-3">
-            <div className="text-sm text-text-hi">{chosen.name}</div>
+            <div className="text-body text-text-hi">{chosen.name}</div>
             <div className="mt-0.5 text-sub text-dim">
               {chosen.count} film{chosen.count === 1 ? "" : "s"} in your library
             </div>
           </div>
 
-          <div className="mb-1 text-label font-extrabold tracking-[0.12em] text-dim">HOW MANY</div>
+          <Eyebrow className="mb-1">How many</Eyebrow>
           <div className="mb-3 flex gap-2">
             <SizeChip label="All" active={limit === null} onClick={() => setLimit(null)} />
             {SIZES.filter((n) => n < chosen.count).map((n) => (
@@ -152,7 +152,7 @@ function Row({ name, count, onClick }: { name: string; count: number; onClick: (
       onClick={onClick}
       className="flex items-center justify-between rounded-xl border border-border px-4 py-2.5 text-left active:scale-[0.99]"
     >
-      <span className="min-w-0 truncate text-sm text-text-hi">{name}</span>
+      <span className="min-w-0 truncate text-body text-text-hi">{name}</span>
       <span className="ml-3 flex-shrink-0 text-sub text-dim">{count}</span>
     </button>
   );

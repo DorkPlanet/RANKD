@@ -61,7 +61,7 @@ const FILE_MS = 150;
 const DRAG_CAP = 90;
 
 const TARGET =
-  "rc-target flex-1 py-3 text-label font-extrabold uppercase tracking-[0.16em] active:scale-95";
+  "rc-target flex-1 py-3 text-label font-bold uppercase tracking-[0.14em] active:scale-95";
 
 export default function RoughCut({
   films,
@@ -402,7 +402,7 @@ export default function RoughCut({
           {/* The number counts up rather than appearing. It is the one figure
               this screen exists to report, and a count-up is the cheapest way to
               make a total read as something that was accumulated. */}
-          <p className="rc-rise font-display text-3xl tracking-wide text-gold" style={{ "--i": 0 } as React.CSSProperties}>
+          <p className="rc-rise font-display text-[26px] leading-none tracking-wide text-gold" style={{ "--i": 0 } as React.CSSProperties}>
             <CountUp to={choices.size} /> placed
           </p>
           <p className="rc-rise mt-3 text-sub leading-relaxed text-dim" style={{ "--i": 1 } as React.CSSProperties}>
@@ -426,7 +426,7 @@ export default function RoughCut({
                 <button
                   key={m}
                   onClick={() => setNext(m)}
-                  className={`flex-1 rounded-lg border py-1.5 text-label font-extrabold uppercase tracking-[0.14em] active:scale-95 ${
+                  className={`flex-1 rounded-lg border py-1.5 text-label font-bold uppercase tracking-[0.14em] active:scale-95 ${
                     next === m ? "border-gold text-gold" : "border-border text-dim"
                   }`}
                 >
@@ -440,7 +440,7 @@ export default function RoughCut({
                   key={bucket}
                   disabled={n < 2}
                   onClick={() => (next === "rank" ? rankPile(bucket) : refine(bucket))}
-                  className="flex-1 rounded-xl border border-border py-2.5 text-label font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
+                  className="flex-1 rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-40"
                 >
                   {bucket === "top" ? "Upper" : bucket === "middle" ? "Middle" : "Lower"}
                   <span className="ml-1.5 text-dim tabular-nums">{n}</span>
@@ -451,14 +451,14 @@ export default function RoughCut({
 
           <button
             onClick={() => commit(choices)}
-            className="rc-rise mt-7 rounded-xl border border-gold/50 px-8 py-3 text-xs font-bold text-gold active:scale-[0.98]"
+            className="rc-rise mt-7 rounded-full border border-gold/40 py-2.5 text-center text-sub font-bold text-gold active:scale-[0.98] disabled:opacity-40 px-8"
             style={{ "--i": 3 } as React.CSSProperties}
           >
             Keep it
           </button>
           <button
             onClick={onExit}
-            className="rc-rise mt-2 px-6 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95"
+            className="rc-rise mt-2 px-6 py-3 text-label font-bold uppercase tracking-[0.18em] text-dim active:scale-95"
             style={{ "--i": 4 } as React.CSSProperties}
           >
             Throw it away
@@ -480,8 +480,8 @@ export default function RoughCut({
           difference to the artwork. */}
       <div className="mx-auto mt-7 w-full max-w-[330px] flex-shrink-0 px-5">
         <div className="mb-2.5 flex items-baseline justify-between">
-          <span className="text-base text-gold">{starsFor(tier)}</span>
-          <span className="text-label font-extrabold uppercase tracking-[0.14em] text-dim">
+          <span className="text-body text-gold">{starsFor(tier)}</span>
+          <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
             Rough cut{pass.n > 1 ? ` · pass ${pass.n}` : ""}
           </span>
         </div>
@@ -694,7 +694,7 @@ export default function RoughCut({
             style={{
               aspectRatio: "2 / 3",
               containerType: "inline-size",
-              boxShadow: "0 8px 26px rgba(0,0,0,0.55)",
+              boxShadow: "0 8px 26px rgba(0, 0, 0, 0.55)",
             }}
           >
             {/* Was `film.poster && <img>`, so a film with no artwork got an
@@ -774,7 +774,7 @@ export default function RoughCut({
               )}
             </span>
             <span
-              className="text-center text-label font-extrabold tabular-nums"
+              className="text-center text-label font-bold tabular-nums"
               style={{ color: filed[b] > 0 ? "var(--gold)" : "var(--dim)", opacity: filed[b] > 0 ? 0.85 : 0.4 }}
             >
               {filed[b]}
@@ -817,7 +817,7 @@ export default function RoughCut({
         <button
           onClick={undo}
           disabled={at === 0}
-          className="px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-30"
+          className="px-4 py-3 text-label font-bold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-40"
         >
           Undo
         </button>
@@ -827,7 +827,7 @@ export default function RoughCut({
         <button
           onClick={skip}
           disabled={at >= pool.length - 1}
-          className="px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-30"
+          className="px-4 py-3 text-label font-bold uppercase tracking-[0.18em] text-dim active:scale-95 disabled:opacity-40"
         >
           Skip
         </button>
@@ -836,7 +836,7 @@ export default function RoughCut({
             an interruption would be the wrong lesson. */}
         <button
           onClick={() => commit(choices)}
-          className="px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-gold/70 active:scale-95"
+          className="px-4 py-3 text-label font-bold uppercase tracking-[0.18em] text-gold/70 active:scale-95"
         >
           Done
         </button>

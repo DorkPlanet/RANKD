@@ -19,6 +19,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { dismissHint, hintDismissed, installRoute, readEnv, type InstallRoute } from "@/lib/install";
+import { PrimaryButton, QuietButton } from "./ui";
 
 /** The slice of `beforeinstallprompt` actually used. Not in lib.dom yet. */
 interface InstallEvent extends Event {
@@ -101,20 +102,16 @@ export function InstallPrompt() {
               {/* Only where a real prompt is in hand. Offering a button that
                   cannot do anything is worse than offering none. */}
               {deferred && (
-                <button
+                <PrimaryButton
                   onClick={async () => {
                     await deferred.prompt();
                     close();
                   }}
-                  className="rounded-full px-4 py-1.5 text-sub font-bold active:scale-95"
-                  style={{ color: "#1c1405", background: "var(--gold)" }}
-                >
-                  Install
-                </button>
+                  >
+                    Install
+                  </PrimaryButton>
               )}
-              <button onClick={close} className="px-2 py-1.5 text-sub font-semibold text-dim active:scale-95">
-                {deferred ? "Not now" : "Got it"}
-              </button>
+              <QuietButton onClick={close}>{deferred ? "Not now" : "Got it"}</QuietButton>
             </div>
           </div>
         </div>

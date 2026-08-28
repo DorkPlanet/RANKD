@@ -69,7 +69,7 @@ export function PosterArt({ film, className, style }: {
       >
         {film.title}
       </span>
-      <span className="text-label font-extrabold uppercase tracking-[0.18em] text-dim opacity-60">
+      <span className="text-label font-bold uppercase tracking-[0.18em] text-dim opacity-60">
         No artwork
       </span>
     </span>

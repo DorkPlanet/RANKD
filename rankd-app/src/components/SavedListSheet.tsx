@@ -14,7 +14,7 @@
 import { useMemo, useState } from "react";
 
 import { CardPicker } from "./CardPicker";
-import { Sheet } from "./ui";
+import { PrimaryButton, SecondaryButton, Sheet } from "./ui";
 import { cardDataFromFilms } from "@/lib/card/data";
 import { deleteList, filmsOf, hydrate, subjectOf, type SavedList } from "@/lib/lists";
 import { starsFor } from "@/lib/tiers";
@@ -85,20 +85,13 @@ export default function SavedListSheet({
 
       <div className="mb-5 flex gap-2">
         {canCard && (
-          <button
-            onClick={() => setShowCard(true)}
-            className="flex-1 rounded-xl bg-gold py-2.5 text-center text-sub font-bold text-[#1c1405] active:scale-[0.98]"
-          >
+          <PrimaryButton className="flex-1" onClick={() => setShowCard(true)}>
             Make the card
-          </button>
+          </PrimaryButton>
         )}
-        <button
-          onClick={() => onPin(!pinned)}
-          disabled={!pinned && !canPin}
-          className="flex-1 rounded-xl border border-border py-2.5 text-center text-sub font-bold text-text-hi active:scale-[0.98] disabled:opacity-40"
-        >
+        <SecondaryButton className="flex-1" onClick={() => onPin(!pinned)} disabled={!pinned && !canPin}>
           {pinned ? "Unpin" : canPin ? "Pin to profile" : "Profile full"}
-        </button>
+        </SecondaryButton>
       </div>
 
       {dropped > 0 && (

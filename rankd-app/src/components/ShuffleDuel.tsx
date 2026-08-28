@@ -45,7 +45,7 @@ const UNDO_MS = 2600;
 
 /** Matches the climb's controls exactly — one language across both modes. */
 const SHUFFLE_CONTROL =
-  "px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
+  "px-4 py-3 text-label font-bold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
 
 export interface ShuffleOptions {
   scope: MatchOptions["scope"];
@@ -732,7 +732,7 @@ export default function ShuffleDuel({
           : "Nothing left to ask here."}
         <button
           onClick={leave}
-          className="mt-4 rounded-full border border-border px-5 py-2 text-xs font-bold text-text-hi active:scale-95"
+          className="mt-4 rounded-full border border-border py-2.5 text-center text-sub font-bold text-text-hi active:scale-[0.98] disabled:opacity-40 px-5 py-2"
         >
           Done
         </button>

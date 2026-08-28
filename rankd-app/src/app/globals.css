@@ -27,6 +27,40 @@
   --border: #122036;
   --header-bg: #000000;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── The ink that goes ON gold ────────────────────────────────────────────
+     Every filled gold control needs a dark foreground, and this exact brown-black
+     was written out by hand in twenty-two places — plus one button that reached
+     for `--bg` navy instead and was therefore a different colour from all the
+     others. A token because it is not a free choice: it is the one value that
+     clears contrast against `--gold` while still reading as ink rather than as
+     the page showing through. */
+  --gold-ink: #1c1405;
+
+  /* ── The colour of something having gone wrong ────────────────────────────
+     The app had no danger colour, and the consequences were not cosmetic.
+     Errors were painted FOUR ways — `--gold`, `--dim`, a hardcoded #D81E26 and a
+     hardcoded #e0705a — and `--gold` is simultaneously how the app says a thing
+     SUCCEEDED. In the feedback sheet the "Sent. Thank you." line and the "could
+     not be sent" line were the same size, the same weight and the same colour,
+     six lines apart, so colour told the reader nothing about which had happened.
+
+     #D81E26 is not a new invention: it is the red already in the wordmark bars,
+     which is why the two buttons that had reached for a danger colour by hand had
+     both landed on it. Naming it is what stops the next one landing somewhere else.
+
+     Spend it ONLY on failure and on irreversible destruction. A red that appears
+     anywhere else stops meaning anything, which is the exact trap `--gold` fell
+     into and the reason the palette note above was written. */
+  --danger: #d81e26;
+
+  /* ── A surface lifted off the page without a border ───────────────────────
+     The chip, the soft-filled pill, the panel on the private profile. It was
+     written inline ten times as `rgba(255,255,255,0.05)`, `0.07` and `0.04` —
+     three values for one element, none of them chosen against the others, and
+     the 0.02 between the first two is exactly the amount that reads as "these
+     are slightly different things" without ever reading as a decision. */
+  --wash: rgba(255, 255, 255, 0.06);
 }
 
 /* Expose the palette + fonts to Tailwind so utilities like bg-bg, text-accent,
@@ -38,6 +72,8 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-danger: var(--danger);
   --color-dim: var(--dim);
   --color-text: var(--text);
   --color-text-hi: var(--text-hi);
@@ -62,8 +98,23 @@
        sub    the line under a title. Normal weight.
        body   the thing you are actually reading. Normal weight.
        title  a section or a row heading.
-     Above this the display face handles its own sizes (26/32/44) because those
-     are one-off numerals, not a scale.
+     Above this the display face handles its own sizes because those are one-off
+     numerals, not a scale. The ones actually in use, so a sweep can tell a
+     deliberate size from a stray one:
+
+       display  19 (a floating card's title: the coach mark, the install
+                   prompt, the film card), 24 (a sheet's title), 26 (a screen's
+                   title — the profile name, an end-of-run heading, the empty
+                   screen), 28 (the header wordmark), 32 (the climb's rank),
+                   44 (the splash and the two gates).
+       serif    18 (a stat's numeral — the profile band, the list's legend),
+                   and 20/48 on the confirm screen, which is the one place a
+                   single number is the entire point of the frame.
+
+     Everything that is not on this list or the four steps above is drift.
+     `text-sm`, `text-base` and `text-xs` in particular are Tailwind's defaults
+     leaking back in — there were 86 of them, one and two pixels away from steps
+     that already existed, which is the exact condition the note above describes.
 
      WEIGHT IS NOT A STEP. 117 of 120 weight declarations were semibold or
      heavier, which is why nothing looked emphasised. Emphasis inside body and
@@ -144,6 +195,47 @@ button * {
   user-select: none;
 }
 
+/* ── Where you are, when you are not using a finger ─────────────────────────
+   There was no focus indicator anywhere in this app. Eleven text fields set
+   `outline-none` and put nothing back, and none of the 250-odd buttons carried
+   a focus style at all — so a keyboard, a switch control or the desktop build
+   had no way to show what was selected. The only focus rule in the whole
+   codebase was the one on `.tickbox` below, which is how the gap survived: the
+   one control that HAD been thought about looked fine.
+
+   `:focus-visible`, not `:focus`, and that is the whole reason this costs the
+   phone nothing. The browser only matches it when focus arrived by keyboard —
+   a tap never draws it, so none of the press states change on the device the
+   app is actually used on.
+
+   `:where()` keeps the specificity at zero, so any component that wants its own
+   focus treatment can override this with a single class and does not have to
+   fight it. `border-radius: inherit` makes the ring follow the pill buttons and
+   the rounded fields rather than boxing them.
+
+   ── This rule MUST stay unlayered. Do not wrap it in @layer ────────────────
+   Eleven fields in this app carry Tailwind's `outline-none`, which is
+   `outline-style: none` — a real declaration, at class specificity, that would
+   beat a zero-specificity selector on specificity alone. It does not win here
+   for one reason: `.outline-none` lives in `@layer utilities` and this rule
+   lives outside every layer, and an unlayered style beats a layered one whatever
+   the specificity. Verified in the browser rather than assumed — the cascade was
+   read off `document.styleSheets` to confirm which layer each rule was in.
+
+   So moving this inside `@layer base` or `@layer utilities` would silently
+   switch the focus ring back off on every text field in the app, and nothing
+   would fail — it would simply stop being drawn.
+
+   The accent, not the gold: gold is the app's hero colour and is already spent
+   on ranks, stars and the primary action, so a gold ring would read as another
+   piece of content lighting up. The accent is structural, which is what a focus
+   ring is. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
 /* Checkboxes. A native one paints a pure-white square when unchecked — the only
    white anything in an app of navy and gold, and `accent-color` does nothing
    until it is ticked, so the DEFAULT state was the broken-looking one. Drawn
@@ -186,6 +278,63 @@ button * {
 .tip {
   color: var(--dim);
   transition: opacity 0.55s ease;
+}
+
+/* ── The ordinary slider ────────────────────────────────────────────────────
+   Two of these exist — the brightness slider at the top of Settings and the
+   zoom on the avatar cropper — and both were bare `<input type=range>` with an
+   `accent-color` and nothing else. So the first interactive control anybody
+   meets in Settings was a stock browser widget: Material's track and thumb on
+   Android, Safari's on iOS, in an app that draws its own everything.
+
+   Worse, the two did not even agree with each other. Brightness took `--accent`
+   and the cropper's zoom took `--gold`, so the app had a blue slider and a gold
+   slider and a third, fully bespoke one (`.dual-range` below) with gold thumbs
+   and tick marks.
+
+   This is that third one's thumb, lifted out and given a visible track, so all
+   three now share a face. `.dual-range` keeps its own rules because its track is
+   drawn by two overlapping elements; the THUMB is deliberately identical. */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 34px;
+  background: transparent;
+  cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  /* Centres an 18px thumb on a 4px track: (4 - 18) / 2. */
+  margin-top: -7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: 2px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.range:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 /* Dual-thumb range. Rather than stacking two full-width inputs — where the

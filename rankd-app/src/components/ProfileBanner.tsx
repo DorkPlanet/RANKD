@@ -29,7 +29,7 @@
 // than a hole. None at all leaves a quiet gradient, which is what a profile with
 // nothing ranked should look like: unfinished, not broken.
 
-import { avatarOf } from "@/lib/profile";
+import { Avatar } from "./Avatar";
 import { blockFor } from "@/lib/card/palette";
 import type { ProfileIdentity } from "@/lib/social/publicProfile";
 import type { SnapshotFilm } from "@/lib/snapshot";
@@ -55,12 +55,6 @@ export function ProfileBanner({
   films: SnapshotFilm[];
   identity: ProfileIdentity;
 }) {
-  const avatar = avatarOf({
-    handle: identity.handle,
-    displayName: null,
-    avatarUrl: identity.avatarUrl,
-  });
-
   const top = films.slice(0, SLICES);
   const weights = top.map((_, i) => FALLOFF ** i);
   const total = weights.reduce((a, b) => a + b, 0) || 1;
@@ -131,22 +125,11 @@ export function ProfileBanner({
           cover is every social network's signature, and is also what made the
           circle look clipped. A quarter reads as tucked under. */}
       <div className="absolute inset-x-0 -bottom-6 flex justify-center">
-        {avatar.kind === "image" ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatar.url}
-            alt=""
-            className="h-20 w-20 rounded-full object-cover"
-            style={{ border: "3px solid var(--bg)" }}
-          />
-        ) : (
-          <span
-            className="flex h-20 w-20 items-center justify-center rounded-full font-display text-3xl text-gold"
-            style={{ background: "var(--surface)", border: "3px solid var(--bg)" }}
-          >
-            {avatar.letter}
-          </span>
-        )}
+        {/* The same `Avatar` the owner sees on their own profile, at the same
+            size with the same ring. These were 80px with a 3px border here and
+            76px with a double ring there — your face, drawn two ways depending
+            on who was looking at it. */}
+        <Avatar identity={{ handle: identity.handle, displayName: null, avatarUrl: identity.avatarUrl }} />
       </div>
     </div>
   );

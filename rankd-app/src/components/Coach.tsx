@@ -23,6 +23,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { resolveSteps, type TourStep } from "@/lib/tour";
+import { PrimaryButton, QuietButton } from "./ui";
 
 /** Matches `Sheet`'s backdrop arming delay, and for the same reason. */
 const ARM_MS = 400;
@@ -167,7 +168,7 @@ export default function Coach({
         className="absolute"
         style={{
           pointerEvents: "none",
-          boxShadow: "0 0 0 9999px rgba(0,0,0,0.78), inset 0 0 0 1.5px var(--gold)",
+          boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.78), inset 0 0 0 1.5px var(--gold)",
         }}
       />
 
@@ -189,26 +190,16 @@ export default function Coach({
         <p className="mt-2.5 text-sub leading-relaxed text-text">{step.body}</p>
 
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-label font-extrabold tracking-[0.18em] text-dim tabular-nums">
+          <span className="text-label font-bold tracking-[0.18em] text-dim tabular-nums">
             {i + 1} / {steps.length}
           </span>
           <span className="flex items-center gap-2">
             {/* Skip is always available and always ends the whole thing. A
                 tutorial you cannot leave on its first screen is a wall. */}
             {!last && (
-              <button
-                onClick={() => armed() && onDone()}
-                className="px-2 py-1.5 text-label font-extrabold uppercase tracking-[0.14em] text-dim active:scale-95"
-              >
-                Skip
-              </button>
+              <QuietButton onClick={() => armed() && onDone()}>Skip</QuietButton>
             )}
-            <button
-              onClick={advance}
-              className="rounded-full bg-gold px-5 py-2 text-sub font-bold text-[#1c1405] active:scale-[0.98]"
-            >
-              {last ? "Got it" : "Next"}
-            </button>
+            <PrimaryButton onClick={advance}>{last ? "Got it" : "Next"}</PrimaryButton>
           </span>
         </div>
       </div>

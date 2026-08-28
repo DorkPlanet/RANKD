@@ -27,33 +27,9 @@ import type { PersonStat } from "@/lib/profile";
 import type { SnapshotFilm } from "@/lib/snapshot";
 import { blockFor, inkOn } from "@/lib/card/palette";
 import { genreTypeSize } from "@/lib/card/genreType";
+import { Eyebrow } from "./ui";
+import { Section, Stat } from "./ProfileBits";
 
-/** Matches `Stat` on the owner's profile. Numbers first, label under. */
-function Stat({ n, label }: { n: number; label: string }) {
-  return (
-    <div>
-      <span className="block font-serif text-lg font-bold text-text-hi tabular-nums">
-        {n.toLocaleString()}
-      </span>
-      <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
-        {label.toUpperCase()}
-      </span>
-    </div>
-  );
-}
-
-/** Matches `Section`. A rule that fades at both ends, then a small heading. */
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mt-7">
-      <div className="rule-fade mb-6" />
-      <div className="mb-2.5 text-label font-extrabold tracking-[0.18em] text-dim">
-        {title.toUpperCase()}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 /**
  * The one card on the page, and it is the genre.
@@ -114,7 +90,7 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
             consequence of a 960px canvas rather than a decision about how loud
             the thing should be. */}
         <div className="px-5 py-5" style={{ background: block, color: ink }}>
-          <span className="block text-label font-extrabold tracking-[0.16em] opacity-70">
+          <span className="block text-label font-bold tracking-[0.14em] opacity-70">
             THEIR GENRE
           </span>
           <span
@@ -150,13 +126,13 @@ function GenreCard({ genre, film }: { genre: PersonStat; film?: SnapshotFilm }) 
             <span className="block font-serif text-lg font-bold tabular-nums text-text-hi">
               {genre.count}
             </span>
-            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">FILMS</span>
+            <Eyebrow>Films</Eyebrow>
           </div>
           <div className="relative">
             <span className="block font-serif text-lg font-bold tabular-nums text-text-hi">
               {genre.avg.toFixed(1)}★
             </span>
-            <span className="block text-label font-extrabold tracking-[0.14em] text-dim">
+            <span className="block text-label font-bold tracking-[0.14em] text-dim">
               ON AVERAGE
             </span>
           </div>
@@ -177,7 +153,7 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
 
   return (
     <main
-      className="mx-auto min-h-screen w-full max-w-md pb-16"
+      className="mx-auto min-h-svh w-full max-w-md pb-16"
       style={{ background: "var(--bg)" }}
     >
       {/* Full bleed, so the frames run to the edges of the phone. Everything
@@ -202,7 +178,7 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
             that read as "rankd, a Rankd house account". This says what it holds
             instead of restating whose it is. */}
         {profile.house && (
-          <span className="mt-2 text-label font-extrabold tracking-[0.16em] text-dim">
+          <span className="mt-2 text-label font-bold tracking-[0.14em] text-dim">
             THE HOUSE RANKING
           </span>
         )}
@@ -260,7 +236,7 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
                       />
                     )}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-text-hi">{film.title}</span>
+                      <span className="block truncate text-body text-text-hi">{film.title}</span>
                       <span className="block text-label text-dim">
                         {film.year}
                         {film.year ? " · " : ""}
@@ -278,7 +254,7 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
               <div className="space-y-2">
                 {[...summary.directors, ...summary.actors].slice(0, 6).map((person) => (
                   <div key={person.name} className="flex items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate text-sm text-text-hi">{person.name}</span>
+                    <span className="min-w-0 truncate text-body text-text-hi">{person.name}</span>
                     <span className="shrink-0 text-label text-dim">
                       {person.avg.toFixed(1)}★ · {person.count} films
                     </span>
@@ -293,10 +269,10 @@ export function PublicProfileView({ profile }: { profile: PublicProfile }) {
               <div className="space-y-2">
                 {summary.superlatives.slice(0, 5).map((fact) => (
                   <div key={fact.label} className="flex items-baseline justify-between gap-3">
-                    <span className="shrink-0 text-label font-extrabold tracking-[0.14em] text-dim">
+                    <span className="shrink-0 text-label font-bold tracking-[0.14em] text-dim">
                       {fact.label.toUpperCase()}
                     </span>
-                    <span className="min-w-0 truncate text-right text-sm text-text-hi">
+                    <span className="min-w-0 truncate text-right text-body text-text-hi">
                       {fact.value}
                       {fact.note ? <span className="text-dim"> {fact.note}</span> : null}
                     </span>

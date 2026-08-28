@@ -21,11 +21,12 @@ import { rankedFilms } from "@/lib/ladder";
 import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
 import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
-import Sheet from "./Sheet";
+import { Eyebrow, FIELD, PrimaryButton, Sheet, Tabs } from "./ui";
+import { Section, Stat } from "./ProfileBits";
+import { Avatar } from "./Avatar";
 import { peopleIn } from "@/lib/people";
 import {
   autoCollections,
-  avatarOf,
   fingerprint,
   MAX_PINNED,
   MAX_PINNED_PEOPLE,
@@ -634,21 +635,7 @@ export default function ProfileScreen({
               and a centred avatar read as a column that had drifted. The rule
               still stands under the WORD rather than a cell, so the mark stays
               the width of the label it belongs to. */}
-          <div className="mt-6 flex justify-center gap-6 border-b border-border">
-            {PANELS.map((label, i) => (
-              <button
-                key={label}
-                onClick={() => goTo(i as Tab)}
-                className="-mb-px pb-2.5 text-sub transition-colors"
-                style={{
-                  color: tab === i ? "var(--text-hi)" : "var(--dim)",
-                  borderBottom: `2px solid ${tab === i ? "var(--gold)" : "transparent"}`,
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Tabs labels={PANELS} at={tab} onPick={(i) => goTo(i as Tab)} className="mt-6" />
 
           </div>
 
@@ -688,7 +675,7 @@ export default function ProfileScreen({
                 list is never empty and never only the maths. */}
             <button
               onClick={() => setPickingPeople(true)}
-              className="mb-2 block text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
+              className="mb-2 block text-label font-bold tracking-[0.14em] text-dim active:opacity-70"
             >
               CHANGE ›
             </button>
@@ -698,7 +685,7 @@ export default function ProfileScreen({
                 the rows underneath are free to be names. */}
             {people.directors.length > 0 && (
               <>
-                <div className="mb-1 text-label font-extrabold tracking-[0.16em] text-dim">
+                <div className="mb-1 text-label font-bold tracking-[0.14em] text-dim">
                   DIRECTORS
                 </div>
                 <div className="mb-4">
@@ -721,7 +708,7 @@ export default function ProfileScreen({
             )}
             {people.actors.length > 0 && (
               <>
-                <div className="mb-1 text-label font-extrabold tracking-[0.16em] text-dim">ACTORS</div>
+                <Eyebrow className="mb-1">Actors</Eyebrow>
                 <div>
                   {people.actors.map((a) => (
                     <PersonCard
@@ -897,7 +884,7 @@ export default function ProfileScreen({
                   already carries that word, and two headings with the same
                   label on one page make the reader check whether they are
                   looking at the same thing twice. */}
-              <span className="text-label font-extrabold tracking-[0.18em] text-dim">TROPHY CASE</span>
+              <Eyebrow>Trophy case</Eyebrow>
               <span className="text-label text-dim tabular-nums">
                 {earned} of {badges.length} ›
               </span>
@@ -1055,7 +1042,7 @@ export default function ProfileScreen({
                   films there is no locked shape and the gold line is your whole
                   placed list, so calling it LOCKED would be naming something
                   that is not on the chart. */}
-              <div className="mt-1 flex justify-center gap-3 text-label tracking-[0.08em] text-dim">
+              <div className="mt-1 flex justify-center gap-3 text-label tracking-[0.14em] text-dim">
                 {/* Below ten locks there is one line and it is Rankd's, so the
                     key names one thing. Naming a gold LOCKED line that is not on
                     the chart is how somebody starts hunting for it. */}
@@ -1409,49 +1396,19 @@ function AvatarSlot({
   accountImage: string | null;
   onOpen: () => void;
 }) {
-  // The file waiting to be cropped. Picking one no longer uploads it — see
-  // `AvatarCropper` for why centre-cropping on the user's behalf was wrong.
-  const avatar = avatarOf(identity, accountImage);
-  // Big enough to be the face of the card rather than a bullet point beside the
-  // name. Everything else here is derived from it so the badge and the fallback
-  // initial keep their proportions. Stays under AVATAR_SIZE at 3× density, so
-  // the uploaded 256px crop still has pixels to spare.
-  const SIZE = 76;
-
-  const face = (
-    <span
-      className="relative flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full font-display text-gold"
-      style={{
-        width: SIZE,
-        height: SIZE,
-        fontSize: Math.round(SIZE * 0.45),
-        background: "var(--surface)",
-        // A double ring, not the old hairline. The circle now overlaps the
-        // banner, and 1.5px against a photograph is not an edge — the artwork
-        // reads straight through it and the picture looks clipped out of the
-        // cover. The inner band is the page's own colour, so the circle is cut
-        // OUT of the banner rather than laid on top of it.
-        boxShadow: "0 0 0 3px var(--bg), 0 0 0 4.5px var(--border)",
-      }}
-    >
-      {avatar.kind === "image" ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatar.url} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <span>{avatar.letter}</span>
-      )}
-    </span>
-  );
-
+  // The circle itself is `Avatar`, shared with the public and private profiles
+  // so your face is the same object however it is being looked at. This
+  // component is only what wraps it: the tap target and the edit badge, neither
+  // of which a visitor ever sees.
   return (
     <button onClick={onOpen} aria-label="Change your picture" className="relative flex-shrink-0 active:scale-95">
-      {face}
+      <Avatar identity={identity} accountImage={accountImage} />
       <span
         aria-hidden
         className="absolute bottom-0 right-0 flex items-center justify-center rounded-full"
         style={{ width: 23, height: 23, background: "var(--gold)", boxShadow: "0 0 0 2px var(--bg)" }}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#1c1405" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--gold-ink)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
         </svg>
@@ -1493,7 +1450,7 @@ function AvatarMenu({
     // The banner joined this sheet when its own floating pill was removed. One
     // question, asked once: how does your profile look. Two controls in two
     // places for the two halves of the same answer was the thing that was wrong.
-    <Sheet title="Your picture and banner" onClose={onClose}>
+    <Sheet title="Your picture and banner" onClose={onClose} scroll>
       <p className="mb-4 text-sub leading-snug text-dim">
         {signedIn
           ? "A frame from one of your films, or a photo of your own."
@@ -1504,7 +1461,7 @@ function AvatarMenu({
         onClick={onPickFromFilms}
         className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
       >
-        <span className="block text-sm text-text-hi">Use a frame from a film</span>
+        <span className="block text-body text-text-hi">Use a frame from a film</span>
         <span className="block text-sub leading-snug text-dim">
           Nothing is uploaded. Works whether or not you have an account.
         </span>
@@ -1516,7 +1473,7 @@ function AvatarMenu({
           picker. */}
       {signedIn && (
         <label className="mb-2 block w-full cursor-pointer rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]">
-          <span className="block text-sm text-text-hi">Upload a photo</span>
+          <span className="block text-body text-text-hi">Upload a photo</span>
           <span className="block text-sub leading-snug text-dim">You choose the crop.</span>
           <input
             type="file"
@@ -1540,7 +1497,7 @@ function AvatarMenu({
       {identity.avatarUrl && (
         <button
           onClick={onRemove}
-          className="w-full rounded-xl border border-border px-4 py-3 text-left text-sm text-dim active:scale-[0.99]"
+          className="w-full rounded-xl border border-border px-4 py-3 text-left text-body text-dim active:scale-[0.99]"
         >
           Remove it
         </button>
@@ -1556,7 +1513,7 @@ function AvatarMenu({
         onClick={onPickBanner}
         className="w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
       >
-        <span className="block text-sm text-text-hi">
+        <span className="block text-body text-text-hi">
           {hasBanner ? "Change the scene up top" : "Pick a scene for up top"}
         </span>
         <span className="block text-sub leading-snug text-dim">
@@ -1593,7 +1550,7 @@ function StillPicker({
   }, [film]);
 
   return (
-    <Sheet title={film.title} onClose={onClose}>
+    <Sheet title={film.title} onClose={onClose} scroll>
       <p className="mb-3 text-sub leading-snug text-dim">
         {forAvatar
           ? "Choose a frame for your picture."
@@ -1732,7 +1689,7 @@ function ExportRow({
           />
         )}
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[7.5px] font-extrabold tracking-[0.18em] text-dim">
+          <span className="block truncate text-[7.5px] font-bold tracking-[0.18em] text-dim">
             {eyebrow}
           </span>
           <span className="mt-0.5 block truncate font-display text-body leading-tight tracking-wide text-text-hi">
@@ -1757,7 +1714,7 @@ function ExportRow({
                 e.stopPropagation();
                 onCard();
               }}
-              className="mt-1 block text-label font-extrabold tracking-[0.14em] text-gold active:opacity-60"
+              className="mt-1 block text-label font-bold tracking-[0.14em] text-gold active:opacity-60"
             >
               MAKE CARD
             </span>
@@ -1809,7 +1766,7 @@ function MiniCard({
         )}
         <span className="flagship-wash" />
         <span className="relative block p-3">
-          <span className="block text-label font-extrabold tracking-[0.2em] text-dim">{eyebrow}</span>
+          <span className="block text-label font-bold tracking-[0.14em] text-dim">{eyebrow}</span>
           <span className="mt-1 block truncate font-display text-title leading-tight tracking-wide text-text-hi">
             {title}
           </span>
@@ -1820,7 +1777,7 @@ function MiniCard({
         <button
           onClick={onCard}
           aria-label={`Make a card for ${title}`}
-          className="absolute bottom-2 right-2 z-10 rounded-full border px-2 py-1 text-label font-extrabold uppercase tracking-[0.14em] active:scale-95"
+          className="absolute bottom-2 right-2 z-10 rounded-full border px-2 py-1 text-label font-bold uppercase tracking-[0.14em] active:scale-95"
           style={{
             color: "var(--gold)",
             borderColor: "color-mix(in srgb, var(--gold) 40%, transparent)",
@@ -1844,21 +1801,13 @@ function CollectionSheet({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="sheet-in flex max-h-[82vh] w-full max-w-md flex-col rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-5 h-1 w-10 flex-shrink-0 rounded-full bg-border" />
-        <div className="mb-1 flex flex-shrink-0 items-baseline justify-between">
-          <span className="min-w-0 truncate font-display text-2xl tracking-wide text-gold">{c.title}</span>
-          <button onClick={onClose} className="ml-3 flex-shrink-0 text-sm font-semibold text-dim active:scale-95">
-            Done
-          </button>
-        </div>
-        <p className="mb-3 flex-shrink-0 text-sub leading-snug text-dim">{c.blurb}</p>
-
-        <div className="min-h-0 flex-1 overflow-y-auto">
+    // Was a hand-rolled copy of the sheet chrome — its own scrim, its own
+    // grabber, its own Done — which is how it ended up covering the nav and
+    // closing with no animation while every drawer opened from the header slid
+    // away properly. `Sheet` is the only one now.
+    <Sheet title={c.title} onClose={onClose} scroll>
+      <p className="mb-3 text-sub leading-snug text-dim">{c.blurb}</p>
+      <div>
           {c.films.map((f, i) => (
             <button
               key={f.id}
@@ -1876,25 +1825,24 @@ function CollectionSheet({
                   src={f.poster}
                   alt=""
                   loading="lazy"
-                  style={{ width: 30, aspectRatio: "2/3", objectFit: "cover", borderRadius: 3 }}
+                  style={{ width: 30, aspectRatio: "2 / 3", objectFit: "cover", borderRadius: 3 }}
                 />
               ) : (
                 <span
                   className="shrink-0"
-                  style={{ width: 30, aspectRatio: "2/3", borderRadius: 3, background: "var(--border)" }}
+                  style={{ width: 30, aspectRatio: "2 / 3", borderRadius: 3, background: "var(--border)" }}
                 />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-text-hi">{f.title}</span>
+                <span className="block truncate text-body text-text-hi">{f.title}</span>
                 <span className="block text-label text-dim">{f.year}</span>
               </span>
               <span className="flex-shrink-0 text-sub text-gold">{starsFor(f.rating)}</span>
             </button>
           ))}
           {c.films.length === 0 && <p className="text-sub text-dim">Nothing in here yet.</p>}
-        </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1993,7 +1941,7 @@ function PeoplePicker({
   const full = chosen.length >= MAX_PINNED_PEOPLE;
 
   return (
-    <Sheet title="Who goes up top" onClose={onClose}>
+    <Sheet title="Who goes up top" onClose={onClose} scroll>
       <p className="mb-3 text-sub leading-snug text-dim">
         Pick up to {MAX_PINNED_PEOPLE}. Anyone you don&rsquo;t pick is still worked out from your
         ratings.
@@ -2002,7 +1950,7 @@ function PeoplePicker({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Search names"
-        className="mb-3 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sub text-text-hi outline-none placeholder:text-dim"
+        className={`${FIELD} mb-3`}
       />
       <div className="max-h-[46vh] overflow-y-auto">
         {shown.map((p) => {
@@ -2019,7 +1967,7 @@ function PeoplePicker({
               <span className={`min-w-0 flex-1 truncate text-sub ${on ? "text-gold" : "text-text-hi"}`}>
                 {p.name}
               </span>
-              <span className="flex-shrink-0 text-label uppercase tracking-[0.12em] text-dim">
+              <span className="flex-shrink-0 text-label uppercase tracking-[0.14em] text-dim">
                 {p.role}
               </span>
               <span className="w-[52px] flex-shrink-0 text-right text-label tabular-nums text-dim">
@@ -2036,48 +1984,6 @@ function PeoplePicker({
   );
 }
 
-function Stat({ n, label, onClick }: { n: number; label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="active:scale-95">
-      <span className="block font-serif text-lg font-bold text-text-hi tabular-nums">{n}</span>
-      <span className="block text-label font-extrabold tracking-[0.14em] text-dim">{label.toUpperCase()}</span>
-    </button>
-  );
-}
-
-/**
- * A block, with a rule above it.
- *
- * Sections used to be separated by space alone, which is why the page read as
- * one long run of text: eight headings all the same size with nothing between
- * them, so the eye had no edge to catch on.
- *
- * The rule fades out at both ends rather than running the full width. A hard
- * line is a border and says "these are different things"; a fading one is a
- * breath and says "same page, next idea", which is what these actually are. It
- * is also the treatment the old zone heading used, so the app already had an
- * answer to this before the zone headings were removed.
- *
- * `first` omits it. A rule under a tab bar that already has a line under it
- * would be two rules a few pixels apart.
- */
-function Section({
-  title,
-  first,
-  children,
-}: {
-  title: string;
-  first?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={first ? "mt-6" : "mt-7"}>
-      {!first && <div className="rule-fade mb-6" />}
-      <div className="mb-2.5 text-label font-extrabold tracking-[0.18em] text-dim">{title.toUpperCase()}</div>
-      {children}
-    </section>
-  );
-}
 
 
 function EditIdentity({
@@ -2099,17 +2005,12 @@ function EditIdentity({
   // once, and a link somebody has already shared has to keep working.
   const [bio, setBio] = useState(me.bio ?? "");
   return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="sheet-in w-full max-w-md rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <span className="mb-1.5 block font-display text-2xl tracking-wide text-gold">
-          {publicName(me)}
-        </span>
-        {/* The sheet is headed by the name rather than by the word "You", which
-            is both warmer and the only place the handle now needs restating. */}
+    // The sheet is headed by the NAME rather than by the word "You", which is
+    // both warmer and the only place the handle now needs restating — so the
+    // title goes to `Sheet` and this stops maintaining its own copy of the
+    // chrome. It was the one sheet in the app with no maximum height, so a long
+    // bio on a short phone could push Save off the bottom edge.
+    <Sheet title={publicName(me)} onClose={onClose}>
         <p className="mb-4 text-sub leading-snug text-dim">Say something about your taste.</p>
         {/* 300 characters and four rows, not 120 and two.
             The old field was sized for the placeholder — "a line about your
@@ -2124,7 +2025,7 @@ function EditIdentity({
           maxLength={300}
           rows={4}
           placeholder="A line about your taste"
-          className="w-full resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-sm leading-snug text-text-hi outline-none placeholder:text-dim"
+          className={`${FIELD} resize-none leading-snug`}
         />
         {/* Only once it is worth knowing. A counter from zero is pressure to
             fill it; a counter near the ceiling is useful information. */}
@@ -2134,18 +2035,18 @@ function EditIdentity({
         <p className="mt-3 text-label leading-snug text-dim">
           Tap your picture to change it or the scene behind you.
         </p>
-        <button
+        <PrimaryButton
+          wide
+          className="mt-3"
           onClick={() => {
             // The one field this sheet owns. A patch rather than a whole
             // object, so editing a bio cannot carry a stale avatar back with it.
             onSave({ bio: bio.trim() || null });
             onClose();
           }}
-          className="mt-3 w-full rounded-full bg-gold py-3 text-sm font-bold text-[#1c1405] active:scale-[0.99]"
         >
           Save
-        </button>
-      </div>
-    </div>
+        </PrimaryButton>
+    </Sheet>
   );
 }

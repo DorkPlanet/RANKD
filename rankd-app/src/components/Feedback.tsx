@@ -19,6 +19,7 @@ import { useState } from "react";
 
 import type { Film } from "@/lib/types";
 import { isPlaced } from "@/lib/lock";
+import { FIELD } from "./ui";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
@@ -109,16 +110,16 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
             maxLength={4000}
             rows={4}
             placeholder="What happened?"
-            className="w-full resize-none rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+            className={`${FIELD} resize-none`}
           />
           <button
             onClick={send}
             disabled={!message.trim() || status === "sending"}
-            className="mt-2 w-full rounded-xl border border-border py-2.5 text-center text-xs font-bold text-text-hi active:scale-[0.98] disabled:opacity-35"
+            className="mt-2 w-full rounded-full border border-border py-2.5 text-center text-sub font-bold text-text-hi active:scale-[0.98] disabled:opacity-40"
           >
             {status === "sending" ? "Sending…" : "Send"}
           </button>
-          {error && <p className="mt-2 text-sub leading-snug text-gold">{error}</p>}
+          {error && <p className="mt-2 text-sub leading-snug text-danger">{error}</p>}
           <p className="mt-2 text-label leading-snug text-dim">
             Sends your library size and browser. Never film titles or ratings.
           </p>

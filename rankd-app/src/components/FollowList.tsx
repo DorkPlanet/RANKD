@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 
-import Sheet from "./Sheet";
+import { Sheet } from "./ui";
 import { PersonRow, type Person } from "./PersonRow";
 
 export type Direction = "followers" | "following";
@@ -53,7 +53,7 @@ export function FollowList({
   const title = direction === "followers" ? "Followers" : "Following";
 
   return (
-    <Sheet title={title} onClose={onClose}>
+    <Sheet title={title} onClose={onClose} scroll>
       {failed ? (
         <p className="text-sub leading-snug text-dim">Couldn&rsquo;t load that just now.</p>
       ) : people === null ? (

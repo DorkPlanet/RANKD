@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { PersonRow, type Person } from "./PersonRow";
+import { SecondaryButton, Tabs } from "./ui";
 
 function List({
   people,
@@ -110,21 +111,13 @@ export function PeoplePanel({
       {/* The two labels, which are also the position. Same treatment as the
           page tabs above, one level down and quieter, so it reads as a division
           WITHIN this page rather than as a second row of pages. */}
-      <div className="flex justify-center gap-6 px-6 pt-6">
-        {sides.map((side, i) => (
-          <button
-            key={side.key}
-            onClick={() => goTo(i)}
-            className="pb-2 text-label font-extrabold tracking-[0.14em] transition-colors"
-            style={{
-              color: at === i ? "var(--gold)" : "var(--dim)",
-              borderBottom: `2px solid ${at === i ? "var(--gold)" : "transparent"}`,
-            }}
-          >
-            {side.label.toUpperCase()}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        nested
+        labels={sides.map((s) => s.label)}
+        at={at}
+        onPick={goTo}
+        className="px-6 pt-6"
+      />
 
       {/* ── A native scroll-snap track, not a second gesture handler ──────────
           The page this sits on already swipes sideways, so a hand-rolled drag in
@@ -157,13 +150,13 @@ export function PeoplePanel({
           rather than only report a fact. */}
       <div className="mt-8 px-6">
         <div className="rule-fade mb-6" />
-        <button
-          onClick={onFindPeople}
-          className="mx-auto block rounded-full px-4 py-1.5 text-label font-extrabold tracking-[0.14em] text-dim active:scale-95"
-          style={{ background: "rgba(255,255,255,0.05)" }}
-        >
-          FIND PEOPLE
-        </button>
+        {/* Same control, same look, as the one on the empty Takes feed. Both
+            were 10px caps in `--dim` on a wash, which is the recipe this app
+            uses to mark something as the QUIETEST thing on screen — on the one
+            offer an empty page has to make. */}
+        <SecondaryButton onClick={onFindPeople} className="mx-auto block">
+          Find people
+        </SecondaryButton>
       </div>
     </div>
   );

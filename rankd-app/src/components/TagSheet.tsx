@@ -21,7 +21,7 @@
 
 import { useState } from "react";
 
-import { Sheet } from "./ui";
+import { Eyebrow, FIELD, PrimaryButton, QuietButton, Sheet } from "./ui";
 import { cleanNote, cleanTags, MAX_TAGS, NOTE_MAX, TAGS, type Tag } from "@/lib/tags";
 import type { Film } from "@/lib/types";
 
@@ -59,7 +59,11 @@ export function TagSheet({
 
   return (
     <Sheet title={film.title} onClose={onClose}>
-      <div className="px-6 pb-6">
+      {/* No gutter of its own. `Sheet` already pads `px-6 pb-6`, so this had
+          been sitting on 48px of inset — the narrowest content column in the
+          app, and the reason the chips wrapped a row earlier than they needed
+          to. */}
+      <div>
         <p className="text-sub leading-snug text-dim">
           What puts it there? Pick up to {MAX_TAGS}.
         </p>
@@ -79,8 +83,8 @@ export function TagSheet({
                   !on && full ? "opacity-35" : ""
                 }`}
                 style={{
-                  background: on ? "var(--gold)" : "rgba(255,255,255,0.05)",
-                  color: on ? "var(--bg)" : "var(--text)",
+                  background: on ? "var(--gold)" : "var(--wash)",
+                  color: on ? "var(--gold-ink)" : "var(--text)",
                   fontWeight: on ? 700 : 400,
                 }}
               >
@@ -90,15 +94,14 @@ export function TagSheet({
           })}
         </div>
 
-        <label className="mt-6 block text-label font-extrabold tracking-[0.14em] text-dim">
-          WHAT STOOD OUT?
-        </label>
+        <Eyebrow className="mt-6">What stood out?</Eyebrow>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))}
           rows={2}
           placeholder="Optional"
-          className="mt-2 w-full resize-none rounded-xl border border-border bg-bg px-3 py-2 text-sub text-text-hi outline-none placeholder:text-dim"
+          aria-label="What stood out?"
+          className={`${FIELD} mt-2 resize-none`}
         />
         {/* Only once it is worth knowing about, so the box is not permanently
             wearing a number nobody is near. */}
@@ -106,20 +109,17 @@ export function TagSheet({
           <div className="mt-1 text-label text-dim">{NOTE_MAX - note.length} left</div>
         )}
 
-        <button
-          onClick={done}
-          className="mt-6 w-full rounded-xl bg-gold py-3 text-center text-sub font-bold text-bg active:scale-[0.98]"
-        >
+        {/* `text-bg` navy was the ink here — the only gold button in the app not
+            using `--gold-ink`, so this one read a shade colder than every other
+            primary. And `rounded-xl` where the rest are pills. */}
+        <PrimaryButton wide className="mt-6" onClick={done}>
           Save
-        </button>
+        </PrimaryButton>
         {/* Skipping has to be as easy as answering, or the prompt becomes a toll
             on locking and people stop locking. */}
-        <button
-          onClick={onClose}
-          className="mt-2 w-full py-2 text-center text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
-        >
-          NOT NOW
-        </button>
+        <QuietButton wide className="mt-2" onClick={onClose}>
+          Not now
+        </QuietButton>
       </div>
     </Sheet>
   );

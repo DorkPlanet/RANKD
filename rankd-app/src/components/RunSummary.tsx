@@ -23,6 +23,7 @@ import { saveList } from "@/lib/lists";
 import { subjectEyebrow, subjectTitle, type RankSubject } from "@/lib/subject";
 import { starsFor } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
+import { Eyebrow, PrimaryButton, QuietButton } from "./ui";
 
 type Saving = "idle" | "working" | "saved" | "failed";
 
@@ -67,11 +68,11 @@ export function RunSummary({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
       <div className="mx-auto w-full max-w-sm">
         <div className="text-center">
-          <div className="font-display text-2xl leading-none tracking-wide text-gold">{title}</div>
-          <p className="mt-1.5 text-label uppercase tracking-wider text-dim">
-            {subtitle ? `${subtitle} · ` : ""}
-            {films.length} ranked
-          </p>
+          <div className="font-display text-[26px] leading-none tracking-wide text-gold">{title}</div>
+          <Eyebrow className="mt-1.5">
+
+ ranked
+            </Eyebrow>
           {/* Honest about which it is. A run you stopped early is still an
               answer — it is just not the same claim as one that went the
               distance, and the saved list should not pretend otherwise. */}
@@ -102,18 +103,18 @@ export function RunSummary({
               style={{ borderColor: i === 0 ? "var(--gold)" : "var(--border)" }}
             >
               <span
-                className={`w-6 flex-shrink-0 text-center font-serif ${i === 0 ? "text-lg font-bold text-gold" : "text-sm text-dim"}`}
+                className={`w-6 flex-shrink-0 text-center font-serif ${i === 0 ? "text-body font-bold text-gold" : "text-sub text-dim"}`}
               >
                 {i + 1}
               </span>
               {f.poster ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={f.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2/3" }} />
+                <img src={f.poster} alt="" className="w-9 flex-shrink-0 rounded" style={{ aspectRatio: "2 / 3" }} />
               ) : (
-                <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2/3" }} />
+                <span className="w-9 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2 / 3" }} />
               )}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-text-hi">{f.title}</span>
+                <span className="block truncate text-body text-text-hi">{f.title}</span>
                 <span className="block truncate text-sub text-dim">
                   {[f.year, f.guest ? "not seen" : starsFor(f.rating)].filter(Boolean).join(" · ")}
                 </span>
@@ -130,28 +131,28 @@ export function RunSummary({
           take it with you.
         </p>
 
+        {/* ── The one thing to do here, drawn as such ──────────────────────
+            This screen had NO primary. Saving the list — the only action that
+            keeps any of the work you just did, on a run that deliberately does
+            not touch the main list — was an outlined button, and its sibling
+            end screen (`SessionEnd`, reached from the same session) leads with a
+            filled gold pill. Two endings to the same evening, opposite
+            hierarchies.
+
+            The three routes below stay bare text. They are ways OUT, and a row
+            of three equal pills would compete with the one thing worth doing. */}
         <div className="mt-3 flex flex-col gap-2">
-          <button
-            onClick={save}
-            disabled={saved !== "idle"}
-            className="w-full rounded-full border border-border py-2.5 text-xs font-bold tracking-wide text-text-hi active:scale-95 disabled:opacity-60"
-          >
+          <PrimaryButton wide onClick={save} disabled={saved !== "idle"}>
             {saved === "saved"
-              ? "Saved to your lists ✓"
+              ? "Saved to your lists"
               : saved === "failed"
                 ? "Couldn't save it"
                 : "Save as a list"}
-          </button>
+          </PrimaryButton>
           <div className="mt-1 flex items-center justify-center gap-5">
-            <button onClick={onAgain} className="text-sub font-semibold text-dim active:scale-95">
-              Rank them again
-            </button>
-            <button onClick={onList} className="text-sub font-semibold text-dim active:scale-95">
-              Your list
-            </button>
-            <button onClick={onDone} className="text-sub font-semibold text-dim active:scale-95">
-              Done
-            </button>
+            <QuietButton onClick={onAgain}>Rank them again</QuietButton>
+            <QuietButton onClick={onList}>Your list</QuietButton>
+            <QuietButton onClick={onDone}>Done</QuietButton>
           </div>
         </div>
       </div>

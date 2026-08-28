@@ -29,6 +29,7 @@
 import { useState } from "react";
 
 import { starsFor, type Rating } from "@/lib/tiers";
+import { PrimaryButton } from "./ui";
 
 export interface ResumeRun {
   tier: Rating;
@@ -76,7 +77,7 @@ export default function ResumeOverlay({
         className="resume-card w-full max-w-[320px] rounded-3xl border border-border px-6 py-7"
         style={{ background: "color-mix(in srgb, var(--surface) 92%, transparent)" }}
       >
-        <span className="block text-label font-extrabold uppercase tracking-[0.2em] text-dim">
+        <span className="block text-label font-bold uppercase tracking-[0.14em] text-dim">
           King of the Hill
         </span>
         <span className="mt-2 block font-display text-[32px] leading-none tracking-wide text-gold">
@@ -86,12 +87,9 @@ export default function ResumeOverlay({
           {run.placed} of {run.total} placed
         </span>
 
-        <button
-          onClick={onContinue}
-          className="mt-6 w-full rounded-full bg-gold py-3.5 text-center text-sub font-bold text-[#1c1405] active:scale-[0.99]"
-        >
-          Continue
-        </button>
+        <PrimaryButton wide className="mt-6" onClick={onContinue}>
+            Continue
+          </PrimaryButton>
 
         <Route label="Another tier" onClick={onTier} />
         <Route label="Something else" onClick={onModes} />

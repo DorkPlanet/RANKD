@@ -15,7 +15,7 @@
 
 import { useState } from "react";
 
-import { avatarOf } from "@/lib/profile";
+import { Avatar } from "./Avatar";
 
 export interface Person {
   handle: string;
@@ -27,27 +27,16 @@ export interface Person {
   following: boolean | null;
 }
 
-function Avatar({ person }: { person: Person }) {
-  const avatar = avatarOf({
-    handle: person.handle,
-    displayName: null,
-    avatarUrl: person.avatarUrl,
-  });
-  return avatar.kind === "image" ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={avatar.url}
-      alt=""
-      className="h-11 w-11 shrink-0 rounded-full object-cover"
-      style={{ border: "1px solid var(--border)" }}
+// A row sits on the page rather than on artwork, so this is the `flat` variant
+// — no ring. Everything else about the circle, the fallback letter included, is
+// the same object the profiles draw.
+function RowAvatar({ person }: { person: Person }) {
+  return (
+    <Avatar
+      flat
+      size={44}
+      identity={{ handle: person.handle, displayName: null, avatarUrl: person.avatarUrl }}
     />
-  ) : (
-    <span
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full font-display text-lg text-gold"
-      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-    >
-      {avatar.letter}
-    </span>
   );
 }
 
@@ -80,9 +69,9 @@ export function PersonRow({ person }: { person: Person }) {
         href={`/@${person.handle}`}
         className="flex min-w-0 flex-1 items-center gap-3 active:opacity-70"
       >
-        <Avatar person={person} />
+        <RowAvatar person={person} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-text-hi">{person.handle}</span>
+          <span className="block truncate text-body text-text-hi">{person.handle}</span>
           <span className="block truncate text-label leading-snug text-dim">
             {/* In priority order. "Private" outranks a bio because it changes
                 what the rest of the row means. */}
@@ -103,11 +92,13 @@ export function PersonRow({ person }: { person: Person }) {
           onClick={() => void toggle()}
           disabled={busy}
           aria-pressed={following}
-          className="shrink-0 rounded-full px-4 py-1.5 text-label font-extrabold tracking-wide active:scale-95 disabled:opacity-50"
+          // Matches `FollowButton` exactly. The same control was 10px here and
+          // 14px on the profile a tap away, which is the same button twice.
+          className="shrink-0 rounded-full px-5 py-2 text-sub font-bold active:scale-[0.98] disabled:opacity-40"
           style={
             following
-              ? { background: "rgba(255,255,255,0.07)", color: "var(--text-hi)" }
-              : { background: "var(--gold)", color: "#1c1405" }
+              ? { background: "var(--wash)", color: "var(--text-hi)" }
+              : { background: "var(--gold)", color: "var(--gold-ink)" }
           }
         >
           {following ? "Following" : "Follow"}

@@ -25,8 +25,9 @@
 import { useState } from "react";
 
 import { saveMe, type Me } from "@/lib/account";
+import { SettingRow } from "./ui";
 
-const ROW = "flex w-full items-start justify-between gap-4 py-3 text-left";
+const ROW = "py-3";
 
 /**
  * Where this profile actually is.
@@ -43,29 +44,6 @@ const ROW = "flex w-full items-start justify-between gap-4 py-3 text-left";
 function profileAddress(handle: string): string {
   if (typeof window === "undefined") return `/@${handle}`;
   return `${window.location.host}/@${handle}`;
-}
-
-function Switch({ on, busy, onClick }: { on: boolean; busy: boolean; onClick: () => void }) {
-  return (
-    <span
-      role="switch"
-      aria-checked={on}
-      onClick={busy ? undefined : onClick}
-      className="mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors"
-      style={{
-        background: on ? "var(--gold)" : "var(--border)",
-        opacity: busy ? 0.5 : 1,
-      }}
-    >
-      <span
-        className="h-5 w-5 rounded-full transition-transform"
-        style={{
-          background: on ? "#1c1405" : "var(--bg)",
-          transform: on ? "translateX(16px)" : "translateX(0)",
-        }}
-      />
-    </span>
-  );
 }
 
 export function Visibility({
@@ -112,39 +90,39 @@ export function Visibility({
 
   return (
     <div>
-      <div className={ROW}>
-        <span className="min-w-0">
-          <span className="block text-sm text-text-hi">Anyone can find you</span>
-          <span className="block text-sub leading-snug text-dim">
-            {isPublic
-              ? `Your profile is at ${profileAddress(me.handle)}.`
-              : "Your profile is hidden. Nobody can open it, not even with the link."}
-          </span>
-        </span>
-        <Switch on={isPublic} busy={busy !== null} onClick={() => void set("profile", !isPublic)} />
-      </div>
+      <SettingRow
+        className={ROW}
+        title="Anyone can find you"
+        blurb={
+          isPublic
+            ? `Your profile is at ${profileAddress(me.handle)}.`
+            : "Your profile is hidden. Nobody can open it, not even with the link."
+        }
+        on={isPublic}
+        busy={busy !== null}
+        onToggle={() => void set("profile", !isPublic)}
+      />
 
       {/* Only once there is a profile for it to be part of. A switch for the
           contents of a page nobody can open is a question with no meaning. */}
       {isPublic && (
-        <div className={ROW} style={{ borderTop: "1px solid var(--border)" }}>
-          <span className="min-w-0">
-            <span className="block text-sm text-text-hi">Show what you like</span>
-            <span className="block text-sub leading-snug text-dim">
-              {tasteIsPublic
+        <div style={{ borderTop: "1px solid var(--border)" }}>
+          <SettingRow
+            className={ROW}
+            title="Show what you like"
+            blurb={
+              tasteIsPublic
                 ? "Your top films, who you rate highest, and the shape of your taste."
-                : "Just your name and your counts. The rest stays yours."}
-            </span>
-          </span>
-          <Switch
+                : "Just your name and your counts. The rest stays yours."
+            }
             on={tasteIsPublic}
             busy={busy !== null}
-            onClick={() => void set("taste", !tasteIsPublic)}
+            onToggle={() => void set("taste", !tasteIsPublic)}
           />
         </div>
       )}
 
-      {error && <p className="mt-2 text-sub leading-snug text-gold">{error}</p>}
+      {error && <p className="mt-2 text-sub leading-snug text-danger">{error}</p>}
     </div>
   );
 }

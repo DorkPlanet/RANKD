@@ -117,11 +117,14 @@ export function FollowButton({ handle }: { handle: string }) {
             onClick={() => void toggle()}
             disabled={busy}
             aria-pressed={state.following}
-            className="rounded-full px-6 py-2 text-sm font-extrabold tracking-wide active:scale-95 disabled:opacity-60"
+            // Same size as the one in a `PersonRow`, which was `text-label
+            // px-4 py-1.5` — so the identical control was 10px in a search
+            // result and 14px on the profile you reached from it.
+            className="rounded-full px-5 py-2 text-sub font-bold active:scale-[0.98] disabled:opacity-40"
             style={
               state.following
-                ? { background: "rgba(255,255,255,0.07)", color: "var(--text-hi)" }
-                : { background: "var(--gold)", color: "#1c1405" }
+                ? { background: "var(--wash)", color: "var(--text-hi)" }
+                : { background: "var(--gold)", color: "var(--gold-ink)" }
             }
           >
             {/* Three states, not two. "Friends" is the one worth naming,

@@ -32,7 +32,7 @@ export function ListIcon() {
  */
 export function ActivityIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
       <line x1="4" y1="8" x2="20" y2="8" />
       <line x1="4" y1="16" x2="13" y2="16" />
     </svg>
@@ -68,7 +68,7 @@ export function AddFilmIcon() {
 
 export function TrophyIcon() {
   return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
       <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
       <path d="M4 22h16" />
@@ -90,9 +90,103 @@ export function GearIcon() {
 
 export function LockIcon() {
   return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="4" y="11" width="16" height="10" rx="2" />
       <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
+/**
+ * The disclosure arrow, pointing down. `open` turns it over.
+ *
+ * ── One chevron, where there were four ────────────────────────────────────
+ *
+ * It was drawn as a real SVG in the list's tier jump, as the text glyph `▾` in
+ * Settings' rows and in two of the duel screen's pickers, and as `›` in three
+ * more places. A text glyph renders at the SYSTEM font's metrics rather than on
+ * the icon grid — different weight, different optical size, a different baseline
+ * — and it moves when a font finishes loading. `globals.css` already makes
+ * exactly this argument about the checkbox's tick, which is drawn rather than
+ * typed for the same reason.
+ */
+export function ChevronIcon({ open, size = 13 }: { open?: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s var(--ease)" }}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+/** The same chevron lying on its side — "there is more this way". */
+export function ChevronRightIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+/** A tick. Same shape as the one drawn inside `.tickbox`, so they agree. */
+export function TickIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3.5 8.5l3 3 6-6.5" />
+    </svg>
+  );
+}
+
+/**
+ * A star, earned or not. Drawn rather than typed for the same reason the tick
+ * is: `★` and `☆` are different glyphs in most fonts and are not the same
+ * WEIGHT, so a full trophy case rendered as a column of stars that did not line
+ * up with each other.
+ */
+export function StarIcon({ filled, size = 15 }: { filled?: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.4-5.8-3-5.8 3 1.1-6.4L2.6 9.4l6.5-.9z" />
     </svg>
   );
 }
@@ -117,7 +211,7 @@ export function RankdMark() {
 export function ClimbArrow() {
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-      <path d="M3 1l4 4-4 4" stroke="var(--gold)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 1l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

@@ -176,7 +176,7 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
 // against it. Defaults to the challenger's lean, which is every caller but the
 // left-hand card in Fast Shuffle.
 export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TILT) {
-  const clone = posterClone(el, poster, "0 8px 26px rgba(0,0,0,0.55)");
+  const clone = posterClone(el, poster, "0 8px 26px rgba(0, 0, 0, 0.55)");
   playOnce(clone, [
         { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1 },
         { transform: `translate(0,18px) rotate(${tilt}deg) scale(0.94)`, opacity: 0 },
@@ -211,7 +211,7 @@ export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TIL
 export function flyPosterTo(fromEl: HTMLElement, toEl: HTMLElement, poster: string) {
   const a = centreOf(fromEl);
   const b = centreOf(toEl);
-  const clone = posterClone(fromEl, poster, "0 10px 30px rgba(0,0,0,0.55)");
+  const clone = posterClone(fromEl, poster, "0 10px 30px rgba(0, 0, 0, 0.55)");
   playOnce(clone, [
         { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
         // Lifts slightly on the way, so the path is an arc rather than a slide.
@@ -229,7 +229,7 @@ export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster
   const b = centreOf(toImg);
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0,0,0,.6)");
+  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0, 0, 0, 0.6)");
   playOnce(clone, [
         // Leaves at the challenger's lean and arrives at the climber's, so it
         // settles flush against the card it is replacing rather than crooked.
@@ -410,7 +410,7 @@ export function PosterCard({
           // lines — the whole name is the point, it's what you're choosing between.
           fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
           minHeight: "2.3em",
-          textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+          textShadow: "0 2px 8px rgba(0, 0, 0, 0.8)",
         }}
       >
         {film.title}
@@ -441,7 +441,7 @@ export function PosterCard({
             background: "var(--surface)",
             boxShadow: pick
               ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
-              : "0 8px 26px rgba(0,0,0,0.55)",
+              : "0 8px 26px rgba(0, 0, 0, 0.55)",
           }}
         >
           <PosterArt film={film} />
@@ -452,10 +452,10 @@ export function PosterCard({
             is not a neutral default; it is a visible object that says nothing. */}
         {badge && (
           <span
-            className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-extrabold tracking-[0.07em]"
+            className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[0.07em]"
             style={
               pick
-                ? { color: "#1c1405", background: "var(--gold)" }
+                ? { color: "var(--gold-ink)", background: "var(--gold)" }
                 : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
             }
           >

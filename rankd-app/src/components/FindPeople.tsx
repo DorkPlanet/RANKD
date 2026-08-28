@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import Sheet from "./Sheet";
+import { FIELD, Sheet } from "./ui";
 import { MIN_QUERY } from "@/lib/social/searchRules";
 import { PersonRow, type Person } from "./PersonRow";
 
@@ -80,7 +80,7 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
   const short = query.trim().length < MIN_QUERY;
 
   return (
-    <Sheet title="Find people" onClose={onClose}>
+    <Sheet title="Find people" onClose={onClose} scroll>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -90,7 +90,7 @@ export function FindPeople({ onClose }: { onClose: () => void }) {
         spellCheck={false}
         aria-label="Search by name"
         placeholder="Search by name"
-        className="mb-4 w-full rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text-hi outline-none placeholder:text-dim"
+        className={`${FIELD} mb-4`}
       />
 
       {/* Three states, and the empty one is only reachable after a real search.

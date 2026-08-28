@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { ORDERED_TIERS, seedScore, starsFor, type Rating } from "@/lib/tiers";
 import { slugId } from "@/lib/importCsv";
 import { requestTour } from "@/lib/tour";
-import { Sheet } from "./ui";
+import { FIELD, Sheet } from "./ui";
 import type { Film } from "@/lib/types";
 
 interface SearchHit {
@@ -131,7 +131,7 @@ export function LogFilm({
               }
             }}
             placeholder="Search for a film"
-            className="w-full rounded-xl border border-border bg-transparent px-4 py-3 text-sm text-text-hi outline-none placeholder:text-dim"
+            className={FIELD}
           />
 
           <div className="mt-3 flex flex-col gap-1">
@@ -148,12 +148,12 @@ export function LogFilm({
                 >
                   {h.poster ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={h.poster} alt="" className="w-10 flex-shrink-0 rounded" style={{ aspectRatio: "2/3" }} />
+                    <img src={h.poster} alt="" className="w-10 flex-shrink-0 rounded" style={{ aspectRatio: "2 / 3" }} />
                   ) : (
-                    <span className="w-10 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2/3" }} />
+                    <span className="w-10 flex-shrink-0 rounded bg-border" style={{ aspectRatio: "2 / 3" }} />
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-text-hi">{h.title}</span>
+                    <span className="block truncate text-body text-text-hi">{h.title}</span>
                     <span className="block truncate text-sub text-dim">
                       {h.year}
                       {have ? ` · already in your list at ${starsFor(have.rating)}` : ""}
@@ -192,12 +192,12 @@ function RatingStep({
       <div className="mb-4 flex items-center gap-3">
         {hit.poster ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={hit.poster} alt="" className="w-14 flex-shrink-0 rounded-md" style={{ aspectRatio: "2/3" }} />
+          <img src={hit.poster} alt="" className="w-14 flex-shrink-0 rounded-md" style={{ aspectRatio: "2 / 3" }} />
         ) : (
-          <span className="w-14 flex-shrink-0 rounded-md bg-border" style={{ aspectRatio: "2/3" }} />
+          <span className="w-14 flex-shrink-0 rounded-md bg-border" style={{ aspectRatio: "2 / 3" }} />
         )}
         <span className="min-w-0">
-          <span className="block font-display text-lg leading-tight text-text-hi">{hit.title}</span>
+          <span className="block font-display text-title leading-tight text-text-hi">{hit.title}</span>
           <span className="block text-sub text-dim">{hit.year}</span>
         </span>
       </div>
@@ -207,14 +207,14 @@ function RatingStep({
           <button
             key={t}
             onClick={() => onPick(t)}
-            className="rounded-xl border border-border px-4 py-2.5 text-left text-sm text-gold active:scale-[0.99]"
+            className="rounded-xl border border-border px-4 py-2.5 text-left text-body text-gold active:scale-[0.99]"
           >
             {starsFor(t)}
           </button>
         ))}
       </div>
 
-      <button onClick={onBack} className="mt-3 w-full text-center text-xs font-semibold text-dim active:scale-95">
+      <button onClick={onBack} className="mt-3 w-full py-2 text-center text-sub text-dim active:scale-95">
         ‹ Back
       </button>
     </>

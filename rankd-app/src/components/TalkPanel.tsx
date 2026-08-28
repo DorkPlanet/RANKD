@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { MESSAGE_MAX, shortAgo } from "@/lib/social/feed";
 import type { ThreadMessageItem, ThreadSummary } from "@/lib/social/threads";
+import { FIELD } from "./ui";
 
 function Conversation({
   thread,
@@ -70,7 +71,7 @@ function Conversation({
     <div className="px-5">
       <button
         onClick={onBack}
-        className="mt-3 text-label font-extrabold tracking-[0.14em] text-dim active:opacity-70"
+        className="mt-3 text-label font-bold tracking-[0.14em] text-dim active:opacity-70"
       >
         ‹ ALL
       </button>
@@ -130,18 +131,18 @@ function Conversation({
           onChange={(e) => setDraft(e.target.value.slice(0, MESSAGE_MAX))}
           rows={1}
           placeholder="Say something"
-          className="min-h-[38px] w-full flex-1 resize-none rounded-xl border border-border bg-bg px-3 py-2 text-sub text-text-hi outline-none placeholder:text-dim"
+          className={`${FIELD} min-h-[38px] flex-1 resize-none`}
         />
         <button
           onClick={() => void send()}
           disabled={busy || draft.trim().length === 0}
-          className="mb-[3px] flex-shrink-0 rounded-full px-3 py-1.5 text-label font-extrabold tracking-[0.14em] text-gold disabled:opacity-35"
-          style={{ background: "rgba(255,255,255,0.05)" }}
+          className="mb-[3px] flex-shrink-0 rounded-full px-3 py-1.5 text-label font-bold tracking-[0.14em] text-gold disabled:opacity-40"
+          style={{ background: "var(--wash)" }}
         >
           SEND
         </button>
       </div>
-      {error && <p className="pb-4 text-label text-dim">{error}</p>}
+      {error && <p className="pb-4 text-sub leading-snug text-danger">{error}</p>}
     </div>
   );
 }

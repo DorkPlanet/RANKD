@@ -126,7 +126,7 @@ export function RunStatus({
             only because its stars happened to give the row a line box. */}
         <div className="relative mb-2.5 flex min-h-5 items-baseline">
           <span className="shrink-0">{lead}</span>
-          <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-label font-extrabold tracking-[0.1em] text-dim">
+          <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-label font-bold tracking-[0.14em] text-dim">
             {title}
           </span>
         </div>
@@ -143,7 +143,7 @@ export function RunStatus({
 
         {/* Same treatment as RankFace's "of 134" — one type language for the
             whole zone rather than a table above a title. */}
-        <p className="mt-2.5 text-center text-label font-extrabold uppercase tracking-[0.22em] text-dim tabular-nums">
+        <p className="mt-2.5 text-center text-label font-bold uppercase tracking-[0.14em] text-dim tabular-nums">
           {line}
         </p>
       </div>

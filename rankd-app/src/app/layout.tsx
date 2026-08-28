@@ -4,15 +4,36 @@ import "./globals.css";
 
 // Ported from the prototype: Inter (UI), Source Serif 4 (numbers/titles),
 // Bebas Neue (the wordmark). Exposed as CSS vars for Tailwind's theme + raw CSS.
+//
+// ── Every weight declared here must be one the app actually asks for, and
+//    every weight the app asks for must be declared here ──────────────────────
+//
+// These two lists had drifted apart in both directions and the result was
+// invisible, which is what makes it worth a comment rather than a commit.
+//
+// Inter carried `500` that nothing used (there is not one `font-medium` in the
+// codebase) and did NOT carry `800`, which 77 class names asked for. A weight
+// that is never fetched does not fail — the browser matches the nearest one it
+// has — so all 77 `font-extrabold`s rendered at 700, identically to the 55
+// `font-bold`s beside them. Every place the code drew a distinction between the
+// two was drawing nothing. Those class names are now `font-bold`; do not
+// reintroduce `font-extrabold` without adding `800` here first.
+//
+// Source Serif was the same bug in reverse: it declared only `600`/`700`, so the
+// eleven places setting a bio, a tagline or a blurb in bare `font-serif italic`
+// asked for 400 and were served 600. The app's quietest voice was being set in
+// semibold. `400` is declared now, which is what makes `font-normal` on a serif
+// numeral (see `ListScreen`'s shuffled ranks) a real contrast against its
+// `font-bold` sibling rather than 700-vs-600.
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "600", "700"],
 });
 const sourceSerif = Source_Serif_4({
   variable: "--font-src-serif",
   subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["400", "600", "700"],
   style: ["normal", "italic"],
 });
 const bebas = Bebas_Neue({

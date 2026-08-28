@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AVATAR_SIZE, cropAvatar, decodeImage, uploadAvatar, type CropBox } from "@/lib/avatar";
+import { PrimaryButton, QuietButton, Sheet } from "./ui";
 
 /** The square the crop is chosen in. The circle is inscribed in it. */
 const VIEWPORT = 264;
@@ -179,14 +180,13 @@ export function AvatarCropper({
   const zoom = view ? view.s / base : 1;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
-      <div
-        className="sheet-in w-full max-w-md rounded-t-3xl border-t border-border bg-surface px-6 pb-9 pt-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-border" />
-        <span className="mb-1 block font-display text-2xl tracking-wide text-gold">Your picture</span>
-        <p className="mb-4 text-sub leading-snug text-dim">Drag to move it. Pinch or use the slider to zoom.</p>
+    <Sheet title="Your picture" onClose={onCancel}>
+        {/* The grabber, the title and the Done control all come from `Sheet`
+            now. This was the fifth hand-rolled copy of that chrome and the only
+            one drawing its scrim at 60% black instead of 50% — so the darkest
+            overlay in the app was the one over a picture you were trying to
+            frame. It was also the only sheet with no Done in its header. */}
+        <p className="-mt-2 mb-4 text-sub leading-snug text-dim">Drag to move it. Pinch or use the slider to zoom.</p>
 
         {/* The stage. `touch-action: none` so the browser does not claim the
             drag for scrolling before the handlers see it — the same reason the
@@ -244,31 +244,20 @@ export function AvatarCropper({
           aria-label="Zoom"
           disabled={!bitmap}
           onChange={(e) => setZoom(parseFloat(e.target.value))}
-          className="mt-4 w-full"
-          style={{ accentColor: "var(--gold)" }}
+          className="range mt-2"
         />
 
-        {error && <p className="mt-2 text-sub leading-snug text-gold">{error}</p>}
+        {error && <p className="mt-2 text-sub leading-snug text-danger">{error}</p>}
 
-        <button
-          onClick={confirm}
-          disabled={!bitmap || busy}
-          className="mt-3 w-full rounded-full py-3 text-sm font-bold active:scale-[0.99] disabled:opacity-40"
-          style={{ color: "#1c1405", background: "var(--gold)" }}
-        >
+        <PrimaryButton wide className="mt-3" onClick={confirm} disabled={!bitmap || busy}>
           {busy ? "Uploading…" : "Use this picture"}
-        </button>
-        <button
-          onClick={onCancel}
-          disabled={busy}
-          className="mt-2 w-full py-2 text-center text-xs font-semibold text-dim active:scale-95 disabled:opacity-40"
-        >
+        </PrimaryButton>
+        <QuietButton wide className="mt-2" onClick={onCancel} disabled={busy}>
           Cancel
-        </button>
+        </QuietButton>
         <p className="mt-3 text-center text-label text-dim">
           Saved at {AVATAR_SIZE}×{AVATAR_SIZE}
         </p>
-      </div>
-    </div>
+    </Sheet>
   );
 }

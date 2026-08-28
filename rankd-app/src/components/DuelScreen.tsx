@@ -40,7 +40,7 @@ import { loadRoughCut } from "@/lib/roughCutRun";
 import { cardDataFromFilms } from "@/lib/card/data";
 import { CardPicker } from "./CardPicker";
 import { ImportGuide } from "./ImportGuide";
-import { ImportButton } from "./ui";
+import { Eyebrow, ImportButton, PrimaryButton } from "./ui";
 import { RunStatus } from "./RunStatus";
 import ResumeOverlay from "./ResumeOverlay";
 import { clearCuratedRun, clearRun, saveCuratedRun, saveRun } from "@/lib/runs";
@@ -55,6 +55,9 @@ import {
   StartButton,
 } from "./ui";
 import {
+  ChevronIcon,
+  ChevronRightIcon,
+  TickIcon,
   ActivityIcon,
   ClimbArrow,
   GearIcon,
@@ -1184,9 +1187,17 @@ export default function DuelScreen({
                       list of closed rows with no import control anywhere in
                       sight. The primary action on the empty screen has to BE
                       the action. */}
+                  {/* `primary`, because on this screen it is not one of two
+                      choices — it is the only thing there is to do. Without it
+                      the control inherited the outlined treatment meant for
+                      Settings' Merge/Replace pair, so a brand-new user's single
+                      call to action was drawn as the quietest button in the app
+                      while the same screen WITH films in it offered a full gold
+                      pill. */}
                   <ImportButton
                     label="Import your films"
                     merge={false}
+                    primary
                     onFile={(f) => onImportFile?.(f)}
                   />
                   {/* A "show me how it works" button lived here and is gone.
@@ -1206,12 +1217,9 @@ export default function DuelScreen({
                       same tier picker anyway. Every mode now begins the same
                       way, which is also what stops this screen quietly deciding
                       that the default game is the most expensive one. */}
-                  <button
-                    onClick={() => setModeOpen(true)}
-                    className="w-full rounded-full bg-gold py-3.5 text-center text-sub font-bold text-[#1c1405] active:scale-[0.99]"
-                  >
-                    Start ranking
-                  </button>
+                  <PrimaryButton wide onClick={() => setModeOpen(true)}>
+                      Start ranking
+                    </PrimaryButton>
                 </>
               )}
               <button
@@ -1281,8 +1289,8 @@ export default function DuelScreen({
               </span>
             ) : (
               <button onClick={() => setTierOpen(true)} className="flex items-baseline gap-1.5 active:scale-95">
-                <span className="text-base leading-none text-gold">{starsFor(session?.tier ?? DEFAULT_TIER)}</span>
-                <span className="text-label leading-none text-dim">▾</span>
+                <span className="text-body leading-none text-gold">{starsFor(session?.tier ?? DEFAULT_TIER)}</span>
+                <span className="text-dim"><ChevronIcon size={11} /></span>
               </button>
             )
           }
@@ -1828,9 +1836,9 @@ function ModePanel({
           onClick={onPickTier}
           className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
         >
-          <span className="text-label font-extrabold tracking-[0.12em] text-dim">TIER</span>
+          <Eyebrow>Tier</Eyebrow>
           <span className="flex items-baseline gap-2">
-            <span className="text-base text-gold">{starsFor(tier)}</span>
+            <span className="text-body text-gold">{starsFor(tier)}</span>
             <span className="text-sub text-dim">
               {inTier} film{inTier === 1 ? "" : "s"} ›
             </span>
@@ -1844,7 +1852,7 @@ function ModePanel({
             decides which films are dealt and nothing else. */}
         <div className="mb-3 rounded-xl border border-border px-4 py-3">
           <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm text-text-hi">Range</span>
+            <span className="text-body text-text-hi">Range</span>
             <span className="text-sub text-gold">
               {starsFor(tier - below)} – {starsFor(tier + above)}
             </span>
@@ -1903,7 +1911,7 @@ function ModePanel({
           if (!split || !anyRankable) return null;
           return (
             <div className="mt-5 border-t border-border pt-4">
-              <p className="mb-2 text-label font-extrabold uppercase tracking-[0.18em] text-dim">
+              <p className="mb-2 text-label font-bold uppercase tracking-[0.18em] text-dim">
                 Already split — rank a pile
               </p>
               <div className="flex gap-2">
@@ -1912,7 +1920,7 @@ function ModePanel({
                     key={b}
                     disabled={open[b].length < 2}
                     onClick={() => onRankPile(open[b].map((f) => f.id))}
-                    className="flex-1 rounded-xl border border-border py-2.5 text-label font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-30"
+                    className="flex-1 rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98] disabled:opacity-40"
                   >
                     {b === "top" ? "Upper" : b === "middle" ? "Middle" : "Lower"}
                     <span className="ml-1.5 text-dim tabular-nums">{open[b].length}</span>
@@ -1934,9 +1942,9 @@ function ModePanel({
         onClick={onPickTier}
         className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
       >
-        <span className="text-label font-extrabold tracking-[0.12em] text-dim">TIER</span>
+        <Eyebrow>Tier</Eyebrow>
         <span className="flex items-baseline gap-2">
-          <span className="text-base text-gold">{starsFor(tier)}</span>
+          <span className="text-body text-gold">{starsFor(tier)}</span>
           <span className="text-sub text-dim">
             {count} film{count === 1 ? "" : "s"} ›
           </span>
@@ -1949,7 +1957,7 @@ function ModePanel({
           only comparisons that say anything about how two star bands relate. */}
       <div className="mt-4 rounded-xl border border-border px-4 py-3">
         <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-sm text-text-hi">Range</span>
+          <span className="text-body text-text-hi">Range</span>
           <span className="text-sub text-gold">
             {starsFor(lowEdge)} – {starsFor(highEdge)}
           </span>
@@ -2074,7 +2082,7 @@ function ShuffleSetup({
 
   return (
     <Sheet title="Fast Shuffle" onClose={onClose}>
-      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.12em] text-dim">What to compare</div>
+      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.14em] text-dim">What to compare</div>
       <div className="mb-3 flex gap-2">
         <ScopeTab label="All films" active={kind === "all"} onClick={() => setKind("all")} />
         <ScopeTab label="This tier" active={kind === "tier"} onClick={() => setKind("tier")} />
@@ -2086,15 +2094,15 @@ function ShuffleSetup({
           onClick={onPickTier}
           className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
         >
-          <span className="text-label font-extrabold tracking-[0.12em] text-dim">TIER</span>
-          <span className="text-base text-gold">{starsFor(tier)} ›</span>
+          <Eyebrow>Tier</Eyebrow>
+          <span className="text-body text-gold">{starsFor(tier)} ›</span>
         </button>
       )}
 
       {kind === "range" && (
         <div className="mb-3 rounded-xl border border-border px-4 py-3">
           <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-sm text-text-hi">Range</span>
+            <span className="text-body text-text-hi">Range</span>
             <span className="text-sub text-gold">
               {starsFor(tier - below)} – {starsFor(tier + above)}
             </span>
@@ -2117,7 +2125,7 @@ function ShuffleSetup({
           inside a pen — sharpening one arbitrary patch and leaving the rest
           untouched. See the note on `ShuffleOptions.target`. */}
       <div className="mb-3">
-        <div className="mb-1.5 text-label font-bold uppercase tracking-[0.12em] text-dim">How many</div>
+        <div className="mb-1.5 text-label font-bold uppercase tracking-[0.14em] text-dim">How many</div>
         <div className="flex gap-2">
           {[25, 50, 100].map((b) => (
             <ScopeTab key={b} label={String(b)} active={batch === b} onClick={() => setBatch(b)} />
@@ -2141,7 +2149,7 @@ function ShuffleSetup({
           rather than a default. */}
       <label className="mb-1 flex items-center justify-between rounded-xl border border-border px-4 py-3">
         <span className="min-w-0 pr-3">
-          <span className="block text-sm text-text-hi">Include films I&apos;ve already placed</span>
+          <span className="block text-body text-text-hi">Include films I&apos;ve already placed</span>
           <span className="block text-sub leading-snug text-dim">
             {includeConfirmed
               ? "Placed films can move within their star rating."
@@ -2212,9 +2220,9 @@ function ModeRow({
       {/* What it costs you, in the one unit all four share. The list used to
           make you infer this from four blurbs of four different lengths. */}
       {meta && (
-        <span className="flex-shrink-0 text-label font-bold uppercase tracking-[0.12em] text-dim">{meta}</span>
+        <span className="flex-shrink-0 text-label font-bold uppercase tracking-[0.14em] text-dim">{meta}</span>
       )}
-      <span className="flex-shrink-0 text-sub text-dim">›</span>
+      <span className="flex-shrink-0 text-dim"><ChevronRightIcon /></span>
     </button>
   );
 }
@@ -2264,14 +2272,14 @@ function TierPicker({
             key={t}
             disabled={!playable}
             onClick={() => onPick(t)}
-            className="mb-1.5 flex w-full flex-col gap-1 rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-30"
+            className="mb-1.5 flex w-full flex-col gap-1 rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99] disabled:opacity-40"
           >
             <span className="flex w-full items-center justify-between">
-              <span className="text-base text-gold">{starsFor(t)}</span>
+              <span className="text-body text-gold">{starsFor(t)}</span>
               <span className="flex items-center gap-2 text-sub text-dim">
                 {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
                 {n === 1 && ", needs 2"}
-                {t === current && <span className="text-gold">✓</span>}
+                {t === current && <span className="text-gold"><TickIcon /></span>}
               </span>
             </span>
             {cut && (cut.resuming !== null || cut.split) && (
@@ -2339,7 +2347,7 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
         <button
           onClick={onSettings}
           aria-label="Settings"
-          className="absolute left-5 text-dim transition-colors active:scale-95"
+          className="absolute left-6 text-dim transition-colors active:scale-95"
           style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
         >
           <GearIcon />
@@ -2348,7 +2356,7 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
       <button
         onClick={onTrophies}
         aria-label="Achievements"
-        className="absolute right-5 text-dim transition-colors active:scale-95"
+        className="absolute right-6 text-dim transition-colors active:scale-95"
         style={{ top: "calc(0.75rem + env(safe-area-inset-top))" }}
       >
         <TrophyIcon />
@@ -2685,7 +2693,7 @@ function Duel({
             <button
               onClick={onUndo}
               disabled={!canUndo}
-              className={`${CONTROL} disabled:opacity-30 disabled:active:scale-100`}
+              className={`${CONTROL} disabled:opacity-40 disabled:active:scale-100`}
               style={{
                 opacity: played ? undefined : 0,
                 pointerEvents: played ? "auto" : "none",
@@ -2749,7 +2757,7 @@ const RUN_ENDGAME = 10;
 // them look lighter would make them harder to hit. Small caps matches the
 // session line and RankFace's "of 134", so the screen keeps one voice.
 const CONTROL =
-  "px-4 py-3 text-label font-extrabold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
+  "px-4 py-3 text-label font-bold uppercase tracking-[0.18em] text-dim transition-colors active:scale-95";
 
 // `guidance` is a line about THIS run rather than about the app — "only 3 left"
 // rather than "flick a film up". It joins the rotation at the front instead of
@@ -2815,14 +2823,14 @@ function RankFace({ from, to, total }: { from: number | null; to: number | null;
           {from}
         </span>
         {/* Points the way the pile is climbed — up the order, toward #1. */}
-        <ClimbArrow />
+        <span className="text-gold"><ClimbArrow /></span>
         <span className="min-w-[3ch] text-left font-display text-[32px] leading-none tracking-wide text-text/45 tabular-nums">
           {to}
         </span>
         <Hairline flip />
       </div>
       {/* Underneath and centred, so it can't pull the numbers off true. */}
-      <span className="text-label font-extrabold uppercase tracking-[0.22em] text-dim">
+      <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
         of {total}
       </span>
     </div>
@@ -2866,7 +2874,7 @@ function ConfirmView({
   const won = justPromoted ? (earned ?? champion.rating) : champion.rating;
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
-      <span className="text-label font-extrabold tracking-[0.14em] text-gold">
+      <span className="text-label font-bold tracking-[0.14em] text-gold">
         {justPromoted ? `⭐ EARNED ${starsFor(won)}` : "🏆 TOPS THE PILE"}
       </span>
       <div className="w-40 overflow-hidden rounded-xl" style={{ boxShadow: "0 0 0 3px var(--gold), 0 12px 36px color-mix(in srgb, var(--gold) 45%, transparent)" }}>
@@ -2876,15 +2884,18 @@ function ConfirmView({
       <div>
         <div className="font-serif text-xl font-bold text-text-hi">{champion.title}</div>
         {justPromoted ? (
-          <div className="mt-1 text-base text-gold">{starsFor(won)}</div>
+          <div className="mt-1 text-body text-gold">{starsFor(won)}</div>
         ) : (
           <div className="mt-1 font-serif text-5xl font-bold text-gold">#{rank}</div>
         )}
       </div>
+      {/* The one primary in the app that keeps a glow. It sits over artwork
+          rather than over a page, so the shadow is what separates it from the
+          poster behind — everything else about it is the shared shape. */}
       <button
         onClick={onConfirm}
-        className="rounded-full px-8 py-3 text-sm font-extrabold tracking-wide active:scale-95"
-        style={{ color: "#1c1405", background: "var(--gold)", boxShadow: "0 4px 20px color-mix(in srgb, var(--gold) 40%, transparent)" }}
+        className="rounded-full px-8 py-3 text-sub font-bold active:scale-[0.98]"
+        style={{ color: "var(--gold-ink)", background: "var(--gold)", boxShadow: "0 4px 20px color-mix(in srgb, var(--gold) 40%, transparent)" }}
       >
         {justPromoted ? `Lock in at ${starsFor(won)}` : `Lock in as #${rank}`}
       </button>
@@ -2896,7 +2907,7 @@ function ConfirmView({
         <div className="flex flex-col items-center gap-2">
           <button
             onClick={onTakeOn}
-            className="rounded-full border px-6 py-2.5 text-xs font-bold tracking-wide active:scale-95"
+            className="rounded-full border px-6 py-2.5 text-sub font-bold active:scale-95"
             style={{ color: "var(--accent)", borderColor: "var(--accent)" }}
           >
             Take on {starsFor(promoteTo)}
@@ -2908,7 +2919,7 @@ function ConfirmView({
       )}
 
       {onBack && !justPromoted && (
-        <button onClick={onBack} className="-mt-1 text-xs font-semibold text-dim active:scale-95">
+        <button onClick={onBack} className="-mt-1 py-2 text-sub text-dim active:scale-95">
           Not yet — keep playing
         </button>
       )}
@@ -3014,7 +3025,7 @@ function TierComplete({
           <div className="flex w-full max-w-[300px] flex-col gap-4">
             {offer.length > 0 && (
               <div>
-                <p className="mb-2 text-label font-extrabold uppercase tracking-[0.18em] text-dim">
+                <p className="mb-2 text-label font-bold uppercase tracking-[0.18em] text-dim">
                   Still split — rank another pile
                 </p>
                 <div className="flex gap-2">
@@ -3022,7 +3033,7 @@ function TierComplete({
                     <button
                       key={bucket}
                       onClick={() => onRankPile!(pileFilms.map((f) => f.id))}
-                      className="flex-1 rounded-xl border border-border py-2.5 text-label font-extrabold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98]"
+                      className="flex-1 rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-text-hi active:scale-[0.98]"
                     >
                       {bucket === "top" ? "Upper" : bucket === "middle" ? "Middle" : "Lower"}
                       <span className="ml-1.5 text-dim tabular-nums">{pileFilms.length}</span>
