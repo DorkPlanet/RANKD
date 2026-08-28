@@ -7,11 +7,19 @@ import { inShelf, pageAfterSwipe, RIBBON, stepScreen, TURN_AT } from "@/lib/ribb
 describe("stepScreen", () => {
   it("walks the ribbon in bottom-bar order", () => {
     expect(stepScreen("list", 1)).toBe("duel");
-    expect(stepScreen("duel", 1)).toBe("activity");
-    expect(stepScreen("activity", 1)).toBe("profile");
-    expect(stepScreen("profile", -1)).toBe("activity");
-    expect(stepScreen("activity", -1)).toBe("duel");
+    expect(stepScreen("duel", 1)).toBe("profile");
+    expect(stepScreen("profile", -1)).toBe("duel");
     expect(stepScreen("duel", -1)).toBe("list");
+  });
+
+  it("cannot reach Activity, which is withdrawn rather than deleted", () => {
+    // The screen, its API routes and its tables are all still in the tree — see
+    // the note on `RIBBON`. This asserts the one thing that matters while it is
+    // paused: there is no swipe that lands on it. A guard rather than a
+    // description, so putting it back has to be deliberate.
+    expect([...RIBBON]).not.toContain("activity");
+    expect(stepScreen("duel", 1)).not.toBe("activity");
+    expect(stepScreen("profile", -1)).not.toBe("activity");
   });
 
   it("stops at both ends rather than wrapping", () => {
@@ -22,11 +30,11 @@ describe("stepScreen", () => {
   });
 
   it("matches the bottom bar, minus the cell that is a sheet", () => {
-    // The bar is Your list / Log a film / Rank / Activity / You. "Log a film"
-    // opens over whatever you were on rather than going anywhere, so it is not a
-    // place and is not on the ribbon. Everything else is, in the same order —
-    // that correspondence is the whole reason a swipe feels like the bar.
-    expect([...RIBBON]).toEqual(["list", "duel", "activity", "profile"]);
+    // The bar is Your list / Log a film / Rank / You. "Log a film" opens over
+    // whatever you were on rather than going anywhere, so it is not a place and
+    // is not on the ribbon. Everything else is, in the same order — that
+    // correspondence is the whole reason a swipe feels like the bar.
+    expect([...RIBBON]).toEqual(["list", "duel", "profile"]);
   });
 });
 

@@ -94,7 +94,7 @@ export default function RoughCut({
    * Leave for another screen. The pass is applied on the way out — see `leaveTo`
    * — so the caller only has to do the navigating.
    */
-  onNavigate: (to: "modes" | "list" | "profile" | "activity") => void;
+  onNavigate: (to: "modes" | "list" | "profile") => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
   logging?: boolean;
   onToggleLog?: () => void;
@@ -363,7 +363,7 @@ export default function RoughCut({
    * two-thirds through is still two-thirds of a sorted tier, and losing that
    * because you tapped the list would be a worse trap than the one being fixed.
    */
-  const leaveTo = (to: "modes" | "list" | "profile" | "activity") => {
+  const leaveTo = (to: "modes" | "list" | "profile") => {
     onFilms(applyRoughCut(films, tier, choices));
     onNavigate(to);
   };
@@ -375,7 +375,6 @@ export default function RoughCut({
       onModes={() => leaveTo("modes")}
       onList={() => leaveTo("list")}
       onProfile={() => leaveTo("profile")}
-      onActivity={() => leaveTo("activity")}
       logging={logging}
       onToggleLog={onToggleLog}
     />

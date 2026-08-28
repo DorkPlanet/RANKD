@@ -29,8 +29,26 @@
 // offer to continue rather than dropping you into a duel you had left, and
 // nothing new had to be written for it.
 
-/** The screens you can swipe between, left to right. */
-export const RIBBON = ["list", "duel", "activity", "profile"] as const;
+/**
+ * The screens you can swipe between, left to right.
+ *
+ * ── Activity is out, deliberately, and this is where it comes back ─────────
+ *
+ * The user's call, 28 Aug 2026: the social side "has been a failure… I'd rather
+ * a complete idea than one hardly working." Takes, Talk and the unread dot were
+ * each defensible on their own and did not add up to a thing anybody would come
+ * back for, so the screen is unreachable rather than half-offered.
+ *
+ * FOLLOWING AND FOLLOWERS STAY. That half works and the user said so. It lives
+ * on the profile's third panel and is untouched by this.
+ *
+ * The code is all still here — `FeedScreen`, `TalkPanel`, `/api/feed`,
+ * `/api/threads`, and the `activity` tables — because this is a pause, not a
+ * deletion, and the rework starts from what is written rather than from nothing.
+ * Putting it back is this line plus the nav cell in `DuelScreen`; the file's own
+ * note about a shared order is why that is only two places.
+ */
+export const RIBBON = ["list", "duel", "profile"] as const;
 
 export type RibbonScreen = (typeof RIBBON)[number];
 

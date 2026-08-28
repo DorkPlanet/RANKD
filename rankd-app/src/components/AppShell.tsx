@@ -13,7 +13,6 @@ import { dragScreen, exitScreen, stepScreen, type Dir, type RibbonScreen } from 
 import { useEffect, useRef, useState } from "react";
 import { TagSheet } from "./TagSheet";
 import { placedOrder } from "@/lib/snapshot";
-import { FeedScreen } from "./FeedScreen";
 import DuelScreen from "./DuelScreen";
 import { LogFilm } from "./LogFilm";
 import { SCRIM_ARM_MS, SHEET_EXIT_MS } from "./ui";
@@ -514,7 +513,6 @@ export default function AppShell() {
    * feed route marks everything seen when it is READ, and the nav asking for a
    * dot is not somebody reading anything.
    */
-  const [unread, setUnread] = useState(false);
   // ── Arrivals at RNK ────────────────────────────────────────────────────────
   //
   // Bumped every time the user comes to the duel from somewhere else, and it
@@ -708,25 +706,6 @@ export default function AppShell() {
     return () => cancelAnimationFrame(id);
   }, [slide]);
 
-  // Asked once on arrival and again whenever the game is returned to, which is
-  // the moment a person is most likely to want to know. Not polled: a dot that
-  // costs a request a minute is a dot nobody asked for.
-  useEffect(() => {
-    if (!splashGone) return;
-    let dead = false;
-    void (async () => {
-      try {
-        const res = await fetch("/api/feed?peek=1", { cache: "no-store" });
-        if (dead || !res.ok) return;
-        setUnread(((await res.json()) as { unread?: number }).unread ? true : false);
-      } catch {
-        // No signal, no dot. Silence is the honest default.
-      }
-    })();
-    return () => {
-      dead = true;
-    };
-  }, [splashGone, greet]);
 
   const splash = splashGone ? null : <Splash leaving={splashLeaving} />;
 
@@ -1007,8 +986,6 @@ export default function AppShell() {
           // the opening animation. Derived rather than an effect that flips a
           // flag, which would be a cascading render to express one comparison.
           greet={splashGone ? greet : 0}
-          onActivity={() => go("activity")}
-          activityUnread={unread}
           onLocked={(id) => {
             const film = library.find((f) => f.id === id);
             if (film) setOverlay({ kind: "tags", film });
@@ -1043,26 +1020,6 @@ export default function AppShell() {
           refine={refine}
           onRefineHandled={() => setRefine(null)}
         />
-      ) : current === "activity" ? (
-        <FeedScreen
-          onSettings={() => setOverlay({ kind: "settings" })}
-          onTrophies={() => setOverlay({ kind: "trophies" })}
-          onList={() => go("list")}
-          onDuel={goDuel}
-          onProfile={() => go("profile")}
-          onRibbon={ribbon}
-          onRead={() => setUnread(false)}
-          onFindPeople={() => setOverlay({ kind: "people" })}
-          // The feed carries a `slugId` and a title; the library lives here. A
-          // film the reader does not own simply does not open, which is why the
-          // card only offers the tap when it knows they have it.
-          onFilm={(id) => {
-            const film = library.find((f) => f.id === id);
-            if (film) setOverlay({ kind: "info", film });
-          }}
-          logging={overlay?.kind === "log"}
-          onToggleLog={toggleLog}
-        />
       ) : current === "list" ? (
         <ListScreen
           films={library}
@@ -1072,8 +1029,6 @@ export default function AppShell() {
           onDuel={goDuel}
           onProfile={() => go("profile")}
           onRibbon={ribbon}
-          onActivity={() => go("activity")}
-          activityUnread={unread}
           // Swiped in from the game, which sits to the RIGHT of the list, so the
           // state to land on is the one nearest it.
           enterAtEnd={slide?.dir === -1}
@@ -1098,7 +1053,6 @@ export default function AppShell() {
           onTrophies={() => setOverlay({ kind: "trophies" })}
           onDuel={goDuel}
           onList={() => go("list")}
-          onActivity={() => go("activity")}
           onRibbon={ribbon}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}

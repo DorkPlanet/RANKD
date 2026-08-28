@@ -107,9 +107,7 @@ export default function DuelScreen({
   onRoughCutBegan,
   onPerson,
   greet = 0,
-  onActivity,
   onLocked,
-  activityUnread,
   onRibbon,
   swipeBlocked = false,
 }: {
@@ -151,7 +149,6 @@ export default function DuelScreen({
    */
   greet?: number;
   /** The Activity screen. Optional so a caller that has none simply shows no destination. */
-  onActivity?: () => void;
   /**
    * A film was just locked.
    *
@@ -161,7 +158,6 @@ export default function DuelScreen({
    */
   onLocked?: (filmId: string) => void;
   /** Somebody has spoken to you on Takes since you last looked. */
-  activityUnread?: boolean;
   /**
    * A horizontal swipe across the game, taken one step along the ribbon.
    *
@@ -887,7 +883,6 @@ export default function DuelScreen({
           setRoughCutTier(null);
           if (to === "list") onList();
           else if (to === "profile") onProfile();
-          else if (to === "activity") onActivity?.();
           else setModeOpen(true);
         }}
       />
@@ -1232,8 +1227,6 @@ export default function DuelScreen({
           </div>
           <BottomNav
             screen="duel"
-            onActivity={onActivity}
-            activityUnread={activityUnread}
             onSettings={onSettings}
             onModes={toggleModes}
             onList={onList}
@@ -1440,8 +1433,6 @@ export default function DuelScreen({
 
       <BottomNav
         screen="duel"
-        onActivity={onActivity}
-        activityUnread={activityUnread}
         onSettings={onSettings}
         onModes={toggleModes}
         onList={onList}
@@ -1504,8 +1495,6 @@ export function BottomNav({
   onModes,
   onList,
   onProfile,
-  onActivity,
-  activityUnread,
   logging,
   onToggleLog,
 }: {
@@ -1514,9 +1503,7 @@ export function BottomNav({
   onModes?: () => void;
   onList: () => void;
   onProfile?: () => void;
-  onActivity?: () => void;
   /** Somebody has spoken to you since you last looked. Draws a dot, not a number. */
-  activityUnread?: boolean;
   /** Whether the log sheet is up, so the cell that opened it stays lit. */
   logging?: boolean;
   onToggleLog?: () => void;
@@ -1620,7 +1607,17 @@ export function BottomNav({
       // physical bottom edge instead of cutting off into the page background.
       style={{ background: "var(--header-bg)", borderColor: "var(--border)", paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {/* Five equal cells so RNK sits dead centre — it's the core loop. */}
+      {/* ── Four cells, and RNK is no longer dead centre ────────────────────
+          This read "Five equal cells so RNK sits dead centre — it's the core
+          loop", and that was true until Takes came out (28 Aug 2026, see
+          `RIBBON` in lib/ribbon.ts). Four cells put RNK third of four, which is
+          off centre by half a cell.
+
+          Left that way ON PURPOSE rather than papered over by reordering. The
+          centre rule is worth keeping and it wants its fifth cell back, so the
+          honest state is a nav that visibly has a hole in it until the social
+          rework decides what fills it. Reordering to fake a centre would hide
+          the very thing the next person needs to see. */}
       <NavItem label="Your list" active={screen === "list"} onClick={onList} icon={<ListIcon />} />
       {/* Was End session, which is now Done inside the duel where it belongs —
           you stop a run from the run, not from the chrome. The cell goes to
@@ -1630,27 +1627,6 @@ export function BottomNav({
           unlike the control it replaced. */}
       <NavItem label="Log a film" active={logging} onClick={onToggleLog} icon={<AddFilmIcon />} />
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
-      {/* It is a screen now. The pill that used to apologise for it is gone, and
-          so is the timer behind it — see the deleted `tease`. Closes D15. */}
-      <NavItem
-        label={activityUnread ? "Takes, something new" : "Takes"}
-        active={screen === "activity"}
-        onClick={onActivity}
-        icon={
-          <span className="relative inline-flex">
-            <ActivityIcon />
-            {/* A dot, not a count. A number invites you to clear it; a dot says
-                somebody spoke and lets the screen do the telling. */}
-            {activityUnread && (
-              <span
-                aria-hidden
-                className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full"
-                style={{ background: "var(--gold)" }}
-              />
-            )}
-          </span>
-        }
-      />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
       <NavItem

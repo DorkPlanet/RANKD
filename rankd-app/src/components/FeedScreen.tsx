@@ -1,5 +1,27 @@
 "use client";
 
+// ── NOT REACHABLE. Withdrawn 28 Aug 2026, kept for the rework ──────────────
+//
+// Nothing renders this. `RIBBON` no longer lists `activity`, the nav cell is
+// gone, and there is no swipe that lands here — `ribbon.test.ts` guards that.
+//
+// The user's call, and worth quoting because it is the brief for whatever
+// replaces this: the social side "has been a failure… I'd rather a complete idea
+// than one hardly working." Takes and Talk were each defensible alone and did
+// not add up to something anybody would come back for.
+//
+// FOLLOWING AND FOLLOWERS STAY — that half works and is untouched, on the
+// profile's third panel.
+//
+// Deleted nothing: this file, `TalkPanel`, `/api/feed`, `/api/threads` and the
+// `activity` tables are all intact, and the server still WRITES feed rows on
+// every push (`writeFeedCards`) so the history is unbroken when this comes back.
+// That is deliberate — a rework starting from a blank file would re-derive every
+// argument below, and several of them were expensive to arrive at.
+//
+// Read the rest of this header as the record of what was tried, not as a
+// description of what is running.
+//
 // TAKES — where people's lists are moving, and whether you agree.
 //
 // ── Why this is not an activity feed ───────────────────────────────────────
