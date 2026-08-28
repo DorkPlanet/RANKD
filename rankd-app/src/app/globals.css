@@ -670,6 +670,34 @@ button * {
   height: 100svh;
 }
 
+/* ── How tall a bottom sheet may get ────────────────────────────────────────
+   The same argument as `.h-app` immediately above, and it was the one place in
+   the app still measuring in bare `vh`.
+
+   `vh` is the LARGEST the viewport ever gets — it assumes the URL bar has
+   retracted. A sheet capped that way is allowed to lay itself out taller than
+   the screen actually showing it, and then two things go wrong at once: the
+   bottom of the panel is off-screen, and because the content still FITS inside
+   the max-height the element never overflows, so `overflow-y-auto` has nothing
+   to scroll and the part you cannot see is the part you cannot reach.
+
+   That stayed invisible while every sheet was short. It surfaced the moment one
+   grew: reported from a phone, 28 Aug 2026, on the tag sheet — "I can't scroll
+   the card when trying to describe."
+
+   `svh` is the smallest the viewport gets, so the cap is never an over-estimate
+   and a sheet that needs to scroll actually does. Declared three times for the
+   same reason `.h-app` is: an old browser lands on `vh` rather than on nothing.
+
+   None of these units track the on-screen KEYBOARD, which no viewport unit
+   does. Sheets carrying a text field want `scroll` as well, so the content has a
+   bounded frame the browser can scroll a focused input into view within. */
+.sheet-max {
+  max-height: 82vh;
+  max-height: 82dvh;
+  max-height: 82svh;
+}
+
 /* ── Fast Shuffle's countdown ───────────────────────────────────────────────
    The climb's rank face lifts because a place was TAKEN. This one rolls because
    a number went down, which is a different claim and deserves a different

@@ -142,7 +142,7 @@ export function Sheet({
       <div
         // `pb-6`, not more: the nav owns the home-indicator strip now, so the
         // panel needs no extra clearance beneath it.
-        className={`max-h-[82vh] w-full max-w-md rounded-t-3xl border-t border-border bg-surface px-6 pb-6 pt-5 ${
+        className={`sheet-max w-full max-w-md rounded-t-3xl border-t border-border bg-surface px-6 pb-6 pt-5 ${
           scroll ? "flex flex-col" : "overflow-y-auto"
         } ${closing ? "sheet-out" : "sheet-in"}`}
         onClick={(e) => e.stopPropagation()}
@@ -370,11 +370,21 @@ export function BackRow({ onClick }: { onClick: () => void }) {
 export function Switch({
   on,
   busy,
+  disabled,
   onClick,
   label,
 }: {
   on: boolean;
   busy?: boolean;
+  /**
+   * Off limits for now, which is NOT the same as busy.
+   *
+   * `busy` means a request is in flight and the answer is coming. This means the
+   * switch has nothing to act on yet — and the two want to be told apart,
+   * because a row that is disabled forever should be explaining why in its
+   * blurb while a busy one should not.
+   */
+  disabled?: boolean;
   onClick: () => void;
   /** Named for screen readers, which cannot see the sentence beside it. */
   label: string;
@@ -385,7 +395,7 @@ export function Switch({
       role="switch"
       aria-checked={on}
       aria-label={label}
-      disabled={busy}
+      disabled={busy || disabled}
       onClick={onClick}
       className="mt-0.5 inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-40"
       style={{ background: on ? "var(--gold)" : "var(--border)" }}
@@ -413,6 +423,8 @@ export function SettingRow({
   blurb,
   on,
   busy,
+  disabled,
+  boxed,
   onToggle,
   className = "",
 }: {
@@ -420,16 +432,35 @@ export function SettingRow({
   blurb: React.ReactNode;
   on: boolean;
   busy?: boolean;
+  /** Nothing to act on yet. The blurb should say what is missing. */
+  disabled?: boolean;
+  /**
+   * Draw it as its own bordered card rather than as a bare row.
+   *
+   * Settings is a LIST of these, where boxes would be nine rectangles stacked in
+   * a column and the rules between them do the separating for free. A sheet with
+   * one or two of them is the opposite case: with nothing above or below to
+   * group them, a bare row reads as a paragraph that happens to have a switch
+   * near it, and people miss it entirely. Reported on the tag sheet, 28 Aug 2026.
+   *
+   * The box is `ShuffleRow`'s, which is the shape this app already uses for a
+   * toggle standing on its own.
+   */
+  boxed?: boolean;
   onToggle: () => void;
   className?: string;
 }) {
   return (
-    <div className={`flex items-start justify-between gap-3 ${className}`}>
+    <div
+      className={`flex items-start justify-between gap-3 ${
+        boxed ? "rounded-xl border border-border px-4 py-3" : ""
+      } ${className}`}
+    >
       <span className="min-w-0">
         <span className="block text-body text-text-hi">{title}</span>
         <span className="block text-sub leading-snug text-dim">{blurb}</span>
       </span>
-      <Switch on={on} busy={busy} onClick={onToggle} label={title} />
+      <Switch on={on} busy={busy} disabled={disabled} onClick={onToggle} label={title} />
     </div>
   );
 }
