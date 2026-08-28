@@ -36,7 +36,20 @@ CREATE INDEX IF NOT EXISTS "thread_message_idx" ON "thread_message" USING btree 
 
 -- Reports move from comments to messages. The table is empty, so this replaces
 -- the column rather than migrating it.
-DROP TABLE IF EXISTS "report";--> statement-breakpoint
+-- Guarded, because this file is now journaled and therefore re-runnable.
+-- Dropping unconditionally was safe exactly once, when `report` still had the
+-- `comment_id` column and was empty. Run a second time against a database that
+-- has already migrated, it would delete every report anybody had filed. So it
+-- drops only the OLD shape, which is the only one that needs replacing.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'report' AND column_name = 'comment_id'
+  ) THEN
+    DROP TABLE "report";
+  END IF;
+END $$;--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "report" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"reporter_id" uuid NOT NULL REFERENCES "public"."user"("id") ON DELETE cascade,
