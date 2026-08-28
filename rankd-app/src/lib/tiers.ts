@@ -35,3 +35,18 @@ export const tierAbove = (r: number): Rating | undefined => {
   const i = ORDERED_TIERS.indexOf(r as Rating);
   return i > 0 ? ORDERED_TIERS[i - 1] : undefined; // ORDERED_TIERS runs 5 → 0.5
 };
+
+/**
+ * How many films sit in each tier.
+ *
+ * Lived in `DuelScreen` and, byte-identically, a second private copy in
+ * `FilmPicker` — so four screens counted tiers two ways that happened to agree.
+ * It reads one field of a film and belongs beside the tier scale, not inside a
+ * screen; the card layer needs it too, and importing a screen into the card
+ * renderer to get a two-line reducer would have been the wrong shape entirely.
+ */
+export const tierCounts = (films: readonly { rating: Rating }[]): Map<Rating, number> => {
+  const m = new Map<Rating, number>();
+  for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
+  return m;
+};

@@ -13,6 +13,7 @@
 // anything about this.
 
 import { axisLabel, MOVED, type TasteAxis, type TasteShape } from "@/lib/taste";
+import { pointAt, polygonPoints, ringPoints } from "@/lib/radar";
 
 // Wider than it is tall, because the labels that overflow are always the ones on
 // the left and right arms. "Science Fiction" ran off the right edge the first
@@ -23,19 +24,21 @@ const CX = 150;
 const CY = 112;
 const LABEL_R = 80;
 
-/** Where an axis sits on the dial. First one straight up, then clockwise. */
-const angleAt = (i: number, n: number): number => (-90 + (i * 360) / n) * (Math.PI / 180);
-
-const pointAt = (i: number, n: number, radius: number): [number, number] => {
-  const a = angleAt(i, n);
-  return [CX + Math.cos(a) * radius, CY + Math.sin(a) * radius];
-};
+// The geometry moved to `lib/radar.ts` when the dossier card grew a radar of its
+// own. The card draws to a canvas and this draws SVG, so they cannot share a
+// renderer — but they must share where the points ARE, or the same taste is two
+// different shapes depending on which one you happen to be looking at.
+const at = (i: number, n: number, radius: number) => pointAt(i, n, radius, CX, CY);
 
 const polygon = (values: number[]): string =>
-  values.map((v, i) => pointAt(i, values.length, R * Math.max(0, Math.min(1, v))).join(",")).join(" ");
+  polygonPoints(values, R, CX, CY)
+    .map((p) => p.join(","))
+    .join(" ");
 
 const ring = (fraction: number, n: number): string =>
-  Array.from({ length: n }, (_, i) => pointAt(i, n, R * fraction).join(",")).join(" ");
+  ringPoints(fraction, n, R, CX, CY)
+    .map((p) => p.join(","))
+    .join(" ");
 
 export function TasteChart({
   axes,
@@ -110,7 +113,7 @@ export function TasteChart({
           <polygon key={f} points={ring(f, n)} />
         ))}
         {axes.map((a, i) => {
-          const [x, y] = pointAt(i, n, R);
+          const [x, y] = at(i, n, R);
           return <line key={a.genre} x1={CX} y1={CY} x2={x} y2={y} />;
         })}
       </g>
@@ -158,7 +161,7 @@ export function TasteChart({
 
       <g fontSize="9" fill="var(--dim)" letterSpacing="0.05em">
         {axes.map((a, i) => {
-          const [x, y] = pointAt(i, n, LABEL_R);
+          const [x, y] = at(i, n, LABEL_R);
           const dx = x - CX;
           const anchor = dx > 3 ? "start" : dx < -3 ? "end" : "middle";
           // Nudge the top and bottom labels off the shape's own points.

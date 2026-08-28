@@ -330,6 +330,36 @@ export interface Fingerprint {
 
 const LIBRARY_MIDPOINT = 2.75; // halfway up the half-star scale
 
+/**
+ * How many films fall in each decade, commonest first.
+ *
+ * Lifted out of `fingerprint`, which computed exactly this and then threw all
+ * but the top row away. The dossier card wants the whole distribution for its
+ * decade chart, and a second tally written beside this one would be a second
+ * answer to "which decade" that could disagree with the stat printed under it.
+ *
+ * A film with no year, or a year that will not parse, is simply not counted —
+ * the same thing `fingerprint` always did. It is not a decade called "unknown",
+ * because a chart segment for "we don't know" tells the reader nothing about
+ * their taste.
+ */
+export function decadesIn(
+  films: readonly Pick<Film, "year">[],
+): { label: string; count: number }[] {
+  const tally = new Map<string, number>();
+  for (const f of films) {
+    const y = parseInt(f.year ?? "", 10);
+    if (Number.isNaN(y)) continue;
+    const label = `${Math.floor(y / 10) * 10}s`;
+    tally.set(label, (tally.get(label) ?? 0) + 1);
+  }
+  return [...tally.entries()]
+    .map(([label, count]) => ({ label, count }))
+    // Commonest first so a chart can take the top n, then chronological within a
+    // tie so two decades of equal size do not swap places between renders.
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
 // Takes the fields it actually reads rather than a whole `Film`, so a share card
 // can characterise a saved ranking's entries without inventing an `id` and a
 // `score` for rows that have neither. Every existing caller still passes `Film[]`.
@@ -344,28 +374,23 @@ export function fingerprint(
 
   const tiers = new Map<Rating, number>();
   const genres = new Map<string, number>();
-  const decades = new Map<string, number>();
   let total = 0;
 
   for (const f of films) {
     tiers.set(f.rating, (tiers.get(f.rating) ?? 0) + 1);
     total += f.rating;
     for (const g of f.genres ?? []) genres.set(g, (genres.get(g) ?? 0) + 1);
-    const y = parseInt(f.year ?? "", 10);
-    if (!Number.isNaN(y)) {
-      const d = `${Math.floor(y / 10) * 10}s`;
-      decades.set(d, (decades.get(d) ?? 0) + 1);
-    }
   }
 
   const mean = total / films.length;
   const g = topOf(genres);
-  const d = topOf(decades);
+  // `decadesIn` is already sorted commonest-first, so the head is the top row.
+  const d = decadesIn(films)[0];
 
   return {
     homeTier: topOf(tiers)?.[0],
     genre: g && { name: g[0], count: g[1] },
-    decade: d && { label: d[0], count: d[1] },
+    decade: d,
     generosity: {
       mean,
       label: mean > LIBRARY_MIDPOINT + 0.35 ? "generous" : mean < LIBRARY_MIDPOINT - 0.35 ? "harsh" : "even-handed",

@@ -15,12 +15,12 @@
 
 import { inShelf, pageAfterSwipe, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BottomNav, Header, tierCounts } from "./DuelScreen";
+import { BottomNav, Header } from "./DuelScreen";
 import { FilmPicker } from "./FilmPicker";
 import { rankedFilms } from "@/lib/ladder";
 import { isPlaced } from "@/lib/lock";
 import { buildList } from "@/lib/list";
-import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
+import { ORDERED_TIERS, starsFor, tierCounts, type Rating } from "@/lib/tiers";
 import { Eyebrow, FIELD, PrimaryButton, Sheet, Tabs } from "./ui";
 import { Section, Stat } from "./ProfileBits";
 import { Avatar } from "./Avatar";

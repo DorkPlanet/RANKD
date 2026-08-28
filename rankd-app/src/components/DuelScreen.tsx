@@ -24,7 +24,7 @@ import {
   promotionWon,
   completePromotion,
 } from "@/lib/ladder";
-import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
+import { ORDERED_TIERS, starsFor, tierCounts, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
 import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/lib/log";
 import { poolFor } from "@/lib/matchmaker";
@@ -1690,12 +1690,6 @@ function NavItem({
     </button>
   );
 }
-
-export const tierCounts = (films: Film[]): Map<Rating, number> => {
-  const m = new Map<Rating, number>();
-  for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
-  return m;
-};
 
 function ModePanel({
   films,

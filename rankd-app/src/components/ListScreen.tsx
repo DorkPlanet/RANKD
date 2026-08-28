@@ -10,13 +10,13 @@
 
 import { EASE, inShelf, pageAfterSwipe, TURN_MS, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BottomNav, Header, tierCounts } from "./DuelScreen";
+import { BottomNav, Header } from "./DuelScreen";
 import { buildList, searchList, type RankedFilm } from "@/lib/list";
 import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
-import { starsFor, ORDERED_TIERS, type Rating } from "@/lib/tiers";
+import { starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD } from "./ui";

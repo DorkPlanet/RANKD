@@ -28,7 +28,7 @@
 // the download hands you, not a smaller re-render that might differ.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { designName, designs, renderCard } from "@/lib/card/render";
+import { cardAspect, designName, designs, renderCard } from "@/lib/card/render";
 import { cardFilename, shareCard } from "@/lib/card/share";
 import type { CardData, CardDesign } from "@/lib/card/types";
 import { PrimaryButton } from "./ui";
@@ -146,13 +146,28 @@ export function CardPicker({ data }: { data: CardData }) {
               // Mandatory snapping alone does not prevent skipping; this does.
               className="w-full flex-shrink-0 snap-center snap-always"
             >
+              {/* The shape comes from the renderer rather than being typed in
+                  here. It was `16 / 9`, which was true of all three designs
+                  right up until it was not — and a preview in a shape the card
+                  does not render in is a preview that lies about the thing you
+                  are about to post. `cardAspect` reads `Renderer.size`, so a
+                  design cannot be previewed wrong.
+
+                  `object-contain`, not `cover`: a preview must never crop the
+                  artefact, which is the one thing it exists to show. */}
+              {/* Sized by HEIGHT, with the width following the aspect. A 9:16
+                  card at the full width of a phone is over 800px tall, which no
+                  sheet in this app can show — capped at 46vh it sits whole
+                  inside the panel with room for the dots and the button under
+                  it. `maxWidth` catches the reverse case, a short wide window,
+                  where height alone would push the card off the sides. */}
               <div
-                className="w-full overflow-hidden rounded-xl border border-border"
-                style={{ aspectRatio: "16 / 9" }}
+                className="mx-auto overflow-hidden rounded-xl border border-border"
+                style={{ aspectRatio: cardAspect(design), height: "46vh", maxWidth: "100%" }}
               >
                 {m ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.url} alt={`${designName[design]} card`} className="h-full w-full object-cover" />
+                  <img src={m.url} alt={`${designName[design]} card`} className="h-full w-full object-contain" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-sub text-dim">
                     {failed[design] ? "Couldn't draw this one" : "Drawing…"}

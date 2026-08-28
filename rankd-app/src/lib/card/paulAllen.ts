@@ -1,66 +1,82 @@
 "use client";
 
-// PAUL ALLEN — the quiet one. A business card, and almost no words.
+// PAUL ALLEN — the business card. Named for the card in American Psycho.
 //
-// Named for the card in American Psycho, because that is the joke the design was
-// already making: the whole scene is four men comparing objects that carry almost
-// no information, and losing their minds over the thickness of the stock.
+// ── The joke, and why it is now in bone rather than navy ───────────────────
 //
-// ── What restraint is for here ─────────────────────────────────────────────
+// The scene is four men comparing objects that carry almost no information and
+// losing their minds over the thickness of the stock and the tint of the paper.
+// The old version made that joke in the app's navy, which meant it read as a
+// quiet Rankd card rather than as a business card — the reference was in the
+// crop marks and the restraint, and nowhere in the thing anybody actually
+// notices first, which is the colour.
 //
-// The other two designs argue: Classic lays the ranking out, Wrapped shouts a
-// finding. This one asserts. It says that the ranking exists, whose it is, and
-// four small numbers about it, and then stops. Nothing is explained.
+// So: BONE STOCK, DARK INK. Off-white ground, near-black serif, a hairline rule,
+// and type set the way a name is set on a card rather than the way a heading is
+// set on a screen. It is the only surface in Rankd that is not dark, and that is
+// the point — it should look like an object that came from somewhere else.
 //
-// That is the whole design brief, so the discipline is in what is REFUSED: no
-// insight line, no "+ 12 more", no footer sentence, no list beyond a top three
-// set small enough to read as provenance rather than content. Every one of those
-// was tempting and every one would make it a worse version of Classic.
+// ── What restraint is for ──────────────────────────────────────────────────
 //
-// The trading-card feel comes from three things and no more: a hairline frame
-// inset from the edge, a lot of unused space, and the artwork centred rather
-// than aligned left like everything else in the app. The frame is drawn in the
-// poster's own colour, which is the only thing that varies between two of these
-// cards side by side — which is exactly what makes a set of them feel collected.
+// Classic hands over the evidence. Marquee makes the claim. This one ASSERTS:
+// that a ranking exists, whose it is, what three films are at the top of it, and
+// four numbers. Then it stops. Nothing is explained.
+//
+// The discipline is in what is refused, and every refusal was tempting: no
+// insight line, no footer sentence, no "+ 12 more", no poster on any row, no
+// chart. Each would make this a worse Classic, and there is already a Classic.
+//
+// ── The safe area does the design's work here ──────────────────────────────
+//
+// The other two treat the bleed as somewhere to put atmosphere. Here the CARD
+// OBJECT is the safe area: a bone rectangle floating on the app's dark ground,
+// which fills the strips above and below. On a story it reads as a card lying on
+// a surface; cropped to 4:5 the surface disappears and it reads as the card
+// itself. Both are correct, which is the whole trick. See frame.ts.
 
-import { drawCircleImage, drawCover, ellipsis, fitText, roundRect } from "./canvas";
+import { axisLabel } from "../taste";
+import { drawCover, ellipsis, fitText, roundRect } from "./canvas";
+import { H, PAD, SAFE_BOT, SAFE_TOP, SCALE, W } from "./frame";
 import type { CardData, Faces, Kit, Renderer } from "./types";
 
-const W = 960;
-const H = 540;
-const PAD = 44;
+// ── The stock ──────────────────────────────────────────────────────────────
+//
+// Not from the palette, and deliberately not affected by the brightness slider.
+// Every other surface in the app is navy and moves with that control; this is
+// paper, and paper does not get dimmer because you turned the app down. Warm
+// rather than pure white — a business card is never #FFFFFF, and the warmth is
+// what stops it reading as a blown-out screenshot.
+const STOCK = "#f4f0e6";
+const INK = "#14100c";
+const INK_SOFT = "#6f675c";
+const RULE = "#cdc5b4";
 
-const FRAME = 22; // how far the hairline sits inside the edge
+// The card object, inset inside the safe area so the stock has an edge on all
+// four sides even after a 4:5 crop.
+const CARD_X = 26;
+const CARD_W = W - CARD_X * 2;
+const CARD_Y = SAFE_TOP + 10;
+const CARD_H = SAFE_BOT - SAFE_TOP - 20;
 
-// Sized to nearly fill the frame's height rather than float in the middle of
-// it. Restraint is the brief, but the first version confused restraint with
-// emptiness: a small poster centred in a wide card left a band of dead space
-// above and below it, and the right-hand column bunched its three lines up near
-// the title and then stopped. Bigger artwork, and content distributed down the
-// same span the artwork occupies, keeps the quiet without the vacancy.
-const HERO_W = 208;
-const HERO_H = Math.round(HERO_W * 1.5);
-const HERO_Y = Math.round((H - HERO_H) / 2);
-const STAT_Y = 426; // labels; values sit 30 below
+const GUT = 34; // the margin inside the stock
+const IN_L = CARD_X + GUT;
+const IN_R = CARD_X + CARD_W - GUT;
+const IN_W = IN_R - IN_L;
 
 export const paulAllen: Renderer = {
-  size: { w: W, h: H, scale: 2, pad: PAD },
+  size: { w: W, h: H, scale: SCALE, pad: PAD },
 
   fonts: (f: Faces) => [
-    `400 56px ${f.display}`,
-    `400 30px ${f.display}`,
-    `400 18px ${f.display}`,
+    `400 46px ${f.display}`,
+    `400 24px ${f.display}`,
+    `400 16px ${f.display}`,
     `600 15px ${f.serif}`,
-    `700 10px ${f.sans}`,
-    `500 12px ${f.sans}`,
+    `600 13px ${f.serif}`,
+    `700 9px ${f.sans}`,
+    `500 10px ${f.sans}`,
   ],
 
-  images: (d: CardData) => [
-    d.entries[0]?.poster,
-    d.portrait,
-    d.entries[1]?.poster,
-    d.entries[2]?.poster,
-  ],
+  images: (d: CardData) => [d.entries[0]?.poster],
 
   draw(ctx, d, kit: Kit) {
     const c = kit.palette;
@@ -72,139 +88,186 @@ export const paulAllen: Renderer = {
     const serif = (px: number, w = 600) => `${w} ${px}px ${f.serif}`;
     const sans = (px: number, w = 500) => `${w} ${px}px ${f.sans}`;
 
+    const smallCaps = (px: number, space: string, fill: string) => {
+      ctx.font = sans(px, 700);
+      ctx.letterSpacing = space;
+      ctx.fillStyle = fill;
+    };
+    const untrack = () => (ctx.letterSpacing = "0px");
+
+    // The surface the card is lying on. Fills the bleed and only the bleed.
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, W, H);
 
-    // The frame — the one thing that makes this read as a card object rather
-    // than a screenshot. Drawn in the film's colour, faintly.
-    ctx.strokeStyle = accent;
-    ctx.globalAlpha = 0.5;
-    ctx.lineWidth = 1;
-    roundRect(ctx, FRAME, FRAME, W - FRAME * 2, H - FRAME * 2, 10);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
+    // ── The stock ──────────────────────────────────────────────────────────
+    ctx.save();
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 26;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = STOCK;
+    roundRect(ctx, CARD_X, CARD_Y, CARD_W, CARD_H, 4);
+    ctx.fill();
+    ctx.restore();
 
-    // Corner ticks, the way a printed card has crop marks. Four short strokes;
-    // they cost nothing and they are most of the "object" feeling.
+    // Corner ticks, the way a printed card carries crop marks. Four short
+    // strokes; they cost nothing and they are most of the "object" feeling.
+    // Drawn in the film's own colour — the only thing that varies between two of
+    // these side by side, which is exactly what makes a set feel collected.
     ctx.strokeStyle = accent;
-    ctx.globalAlpha = 0.9;
-    ctx.lineWidth = 2;
-    const tick = 16;
-    ([
-      [FRAME, FRAME, 1, 1],
-      [W - FRAME, FRAME, -1, 1],
-      [FRAME, H - FRAME, 1, -1],
-      [W - FRAME, H - FRAME, -1, -1],
-    ] as const).forEach(([x, y, dx, dy]) => {
+    ctx.lineWidth = 1.5;
+    const tick = 14;
+    const inset = 14;
+    (
+      [
+        [CARD_X + inset, CARD_Y + inset, 1, 1],
+        [CARD_X + CARD_W - inset, CARD_Y + inset, -1, 1],
+        [CARD_X + inset, CARD_Y + CARD_H - inset, 1, -1],
+        [CARD_X + CARD_W - inset, CARD_Y + CARD_H - inset, -1, -1],
+      ] as const
+    ).forEach(([x, y, dx, dy]) => {
       ctx.beginPath();
       ctx.moveTo(x + dx * tick, y);
       ctx.lineTo(x, y);
       ctx.lineTo(x, y + dy * tick);
       ctx.stroke();
     });
-    ctx.globalAlpha = 1;
 
-    // ── The artwork, centred ───────────────────────────────────────────────
-    const heroX = PAD + 46;
-    const heroY = HERO_Y;
+    // ── The name, set as a name is set on a card ───────────────────────────
+    //
+    // Centred, which nothing else in this app is. Left alignment is the app's
+    // voice and a centred name is the card's, and the difference is most of why
+    // this does not read as a Rankd screen printed out.
+    ctx.textAlign = "center";
+    const mid = CARD_X + CARD_W / 2;
+
+    smallCaps(9, "2.6px", INK_SOFT);
+    ctx.fillText(d.eyebrow.toUpperCase(), mid, CARD_Y + 96);
+    untrack();
+
+    fitText(ctx, d.title.toUpperCase(), IN_W, display, 46, 22);
+    ctx.fillStyle = INK;
+    ctx.fillText(d.title.toUpperCase(), mid, CARD_Y + 140);
+
+    // The hairline under the name, short and centred — the rule on a card sits
+    // under the name, not across the whole stock.
+    ctx.strokeStyle = RULE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(mid - 40, CARD_Y + 162);
+    ctx.lineTo(mid + 40, CARD_Y + 162);
+    ctx.stroke();
+
+    // ── The artwork ────────────────────────────────────────────────────────
+    //
+    // One poster, centred, small. It is provenance rather than the subject: this
+    // card is about the ranking existing, and the picture is the seal on it.
+    const pw = 148;
+    const ph = Math.round(pw * 1.5);
+    const px = mid - pw / 2;
+    const py = CARD_Y + 190;
     const heroImg = img(d.entries[0]?.poster);
     if (heroImg) {
       ctx.save();
-      roundRect(ctx, heroX, heroY, HERO_W, HERO_H, 5);
+      roundRect(ctx, px, py, pw, ph, 3);
       ctx.clip();
-      drawCover(ctx, heroImg, heroX, heroY, HERO_W, HERO_H);
+      drawCover(ctx, heroImg, px, py, pw, ph);
       ctx.restore();
     } else {
-      ctx.fillStyle = c.surface;
-      roundRect(ctx, heroX, heroY, HERO_W, HERO_H, 5);
+      ctx.fillStyle = RULE;
+      roundRect(ctx, px, py, pw, ph, 3);
       ctx.fill();
     }
     ctx.strokeStyle = accent;
+    ctx.globalAlpha = 0.6;
     ctx.lineWidth = 1;
-    roundRect(ctx, heroX - 0.5, heroY - 0.5, HERO_W + 1, HERO_H + 1, 5.5);
+    roundRect(ctx, px - 0.5, py - 0.5, pw + 1, ph + 1, 3.5);
     ctx.stroke();
+    ctx.globalAlpha = 1;
 
-    // ── Whose, and of what ─────────────────────────────────────────────────
-    const tx = heroX + HERO_W + 54;
-    const tw = W - tx - PAD - FRAME;
+    // ── Three titles, as credentials ───────────────────────────────────────
+    //
+    // No posters, no years, no stars. A rank and a name, in the serif, spaced
+    // like the three lines of qualifications under somebody's name on a card.
+    const listY = py + ph + 44;
+    d.entries.slice(0, 3).forEach((film, i) => {
+      const y = listY + i * 28;
+      ctx.textAlign = "center";
+      ctx.font = serif(i === 0 ? 15 : 13);
+      ctx.fillStyle = i === 0 ? INK : INK_SOFT;
+      const numeral = `${i + 1}`;
+      ctx.font = display(16);
+      const nw = ctx.measureText(numeral).width;
+      ctx.font = serif(i === 0 ? 15 : 13);
+      const title = ellipsis(ctx, film.title, IN_W - nw - 20);
+      const tw = ctx.measureText(title).width;
+      const startX = mid - (nw + 10 + tw) / 2;
 
-    if (d.portrait) {
-      drawCircleImage(ctx, img(d.portrait), tx + 24, heroY + 16, 24, c.surface);
-      ctx.strokeStyle = accent;
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(tx + 24, heroY + 16, 24, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
+      ctx.textAlign = "left";
+      ctx.fillStyle = i === 0 ? accent : RULE;
+      ctx.font = display(16);
+      ctx.fillText(numeral, startX, y);
 
-    // The eyebrow needs real clearance, not a nominal gap. Bebas at 56px has a
-    // cap height of ~41, so a 26px offset put the label inside the name's
-    // ascenders and "DIRECTOR" was printed through "CHRISTOPHER NOLAN".
-    const titleY = heroY + (d.portrait ? 104 : 74);
-    ctx.fillStyle = c.dim;
-    ctx.font = sans(10, 700);
-    ctx.letterSpacing = "2.4px";
-    // …and the portrait needs the same clearance from the eyebrow that the
-    // eyebrow needs from the name: a 24px circle centred 24 below the artwork's
-    // top reached the label's cap line.
-    ctx.fillText(d.eyebrow.toUpperCase(), tx, titleY - 46);
-    ctx.letterSpacing = "0px";
-
-    fitText(ctx, d.title.toUpperCase(), tw, display, 56, 26);
-    ctx.fillStyle = c.text;
-    ctx.fillText(d.title.toUpperCase(), tx, titleY);
-
-    // Provenance, not content: three titles, small, no posters, no numbers
-    // beyond their rank. Enough to prove what this is a ranking OF.
-    const podium = d.entries.slice(0, 3);
-    ctx.font = serif(15);
-    podium.forEach((film, i) => {
-      // Spread down the poster's span rather than bunched under the name — the
-      // right-hand column should read as the same height as the artwork, which
-      // is most of what makes it feel like a card face.
-      const y = titleY + 56 + i * 40;
-      ctx.fillStyle = i === 0 ? accent : c.dim;
-      ctx.font = display(18);
-      ctx.fillText(String(i + 1), tx, y);
-      ctx.fillStyle = i === 0 ? c.text : c.dim;
-      ctx.font = serif(15);
-      ctx.fillText(ellipsis(ctx, film.title, tw - 26), tx + 22, y);
+      ctx.fillStyle = i === 0 ? INK : INK_SOFT;
+      ctx.font = serif(i === 0 ? 15 : 13);
+      ctx.fillText(title, startX + nw + 10, y);
     });
 
-    // ── Four numbers, and no sentence ──────────────────────────────────────
+    // ── Four numbers, as contact details ───────────────────────────────────
+    //
+    // The row along the foot of a business card: small, evenly spaced, and read
+    // only by somebody who has already decided to care.
     const stats: [string, string][] = [["FILMS", String(d.stats.films)]];
     if (d.stats.avgRating !== undefined) stats.push(["AVG", `${d.stats.avgRating.toFixed(1)}★`]);
-    if (d.stats.topGenre) stats.push(["GENRE", d.stats.topGenre]);
+    // `axisLabel`, so "Science Fiction" becomes "Sci-Fi" rather than being
+    // ellipsised to "SCIENCE FICTI…" — a truncated genre in a four-column strip
+    // is the one stat that reliably fails to say what it is. Same map the taste
+    // radar uses, so a card cannot name a genre two ways.
+    if (d.stats.topGenre) stats.push(["GENRE", axisLabel(d.stats.topGenre)]);
     if (d.stats.topDecade) stats.push(["DECADE", d.stats.topDecade]);
 
-    const sy = STAT_Y;
-    ctx.strokeStyle = c.border;
+    const statY = CARD_Y + CARD_H - 74;
+    ctx.strokeStyle = RULE;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(tx, sy - 26);
-    ctx.lineTo(W - PAD - FRAME + 22, sy - 26);
+    ctx.moveTo(IN_L, statY - 24);
+    ctx.lineTo(IN_R, statY - 24);
     ctx.stroke();
 
-    const colW = tw / stats.length;
+    const colW = IN_W / stats.length;
+    ctx.textAlign = "center";
     stats.forEach(([label, value], i) => {
-      const x = tx + i * colW;
-      ctx.fillStyle = c.dim;
-      ctx.font = sans(10, 700);
-      ctx.letterSpacing = "1.6px";
-      ctx.fillText(label, x, sy);
-      ctx.letterSpacing = "0px";
-      ctx.fillStyle = c.text;
-      ctx.font = display(30);
-      ctx.fillText(ellipsis(ctx, value, colW - 10), x, sy + 30);
+      const x = IN_L + i * colW + colW / 2;
+      smallCaps(8, "1.6px", INK_SOFT);
+      ctx.fillText(label, x, statY);
+      untrack();
+      ctx.fillStyle = INK;
+      ctx.font = display(24);
+      ctx.fillText(ellipsis(ctx, value, colW - 8), x, statY + 26);
     });
 
-    // The wordmark, small, bottom-left — a maker's mark rather than a header.
-    ctx.fillStyle = c.gold;
-    ctx.font = display(18);
-    ctx.letterSpacing = "3px";
-    ctx.fillText("RANKD", heroX, H - FRAME - 26);
-    ctx.letterSpacing = "0px";
+    // ── The maker's mark ───────────────────────────────────────────────────
+    //
+    // The company name at the foot of the card. In ink rather than gold: gold on
+    // bone is a wedding invitation, and this is a business card.
+    ctx.fillStyle = INK;
+    ctx.font = display(16);
+    ctx.letterSpacing = "3.4px";
+    ctx.fillText("RANKD", mid, CARD_Y + CARD_H - 26);
+    untrack();
+
+    // ── Below the stock, on the surface it lies on ─────────────────────────
+    //
+    // The date and the byline sit on the DARK ground in the bleed, not on the
+    // card. A business card does not print the date it was handed to you, and
+    // keeping them off the stock is what lets the stock stay silent.
+    ctx.fillStyle = c.dim;
+    ctx.font = sans(10, 500);
+    ctx.textAlign = "center";
+    ctx.fillText(
+      [d.handle ? `@${d.handle}` : null, d.dateLabel].filter(Boolean).join("   ·   "),
+      W / 2,
+      SAFE_BOT + 40,
+    );
+    ctx.textAlign = "left";
   },
 };

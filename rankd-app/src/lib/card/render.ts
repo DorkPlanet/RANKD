@@ -30,6 +30,19 @@ export const designName: Record<CardDesign, string> = {
   "paul-allen": "Paul Allen",
 };
 
+/**
+ * A design's shape, as a CSS `aspect-ratio`.
+ *
+ * So the picker can size its preview from the renderer rather than repeating the
+ * number. The preview was hardcoded `16 / 9`, which was true of all three
+ * designs until the day it was not — and a preview in a shape the card does not
+ * render in misrepresents the one thing it exists to show.
+ */
+export const cardAspect = (design: CardDesign): string => {
+  const { w, h } = RENDERERS[design].size;
+  return `${w} / ${h}`;
+};
+
 export async function renderCard(design: CardDesign, data: CardData): Promise<Blob> {
   if (data.entries.length === 0) throw new Error("Nothing to draw");
   const renderer = RENDERERS[design];

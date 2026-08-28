@@ -39,15 +39,59 @@ export interface CardStats {
   topDecade?: string;
 }
 
+/**
+ * Everything a chart on a card is drawn from, resolved at build time.
+ *
+ * ── Why this cannot be derived at draw time ────────────────────────────────
+ *
+ * A `CardEntry` carries a title, a year, a poster and a rating, and no genres —
+ * deliberately, because an entry has to survive a ranking saved two years ago
+ * whose films have since left the library. A renderer may not read the library
+ * to fill the gap: it is a pure `draw` over already-loaded images and that rule
+ * is what keeps three designs from becoming three data pipelines.
+ *
+ * So the charts are computed once in `cardDataFromFilms`, over the real `Film[]`
+ * while it is still in hand, and handed over as numbers.
+ *
+ * ── Every field is optional, and that is a feature ─────────────────────────
+ *
+ * The same rule `CardStats` follows: absent when the data cannot support it. A
+ * filmography card is the case that proves it — nineteen films by one director
+ * mostly share two genres, so a taste radar over them is a flat circle dressed
+ * up as an insight. It is better to draw no chart than a meaningless one, and
+ * the dossier's grid closes up around whatever is missing.
+ */
+export interface CardCharts {
+  /** Genre standings, 0 at the bottom of the order and 1 at the top. */
+  taste?: { label: string; value: number }[];
+  /** Genre counts, commonest first. */
+  genres?: { label: string; count: number }[];
+  /** Decade counts, commonest first. */
+  decades?: { label: string; count: number }[];
+  /** Star tiers, high to low. Only the tiers actually holding something. */
+  tiers?: { label: string; count: number }[];
+}
+
 export interface CardData {
   subject: RankSubject;
   title: string;
   eyebrow: string;
+  /**
+   * Whose ranking this is, as `@name`.
+   *
+   * Read from the browser's cached identity when the card is built, not threaded
+   * through the four screens that build one — see `cardDataFromFilms`. Absent
+   * for a reader who has not claimed a handle, in which case a design simply
+   * does not print a byline.
+   */
+  handle?: string;
   /** Frozen, best first. Renderers truncate; they never reorder. */
   entries: readonly CardEntry[];
   /** A person's photo. Absent for genre and tier, and whenever TMDb had none. */
   portrait?: string;
   stats: CardStats;
+  /** The distributions a design may plot. See `CardCharts`. */
+  charts?: CardCharts;
   /** One personalised line, already chosen. See lib/insight.ts. */
   insight?: string;
   /**

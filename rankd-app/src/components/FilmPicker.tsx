@@ -15,7 +15,7 @@
 
 import { useRef, useState } from "react";
 
-import { ORDERED_TIERS, starsFor, type Rating } from "@/lib/tiers";
+import { ORDERED_TIERS, starsFor, tierCounts, type Rating } from "@/lib/tiers";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 import { FIELD, IconToggle, Sheet } from "./ui";
@@ -26,12 +26,6 @@ const PICKER_PAGE = 60;
 
 // What the picker's search box is asking about.
 type SearchMode = "film" | "director" | "actor";
-
-const tierCounts = (films: Film[]): Map<Rating, number> => {
-  const m = new Map<Rating, number>();
-  for (const f of films) m.set(f.rating, (m.get(f.rating) ?? 0) + 1);
-  return m;
-};
 
 export function FilmPicker({
   films,
