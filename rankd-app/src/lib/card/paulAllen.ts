@@ -38,6 +38,7 @@ import { axisLabel } from "../taste";
 import { drawCover, ellipsis, fitText, roundRect } from "./canvas";
 import { H, PAD, SAFE_BOT, SAFE_TOP, SCALE, W } from "./frame";
 import type { CardData, Faces, Kit, Renderer } from "./types";
+import { lex } from "../lexicon";
 
 // ── The stock ──────────────────────────────────────────────────────────────
 //
@@ -216,7 +217,7 @@ export const paulAllen: Renderer = {
     //
     // The row along the foot of a business card: small, evenly spaced, and read
     // only by somebody who has already decided to care.
-    const stats: [string, string][] = [["FILMS", String(d.stats.films)]];
+    const stats: [string, string][] = [[lex().many.toUpperCase(), String(d.stats.films)]];
     if (d.stats.avgRating !== undefined) stats.push(["AVG", `${d.stats.avgRating.toFixed(1)}★`]);
     // `axisLabel`, so "Science Fiction" becomes "Sci-Fi" rather than being
     // ellipsised to "SCIENCE FICTI…" — a truncated genre in a four-column strip

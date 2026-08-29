@@ -41,6 +41,7 @@ import { bars, donut, radar } from "./charts";
 import { drawCircleImage, drawCover, ellipsis, fitText, roundRect, wrap } from "./canvas";
 import { CONTENT_W, H, LEFT, PAD, RIGHT, SAFE_BOT, SAFE_TOP, SCALE, W } from "./frame";
 import type { CardData, CardEntry, Faces, Kit, Renderer } from "./types";
+import { lex } from "../lexicon";
 
 const PORTRAIT_R = 26;
 
@@ -165,7 +166,7 @@ export const classic: Renderer = {
 
     tracked(9, 700, "1.5px", c.dim);
     ctx.fillText(
-      [d.eyebrow.toUpperCase(), `${d.entries.length} FILMS RANKED`].join("  ·  "),
+      [d.eyebrow.toUpperCase(), `${d.entries.length} ${lex().many.toUpperCase()} RANKED`].join("  ·  "),
       nameX,
       EYEBROW_Y,
     );
@@ -371,7 +372,7 @@ export const classic: Renderer = {
     });
 
     // ── The stat strip ─────────────────────────────────────────────────────
-    const stats: [string, string][] = [["FILMS", String(d.stats.films)]];
+    const stats: [string, string][] = [[lex().many.toUpperCase(), String(d.stats.films)]];
     if (d.stats.avgRating !== undefined) stats.push(["AVG", `${d.stats.avgRating.toFixed(1)}★`]);
     // `axisLabel`, so "Science Fiction" becomes "Sci-Fi" rather than being
     // ellipsised to "SCIENCE FICTI…" — a truncated genre in a four-column strip

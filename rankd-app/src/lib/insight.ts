@@ -30,6 +30,7 @@
 import { fingerprint } from "./profile";
 import type { RankSubject } from "./subject";
 import { starsFor, type Rating } from "./tiers";
+import { lex } from "./lexicon";
 
 /** Everything an insight can be drawn from. `Film` satisfies it. */
 export interface InsightFilm {
@@ -148,7 +149,7 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
     const watched = n - guestCount;
     add(
       "coverage",
-      `You've seen ${watched} of ${possessiveName(subject)} ${n} films.`,
+      `You've ${lex().seen} ${watched} of ${possessiveName(subject)} ${n} ${lex().many}.`,
       watched <= n * 0.35 ? 0.72 : 0.5,
     );
   }
@@ -158,7 +159,7 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
   if (pct(years.length, n) >= COVERAGE && years.length >= MIN_DECADE) {
     const span = Math.max(...years) - Math.min(...years);
     if (span >= 20) {
-      add("span", `${span} years of films, in one order.`, 0.35);
+      add("span", `${span} years of ${lex().many}, in one order.`, 0.35);
     }
   }
 
@@ -196,7 +197,7 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
     if (topRatedIndex > 2) {
       add(
         "upset-loser",
-        `The film you rated highest only finished ${topRatedIndex + 1}th.`,
+        `The ${lex().one} you rated highest only finished ${topRatedIndex + 1}th.`,
         0.8,
       );
     }
@@ -213,13 +214,13 @@ export function insightsFor(films: readonly InsightFilm[], subject: RankSubject)
       add(
         "guest-above",
         above === 1
-          ? `You put a film you haven't seen above ones you have.`
-          : `You put ${above} films you haven't seen above ones you have.`,
+          ? `You put a ${lex().one} you haven't ${lex().seen} above ones you have.`
+          : `You put ${above} ${lex().many} you haven't ${lex().seen} above ones you have.`,
         0.95,
       );
     }
     if (films[0]?.guest) {
-      add("guest-winner", `Your #1 is a film you haven't even seen yet.`, 1);
+      add("guest-winner", `Your #1 is a ${lex().one} you haven't even ${lex().seen} yet.`, 1);
     }
   }
 

@@ -48,6 +48,7 @@ import { blockFor, inkOn } from "./palette";
 import { drawCircleImage, drawCover, ellipsis, fitText, roundRect, wrap } from "./canvas";
 import { CONTENT_W, H, LEFT, PAD, RIGHT, SAFE_BOT, SAFE_TOP, SCALE, W } from "./frame";
 import type { CardData, Faces, Kit, Renderer } from "./types";
+import { lex } from "../lexicon";
 
 // ── The vertical budget ────────────────────────────────────────────────────
 //
@@ -148,7 +149,7 @@ export const marquee: Renderer = {
     ctx.fillText(String(d.stats.films), LEFT, COUNT_Y);
 
     tracked(12, 700, "2.4px");
-    ctx.fillText("FILMS RANKED", LEFT, COUNT_Y + 28);
+    ctx.fillText(`${lex().many.toUpperCase()} RANKED`, LEFT, COUNT_Y + 28);
     untrack();
 
     // ── The claim ──────────────────────────────────────────────────────────
