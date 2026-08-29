@@ -40,6 +40,7 @@ export function FilmPicker({
   onShuffle,
   blurb = "Search by title, or by who made it.",
   onPerson,
+  anyTitle,
 }: {
   films: Film[];
   onClose: () => void;
@@ -48,6 +49,21 @@ export function FilmPicker({
   onPerson?: (person: Person) => void;
   title?: string;
   blurb?: string;
+  /**
+   * Offer every title, including one that is alone in its tier.
+   *
+   * ── Why the default is the other way ───────────────────────────────────
+   *
+   * This sheet was built to start a RUN, and a run needs something to compare
+   * against, so a film alone in its tier is shown and inert. That rule then
+   * travelled with the component to the profile, where the question is "which
+   * of your books should the banner come from" — and there it locked people out
+   * of their own artwork for a reason that has nothing to do with artwork. A
+   * six-book library with six different ratings could not choose any of them.
+   *
+   * So the caller says which question it is asking. Absent, nothing changes.
+   */
+  anyTitle?: boolean;
   /**
    * Face the pile in a random order rather than weakest first. Optional, and
    * currently unused — every caller picks a film to LOOK at rather than to start
@@ -270,10 +286,13 @@ export function FilmPicker({
           // How many others share its rating. A film alone in its tier is shown
           // but inert rather than silently doing nothing when tapped.
           const peers = (counts.get(f.rating) ?? 0) - 1;
+          // See `anyTitle`: the peer rule is about starting a duel, not about
+          // being allowed to point at a title.
+          const inert = !anyTitle && peers < 1;
           return (
             <button
               key={f.id}
-              disabled={peers < 1}
+              disabled={inert}
               onClick={() => onPick(f.id)}
               className="mb-1.5 flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99] disabled:opacity-40"
             >

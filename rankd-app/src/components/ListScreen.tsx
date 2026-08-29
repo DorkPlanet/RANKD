@@ -23,7 +23,7 @@ import { useDriftScroll } from "@/lib/useDriftScroll";
 import { starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
-import { FIELD } from "./ui";
+import { FIELD, Sheet } from "./ui";
 import { ChevronIcon } from "./Icons";
 import { lex } from "@/lib/lexicon";
 
@@ -66,6 +66,15 @@ const CHUNK = 25;
  * `showStars` is not decoration here, it is the POINT: the page exists to show
  * a 3★ sitting above a 4★, and without the stars on the row that is invisible.
  */
+/**
+ * Long-press before a hold-gesture fires, in ms.
+ *
+ * At module scope because the row drag and the rank numeral both use it, and a
+ * hold that means one thing on a row and another on the number inside it must
+ * at least take the same length of time.
+ */
+const HOLD_MS = 380;
+
 function FlatRows({
   rows,
   view,
@@ -73,6 +82,7 @@ function FlatRows({
   carried,
   carriedBy,
   onUnpin,
+  onLockMenu,
 }: {
   rows: RankedFilm[];
   view: { top: number; height: number };
@@ -83,6 +93,8 @@ function FlatRows({
   carriedBy?: number;
   /** Release a pin. Absent on a read-only list. */
   onUnpin?: (f: Film) => void;
+  /** Open the sheet that sets how this film is placed. */
+  onLockMenu?: (f: Film, rank: number) => void;
 }) {
   const chunks: RankedFilm[][] = [];
   for (let i = 0; i < rows.length; i += CHUNK) chunks.push(rows.slice(i, i + CHUNK));
@@ -108,6 +120,7 @@ function FlatRows({
                 carried={carried === r.film.id}
                 carriedBy={carriedBy}
                 onUnpin={onUnpin}
+                onLockMenu={onLockMenu}
               />
             ))}
           </div>
@@ -466,8 +479,9 @@ export default function ListScreen({
     return null;
   };
 
-  /** Long-press before a drag begins, in ms. */
-  const HOLD_MS = 380;
+  /** The film whose placement is being changed, and where it currently sits. */
+  const [lockFor, setLockFor] = useState<{ film: Film; rank: number } | null>(null);
+
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelHold = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -582,6 +596,30 @@ export default function ListScreen({
    * position you spent duels earning, which is the opposite of what unpinning
    * is for.
    */
+  /**
+   * Set how a film is placed, leaving its position alone.
+   *
+   * All three states keep `score`, which is the point: what changes is who owns
+   * the position, not what the position is. Clearing the lock puts the film back
+   * in the shuffle pool without throwing away the duels that got it there — it
+   * simply stops counting as placed, and the next run may move it.
+   */
+  const setLock = (film: Film, lock: "hard" | "soft" | undefined) => {
+    onFilms?.(
+      films.map((f) => {
+        if (f.id !== film.id) return f;
+        if (lock !== undefined) return { ...f, lock };
+        // Deleted rather than set to `undefined`. JSON drops an undefined value
+        // on the way to storage, but the in-memory object is read by everything
+        // downstream first, and `"lock" in film` is not the only shape a reader
+        // can take.
+        const rest = { ...f };
+        delete rest.lock;
+        return rest;
+      }),
+    );
+  };
+
   const unpin = (film: Film) => {
     onFilms?.(films.map((f) => (f.id === film.id ? { ...f, lock: "soft" as const } : f)));
   };
@@ -831,7 +869,15 @@ export default function ListScreen({
           // hold is what separates "I am going somewhere" from "I mean this
           // one", and it is the same gesture the poster long-press already
           // teaches.
-          if (onFilms && !searching) {
+          // ── Two long-presses, one row ──────────────────────────────────
+          //
+          // The rank numeral carries its own hold, which opens the placement
+          // sheet. Without this guard a hold that begins on the number arms the
+          // row DRAG as well, and 380ms later the film is airborne under a
+          // sheet nobody can see past.
+          const onNumeral =
+            e.target instanceof Element && !!e.target.closest("[data-lock]");
+          if (onFilms && !searching && !onNumeral) {
             const at = rowAt(t.clientY);
             const row = at ? displayOrder[at.at] : undefined;
             // ── Pinned rows drag too ──────────────────────────────────────
@@ -965,6 +1011,7 @@ export default function ListScreen({
             carried={carriedId}
             carriedBy={carriedBy}
             onUnpin={onFilms ? unpin : undefined}
+                    onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
           />
         ) : (
           model.sections.map((s, i) => {
@@ -983,6 +1030,7 @@ export default function ListScreen({
                     carried={carriedId === r.film.id}
                     carriedBy={carriedBy}
                     onUnpin={onFilms ? unpin : undefined}
+                    onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
                   />
                 ))}
                 {s.unplaced.length > 0 && (
@@ -1027,6 +1075,15 @@ export default function ListScreen({
             background: "var(--gold)",
             boxShadow: "0 0 10px var(--gold)",
           }}
+        />
+      )}
+
+      {lockFor && (
+        <LockSheet
+          film={lockFor.film}
+          rank={lockFor.rank}
+          onClose={() => setLockFor(null)}
+          onSet={(lock) => setLock(lockFor.film, lock)}
         />
       )}
 
@@ -1131,6 +1188,199 @@ function usePosterShake(root: React.RefObject<HTMLElement | null>, active: boole
   }, [root, active]);
 }
 
+/**
+ * The number on a row, and the control for the state it reports.
+ *
+ * Split out of `Row` because it now owns a gesture and therefore a timer, and a
+ * timer wants a ref of its own rather than one more thing for the row to hold.
+ *
+ * Tap releases a pin — the one thing worth doing without a menu. Hold opens
+ * `LockSheet`, which is every other thing. Right-click does the same on a
+ * pointer, where there is no hold.
+ */
+function RankNumeral({
+  film,
+  rank,
+  onUnpin,
+  onLockMenu,
+}: {
+  film: Film;
+  rank: number;
+  onUnpin?: (f: Film) => void;
+  onLockMenu?: (f: Film, rank: number) => void;
+}) {
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when the hold actually fires, so the touchend that follows does not
+  // ALSO read as a tap and unpin the film behind the sheet that just opened.
+  const fired = useRef(false);
+  const cancel = () => {
+    if (hold.current) clearTimeout(hold.current);
+    hold.current = null;
+  };
+  const canUnpin = !!onUnpin && isHard(film);
+  const canMenu = !!onLockMenu;
+  return (
+    <span
+      // Read by the list's own touchstart, which must not arm a row DRAG for a
+      // hold that began here. Two long-presses on one row is fine as long as
+      // they do not both start.
+      data-lock
+      role={canUnpin || canMenu ? "button" : undefined}
+      tabIndex={canUnpin || canMenu ? 0 : undefined}
+      onTouchStart={
+        canMenu
+          ? () => {
+              cancel();
+              fired.current = false;
+              hold.current = setTimeout(() => {
+                hold.current = null;
+                fired.current = true;
+                navigator.vibrate?.(12);
+                onLockMenu?.(film, rank);
+              }, HOLD_MS);
+            }
+          : undefined
+      }
+      onTouchMove={canMenu ? cancel : undefined}
+      onTouchEnd={canMenu ? cancel : undefined}
+      onTouchCancel={canMenu ? cancel : undefined}
+      onContextMenu={
+        canMenu
+          ? (e) => {
+              e.preventDefault();
+              onLockMenu?.(film, rank);
+            }
+          : undefined
+      }
+      onClick={
+        canUnpin || canMenu
+          ? (e) => {
+              // The row is not a button any more, but the tap still travels —
+              // and the poster/title button is a sibling, not a parent, so this
+              // only guards against a future wrapper.
+              e.stopPropagation();
+              if (fired.current) {
+                fired.current = false;
+                return;
+              }
+              // A tap on a provisional number has nothing to release, so it
+              // opens the sheet instead of doing nothing at all.
+              if (canUnpin) onUnpin?.(film);
+              else onLockMenu?.(film, rank);
+            }
+          : undefined
+      }
+      onKeyDown={
+        canUnpin || canMenu
+          ? (e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              // Enter is the tap; there is no hold on a keyboard, so the menu is
+              // the more useful of the two answers here.
+              if (canMenu) onLockMenu?.(film, rank);
+              else onUnpin?.(film);
+            }
+          : undefined
+      }
+      aria-label={
+        canMenu
+          ? `${film.title}, ${isHard(film) ? "locked" : "provisional"} at ${rank}. Change how it is placed`
+          : undefined
+      }
+      className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
+        isHard(film) ? "font-bold text-gold" : "font-normal text-accent"
+      } ${canUnpin || canMenu ? "px-1 active:scale-90" : ""}`}
+      title={
+        isHard(film)
+          ? "You locked this — tap to unpin, hold to change"
+          : "Fast Shuffle placed this, and it can still move — hold to change"
+      }
+    >
+      {rank}
+    </span>
+  );
+}
+
+/**
+ * Everything a position can be, on one sheet.
+ *
+ * ── Why a hold and not a longer row ────────────────────────────────────────
+ *
+ * Tapping the numeral releases a pin in one gesture, which is right for the
+ * thing people do most and wrong as the ONLY thing they can do: it can go from
+ * locked to provisional and nowhere else. It cannot lock something the model
+ * placed, and it cannot put a film back in the queue — for that the only route
+ * was a reset in Settings that dropped every placement in the library.
+ *
+ * So the numeral carries both gestures, on the same principle the poster and
+ * the row already use: tap is the common answer, hold is all of them. Nothing
+ * is added to the row, and the control is the thing that already REPORTS the
+ * state being changed.
+ *
+ * ── Why the order runs downwards ───────────────────────────────────────────
+ *
+ * Locked, provisional, not ranked — most committed first. It is the order the
+ * legend in the list header already reads in, and it means the destructive
+ * option is the one furthest from the thumb.
+ */
+function LockSheet({
+  film,
+  rank,
+  onClose,
+  onSet,
+}: {
+  film: Film;
+  /** Where it currently sits, so "Locked" can name the position it would keep. */
+  rank?: number;
+  onClose: () => void;
+  onSet: (lock: "hard" | "soft" | undefined) => void;
+}) {
+  const opts: { lock: "hard" | "soft" | undefined; title: string; blurb: string }[] = [
+    {
+      lock: "hard",
+      title: rank === undefined ? "Locked" : `Locked at #${rank}`,
+      blurb: `Your decision. Nothing Rankd plays will move it.`,
+    },
+    {
+      lock: "soft",
+      title: "Provisional",
+      blurb: `Rankd's own placement. It keeps its number and keeps improving as you play.`,
+    },
+    {
+      lock: undefined,
+      title: "Not ranked",
+      blurb: `Back in the queue. It loses its number and Fast Shuffle can place it again.`,
+    },
+  ];
+  return (
+    <Sheet title={film.title} onClose={onClose}>
+      {opts.map((o) => {
+        const on = film.lock === o.lock;
+        return (
+          <button
+            key={o.title}
+            onClick={() => {
+              onSet(o.lock);
+              onClose();
+            }}
+            className="mb-1.5 flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left active:scale-[0.99]"
+            style={{ borderColor: on ? "var(--gold)" : "var(--border)" }}
+          >
+            <span className="min-w-0">
+              <span className={`block text-body ${on ? "text-gold" : "text-text-hi"}`}>{o.title}</span>
+              <span className="block text-sub leading-snug text-dim">{o.blurb}</span>
+            </span>
+            {/* The current state is marked, not disabled: tapping it is a
+                harmless way to dismiss the sheet having decided to change
+                nothing, and a dead row would look like a bug. */}
+            {on && <span className="flex-shrink-0 text-label font-bold uppercase tracking-[0.14em] text-gold">Now</span>}
+          </button>
+        );
+      })}
+    </Sheet>
+  );
+}
+
 function Row({
   film,
   rank,
@@ -1139,6 +1389,7 @@ function Row({
   carried,
   carriedBy = 0,
   onUnpin,
+  onLockMenu,
 }: {
   film: Film;
   rank?: number;
@@ -1150,6 +1401,8 @@ function Row({
   carriedBy?: number;
   /** Release this film's pin. Absent on a read-only list. */
   onUnpin?: (f: Film) => void;
+  /** Open the sheet that sets how this film is placed. */
+  onLockMenu?: (f: Film, rank: number) => void;
 }) {
   return (
     <div
@@ -1261,37 +1514,13 @@ function Row({
            and there is nothing of yours to take back — releasing it would just
            be asking the model to place it again, which is what it is already
            doing. */
-        <span
-          role={onUnpin && isHard(film) ? "button" : undefined}
-          tabIndex={onUnpin && isHard(film) ? 0 : undefined}
-          onClick={
-            onUnpin && isHard(film)
-              ? (e) => {
-                  // The row is not a button any more, but the tap still travels
-                  // — and the poster/title button is a sibling, not a parent, so
-                  // this only guards against a future wrapper.
-                  e.stopPropagation();
-                  onUnpin(film);
-                }
-              : undefined
-          }
-          onKeyDown={
-            onUnpin && isHard(film)
-              ? (e) => {
-                  if (e.key !== "Enter" && e.key !== " ") return;
-                  e.preventDefault();
-                  onUnpin(film);
-                }
-              : undefined
-          }
-          aria-label={onUnpin && isHard(film) ? `Unpin ${film.title}` : undefined}
-          className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
-            isHard(film) ? "font-bold text-gold" : "font-normal text-accent"
-          } ${onUnpin && isHard(film) ? "px-1 active:scale-90" : ""}`}
-          title={isHard(film) ? "You locked this — tap to unpin" : "Fast Shuffle placed this, and it can still move"}
-        >
-          {rank}
-        </span>
+        <RankNumeral
+          film={film}
+          rank={rank}
+          onUnpin={onUnpin}
+          onLockMenu={onLockMenu}
+        />
+
       )}
     </div>
   );

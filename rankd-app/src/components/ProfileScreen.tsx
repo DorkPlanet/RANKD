@@ -125,12 +125,13 @@ interface Collection {
  * Where the picture on the banner comes from, said in the medium's own terms.
  *
  * A film gives you a FRAME — one still out of a hundred thousand, which is why
- * the flow is "pick a film, then pick a frame from it". A book gives you its
- * cover, and there is nothing to pick: one image exists.
+ * the flow is "pick a film, then pick a frame from it". A book gives you a
+ * COVER, and it has one per printing, so the flow is the same shape with a
+ * different noun in it.
  *
  * So the two read differently on purpose. Substituting a noun into the film
- * sentence would have produced "a frame from one of your books", which promises
- * a choice the book flow does not offer.
+ * sentence would have produced "a frame from one of your books", and a book has
+ * no frames.
  */
 function artSource(): string {
   const L = lex();
@@ -1339,11 +1340,15 @@ export default function ProfileScreen({
       {pickingFor && (
         <FilmPicker
           films={films}
+          // Artwork, not a duel: every title is a legitimate answer here.
+          anyTitle
           title={`Pick a ${lex().one}`}
           blurb={
+            // A film gives you a frame and a book gives you a cover, and the
+            // picker after this one now genuinely offers both. See StillPicker.
             pickingFor === "banner"
-              ? "Then choose a frame from it for the top of your profile."
-              : "Then choose a frame from it for your picture."
+              ? `Then choose ${lex().medium === "book" ? "a cover" : "a frame"} from it for the top of your profile.`
+              : `Then choose ${lex().medium === "book" ? "a cover" : "a frame"} from it for your picture.`
           }
           onClose={() => setPickingFor(null)}
           onPick={(id) => {
@@ -1528,17 +1533,46 @@ function AvatarMenu({
         onClick={onPickBanner}
         className="w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
       >
+        {/* "Scene" is a film word and there is no book equivalent that is
+            not just "cover", which is already the label on the picture option
+            above it. So the two rows are told apart by WHERE the image goes
+            rather than by what it is, which is the real difference anyway. */}
         <span className="block text-body text-text-hi">
-          {hasBanner ? "Change the scene up top" : "Pick a scene for up top"}
+          {hasBanner ? "Change the picture up top" : "Pick a picture for up top"}
         </span>
         <span className="block text-sub leading-snug text-dim">
-          A frame from one of your films, across the width of your profile.
+          {artSource()}, across the width of your profile.
         </span>
       </button>
     </Sheet>
   );
 }
 
+/**
+ * The artwork one title can offer, for a banner or a picture.
+ *
+ * ── The bug this was carrying ──────────────────────────────────────────────
+ *
+ * It fetched `/api/stills` unconditionally, and that route is TMDb-only: it
+ * runs `/search/movie` and returns backdrops. In book mode "pick a book, then
+ * choose a frame from it" therefore searched THE FILMS for a book's title and
+ * offered whatever came back — frames from an adaptation if one exists, from an
+ * unrelated film with a similar name if not, and nothing at all for most books.
+ * `artSource` was already promising "the cover of one of your books" on the
+ * screen before this one, so the sentence was right and the fetch was wrong.
+ *
+ * A book has no frames and never will. What it has instead is a cover per
+ * printing, which is the same shape of question — one title, several images,
+ * pick the one you mean — and `/api/covers` already answers it for the artwork
+ * picker on a book's card. So the medium chooses the endpoint and the noun, and
+ * everything below is unchanged.
+ *
+ * The thumbnails are still cropped to the shape they are about to become, which
+ * matters more here than it did for films: a cover is portrait and a banner is
+ * 16:9, so what a cover looks like whole tells you very little about what it
+ * looks like as a banner. Cropping the preview makes the grid honest, and is
+ * why there is still no cropper — you are choosing the result, not the source.
+ */
 function StillPicker({
   film,
   target,
@@ -1552,38 +1586,58 @@ function StillPicker({
 }) {
   const [stills, setStills] = useState<string[] | null>(null);
   const forAvatar = target === "avatar";
+  const L = lex();
+  const book = L.medium === "book";
 
   useEffect(() => {
     let dead = false;
-    fetch(`/api/stills?title=${encodeURIComponent(film.title)}&year=${film.year ?? ""}`)
+    const url = book
+      ? // The author narrows a fuzzy title search, exactly as it does on the
+        // card's own cover picker. Books store it in `director`; see the note on
+        // that field in lib/books.ts.
+        `/api/covers?title=${encodeURIComponent(film.title)}${
+          film.director ? `&author=${encodeURIComponent(film.director)}` : ""
+        }`
+      : `/api/stills?title=${encodeURIComponent(film.title)}&year=${film.year ?? ""}`;
+    fetch(url)
       .then((r) => r.json())
-      .then((d) => !dead && setStills(d?.stills ?? []))
+      .then((d) => {
+        if (dead) return;
+        const found: string[] = (book ? d?.covers : d?.stills) ?? [];
+        // The book already on the shelf is a legitimate candidate and is often
+        // the one somebody wants — it is the artwork they chose. It goes first
+        // and is de-duplicated against whatever Open Library returns.
+        const own = book && film.poster ? [film.poster] : [];
+        setStills([...own, ...found.filter((u) => !own.includes(u))]);
+      })
       .catch(() => !dead && setStills([]));
     return () => {
       dead = true;
     };
-  }, [film]);
+  }, [film, book]);
 
   return (
     <Sheet title={film.title} onClose={onClose} scroll>
       <p className="mb-3 text-sub leading-snug text-dim">
         {forAvatar
-          ? "Choose a frame for your picture."
-          : "Choose a frame for the top of your profile."}
+          ? `Choose ${book ? "a cover" : "a frame"} for your picture.`
+          : `Choose ${book ? "a cover" : "a frame"} for the top of your profile.`}
       </p>
-      {stills === null && <p className="text-sub text-dim">Finding frames…</p>}
+      {stills === null && <p className="text-sub text-dim">Finding {book ? "covers" : "frames"}…</p>}
       {stills?.length === 0 && (
         <p className="text-sub leading-snug text-dim">
-          TMDb has no frames for this one. Try another film.
+          {book
+            ? `Open Library has no covers for this one. Try another ${L.one}.`
+            : "TMDb has no frames for this one. Try another film."}
         </p>
       )}
       {/* Shown as circles when that is what they are about to become. A frame is
           16:9 and an avatar is a circle, so a wide thumbnail would be picked on
           the strength of a composition that gets cropped away — the same
           complaint that put a cropper in front of uploaded photos. There is no
-          cropper here on purpose: these are stills the app chose from TMDb, not
-          somebody's own photograph, so the centre is reliably the subject and a
-          second decision would be ceremony. */}
+          cropper here on purpose: these are images the app chose from TMDb or
+          Open Library, not somebody's own photograph, so the centre is reliably
+          the subject and a second decision would be ceremony. */}
       <div className={forAvatar ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-2"}>
         {(stills ?? []).map((s) => (
           <button
