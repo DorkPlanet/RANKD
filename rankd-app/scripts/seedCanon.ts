@@ -38,6 +38,7 @@
 import { and, eq, gte } from "drizzle-orm";
 
 import { client, db, follows, rankingHistory, tasteSnapshots, users } from "../src/lib/db";
+import { HOUSE_HANDLE } from "../src/lib/social/follow";
 import { discoverPage, detailOf, type DiscoveredFilm } from "../src/lib/tmdb";
 import { placeCanon } from "../src/lib/canon/place";
 import { buildSnapshot } from "../src/lib/snapshot";
@@ -100,7 +101,11 @@ const CREATOR = "donnie";
 
 /** The account. `rankd` is in RESERVED, so it is guaranteed free. */
 const HOUSE = {
-  handle: "rankd",
+  // Shared with the app rather than spelled twice. `claimHandle` points every
+  // new reader at this handle, so a literal here that drifted from that one
+  // would seed an account the app never finds — and the failure is silent:
+  // signups keep working and simply follow nobody.
+  handle: HOUSE_HANDLE,
   email: "house@rankd.invalid", // RFC 2606 reserved: can never route anywhere.
   // Every clause true in the present tense. The first two say what it IS, the
   // third says what happens next rather than what is already happening. Revisit

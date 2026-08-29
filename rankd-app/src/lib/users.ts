@@ -8,6 +8,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { db, users, type User } from "./db";
+import { followHouse } from "./social/follow";
 
 export interface ProvisionInput {
   /** The provider identity a repeat sign-in resolves back to. */
@@ -138,6 +139,29 @@ export async function claimHandle(userId: string, handle: string): Promise<Claim
   // No rows matched, so the guard above caught it: this account already has a
   // handle. Not an error worth throwing, just an answer.
   if (updated.length === 0) return { ok: false, reason: "already" };
+
+  // ── Everyone starts out following the house account ─────────────────────
+  //
+  // Here rather than at account creation, because an account without a handle
+  // is not in the network yet: `requireHandle` refuses every public write, and
+  // a follow is a public row. This is the moment somebody becomes a reader
+  // other people can see, so it is the moment the edge means anything.
+  //
+  // Fires exactly once per account for free. The update above is guarded on
+  // `isNull(users.handle)`, so a second claim never reaches this line, and the
+  // insert itself is `onConflictDoNothing` besides.
+  //
+  // Swallowed on purpose. The handle is already committed by the time this
+  // runs, and the alternative is a signup that fails — leaving the account
+  // holding a handle it was told it could not have — because an edge to a
+  // reference account could not be written. The person can follow it by hand,
+  // which is the same thing one tap later.
+  try {
+    await followHouse(updated[0].id);
+  } catch {
+    /* the handle is claimed either way */
+  }
+
   return { ok: true, user: updated[0] };
 }
 

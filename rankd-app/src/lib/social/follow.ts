@@ -155,6 +155,68 @@ export async function follow(followerId: string, handle: string): Promise<Follow
   return { ok: true };
 }
 
+// ── The one edge nobody asks for ───────────────────────────────────────────
+
+/**
+ * The house account's handle, and the single place it is spelled.
+ *
+ * `scripts/seedCanon.ts` creates the account and this module points new readers
+ * at it, so the string has to be the same in both or the seed makes an account
+ * the app never finds. The schema makes this argument at more length about
+ * `kind === "house"` versus `handle === "rankd"`: a rule spread across files is
+ * only load-bearing at the moment somebody forgets it.
+ */
+export const HOUSE_HANDLE = "rankd";
+
+/**
+ * Start a new reader off following the house account.
+ *
+ * ── Why this is not `follow()` ─────────────────────────────────────────────
+ *
+ * `follow()` is a person acting. It rate limits, it refuses a target that has
+ * gone private or been suspended, and it answers with a reason a screen can
+ * print. None of that applies to an edge written once, by the app, at the
+ * moment an account joins — and running it through the limiter would mean a
+ * handle claim could fail because of a bucket that has nothing to do with the
+ * person claiming it.
+ *
+ * ── Why it cannot throw ───────────────────────────────────────────────────
+ *
+ * Claiming a handle is the critical path: it is what lets somebody past the
+ * gate and into the app. This is a nicety on top of it. A deployment with no
+ * house account — a preview branch, a fresh local database, anything that has
+ * not run the seed script — must not fail a signup over it, so an absent house
+ * is a `false` and not an error. `seedCanon.ts` already treats a missing
+ * creator the same way.
+ *
+ * Returns whether an edge now exists, for the caller that wants to log it.
+ */
+export async function followHouse(userId: string): Promise<boolean> {
+  const house = await db.query.users.findFirst({
+    where: eq(users.handle, HOUSE_HANDLE),
+    columns: { id: true, kind: true, deletedAt: true },
+  });
+
+  // The `kind` check is the load-bearing half. If the house account is ever
+  // absent, somebody could claim `rankd` — it is in RESERVED, so they cannot
+  // today, but a reserved list is a rule and this is a constraint — and every
+  // new account would start out following a stranger.
+  if (!house || house.kind !== "house" || house.deletedAt) return false;
+
+  // The house claims its handle through the seed script rather than this path,
+  // so this cannot fire today. It is here because if it ever did, the insert
+  // would violate the `follow_not_self` CHECK and take a handle claim down with
+  // it — a signup failing on a constraint nobody would think to look at.
+  if (house.id === userId) return false;
+
+  await db
+    .insert(follows)
+    .values({ followerId: userId, followeeId: house.id })
+    .onConflictDoNothing();
+
+  return true;
+}
+
 /**
  * Stop following somebody.
  *
