@@ -35,6 +35,7 @@
 // gesture.
 
 import { newJudgement, type Judgement } from "./log";
+import { tierMax, tierMin } from "./tiers";
 import type { Film } from "./types";
 
 /**
@@ -81,10 +82,25 @@ export function judgementsForMove(
   if (!moved) return [];
 
   const up = to < from;
-  // The films it passed over, nearest first. Nearest matters: a sample taken
-  // from this end is the closest comparison the move makes and the least
-  // arguable, so it is the one that is always included.
-  const passed = up ? order.slice(to, from).reverse() : order.slice(from + 1, to + 1);
+  // ── The films it passed, ordered from the DESTINATION end ────────────────
+  //
+  // This used to run from the origin end, on the reasoning that the nearest
+  // comparison is the least arguable and therefore the one a single duel should
+  // be spent on. That is true and it is the wrong thing to optimise, which a
+  // real drag made obvious: a book hauled six rows up from the 3★s recorded one
+  // win over the 3★ it started next to, lost to the row above the landing slot,
+  // and settled at the BOTTOM of its new tier — nowhere near where the finger
+  // put it. Reported as the item moving back rather than moving.
+  //
+  // The claim that actually places something is the one nearest where it
+  // LANDED. "I beat the row I came to rest above" is what lifts it to that spot;
+  // "I beat the row I was already next to" says almost nothing, and at weight 1
+  // it is the only thing said.
+  //
+  // So the near end of this list is the destination, and a one-duel move spends
+  // itself there. Longer moves sample back toward the origin from it, which is
+  // also the right order to lose precision in.
+  const passed = up ? order.slice(to, from) : order.slice(from + 1, to + 1).reverse();
   if (passed.length === 0) return [];
 
   // ── The film it stopped under, which is the other half of the claim ──────
@@ -174,4 +190,82 @@ export function ratingAfterMove(
 
   const landed = above?.rating ?? below?.rating;
   return landed === undefined || landed === moved.rating ? undefined : landed;
+}
+
+/**
+ * The library with the film actually moved to where it was dropped.
+ *
+ * ── Why the position is WRITTEN and not left to the model ─────────────────
+ *
+ * The spec said two things and the first build only did one of them: "It should
+ * reorder it accordingly. Maybe not with a hard lock as that would be
+ * assumptive. But it should update its number in the order of things. As the
+ * data goes, it should count as one win if its within 10…"
+ *
+ * Reorder it, AND count it as evidence. Only the evidence half was built, which
+ * left the model to work the position out — and it cannot, because the model has
+ * no way of knowing what the gesture meant. Dropping a book at position 5
+ * repeatedly landed it at 7 or 8: its one recorded win put it above the row it
+ * was dropped onto and below two untouched neighbours still sitting on their
+ * seed, which is a defensible answer to a question nobody asked. Reported as the
+ * item moving back rather than moving.
+ *
+ * So the order is written directly. This is NOT a lock — `lock` is untouched, so
+ * a soft placement stays soft and the model may revise it the moment real duels
+ * disagree. That is exactly "for the moment".
+ *
+ * ── Why scores are rewritten per TIER ─────────────────────────────────────
+ *
+ * Bands never overlap, and everything downstream depends on that: `list.ts`
+ * takes a plain score sort as tier-correct, and the counts, the profile and the
+ * cards all inherit it. So the requested order is applied WITHIN each affected
+ * band rather than across the list — which is the same thing, because a film
+ * that moved between tiers has already had its rating changed to match where it
+ * landed.
+ */
+export function applyMove(
+  films: readonly Film[],
+  order: readonly Film[],
+  from: number,
+  to: number,
+  rating?: Film["rating"],
+): Film[] {
+  const moved = order[from];
+  if (!moved || from === to) return [...films];
+
+  // The order the reader asked for, with the film lifted out and put back.
+  const next = order.filter((_, i) => i !== from);
+  next.splice(to, 0, moved);
+
+  // The rating change comes first so the film is spread inside its NEW band.
+  const ratingOf = (f: Film) => (f.id === moved.id && rating !== undefined ? rating : f.rating);
+
+  const byTier = new Map<number, string[]>();
+  for (const f of next) {
+    const t = ratingOf(f);
+    byTier.set(t, [...(byTier.get(t) ?? []), f.id]);
+  }
+
+  const scores = new Map<string, number>();
+  for (const [tier, ids] of byTier) {
+    const mn = tierMin(tier);
+    const mx = tierMax(tier);
+    const n = ids.length;
+    // Evenly across the band, best first — the same spacing `respreadTier` and
+    // `writeScores` use, so a tier that was reordered by hand and one that was
+    // reordered by a climb are numerically indistinguishable.
+    ids.forEach((id, i) =>
+      scores.set(id, n === 1 ? Math.round((mn + mx) / 2) : Math.round(mx - (i / (n - 1)) * (mx - mn))),
+    );
+  }
+
+  return films.map((f) => {
+    const score = scores.get(f.id);
+    if (score === undefined) return f;
+    return {
+      ...f,
+      score,
+      ...(f.id === moved.id && rating !== undefined ? { rating } : {}),
+    };
+  });
 }

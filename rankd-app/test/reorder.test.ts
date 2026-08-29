@@ -48,8 +48,10 @@ describe("weightOf", () => {
 describe("judgementsForMove", () => {
   it("records a win when a film is dragged up", () => {
     const js = judgementsForMove(list(20), 5, 3);
-    // `a` is always the moved film, so the outcome reads directly.
-    expect(js[0]).toMatchObject({ a: "f5", b: "f4", o: "a", m: "drag" });
+    // `a` is always the moved film, so the outcome reads directly. `f3` is the
+    // row it came to rest ABOVE — the destination end, which is the claim that
+    // actually places it.
+    expect(js[0]).toMatchObject({ a: "f5", b: "f3", o: "a", m: "drag" });
   });
 
   it("also records the film it STOPPED under", () => {
@@ -98,11 +100,14 @@ describe("judgementsForMove", () => {
     for (const j of js.filter((x) => x.o === "a")) expect(passed.has(j.b)).toBe(true);
   });
 
-  it("always includes the nearest thing it passed", () => {
-    // The closest comparison is the least arguable one, so it is the one a
-    // weight of 1 has to spend itself on.
+  it("always includes the film it came to rest above", () => {
+    // The claim that PLACES something is the one nearest where it landed. This
+    // ordering ran from the origin end once, and a six-row drag then recorded a
+    // single win over the row it started beside — which said almost nothing and
+    // left the book at the bottom of its new tier instead of where the finger
+    // put it.
     const js = judgementsForMove(list(20), 10, 4);
-    expect(js.map((j) => j.b)).toContain("f9");
+    expect(js.map((j) => j.b)).toContain("f4");
   });
 
   it("spreads its picks across the span rather than bunching them", () => {

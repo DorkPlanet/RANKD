@@ -13,15 +13,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header } from "./DuelScreen";
 import { buildBeliefOrder, buildList, searchList, type RankedFilm } from "@/lib/list";
 import { beliefsFor } from "@/lib/beliefs";
-import { respreadFor } from "@/lib/shuffle";
-import { judgementsForMove, ratingAfterMove } from "@/lib/reorder";
+import { applyMove, judgementsForMove, ratingAfterMove } from "@/lib/reorder";
 import { appendJudgements, loadLog } from "@/lib/log";
 import type { Judgement } from "@/lib/log";
 import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
-import { seedScore, starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
+import { starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD } from "./ui";
@@ -96,7 +95,7 @@ function FlatRows({
         if (!near) return <div key={i} style={{ height }} />;
         return (
           <div key={i} style={{ height }}>
-            {chunk.map((r, j) => (
+            {chunk.map((r) => (
               <Row
                 key={r.film.id}
                 film={r.film}
@@ -204,6 +203,17 @@ export default function ListScreen({
     startY: number;
     /** Where the finger is now, in client coordinates. */
     y: number;
+    /**
+     * Where the landing line is drawn, in client coordinates.
+     *
+     * The EDGE of the row it would drop above, not the finger's own position.
+     * Drawn at the finger it was invisible — a 2px line directly under a
+     * fingertip is covered by the fingertip, which is what "I do not see an
+     * indicator as to where it is moving to" was. The gap it will land in is
+     * also the more useful thing to show: it is the answer, where the finger is
+     * merely the question.
+     */
+    lineY: number;
   } | null>(null);
   /**
    * Whether a locked row may be dragged.
@@ -437,16 +447,28 @@ export default function ListScreen({
    * which does not exist on the shuffled page — and would be wrong in a
    * different way on each. The rows know where they are.
    */
-  const rowAt = (clientY: number): number => {
+  const rowAt = (clientY: number, ignore?: string): { at: number; top: number } | null => {
     const rows = scroller.current?.querySelectorAll<HTMLElement>("[data-film-id]");
-    if (!rows) return -1;
+    if (!rows) return null;
     for (const row of rows) {
+      // ── The carried row is never a destination ────────────────────────
+      //
+      // It follows the finger now, so its box is under the finger on every
+      // single frame — which made it the answer every time, so the target always
+      // equalled the origin and the drop did nothing. Reported exactly that way:
+      // "wherever I place the item it just moves back to its spot".
+      //
+      // The bug arrived WITH the fix that made the row follow the thumb. Before
+      // that the row stayed put and stopped being under the finger the moment it
+      // moved, which hid this completely.
+      if (row.dataset.filmId === ignore) continue;
       const r = row.getBoundingClientRect();
       if (clientY >= r.top && clientY <= r.bottom) {
-        return displayOrder.findIndex((f) => f.id === row.dataset.filmId);
+        const at = displayOrder.findIndex((f) => f.id === row.dataset.filmId);
+        return at === -1 ? null : { at, top: r.top };
       }
     }
-    return -1;
+    return null;
   };
 
   /** Long-press before a drag begins, in ms. */
@@ -476,20 +498,18 @@ export default function ListScreen({
     void appendJudgements(rows);
     setLog(nextLog);
 
-    // The rating first, so the respread below files it in its NEW band.
-    const rating = ratingAfterMove(displayOrder, from, to);
-    const withRating = films.map((f) =>
-      f.id === moved.id && rating !== undefined ? { ...f, rating, score: seedScore(rating) } : f,
-    );
-
-    // Re-derived, not written by hand. The judgements are the input and the
-    // model works out the position, exactly as it does after a duel — which is
-    // what stops a drag and a duel disagreeing about what the evidence means.
-    const beliefs = beliefsFor(withRating, nextLog);
-    const touched = withRating.filter(
-      (f) => f.id === moved.id || f.rating === moved.rating || f.rating === rating,
-    );
-    onFilms?.(respreadFor(withRating, touched, beliefs, true));
+    // ── The order is WRITTEN, and the evidence is recorded alongside it ────
+    //
+    // Both halves of what was asked for: "It should reorder it accordingly…
+    // But it should update its number in the order of things. As the data goes,
+    // it should count as one win…"
+    //
+    // The first build only recorded the evidence and let the model place the
+    // film, which it cannot do faithfully — it has no way to know what the
+    // gesture meant, so a book dropped at 5 landed at 7. Nothing here locks:
+    // `lock` is untouched, so the model may still revise this the moment real
+    // duels disagree, which is what "for the moment" asks for.
+    onFilms?.(applyMove(films, displayOrder, from, to, ratingAfterMove(displayOrder, from, to)));
   };
 
   /**
@@ -542,8 +562,13 @@ export default function ListScreen({
       e.preventDefault();
       const t = e.touches[0];
       if (!t) return;
-      const to = rowAt(t.clientY);
-      setDrag((d) => (d ? { ...d, y: t.clientY, to: to === -1 ? d.to : to } : d));
+      setDrag((d) => {
+        if (!d) return d;
+        const hit = rowAt(t.clientY, d.id);
+        return hit
+          ? { ...d, y: t.clientY, to: hit.at, lineY: hit.top }
+          : { ...d, y: t.clientY };
+      });
     };
     document.addEventListener("touchmove", onMove, { passive: false });
     return () => document.removeEventListener("touchmove", onMove);
@@ -813,11 +838,20 @@ export default function ListScreen({
           // teaches.
           if (onFilms && !searching) {
             const at = rowAt(t.clientY);
-            const row = displayOrder[at];
-            if (row && (moveLocked || !isHard(row))) {
+            const row = at ? displayOrder[at.at] : undefined;
+            // `at` narrowed alongside `row`, so the closure below can read it
+            // without the compiler losing track of it across the timeout.
+            if (at && row && (moveLocked || !isHard(row))) {
               holdTimer.current = setTimeout(() => {
                 holdTimer.current = null;
-                setDrag({ id: row.id, from: at, to: at, startY: t.clientY, y: t.clientY });
+                setDrag({
+                  id: row.id,
+                  from: at.at,
+                  to: at.at,
+                  startY: t.clientY,
+                  y: t.clientY,
+                  lineY: at.top,
+                });
                 // A short buzz, where the device offers one: the row has left
                 // the list and nothing else on screen says so yet.
                 navigator.vibrate?.(12);
@@ -969,7 +1003,7 @@ export default function ListScreen({
           aria-hidden
           className="pointer-events-none fixed inset-x-3 z-30"
           style={{
-            top: drag.y,
+            top: drag.lineY,
             height: 2,
             background: "var(--gold)",
             boxShadow: "0 0 10px var(--gold)",
@@ -1118,7 +1152,16 @@ function Row({
               // "it also looks a little off", and it was the biggest part of it.
               transform: `translateY(${carriedBy}px) scale(1.02)`,
               opacity: 0.92,
-              boxShadow: "0 10px 30px var(--shadow-strong)",
+              // ── No drop shadow ────────────────────────────────────────
+              //
+              // It was `0 10px 30px var(--shadow-strong)`, which is 75% black
+              // over 30px on the night theme — a dark smudge trailing the finger
+              // rather than a lifted card. Reported as "the black bar where the
+              // finger is held".
+              //
+              // The scale is enough on its own to say the row has left the list,
+              // and the gold line says where it is going. A shadow that has to be
+              // heavy to read on a dark page is the wrong device for a dark page.
               // Above its neighbours while it is off the ground, or the rows it
               // passes over paint on top of it.
               position: "relative",
