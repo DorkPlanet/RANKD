@@ -24,7 +24,7 @@ import { starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD } from "./ui";
-import { ChevronIcon, LockIcon } from "./Icons";
+import { ChevronIcon } from "./Icons";
 import { lex } from "@/lib/lexicon";
 
 // Fixed row metrics. Building all 828 rows at once measured a 748ms blocked
@@ -72,6 +72,7 @@ function FlatRows({
   onInfo,
   carried,
   carriedBy,
+  onUnpin,
 }: {
   rows: RankedFilm[];
   view: { top: number; height: number };
@@ -80,6 +81,8 @@ function FlatRows({
   carried?: string | null;
   /** How far it has travelled with the finger. */
   carriedBy?: number;
+  /** Release a pin. Absent on a read-only list. */
+  onUnpin?: (f: Film) => void;
 }) {
   const chunks: RankedFilm[][] = [];
   for (let i = 0; i < rows.length; i += CHUNK) chunks.push(rows.slice(i, i + CHUNK));
@@ -104,6 +107,7 @@ function FlatRows({
                 showStars
                 carried={carried === r.film.id}
                 carriedBy={carriedBy}
+                onUnpin={onUnpin}
               />
             ))}
           </div>
@@ -215,15 +219,6 @@ export default function ListScreen({
      */
     lineY: number;
   } | null>(null);
-  /**
-   * Whether a locked row may be dragged.
-   *
-   * The user's call: "Everything should be able to be changed. Maybe not locked
-   * items. But it should have a toggle off for lock so you can move it if you
-   * need." A hard lock is a position somebody committed to by hand, so moving
-   * one is a second deliberate act rather than the same gesture.
-   */
-  const [moveLocked, setMoveLocked] = useState(false);
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
@@ -577,6 +572,20 @@ export default function ListScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag !== null]);
 
+  /**
+   * Take back a pin, leaving the position alone.
+   *
+   * Dropping to `"soft"` rather than to unplaced is the whole point. The film
+   * keeps its number and its place; what changes is WHO owns that place — it
+   * stops being your commitment and becomes the model's working answer, free to
+   * improve as the evidence does. Clearing the lock outright would delete a
+   * position you spent duels earning, which is the opposite of what unpinning
+   * is for.
+   */
+  const unpin = (film: Film) => {
+    onFilms?.(films.map((f) => (f.id === film.id ? { ...f, lock: "soft" as const } : f)));
+  };
+
   const jumpTo = (tier: Rating) => {
     setJumpOpen(false);
     const target = offsets.find((o) => o.tier === tier);
@@ -763,20 +772,6 @@ export default function ListScreen({
                 now the one every other chevron is drawn from — see `ChevronIcon`. */}
             <ChevronIcon open={jumpOpen} />
           </button>
-          {/* Only where a drag can actually do something. A read-only list has
-              nothing to unlock. */}
-          {onFilms && (
-            <button
-              onClick={() => setMoveLocked((v) => !v)}
-              aria-pressed={moveLocked}
-              aria-label="Allow locked rows to be dragged"
-              className={`absolute inset-y-1 right-11 flex items-center px-2 ${
-                moveLocked ? "text-gold" : "text-dim"
-              } active:scale-95`}
-            >
-              <LockIcon />
-            </button>
-          )}
           {jumpOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setJumpOpen(false)} />
@@ -839,9 +834,25 @@ export default function ListScreen({
           if (onFilms && !searching) {
             const at = rowAt(t.clientY);
             const row = at ? displayOrder[at.at] : undefined;
-            // `at` narrowed alongside `row`, so the closure below can read it
+            // ── Pinned rows drag too ──────────────────────────────────────
+            //
+            // This used to read `(moveLocked || !isHard(row))`, so a row you had
+            // locked could not be picked up until you found a padlock toggle
+            // next to the search box. That is the rigidity, in one line.
+            //
+            // A lock means "the MODEL may not rearrange this". It has never
+            // meant "you may not touch this", and conflating the two made the
+            // app argue with its owner. Every user action always works; the
+            // model's restraint is unchanged and lives in `respreadTier` and
+            // `matchmaker.poolFor`, where it belongs.
+            //
+            // The pin SURVIVES the move: `applyMove` writes a score and never
+            // touches `lock`, so a film you pinned stays pinned, at the place
+            // you just put it.
+            //
+            // `at` is narrowed alongside `row` so the closure below can read it
             // without the compiler losing track of it across the timeout.
-            if (at && row && (moveLocked || !isHard(row))) {
+            if (at && row) {
               holdTimer.current = setTimeout(() => {
                 holdTimer.current = null;
                 setDrag({
@@ -947,7 +958,14 @@ export default function ListScreen({
             </div>
           )
         ) : flat ? (
-          <FlatRows rows={flat} view={view} onInfo={onInfo} carried={carriedId} carriedBy={carriedBy} />
+          <FlatRows
+            rows={flat}
+            view={view}
+            onInfo={onInfo}
+            carried={carriedId}
+            carriedBy={carriedBy}
+            onUnpin={onFilms ? unpin : undefined}
+          />
         ) : (
           model.sections.map((s, i) => {
             const o = offsets[i];
@@ -964,6 +982,7 @@ export default function ListScreen({
                     onInfo={onInfo}
                     carried={carriedId === r.film.id}
                     carriedBy={carriedBy}
+                    onUnpin={onFilms ? unpin : undefined}
                   />
                 ))}
                 {s.unplaced.length > 0 && (
@@ -1119,6 +1138,7 @@ function Row({
   showStars,
   carried,
   carriedBy = 0,
+  onUnpin,
 }: {
   film: Film;
   rank?: number;
@@ -1128,9 +1148,11 @@ function Row({
   carried?: boolean;
   /** How far the finger has travelled since the drag began, in px. */
   carriedBy?: number;
+  /** Release this film's pin. Absent on a read-only list. */
+  onUnpin?: (f: Film) => void;
 }) {
   return (
-    <button
+    <div
       data-film-id={film.id}
       // ── What a drag looks like ────────────────────────────────────────
       //
@@ -1171,23 +1193,36 @@ function Row({
       }}
       // Every row carries it; the tour points at whichever is first on screen.
       data-tour="list-row"
-      onClick={() => onInfo(film)}
-      className="list-row flex w-full items-center gap-3.5 text-left active:scale-[0.99]"
+      className="list-row flex w-full items-center gap-3.5 text-left"
     >
-      {film.poster ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={film.poster} alt="" loading="lazy" className="list-poster" />
-      ) : (
-        <span className="list-poster" style={{ background: "var(--border)" }} />
-      )}
+      {/* ── Why the row is no longer itself a button ────────────────────────
+          The rank numeral has to be tappable on its own — it is where a pin is
+          drawn, so it is the obvious place to release one. A button inside a
+          button is invalid HTML and unreachable by a keyboard, so the row is a
+          container now and the two controls are siblings.
 
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-body text-text-hi">{film.title}</span>
-        <span className="block text-sub text-dim">
-          {film.year}
-          {showStars && <span className="ml-2 text-gold">{starsFor(film.rating)}</span>}
+          Everything the drag depends on is unchanged: `data-film-id` and the
+          height stay on this element, which is what `rowAt` hit-tests and what
+          the section spacers are computed from. */}
+      <button
+        onClick={() => onInfo(film)}
+        className="flex h-full min-w-0 flex-1 items-center gap-3.5 text-left active:scale-[0.99]"
+      >
+        {film.poster ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={film.poster} alt="" loading="lazy" className="list-poster" />
+        ) : (
+          <span className="list-poster" style={{ background: "var(--border)" }} />
+        )}
+
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-body text-text-hi">{film.title}</span>
+          <span className="block text-sub text-dim">
+            {film.year}
+            {showStars && <span className="ml-2 text-gold">{starsFor(film.rating)}</span>}
+          </span>
         </span>
-      </span>
+      </button>
 
       {/* Three states, told by the number's weight rather than by anything that
           would change the row's height — ROW_H is load-bearing, since the
@@ -1212,15 +1247,52 @@ function Row({
         /* `title` is kept as a desktop pointer, but it is no longer where the
            distinction LIVES — the legend in the header says it out loud. The
            wording matches the legend on purpose. */
+        /* ── A pin you can take back in one tap ─────────────────────────────
+           The gold numeral already MEANS "you locked this". Until now that was
+           all it did, and the only way back was a bulk reset in Settings that
+           dropped every placement at once — which is why committing to a
+           position felt heavier than it should.
+
+           So the numeral becomes the control for the thing it is already
+           reporting: tap it to release the pin. The inverse of "Lock in as #N",
+           in the place a reader is already looking for it.
+
+           Only a HARD lock is tappable. A soft one is the model's own placement
+           and there is nothing of yours to take back — releasing it would just
+           be asking the model to place it again, which is what it is already
+           doing. */
         <span
+          role={onUnpin && isHard(film) ? "button" : undefined}
+          tabIndex={onUnpin && isHard(film) ? 0 : undefined}
+          onClick={
+            onUnpin && isHard(film)
+              ? (e) => {
+                  // The row is not a button any more, but the tap still travels
+                  // — and the poster/title button is a sibling, not a parent, so
+                  // this only guards against a future wrapper.
+                  e.stopPropagation();
+                  onUnpin(film);
+                }
+              : undefined
+          }
+          onKeyDown={
+            onUnpin && isHard(film)
+              ? (e) => {
+                  if (e.key !== "Enter" && e.key !== " ") return;
+                  e.preventDefault();
+                  onUnpin(film);
+                }
+              : undefined
+          }
+          aria-label={onUnpin && isHard(film) ? `Unpin ${film.title}` : undefined}
           className={`rank-num flex-shrink-0 font-serif text-[26px] leading-none ${
             isHard(film) ? "font-bold text-gold" : "font-normal text-accent"
-          }`}
-          title={isHard(film) ? "You locked this" : "Fast Shuffle placed this, and it can still move"}
+          } ${onUnpin && isHard(film) ? "px-1 active:scale-90" : ""}`}
+          title={isHard(film) ? "You locked this — tap to unpin" : "Fast Shuffle placed this, and it can still move"}
         >
           {rank}
         </span>
       )}
-    </button>
+    </div>
   );
 }
