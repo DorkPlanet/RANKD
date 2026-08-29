@@ -100,6 +100,23 @@ export interface ShuffleOptions {
    */
   reRate?: boolean;
   /**
+   * Include films this mode has ALREADY placed, and keep refining them.
+   *
+   * ── Why the default excludes them, and why that stopped being enough ──────
+   *
+   * A batch is "the least-settled films with NO NUMBER YET", which is right for
+   * getting a library into shape and wrong once it is. Every film ends up soft
+   * locked, the pool empties, and Fast Shuffle has nothing left to offer — even
+   * though its own answers are exactly the ones worth arguing with, and every
+   * extra duel makes the belief behind them better.
+   *
+   * `includeConfirmed` already lets HARD locks back in, which is a different
+   * question: those are placements a person committed to. This is about the
+   * model's own, and it is the safe half of the pair — a soft lock is the
+   * model's opinion and the model may always improve on it.
+   */
+  reshuffle?: boolean;
+  /**
    * Duel this ONE film for the whole run, against opponents from its tier.
    *
    * The anchor mechanism already existed — `nextPair` takes an `anchorId` and
@@ -271,6 +288,22 @@ export default function ShuffleDuel({
   // and a list of stale objects would go out of date immediately. Null when the
   // run is open-ended.
   const [batch, setBatch] = useState<string[] | null>(null);
+  /**
+   * Batch films whose turn is over, on a reshuffle.
+   *
+   * ── Why placement cannot be the measure here ──────────────────────────────
+   *
+   * A batch normally ends when every film in it has a number, which is exactly
+   * right when the batch was drawn from films that had none. On a reshuffle they
+   * ALL have one already, so `isPlaced` is true from the first frame: the run
+   * would find no next anchor and declare itself finished before a single duel.
+   *
+   * So a reshuffle counts turns instead. A film is done when its anchor turn
+   * ends — the same moment that retires an anchor in an ordinary run — which
+   * makes the countdown mean the same thing in both: how many films are left to
+   * argue about.
+   */
+  const done = useRef<Set<string>>(new Set());
   // Whether the opening serve has run yet.
   //
   // `pair === null` meant two completely different things — "not served yet"
@@ -363,7 +396,10 @@ export default function ShuffleDuel({
       let chosen: string[] | null = null;
       if (options.batch) {
         chosen = poolFor(films, { scope: options.scope, includeConfirmed: options.includeConfirmed })
-          .filter((f) => !isPlaced(f))
+          // On a reshuffle every film in scope is fair game, and the sort below
+          // still puts the least-settled first — so it reaches for the shakiest
+          // placements rather than re-treading the ones already well evidenced.
+          .filter((f) => options.reshuffle || !isPlaced(f))
           .map((f) => ({ f, spread: fitted.get(f.id)?.spread ?? PRIOR_SPREAD }))
           .sort((x, y) => y.spread - x.spread || (x.f.id < y.f.id ? -1 : 1))
           .slice(0, options.batch)
@@ -660,10 +696,20 @@ export default function ShuffleDuel({
     // actually finishable. Without this the matchmaker would wander off to
     // whichever film in the whole scope it knew least about and the countdown
     // would sit still while you played.
+    // A retiring anchor has had its turn, whether or not that turn changed its
+    // number. Only a reshuffle reads this; an ordinary run still asks about
+    // placement, so nothing about it changes.
+    if (retire && anchor) done.current.add(anchor.id);
+
+    const spent = (id: string) =>
+      options.reshuffle
+        ? done.current.has(id)
+        : isPlaced(placed.find((f) => f.id === id) ?? ({} as Film));
+
     const nextAnchor = options.focus
       ? options.focus
       : retire
-        ? batch?.find((id) => !isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))
+        ? batch?.find((id) => !spent(id))
         : anchor?.id;
     serve(placed, nextLog, nextBeliefs, nextAnchor);
 
@@ -680,7 +726,7 @@ export default function ShuffleDuel({
     if (options.target && count + 1 >= options.target) {
       flush();
       setEnded(true);
-    } else if (batch && batch.every((id) => isPlaced(placed.find((f) => f.id === id) ?? ({} as Film)))) {
+    } else if (batch && batch.every(spent)) {
       // Flush first: the pending judgement is written on a timer that the run
       // ending would otherwise outlive.
       flush();

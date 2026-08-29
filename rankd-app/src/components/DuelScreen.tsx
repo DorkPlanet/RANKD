@@ -2007,6 +2007,9 @@ function ShuffleSetup({
   // ratings, so it should be a decision made for THIS run rather than a setting
   // somebody turned on once and forgot about.
   const [reRateOn, setReRateOn] = useState(false);
+  // Off by default so the mode still opens on "what has no number yet", which
+  // is the right first answer for a library that is not finished.
+  const [reshuffle, setReshuffle] = useState(false);
   // ── How big this run is ─────────────────────────────────────────────────
   //
   // FILMS, not minutes, and the third shape this control has taken.
@@ -2052,7 +2055,11 @@ function ShuffleSetup({
   // How many films in this scope have no number yet. A batch cannot be bigger
   // than the work available, and a start button offering 100 when 12 remain
   // would be promising a run that ends early for reasons nobody explained.
-  const unplaced = poolFor(films, { scope, includeConfirmed }).filter((f) => !isPlaced(f)).length;
+  // Matches what the run will actually draw, or the button promises a length
+  // the batch cannot deliver. See `reshuffle` in ShuffleOptions.
+  const unplaced = poolFor(films, { scope, includeConfirmed }).filter(
+    (f) => reshuffle || !isPlaced(f),
+  ).length;
 
 
 
@@ -2140,6 +2147,27 @@ function ShuffleSetup({
         />
       </label>
 
+      {/* ── Going back over what it already placed ──────────────────────
+          Without this the mode retires itself: a batch is drawn from films with
+          no number yet, so once everything has one there is nothing left to
+          play, however shaky those numbers are. */}
+      <label className="mb-1 flex items-center justify-between rounded-xl border border-border px-4 py-3">
+        <span className="min-w-0 pr-3">
+          <span className="block text-body text-text-hi">Go over ones it already placed</span>
+          <span className="block text-sub leading-snug text-dim">
+            {reshuffle
+              ? `Shakiest first, so the ${lex().many} it is least sure of come back round.`
+              : `Only ${lex().many} with no number yet.`}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={reshuffle}
+          onChange={(e) => setReshuffle(e.target.checked)}
+          className="tickbox"
+        />
+      </label>
+
       {/* ── Letting the run fix a rating ──────────────────────────────────
           Below "include the ones I've placed" because it is the bigger claim of
           the two: that one lets the model re-ORDER what you placed, this one
@@ -2165,7 +2193,7 @@ function ShuffleSetup({
       <StartButton
         label={`Start · ${plural(batch ? Math.min(batch, unplaced) : count)}`}
         onClick={() =>
-          onStart({ scope, includeConfirmed, reRate: reRateOn, batch: batch ?? undefined })
+          onStart({ scope, includeConfirmed, reRate: reRateOn, reshuffle, batch: batch ?? undefined })
         }
         disabled={!playable}
       />
