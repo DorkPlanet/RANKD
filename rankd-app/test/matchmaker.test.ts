@@ -43,6 +43,27 @@ describe("scope", () => {
     const out = inScope(library, { kind: "range", tier: 4, below: 0.5, above: 1 });
     expect(out.map((f) => f.id)).toEqual(["a", "b", "c", "d"]);
   });
+
+  // The whole reason this kind exists: the Fast Shuffle strip can now select
+  // tiers that do not touch, which an anchor and two edges cannot express.
+  it("tiers takes an arbitrary, non-contiguous set", () => {
+    const out = inScope(library, { kind: "tiers", tiers: [5, 3.5] });
+    expect(out.map((f) => f.id)).toEqual(["a", "d"]);
+  });
+
+  it("tiers with one entry matches the single-tier scope", () => {
+    expect(inScope(library, { kind: "tiers", tiers: [4] }).map((f) => f.id)).toEqual(
+      inScope(library, { kind: "tier", tier: 4 }).map((f) => f.id),
+    );
+  });
+
+  it("tiers ignores the order it was given, keeping library order", () => {
+    expect(inScope(library, { kind: "tiers", tiers: [3.5, 5] }).map((f) => f.id)).toEqual(["a", "d"]);
+  });
+
+  it("an empty tier set admits nothing", () => {
+    expect(inScope(library, { kind: "tiers", tiers: [] })).toEqual([]);
+  });
 });
 
 describe("pool", () => {

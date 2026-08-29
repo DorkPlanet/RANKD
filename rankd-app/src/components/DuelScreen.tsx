@@ -1774,13 +1774,7 @@ function ModePanel({
     return (
       <ShuffleSetup
         films={films}
-        tier={tier}
-        below={below}
-        above={above}
-        onBelow={onBelow}
-        onAbove={onAbove}
         onClose={onClose}
-        onPickTier={onPickTier}
         onBack={() => setChosen(null)}
         onStart={onFastShuffle}
       />
@@ -1964,7 +1958,7 @@ function ModePanel({
       <StartButton label={`Start · ${plural(count)}`} onClick={() => onKoth(tier)} disabled={!playable} />
       {!playable && (
         <p className="mt-2 text-center text-sub text-gold">
-          Only {plural(count)} in range — widen it or pick another tier.
+          Only {plural(count)} here — add a tier, or clear the selection.
         </p>
       )}
       <BackRow onClick={() => setChosen(null)} />
@@ -1978,30 +1972,168 @@ function ModePanel({
 //
 // PROVISIONAL LOOK — assembled from the panel's existing controls so it doesn't
 // invent a competing language, but it has had no design pass.
+/**
+ * The ten tiers, drawn as the shape of the library, selected by tapping.
+ *
+ * ── Why a histogram and not a list of rows ────────────────────────────────
+ *
+ * The question this control answers is "where should I spend the next twenty
+ * minutes", and that question has never been answerable from a list of star
+ * strings: it needs to know where the films ARE and where the unranked ones
+ * are, and the old picker showed neither until you had already committed to a
+ * tier and left the sheet.
+ *
+ * So the height of a column is how many films that tier holds, and the bright
+ * part of it is how many of them this run would still have to place. A library
+ * with a bulge at 3½ and nothing placed in it says so at a glance, and the tier
+ * worth opening is the tallest bright bar. That is the same information the two
+ * removed screens were withholding, in less vertical space than either took.
+ *
+ * ── Why tap-to-toggle and not a range slider ──────────────────────────────
+ *
+ * A slider can only express a contiguous span, and it costs a grab, a drag and
+ * a release per edge. Ten targets cost one tap each, express spans that are not
+ * contiguous, and — the part that matters on a phone — are hit with the thumb
+ * without aiming at an 8px handle.
+ *
+ * Counts come from the run's own pool function, not from a filter written here,
+ * so a tier that looks empty because everything in it is hard-locked reads as
+ * empty rather than as a bar the run would refuse to draw from.
+ */
+function TierStrip({
+  films,
+  picked,
+  includeConfirmed,
+  reshuffle,
+  onToggle,
+}: {
+  films: Film[];
+  picked: Rating[];
+  includeConfirmed: boolean;
+  reshuffle: boolean;
+  onToggle: (t: Rating) => void;
+}) {
+  const cols = ORDERED_TIERS.map((tier) => {
+    const pool = poolFor(films, { scope: { kind: "tier", tier }, includeConfirmed });
+    return {
+      tier,
+      total: pool.length,
+      // What this run would actually still have to do here, under the two ticks
+      // below the strip. Both of them change these bars live, which is the
+      // cheapest way to show what "include ones I've placed" is worth.
+      left: pool.filter((f) => reshuffle || !isPlaced(f)).length,
+      // A duel needs two. One film in a tier is a bar you can see and cannot
+      // play, and saying so with opacity is kinder than a toast on tap.
+      playable: pool.length >= 2,
+    };
+  });
+  // Relative heights, so the strip is about SHAPE rather than absolute size. A
+  // floor of 1 keeps the division safe on an empty library.
+  const tallest = Math.max(1, ...cols.map((c) => c.total));
+
+  return (
+    <div className="mb-1.5 flex items-end gap-1">
+      {cols.map(({ tier, total, left, playable }) => {
+        const on = picked.includes(tier);
+        const h = Math.round((total / tallest) * BAR_H);
+        return (
+          <button
+            key={tier}
+            disabled={!playable}
+            onClick={() => onToggle(tier)}
+            aria-pressed={on}
+            aria-label={`${starsFor(tier)} — ${plural(total)}, ${left} still to place`}
+            className="flex flex-1 flex-col items-center gap-1 active:scale-95 disabled:opacity-25"
+          >
+            <span className="flex w-full items-end justify-center" style={{ height: BAR_H }}>
+              <span
+                className="relative w-full overflow-hidden rounded-t-[3px]"
+                // A tier with films in it always draws something, or one outlier
+                // tall bar would make three real tiers invisible.
+                style={{ height: total > 0 ? Math.max(h, 3) : 2, background: "var(--border)" }}
+              >
+                <span
+                  className="absolute inset-x-0 bottom-0"
+                  style={{
+                    height: total > 0 ? `${(left / total) * 100}%` : 0,
+                    background: on ? "var(--gold)" : "var(--dim)",
+                  }}
+                />
+              </span>
+            </span>
+            <span className={`text-label font-bold tabular-nums ${on ? "text-gold" : "text-dim"}`}>
+              {TIER_TICK[tier]}
+            </span>
+            {/* The selection rail. The bar itself cannot carry it: a bar's height
+                is data, so a selected ½★ tier holding four films would announce
+                itself with a 3px sliver. The rail is the same width under every
+                column whatever the count. */}
+            <span
+              className="h-[2px] w-full rounded-full"
+              style={{ background: on ? "var(--gold)" : "transparent" }}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Tall enough to show shape, short enough that the ticks stay above the fold. */
+const BAR_H = 52;
+
+/**
+ * Compact tier labels for the strip.
+ *
+ * `starsFor` is the app's word for a tier everywhere else and stays so in the
+ * summary line under the strip, but five glyphs will not fit in a tenth of a
+ * phone's width. A numeral does, and the column it sits under is already
+ * carrying the meaning.
+ */
+const TIER_TICK: Record<number, string> = {
+  5: "5",
+  4.5: "4½",
+  4: "4",
+  3.5: "3½",
+  3: "3",
+  2.5: "2½",
+  2: "2",
+  1.5: "1½",
+  1: "1",
+  0.5: "½",
+};
+
 function ShuffleSetup({
   films,
-  tier,
-  below,
-  above,
-  onBelow,
-  onAbove,
   onClose,
-  onPickTier,
   onBack,
   onStart,
 }: {
   films: Film[];
-  tier: Rating;
-  below: number;
-  above: number;
-  onBelow: (v: number) => void;
-  onAbove: (v: number) => void;
   onClose: () => void;
-  onPickTier: () => void;
   onBack: () => void;
   onStart: (opts: ShuffleOptions) => void;
 }) {
-  const [kind, setKind] = useState<"all" | "tier" | "range">("all");
+  /**
+   * Which tiers this run is aimed at. Empty means all of them.
+   *
+   * ── What this replaced, and why three controls became one ────────────────
+   *
+   * "What to compare" was a row of three tabs — All / This tier / Range — and
+   * picking anything but the first opened a SECOND control: a row that said
+   * "Tier ›", which closed this sheet and swapped in a different one, and then
+   * for Range a two-handled slider underneath. Choosing 4★ and 5★ meant a tab,
+   * a sheet you had to be handed back from, and a drag. The reported symptom
+   * was "menus in menus"; the cause is that all three controls were saying the
+   * same thing in three grammars, and one of them destroyed the sheet you were
+   * filling in to say it.
+   *
+   * A tier selection is a SET, so the control is a set: ten tiers, tap to
+   * include. Nothing selected is everything, which keeps the mode opening on
+   * the answer it always opened on. Contiguity is no longer required, so "my
+   * 5s and my 3s" is now sayable and was not before.
+   */
+  const [picked, setPicked] = useState<Rating[]>([]);
   const [includeConfirmed, setIncludeConfirmed] = useState(false);
   // Off every time the panel opens, deliberately not remembered. This rewrites
   // ratings, so it should be a decision made for THIS run rather than a setting
@@ -2041,12 +2173,18 @@ function ShuffleSetup({
       alive = false;
     };
   }, []);
+  // Descending, because the strip is drawn that way and the scope should read
+  // in the same order the eye picked it in.
+  const chosen = ORDERED_TIERS.filter((t) => picked.includes(t));
+  // A single tier still emits `kind: "tier"`. Nothing downstream distinguishes
+  // it from a one-element `tiers`, but a run over one tier is the oldest shape
+  // in the mode and there is no reason for it to start arriving in a new one.
   const scope: ShuffleOptions["scope"] =
-    kind === "all"
+    chosen.length === 0
       ? { kind: "all" }
-      : kind === "tier"
-        ? { kind: "tier", tier }
-        : { kind: "range", tier, below, above };
+      : chosen.length === 1
+        ? { kind: "tier", tier: chosen[0] }
+        : { kind: "tiers", tiers: chosen };
 
   // The count the run will actually use, from the run's own function — a second
   // filter computed here would drift from it the first time either changed.
@@ -2065,40 +2203,43 @@ function ShuffleSetup({
 
   return (
     <Sheet title="Fast Shuffle" onClose={onClose}>
-      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.14em] text-dim">What to compare</div>
-      <div className="mb-3 flex gap-2">
-        <ScopeTab label={`All ${lex().many}`} active={kind === "all"} onClick={() => setKind("all")} />
-        <ScopeTab label="This tier" active={kind === "tier"} onClick={() => setKind("tier")} />
-        <ScopeTab label="Range" active={kind === "range"} onClick={() => setKind("range")} />
+      <div className="mb-2 flex items-baseline justify-between">
+        <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">Which tiers</span>
+        {/* Only once there is something to undo. An always-present "Clear" on a
+            selection that is already empty is a control that does nothing, and
+            the eye has to check it every time. */}
+        {chosen.length > 0 && (
+          <button
+            onClick={() => setPicked([])}
+            className="text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-95"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {kind !== "all" && (
-        <button
-          onClick={onPickTier}
-          className="mb-3 flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 active:scale-[0.99]"
-        >
-          <Eyebrow>Tier</Eyebrow>
-          <span className="text-body text-gold">{starsFor(tier)} ›</span>
-        </button>
-      )}
+      <TierStrip
+        films={films}
+        picked={picked}
+        includeConfirmed={includeConfirmed}
+        reshuffle={reshuffle}
+        onToggle={(t) =>
+          setPicked((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))
+        }
+      />
 
-      {kind === "range" && (
-        <div className="mb-3 rounded-xl border border-border px-4 py-3">
-          <div className="mb-2 flex items-baseline justify-between">
-            <span className="text-body text-text-hi">Range</span>
-            <span className="text-sub text-gold">
-              {starsFor(tier - below)} – {starsFor(tier + above)}
-            </span>
-          </div>
-          <RangeSlider
-            tier={tier}
-            low={tier - below}
-            high={tier + above}
-            onLow={(v) => onBelow(tier - v)}
-            onHigh={(v) => onAbove(v - tier)}
-          />
-        </div>
-      )}
+      {/* One line, and it is the line the tabs used to be: what is in, and how
+          much work that is. The count is the run's own `unplaced`, so the
+          number here and the number on the start button cannot disagree. */}
+      <p className="mb-3 text-center text-sub text-dim">
+        {chosen.length === 0
+          ? "Every tier"
+          : chosen.length === 1
+            ? starsFor(chosen[0])
+            : `${chosen.length} tiers`}
+        {" · "}
+        <span className="text-gold">{plural(unplaced)}</span> to place
+      </p>
 
       {/* ── Session length ───────────────────────────────────────────────
           The user's ask, and the choice inside it mattered: a target that ENDS

@@ -50,6 +50,15 @@ export type Scope =
   | { kind: "all" }
   | { kind: "tier"; tier: Rating }
   | { kind: "range"; tier: Rating; below: number; above: number }
+  // An explicit set of star tiers, which is what the Fast Shuffle picker now
+  // produces. It supersedes `range` for that mode without replacing it: a range
+  // is still what an anchor-plus-reach control means, and Rough Cut still uses
+  // one. What this adds is the ability to be NON-contiguous — "my 5s and my 3s,
+  // nothing in between" — which an anchor and two edges cannot say.
+  //
+  // A single tier still emits `kind: "tier"`, so nothing downstream of a
+  // one-tier run sees a new shape.
+  | { kind: "tiers"; tiers: readonly Rating[] }
   // Everything one person made, whatever stars each film got. The only scope
   // that spans tiers, and the only one whose result is never written back to
   // `score` — see the note at the top of lib/people.ts for why that pairing is
@@ -103,6 +112,7 @@ export interface MatchOptions {
 export function inScope(films: readonly Film[], scope: Scope): Film[] {
   if (scope.kind === "all") return [...films];
   if (scope.kind === "tier") return films.filter((f) => f.rating === scope.tier);
+  if (scope.kind === "tiers") return films.filter((f) => scope.tiers.includes(f.rating));
   if (scope.kind === "person")
     return films.filter((f) =>
       scope.role === "director" ? f.director === scope.name : (f.cast ?? []).includes(scope.name),
