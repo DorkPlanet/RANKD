@@ -13,17 +13,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header } from "./DuelScreen";
 import { buildBeliefOrder, buildList, searchList, type RankedFilm } from "@/lib/list";
 import { beliefsFor } from "@/lib/beliefs";
-import { loadLog } from "@/lib/log";
+import { respreadFor } from "@/lib/shuffle";
+import { judgementsForMove, ratingAfterMove } from "@/lib/reorder";
+import { appendJudgements, loadLog } from "@/lib/log";
 import type { Judgement } from "@/lib/log";
 import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
 import { useDriftScroll } from "@/lib/useDriftScroll";
-import { starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
+import { seedScore, starsFor, ORDERED_TIERS, tierCounts, type Rating } from "@/lib/tiers";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD } from "./ui";
-import { ChevronIcon } from "./Icons";
+import { ChevronIcon, LockIcon } from "./Icons";
 import { lex } from "@/lib/lexicon";
 
 // Fixed row metrics. Building all 828 rows at once measured a 748ms blocked
@@ -69,10 +71,16 @@ function FlatRows({
   rows,
   view,
   onInfo,
+  carried,
+  landing,
 }: {
   rows: RankedFilm[];
   view: { top: number; height: number };
   onInfo: (f: Film) => void;
+  /** The row under the finger. */
+  carried?: string | null;
+  /** The row the line is drawn above. */
+  landing?: string | null;
 }) {
   const chunks: RankedFilm[][] = [];
   for (let i = 0; i < rows.length; i += CHUNK) chunks.push(rows.slice(i, i + CHUNK));
@@ -88,8 +96,16 @@ function FlatRows({
         if (!near) return <div key={i} style={{ height }} />;
         return (
           <div key={i} style={{ height }}>
-            {chunk.map((r) => (
-              <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} showStars />
+            {chunk.map((r, j) => (
+              <Row
+                key={r.film.id}
+                film={r.film}
+                rank={r.rank}
+                onInfo={onInfo}
+                showStars
+                carried={carried === r.film.id}
+                markAbove={landing === r.film.id}
+              />
             ))}
           </div>
         );
@@ -113,6 +129,7 @@ export default function ListScreen({
   enterAtEnd = false,
   onPoster,
   onTrophies,
+  onFilms,
   logging,
   onToggleLog,
   frozen,
@@ -147,6 +164,13 @@ export default function ListScreen({
   enterAtEnd?: boolean;
   onPoster: (id: string, meta: FilmMeta) => void;
   onTrophies: () => void;
+  /**
+   * Land a reorder: the library, with the dragged film re-rated and re-scored.
+   *
+   * Absent means the list is read-only, which is what turns the drag gesture
+   * off — there is nowhere for the result to go, so nothing should lift.
+   */
+  onFilms?: (films: Film[]) => void;
   /** The log sheet lives in `AppShell` now; the nav only lights its cell. */
   logging?: boolean;
   onToggleLog?: () => void;
@@ -165,6 +189,25 @@ export default function ListScreen({
   // that visibly re-sorts itself, and the two agree often enough that most
   // readers would only see the jump.
   const [log, setLog] = useState<Judgement[] | null>(null);
+  /**
+   * The row being dragged, if any.
+   *
+   * `from` is its index in `displayOrder` and `to` is where it would land —
+   * recomputed on every move, drawn as an insertion line, and only acted on when
+   * the finger lifts.
+   */
+  const [drag, setDrag] = useState<{ id: string; from: number; to: number; dy: number } | null>(
+    null,
+  );
+  /**
+   * Whether a locked row may be dragged.
+   *
+   * The user's call: "Everything should be able to be changed. Maybe not locked
+   * items. But it should have a toggle off for lock so you can move it if you
+   * need." A hard lock is a position somebody committed to by hand, so moving
+   * one is a second deliberate act rather than the same gesture.
+   */
+  const [moveLocked, setMoveLocked] = useState(false);
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
@@ -379,6 +422,91 @@ export default function ListScreen({
     return () => el.removeEventListener("scroll", read);
   }, []);
 
+  /**
+   * Which row is under this point, as an index into `displayOrder`.
+   *
+   * Hit-tested against the real elements rather than computed from a Y offset.
+   * The arithmetic version would have to know about tier headers, UN-RNKD
+   * dividers and section spacers — three things that differ per page and one of
+   * which does not exist on the shuffled page — and would be wrong in a
+   * different way on each. The rows know where they are.
+   */
+  const rowAt = (clientY: number): number => {
+    const rows = scroller.current?.querySelectorAll<HTMLElement>("[data-film-id]");
+    if (!rows) return -1;
+    for (const row of rows) {
+      const r = row.getBoundingClientRect();
+      if (clientY >= r.top && clientY <= r.bottom) {
+        return displayOrder.findIndex((f) => f.id === row.dataset.filmId);
+      }
+    }
+    return -1;
+  };
+
+  /** Long-press before a drag begins, in ms. */
+  const HOLD_MS = 380;
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+
+  /**
+   * Land the drag: write the evidence, move the rating if it crossed a
+   * boundary, and let everything downstream re-derive itself.
+   *
+   * Nothing here locks. A drag is the reader saying "this belongs about here for
+   * now", which is the same kind of claim a duel makes and none of the finality
+   * a lock carries — see the header of lib/reorder.ts.
+   */
+  const dropAt = (from: number, to: number) => {
+    const moved = displayOrder[from];
+    if (!moved || from === to || !log) return;
+
+    const rows = judgementsForMove(displayOrder, from, to);
+    if (rows.length === 0) return;
+
+    const nextLog = [...log, ...rows];
+    void appendJudgements(rows);
+    setLog(nextLog);
+
+    // The rating first, so the respread below files it in its NEW band.
+    const rating = ratingAfterMove(displayOrder, from, to);
+    const withRating = films.map((f) =>
+      f.id === moved.id && rating !== undefined ? { ...f, rating, score: seedScore(rating) } : f,
+    );
+
+    // Re-derived, not written by hand. The judgements are the input and the
+    // model works out the position, exactly as it does after a duel — which is
+    // what stops a drag and a duel disagreeing about what the evidence means.
+    const beliefs = beliefsFor(withRating, nextLog);
+    const touched = withRating.filter(
+      (f) => f.id === moved.id || f.rating === moved.rating || f.rating === rating,
+    );
+    onFilms?.(respreadFor(withRating, touched, beliefs, true));
+  };
+
+  /**
+   * The list exactly as it is drawn, best first.
+   *
+   * A drag is expressed as two positions in THIS array, which is what makes it
+   * work identically on every page: the tiered pages have headers and dividers
+   * between their rows and the shuffled page has neither, and none of that
+   * matters to an order of films.
+   */
+  // Not wrapped in `useMemo`: the React Compiler refused to preserve it and
+  // said so, and it is a flatMap over two values that are already memoised —
+  // sub-millisecond over a real library, and the compiler memoises it anyway.
+  const displayOrder: Film[] = flat
+    ? flat.map((r) => r.film)
+    : model.sections.flatMap((s) => [...s.placed.map((r) => r.film), ...s.unplaced]);
+
+  // Named by ID rather than by index, so the same two values drive the tiered
+  // pages and the flat one. An index would have to be counted through tier
+  // headers and UN-RNKD dividers on one page and not on the other.
+  const carriedId = drag?.id ?? null;
+  const landingId = drag ? (displayOrder[drag.to]?.id ?? null) : null;
+
   const jumpTo = (tier: Rating) => {
     setJumpOpen(false);
     const target = offsets.find((o) => o.tier === tier);
@@ -565,6 +693,20 @@ export default function ListScreen({
                 now the one every other chevron is drawn from — see `ChevronIcon`. */}
             <ChevronIcon open={jumpOpen} />
           </button>
+          {/* Only where a drag can actually do something. A read-only list has
+              nothing to unlock. */}
+          {onFilms && (
+            <button
+              onClick={() => setMoveLocked((v) => !v)}
+              aria-pressed={moveLocked}
+              aria-label="Allow locked rows to be dragged"
+              className={`absolute inset-y-1 right-11 flex items-center px-2 ${
+                moveLocked ? "text-gold" : "text-dim"
+              } active:scale-95`}
+            >
+              <LockIcon />
+            </button>
+          )}
           {jumpOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setJumpOpen(false)} />
@@ -597,6 +739,9 @@ export default function ListScreen({
         // overflow-x hidden as well as y: setting one axis to auto computes the
         // other to auto, and the pane mid-turn would be reachable sideways.
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6"
+        // `none` only while dragging: the browser must keep owning the scroll
+        // every other moment, or the list becomes unusable to get anywhere.
+        style={{ touchAction: drag ? "none" : undefined }}
         onTouchStart={(e) => {
           // Same guard as everywhere else. The list has no sideways strips today
           // and the rolodex proved what happens when one appears and the screen
@@ -604,10 +749,54 @@ export default function ListScreen({
           if (inShelf(e.target)) return (touch.current = null);
           const t = e.touches[0];
           touch.current = { x: t.clientX, y: t.clientY, axis: null };
+
+          // ── A drag begins as a HOLD, not as a touch ────────────────────
+          //
+          // Every row is already a button that opens the card, and the list is a
+          // tall scroller. A drag that started on contact would steal both. The
+          // hold is what separates "I am going somewhere" from "I mean this
+          // one", and it is the same gesture the poster long-press already
+          // teaches.
+          if (onFilms && !searching) {
+            const at = rowAt(t.clientY);
+            const row = displayOrder[at];
+            if (row && (moveLocked || !isHard(row))) {
+              holdTimer.current = setTimeout(() => {
+                holdTimer.current = null;
+                setDrag({ id: row.id, from: at, to: at, dy: 0 });
+                // A short buzz, where the device offers one: the row has left
+                // the list and nothing else on screen says so yet.
+                navigator.vibrate?.(12);
+              }, HOLD_MS);
+            }
+          }
         }}
         onTouchMove={(e) => {
           const from = touch.current;
+
+          // ── Dragging owns the gesture completely ──────────────────────────
+          //
+          // No page turn, no scroll, no axis test. Those all belong to a finger
+          // that is travelling somewhere; this one has already arrived.
+          if (drag) {
+            e.preventDefault();
+            const t = e.touches[0];
+            const to = rowAt(t.clientY);
+            setDrag((d) =>
+              d ? { ...d, dy: t.clientY - (from?.y ?? t.clientY), to: to === -1 ? d.to : to } : d,
+            );
+            return;
+          }
+
           if (!from || turning.current) return;
+          // Moving at all means this was a scroll or a swipe, not a hold.
+          if (
+            holdTimer.current &&
+            (Math.abs(e.touches[0].clientX - from.x) > 8 ||
+              Math.abs(e.touches[0].clientY - from.y) > 8)
+          ) {
+            cancelHold();
+          }
           if (from.axis === "x") {
             const dx = e.touches[0].clientX - from.x;
             // Resist only at the left end, where nothing is next door. The right
@@ -629,6 +818,12 @@ export default function ListScreen({
         onTouchEnd={(e) => {
           const from = touch.current;
           touch.current = null;
+          cancelHold();
+          if (drag) {
+            dropAt(drag.from, drag.to);
+            setDrag(null);
+            return;
+          }
           if (!from || from.axis !== "x" || turning.current) return;
           const dx = e.changedTouches[0].clientX - from.x;
           const landed = pageAfterSwipe(page, segments.length - 1, dx, e.currentTarget.clientWidth);
@@ -674,7 +869,7 @@ export default function ListScreen({
             </div>
           )
         ) : flat ? (
-          <FlatRows rows={flat} view={view} onInfo={onInfo} />
+          <FlatRows rows={flat} view={view} onInfo={onInfo} carried={carriedId} landing={landingId} />
         ) : (
           model.sections.map((s, i) => {
             const o = offsets[i];
@@ -684,7 +879,14 @@ export default function ListScreen({
               <section key={s.tier} data-tier={s.tier} style={{ height: o.height }}>
                 <TierRule stars={starsFor(s.tier)} count={s.total} />
                 {s.placed.map((r: RankedFilm) => (
-                  <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} />
+                  <Row
+                    key={r.film.id}
+                    film={r.film}
+                    rank={r.rank}
+                    onInfo={onInfo}
+                    carried={carriedId === r.film.id}
+                    markAbove={landingId === r.film.id}
+                  />
                 ))}
                 {s.unplaced.length > 0 && (
                   <div
@@ -813,21 +1015,42 @@ function Row({
   rank,
   onInfo,
   showStars,
+  carried,
+  markAbove,
 }: {
   film: Film;
   rank?: number;
   onInfo: (f: Film) => void;
   showStars?: boolean;
+  /** This row is the one under the finger. */
+  carried?: boolean;
+  /** The dragged row would land here — draw the line above this one. */
+  markAbove?: boolean;
 }) {
   return (
     <button
       data-film-id={film.id}
+      // ── What a drag looks like ────────────────────────────────────────
+      //
+      // The carried row lifts and everything else stays exactly where it is,
+      // with a single line marking where it would land. Live-reordering the
+      // rows underneath was the alternative and is a bad trade here: the list
+      // is virtualised with fixed heights and paint containment, so every row
+      // that moved would reflow a section, and 800 of them would do it while a
+      // finger was down.
+      //
+      // A line is also more honest about what is happening. Nothing has been
+      // decided until the finger lifts.
+      style={{
+        height: ROW_H,
+        ...(carried
+          ? { opacity: 0.9, transform: "scale(1.02)", boxShadow: "0 10px 30px var(--shadow)" }
+          : null),
+        ...(markAbove ? { borderTop: "2px solid var(--gold)" } : null),
+      }}
       // Every row carries it; the tour points at whichever is first on screen.
       data-tour="list-row"
       onClick={() => onInfo(film)}
-      // A fixed height is load-bearing: the section spacers are computed from it,
-      // so a row that measured differently would drift the scroll positions.
-      style={{ height: ROW_H }}
       className="list-row flex w-full items-center gap-3.5 text-left active:scale-[0.99]"
     >
       {film.poster ? (

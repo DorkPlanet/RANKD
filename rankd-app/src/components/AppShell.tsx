@@ -674,6 +674,29 @@ export default function AppShell() {
     });
 
   /**
+   * Land a reorder from the list.
+   *
+   * ── Why this MERGES rather than replaces ──────────────────────────────────
+   *
+   * The list is handed `library`, which is `state.films` with guests filtered
+   * out — so writing what it hands back would silently drop every borrowed film
+   * from a person run that happened to be open. `saveFilms` strips guests on the
+   * way to storage anyway, which means the loss would be invisible until the run
+   * came back and found its pile empty.
+   *
+   * Merging by id keeps them. The list is authoritative about the films it can
+   * see and says nothing about the ones it cannot.
+   */
+  const reorder = (next: Film[]) =>
+    setState((s) => {
+      if (!s) return s;
+      const byId = new Map(next.map((f) => [f.id, f]));
+      const films = s.films.map((f) => byId.get(f.id) ?? f);
+      saveFilms(films);
+      return { ...s, films };
+    });
+
+  /**
    * Keep the record, swap the artwork, and make it stick.
    *
    * Deliberately NOT routed through `withMeta`. That function's job is to fold a
@@ -1056,6 +1079,7 @@ export default function AppShell() {
           // state to land on is the one nearest it.
           enterAtEnd={slide?.dir === -1}
           onPoster={setMeta}
+          onFilms={reorder}
           logging={overlay?.kind === "log"}
           onToggleLog={toggleLog}
           // A tutorial is a held moment. Nothing behind it may move.

@@ -46,7 +46,7 @@ export type Outcome = "a" | "b" | "draw";
 // backup files, and they are real judgements about real films. Dropping the
 // value would make them decode as something they were not, or fail to decode at
 // all. An evidence log that rewrites its own history is not evidence.
-export type LogMode = "koth" | "spotlight" | "shuffle" | "promotion";
+export type LogMode = "koth" | "spotlight" | "shuffle" | "promotion" | "drag";
 
 export interface Judgement {
   /** Unique per row, so a re-render or a re-entrant drain can never double-write it. */
@@ -115,8 +115,20 @@ const MODE_CODE: Record<LogMode, string> = {
   spotlight: "s",
   shuffle: "h",
   promotion: "p",
+  // Dragging a row up or down the list. Its own mode because it is its own kind
+  // of claim: a duel is an answer to a question the app asked, and a drag is a
+  // statement the reader volunteered. Worth being able to tell apart later —
+  // and, as the note above says, it costs one character and cannot be recovered
+  // if it is not kept now.
+  drag: "d",
 };
-const MODE_OF: Record<string, LogMode> = { k: "koth", s: "spotlight", h: "shuffle", p: "promotion" };
+const MODE_OF: Record<string, LogMode> = {
+  k: "koth",
+  s: "spotlight",
+  h: "shuffle",
+  p: "promotion",
+  d: "drag",
+};
 
 function encode(js: readonly Judgement[], tombstones: readonly string[] = []): Stored {
   const f: string[] = [];
