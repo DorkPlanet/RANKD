@@ -1958,7 +1958,7 @@ function ModePanel({
       <StartButton label={`Start · ${plural(count)}`} onClick={() => onKoth(tier)} disabled={!playable} />
       {!playable && (
         <p className="mt-2 text-center text-sub text-gold">
-          Only {plural(count)} here — add a tier, or clear the selection.
+          Only {plural(count)} in range — widen it or pick another tier.
         </p>
       )}
       <BackRow onClick={() => setChosen(null)} />
@@ -2340,7 +2340,7 @@ function ShuffleSetup({
       />
       {!playable && (
         <p className="mt-2 text-center text-sub text-gold">
-          Only {plural(count)} in range — widen it or pick another tier.
+          Only {plural(count)} here — add a tier, or clear the selection.
         </p>
       )}
       <BackRow onClick={onBack} />
