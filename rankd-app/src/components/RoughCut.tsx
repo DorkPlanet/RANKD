@@ -29,6 +29,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { applyRoughCut, BUCKETS, roughCutPool, type Bucket } from "@/lib/roughCut";
+import { takePoint } from "@/lib/restore";
 import { clearRoughCut, loadRoughCut, saveRoughCut } from "@/lib/roughCutRun";
 import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
@@ -245,10 +246,34 @@ export default function RoughCut({
     if (b && recent[b].length < 2) recent[b].push(f);
   }
 
+  /**
+   * Apply a pass, having first recorded where the tier stood.
+   *
+   * ── Why one point per VISIT and not one per write ──────────────────────
+   *
+   * There are four ways out of this screen and every one of them applies the
+   * pass: Done, throw-it-away, climbing a pile, refining a pile, and leaving by
+   * the nav. Taking a point at each would fill a five-deep stack with one
+   * sitting of Rough Cut and push out the reset you actually wanted back.
+   *
+   * A pass is one operation from the outside — you opened a tier, you dealt it,
+   * the tier is now in thirds — so one point covers it, and it is taken lazily
+   * at the first write rather than on mount so that opening the screen and
+   * backing straight out leaves nothing behind.
+   */
+  const taken = useRef(false);
+  const apply = (picked: Map<string, Bucket>) => {
+    if (!taken.current) {
+      taken.current = true;
+      takePoint(`Rough Cut on ${starsFor(tier)}`, films);
+    }
+    return applyRoughCut(films, tier, picked);
+  };
+
   // Applied against the CURRENT library rather than the one captured at mount,
   // so anything the credits sweep filled in while you were placing survives.
   const commit = (picked: Map<string, Bucket>) => {
-    onFilms(applyRoughCut(films, tier, picked));
+    onFilms(apply(picked));
     // Done and Throw it away both END the pass, so neither may leave a resume
     // behind — the first has already written its answers into the library and
     // the second means you did not want them. Cleared explicitly rather than
@@ -327,7 +352,7 @@ export default function RoughCut({
    * throw the whole pass away.
    */
   const rankPile = (bucket: Bucket) => {
-    const applied = applyRoughCut(films, tier, choices);
+    const applied = apply(choices);
     const ids = [...choices.entries()].filter(([, b]) => b === bucket).map(([id]) => id);
     clearRoughCut();
     onRankPile(applied, ids);
@@ -342,7 +367,7 @@ export default function RoughCut({
    * order and throw the first pass away.
    */
   const refine = (bucket: Bucket) => {
-    const applied = applyRoughCut(films, tier, choices);
+    const applied = apply(choices);
     onFilms(applied);
     const keep = new Set(
       [...choices.entries()].filter(([, b]) => b === bucket).map(([id]) => id),
@@ -365,7 +390,7 @@ export default function RoughCut({
    * because you tapped the list would be a worse trap than the one being fixed.
    */
   const leaveTo = (to: "modes" | "list" | "profile") => {
-    onFilms(applyRoughCut(films, tier, choices));
+    onFilms(apply(choices));
     onNavigate(to);
   };
 

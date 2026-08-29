@@ -21,6 +21,15 @@ import { resetRanking, wipeAccount, wipeEverything } from "@/lib/reset";
 import { markRankingCleared } from "@/lib/cleared";
 import { fetchAccount } from "@/lib/account";
 import { withdrawSoftLocks } from "@/lib/shuffle";
+import {
+  applyPoint,
+  dropPoint,
+  loadPoints,
+  missingFrom,
+  takePoint,
+  type RestorePoint,
+} from "@/lib/restore";
+import { shortAgo } from "@/lib/social/feed";
 import type { Film } from "@/lib/types";
 import { Account } from "./Account";
 import { Visibility } from "./Visibility";
@@ -407,18 +416,107 @@ function InstallRow({ open, onToggle }: { open: boolean; onToggle: () => void })
   );
 }
 
+/**
+ * The way back from the buttons underneath it.
+ *
+ * Sits ABOVE the resets on purpose. Everything below this destroys something,
+ * and the first thing somebody arriving at a screen full of red buttons should
+ * see is the one that puts things back — not after they have read past three
+ * ways to lose their work.
+ *
+ * Renders nothing when there is nothing to undo, which is the common case: this
+ * is a section that appears when it has something to say, rather than an empty
+ * shelf explaining that it is empty.
+ */
+function UndoThat({
+  films,
+  points,
+  onPoints,
+  onReset,
+}: {
+  films: Film[];
+  /**
+   * Held by the PARENT, not read from storage here.
+   *
+   * The buttons that create a point are the ones directly below this list, so a
+   * component that read storage on mount showed an empty section, and the undo
+   * for the reset you had just pressed did not appear until you left Settings
+   * and came back. Which is the one moment it exists for.
+   */
+  points: RestorePoint[];
+  onPoints: (points: RestorePoint[]) => void;
+  onReset: (films: Film[]) => void;
+}) {
+  const [undone, setUndone] = useState<string | null>(null);
+
+  if (points.length === 0) return null;
+
+  return (
+    <div className="mb-5">
+      <div className="mb-1.5 text-label font-bold uppercase tracking-[0.14em] text-dim">Undo that</div>
+      {points.map((p) => {
+        // Said, not fixed. A restore point holds placements and no titles, so a
+        // film removed since cannot come back and the row has to admit it
+        // rather than quietly restoring less than the sentence promises.
+        const gone = missingFrom(p, films);
+        return (
+          <button
+            key={p.id}
+            onClick={() => {
+              // Undoing is itself a change to every placement in the library,
+              // so it gets a point of its own. Without one the escape hatch
+              // would be the one action in here with no way back out.
+              takePoint(`Undid: ${p.label}`, films);
+              onReset(applyPoint(p, films));
+              dropPoint(p.id);
+              onPoints(loadPoints());
+              setUndone(p.label);
+            }}
+            className="mb-1.5 flex w-full items-center justify-between gap-3 rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-body text-text-hi">{p.label}</span>
+              <span className="block text-sub leading-snug text-dim">
+                Puts {count(p.films.length)} back where they were
+                {gone > 0 && `, except ${gone.toLocaleString()} you have removed since`}.
+              </span>
+            </span>
+            <span className="flex-shrink-0 text-label font-bold uppercase tracking-[0.14em] text-dim">
+              {shortAgo(new Date(p.at).toISOString())}
+            </span>
+          </button>
+        );
+      })}
+      {undone && (
+        <p className="mt-1 text-center text-sub text-gold">
+          Undone: {undone}. Stars and positions are back; any duels that were
+          erased are not.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // WITHDRAW keeps your calls and drops the model's. Cheap, and it comes back as
 // you play, so no confirm.
 //
 // START AGAIN also burns the evidence log, and that half is not optional:
 // beliefs are fitted from the log, so a reset that spared it would refill the
-// list with the order you were leaving (see lib/reset.ts). Only irreversible
-// button in the app — it asks twice and names the number.
+// list with the order you were leaving (see lib/reset.ts). It asks twice and
+// names the number.
+//
+// Both now take a restore point first, so the PLACEMENTS can come back — see
+// `UndoThat` above. The duels cannot: a restore point carries four fields per
+// film and the log is not among them. That is why the warning still says the
+// erase cannot be undone, and why it is still true of the half that matters.
 //
 // Neither touches films or star ratings.
 function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]) => void }) {
   const [arming, setArming] = useState(false);
   const [wiping, setWiping] = useState(false);
+  // Every button below that takes a point refreshes this, so the way back
+  // appears the moment the thing it undoes has happened.
+  const [points, setPoints] = useState<RestorePoint[]>(() => loadPoints());
   const [duels, setDuels] = useState(0);
   // Signed in changes what the second tap is agreeing to: the wipe reaches the
   // account, which means every other device the user has. The copy has to say
@@ -436,6 +534,8 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
 
   return (
     <>
+      <UndoThat films={films} points={points} onPoints={setPoints} onReset={onReset} />
+
       <p className="mb-3 text-sub text-dim">Your {lex().many} and stars are kept. Only the ranking goes.</p>
 
       {soft > 0 && (
@@ -443,6 +543,10 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
           wide
           className="mb-2"
           onClick={() => {
+            // Before, not after. The point has to describe the library the
+            // button is about to rewrite.
+            takePoint(`Dropped ${soft.toLocaleString()} Fast Shuffle placed`, films);
+            setPoints(loadPoints());
             onReset(withdrawSoftLocks(films));
             setArming(false);
           }}
@@ -473,6 +577,11 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
               danger
               className="flex-1"
               onClick={() => {
+                // The placements can come back; the duels cannot. A restore
+                // point holds four fields per film and the log is not among
+                // them, which is why the warning above still says what it says.
+                takePoint("Cleared the ranking", films);
+                setPoints(loadPoints());
                 // Log first: if the write below fails the evidence is already
                 // gone and a retry finishes the job. The other order can leave a
                 // library with no placements and a log that re-places it.

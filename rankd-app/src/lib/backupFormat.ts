@@ -132,6 +132,12 @@ export const FILE_KEYS = FILE_3;
 //    ephemeral device state, and a backup carries what you decided rather than
 //    what you had not decided yet. Nobody wants a half-finished duel following
 //    them onto another phone.
+//  · `rankd-restore-v1` — the undo stack: the last few placements-only
+//    snapshots, taken before a reset or a Rough Cut pass. A record of what THIS
+//    device did in the last few minutes. Merging two devices’ stacks has no
+//    correct answer, and restoring one from a FILE would offer to undo an
+//    operation that happened on another machine, against a library that has
+//    moved on since. See lib/restore.ts.
 //  · `rankd-sync-v1` — sync bookkeeping about THIS browser. Carrying one
 //    device's marker to another would make the second believe it had already
 //    pushed work it has never seen.
@@ -165,6 +171,9 @@ export const FILE_KEYS = FILE_3;
 //   `rankd-lists-v1`    lists.ts      saved rankings (file set only; the wire
 //                                     syncs these as their own rows)
 //   `rankd-profile-v1`  profile.ts    name, bio, banner, pinned rankings
+//
+// UNDO — device-local, in neither set.
+//   `rankd-restore-v1`  restore.ts    placements before the last few big changes
 //
 // RUN STATE — resumable, device-local, in neither set.
 //   `rankd-run-v1`       runs.ts        an in-progress tier climb
