@@ -92,7 +92,12 @@ describe("metaOf", () => {
         imageLinks: { thumbnail: "http://books.google.com/books/content?id=x&zoom=5&edge=curl" },
       }),
     );
-    expect(m.poster).toBe("https://covers.openlibrary.org/b/isbn/9780441013593-L.jpg");
+    // `default=false` is not decoration: without it a missing cover comes back
+    // as a 200 holding a 43-byte blank, which every check in the app treats as
+    // real artwork. See `noBlanks`.
+    expect(m.poster).toBe(
+      "https://covers.openlibrary.org/b/isbn/9780441013593-L.jpg?default=false",
+    );
     expect(m.isbn).toBe("9780441013593");
   });
 

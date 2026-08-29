@@ -74,12 +74,20 @@ describe("parseGoodreadsCsv", () => {
     });
   });
 
-  it("gives every book a cover with no metadata request at all", () => {
+  it("gives every book a head start on a cover, with no metadata request", () => {
     // The reason this parser earns its place on a deployment with no Google
     // Books key: the ISBN *is* the cover URL, so an import has artwork the
     // instant it lands.
+    //
+    // A head start rather than an answer. It is UNVERIFIED — checking 400 of
+    // them from a phone mid-import is not worth the wait — so `default=false`
+    // is what makes the guess fail visibly when it is wrong, and the sweep's
+    // `coverFor` pass is what replaces it. See `needsMeta` in lib/meta.ts for
+    // how an already-imported book gets that pass.
     const { films } = parseGoodreadsCsv(csv(row()));
-    expect(films[0].poster).toBe("https://covers.openlibrary.org/b/isbn/9780441013593-L.jpg");
+    expect(films[0].poster).toBe(
+      "https://covers.openlibrary.org/b/isbn/9780441013593-L.jpg?default=false",
+    );
   });
 
   it("strips the Excel armour off the ISBN", () => {

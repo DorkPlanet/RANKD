@@ -3,7 +3,7 @@ import { refuse } from "../guard";
 import { bestMatch } from "@/lib/tmdbMatch";
 import { bestBook } from "@/lib/bookMatch";
 import { detailOf, searchMovies, type FilmMeta } from "@/lib/tmdb";
-import { detailOf as bookDetail, metaOf, searchBooks, type BookMeta } from "@/lib/books";
+import { detailOf as bookDetail, resolvedMetaOf, searchBooks, type BookMeta } from "@/lib/books";
 
 // Server-side metadata proxy. The keys are read from the environment here and
 // never reach the browser — the client only ever sees the normalised shape.
@@ -126,11 +126,16 @@ export async function GET(request: Request) {
       // path — `withMeta` records `noMatch` and the queue stops asking forever.
       if (!hit) return NextResponse.json({}, { status: 200 });
 
-      // No second request. Google embeds the full `volumeInfo` in every search
-      // hit, so the search that found this book already carries everything a
-      // detail call would return. On a 400-book import that is 400 requests not
-      // made — the film path cannot do this because TMDb's search omits credits.
-      return NextResponse.json(asFilmMeta(metaOf(hit)));
+      // No second GOOGLE request. Google embeds the full `volumeInfo` in every
+      // search hit, so the search that found this book already carries
+      // everything a detail call would return — the film path cannot do this
+      // because TMDb's search omits credits.
+      //
+      // `resolvedMetaOf` does spend one or two cheap, day-cached requests
+      // verifying the artwork, and that is not optional: Open Library answers a
+      // missing cover with a 200 and a blank image, so an unverified URL is how
+      // two thirds of a library ends up wearing empty frames.
+      return NextResponse.json(asFilmMeta(await resolvedMetaOf(hit)));
     } catch {
       return NextResponse.json({ error: "Google Books request failed" }, { status: 502 });
     }

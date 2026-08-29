@@ -135,7 +135,19 @@ export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch && !f.p
 // that medium can actually supply. Artwork and the maker are the two both have.
 const wanted = (): ((f: Film) => boolean) =>
   currentMedium() === "book"
-    ? (f) => !f.poster || !f.director || !f.genres
+    ? // `bookId` is the one that lets an ALREADY-IMPORTED book heal.
+      //
+      // A Goodreads import fills in the title, the author and a poster URL
+      // built from the ISBN, and for most books that URL renders as a blank —
+      // Open Library serves a 1x1 GIF with a 200 for a cover it does not have.
+      // Every other test here passes on such a book, so it would never be asked
+      // about again and would wear an empty frame permanently.
+      //
+      // Nothing but a real metadata fetch sets `bookId`, so requiring it means
+      // every imported book gets exactly one pass through `coverFor` — which
+      // verifies the artwork and replaces it when it is missing — and then
+      // settles. See `coverFor` in lib/books.ts.
+      (f) => !f.poster || !f.director || !f.genres || !f.bookId
     : (f) => !f.poster || !f.director || !f.genres || !f.keywords || !f.countries;
 
 export const needsMeta = (f: Film): boolean => !f.noMatch && !f.pinnedMeta && wanted()(f);

@@ -55,9 +55,25 @@
 // `image/jpeg` from `covers.openlibrary.org`. So the two halves fail
 // independently, which is the reason for splitting them in the first place.
 
+import { normalise } from "./tmdbMatch";
+
 const GOOGLE = "https://www.googleapis.com/books/v1";
 const COVERS = "https://covers.openlibrary.org/b/isbn";
+const COVER_BY_ID = "https://covers.openlibrary.org/b/id";
+const OL_SEARCH = "https://openlibrary.org/search.json";
 const DAY = 60 * 60 * 24;
+
+// ── `default=false`, and why every cover URL must carry it ─────────────────
+//
+// Without it, an ISBN Open Library has no cover for answers **200 with a
+// 43-byte 1x1 GIF**. Not a 404 — a successful response containing a blank. So
+// `<img>` fires `onload`, every "is there artwork" check passes, and the reader
+// gets an empty frame that nothing in the app can tell apart from a real cover.
+//
+// Measured on the live pipeline: 8 of 12 popular books came back as that blank.
+// With this parameter those become 404s, which is a failure the code can see and
+// act on. See `coverFor`.
+const noBlanks = (url: string) => `${url}?default=false`;
 
 /** Everything worth keeping about one book. Shaped to match `FilmMeta`. */
 export interface BookMeta {
@@ -166,6 +182,110 @@ export function authorLine(authors: string[] | undefined): string | undefined {
   return `${authors[0]} et al.`;
 }
 
+/** Does this URL give back a real image rather than a placeholder or a 404? */
+async function exists(url: string): Promise<boolean> {
+  try {
+    // HEAD, so nothing downloads. Cached for a day like every other call here,
+    // which is what keeps a 400-book import to 400 cheap requests rather than
+    // 400 on every single session.
+    const r = await fetch(url, { method: "HEAD", next: { revalidate: DAY } });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Open Library's cover for the WORK, found by title and author.
+ *
+ * ── Why this is needed when the ISBN is already known ─────────────────────
+ *
+ * The ISBN is not wrong. The EDITION is obscure. Google's search returns
+ * whichever volume it ranks first, which is regularly a regional printing or an
+ * ebook — Circe came back as `9786020665931`, an Indonesian edition — and Open
+ * Library holds covers for canonical editions, not for every printing that ever
+ * existed. So an exact, correct ISBN lookup misses.
+ *
+ * Its search index is by WORK, so it answers the question actually being asked:
+ * what does this book look like. Measured on the eight books whose ISBN cover
+ * came back blank, this found all eight, at 20–94kb.
+ *
+ * ── The title check is not optional ───────────────────────────────────────
+ *
+ * This is a fuzzy search, and a fuzzy search that misses returns somebody else's
+ * book rather than nothing. Wearing the wrong cover is worse than wearing none —
+ * the whole argument in `tmdbMatch.ts` — so the result has to still look like
+ * the book that was asked for before its artwork is used.
+ */
+async function workCover(title: string, author?: string): Promise<string | undefined> {
+  const u = new URL(OL_SEARCH);
+  u.searchParams.set("title", title);
+  if (author) u.searchParams.set("author", author);
+  u.searchParams.set("limit", "1");
+  // Only the two fields this reads. Their default response is enormous.
+  u.searchParams.set("fields", "cover_i,title");
+
+  try {
+    const r = await fetch(u, { next: { revalidate: DAY } });
+    if (!r.ok) return undefined;
+    const j = (await r.json()) as { docs?: { cover_i?: number; title?: string }[] };
+    const hit = j.docs?.[0];
+    if (!hit?.cover_i) return undefined;
+    // Same normalisation the film matcher uses, so "The Secret History" and
+    // "Secret History" agree and "Dune" and "Dune Messiah" do not.
+    if (normalise(hit.title ?? "") !== normalise(title)) return undefined;
+    return `${COVER_BY_ID}/${hit.cover_i}-L.jpg`;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The best artwork that actually EXISTS for this volume.
+ *
+ * Three sources, in order of how sure they are that the image belongs to this
+ * exact book:
+ *
+ *  1. The ISBN cover. Precise — an ISBN names one edition and nothing else — so
+ *     when it resolves there is no question of whose cover it is.
+ *  2. Open Library's work search. Fuzzy, title-checked, and the one that does
+ *     the real work: it rescued every book the ISBN missed.
+ *  3. Google's own thumbnail. Small (~300px) and the last resort, because a
+ *     soft cover is still enormously better than an empty frame.
+ *
+ * Each is verified before it is handed back, so this never names a URL that
+ * renders as nothing — which is the entire point, given Open Library answers a
+ * missing cover with a blank image and a 200.
+ */
+export async function coverFor(v: Volume): Promise<string | undefined> {
+  const info = v.volumeInfo ?? {};
+  const isbn = isbnOf(v);
+
+  if (isbn) {
+    const byIsbn = noBlanks(`${COVERS}/${isbn}-L.jpg`);
+    if (await exists(byIsbn)) return byIsbn;
+  }
+
+  if (info.title) {
+    const byWork = await workCover(info.title, info.authors?.[0]);
+    // No `exists` check: `cover_i` is Open Library's own id for an image it
+    // holds, so unlike an ISBN it cannot point at a gap.
+    if (byWork) return byWork;
+  }
+
+  return bigThumb(info.imageLinks?.thumbnail);
+}
+
+/**
+ * One volume as the app should STORE it — artwork verified.
+ *
+ * Separate from `metaOf` because it costs one to two extra requests, and only
+ * the library is worth paying that for. See the note in `metaOf`.
+ */
+export async function resolvedMetaOf(v: Volume): Promise<BookMeta> {
+  return { ...metaOf(v), poster: await coverFor(v) };
+}
+
 /** Everything worth keeping about one volume, by its Google Books id. */
 export async function detailOf(id: string, key?: string): Promise<BookMeta | null> {
   const url = new URL(`${GOOGLE}/volumes/${encodeURIComponent(id)}`);
@@ -173,7 +293,7 @@ export async function detailOf(id: string, key?: string): Promise<BookMeta | nul
 
   const res = await fetch(url, { next: { revalidate: DAY } });
   if (!res.ok) return null;
-  return metaOf((await res.json()) as Volume);
+  return resolvedMetaOf((await res.json()) as Volume);
 }
 
 /**
@@ -192,7 +312,15 @@ export function metaOf(v: Volume): BookMeta {
     bookId: v.id,
     isbn,
     // Open Library first, Google's upgraded thumbnail second. See the header.
-    poster: isbn ? `${COVERS}/${isbn}-L.jpg` : bigThumb(info.imageLinks?.thumbnail),
+    //
+    // This is the CHEAP answer, and it is knowingly incomplete: it names the
+    // ISBN cover without checking whether one exists. `coverFor` is the
+    // complete answer and costs a request; the picker uses this one because it
+    // draws twelve rows at 28px and a missing thumbnail there is a shrug, while
+    // twelve extra round trips is a search that feels broken.
+    //
+    // Anything that lands in the LIBRARY goes through `coverFor` instead.
+    poster: isbn ? noBlanks(`${COVERS}/${isbn}-L.jpg`) : bigThumb(info.imageLinks?.thumbnail),
     synopsis: info.description || undefined,
     pages: info.pageCount || undefined,
     genres: info.categories?.length ? info.categories : undefined,

@@ -238,7 +238,18 @@ export function parseGoodreadsCsv(text: string): ImportResult {
       // the ISBN is the URL. So an imported library has artwork the moment it
       // lands, before the sweep has asked anything — and it still has artwork on
       // a deployment with no Google Books key, where the sweep can ask nothing.
-      ...(isbn ? { isbn, poster: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg` } : {}),
+      // `default=false` so a cover Open Library does not have comes back as a
+      // 404 rather than as a 200 with a blank 1x1 GIF. The blank is worse than
+      // nothing: it renders as an empty frame that no check in the app can tell
+      // apart from real artwork.
+      //
+      // This is still the UNVERIFIED guess — checking 400 of them from a phone
+      // during an import is not worth the wait — so it is a head start rather
+      // than an answer. The credits sweep runs `coverFor` over every book
+      // afterwards and replaces the ones that turned out to be missing.
+      ...(isbn
+        ? { isbn, poster: `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false` }
+        : {}),
       ...(Number.isFinite(pages) && pages > 0 ? { runtime: pages } : {}),
     });
   }
