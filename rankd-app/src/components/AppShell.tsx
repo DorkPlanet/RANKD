@@ -1099,9 +1099,20 @@ export default function AppShell() {
                     // mean the same thing, and only one of them costs bytes in
                     // a store that shares a 5MB budget with the log.
                     spoiler: draft.spoiler ? true : undefined,
-                    // Unpublishing clears the marker, which is what makes the
-                    // take disappear from the next push. See `syncTakes`.
-                    take: draft.publish && rank > 0 ? { at, rank } : undefined,
+                    // ── Publishing is withdrawn, so this always clears ────────
+                    //
+                    // The sheet no longer offers "Share this" — see its header
+                    // for why — so there is nothing that can set this, and any
+                    // take made while the switch was briefly live is retired the
+                    // next time its film is saved. That is the honest end state:
+                    // nothing may sit marked as published while there is nowhere
+                    // for a published take to appear.
+                    //
+                    // `takesFrom` then finds nothing, `syncTakes` deletes any
+                    // stored rows on the next push, and the whole path stays
+                    // exercised rather than rotting. Restoring is this line and
+                    // the two switches, once a profile has a shelf.
+                    take: undefined,
                   }
                 : f,
             );

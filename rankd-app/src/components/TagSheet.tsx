@@ -38,7 +38,7 @@
 
 import { useState } from "react";
 
-import { Eyebrow, FIELD, PrimaryButton, QuietButton, SettingRow, Sheet } from "./ui";
+import { Eyebrow, FIELD, PrimaryButton, QuietButton, Sheet } from "./ui";
 import {
   cleanNote,
   cleanScene,
@@ -49,7 +49,6 @@ import {
   TAGS,
   type Tag,
 } from "@/lib/tags";
-import { isHard } from "@/lib/lock";
 import type { Film } from "@/lib/types";
 
 /** What the sheet hands back. One object, because it is one decision. */
@@ -58,8 +57,6 @@ export interface TagDraft {
   note: string | undefined;
   scene: string | undefined;
   spoiler: boolean;
-  /** Publish it, or keep it to yourself. */
-  publish: boolean;
 }
 
 export function TagSheet({
@@ -74,8 +71,6 @@ export function TagSheet({
   const [tags, setTags] = useState<Tag[]>(() => cleanTags(film.tags));
   const [note, setNote] = useState(film.note ?? "");
   const [scene, setScene] = useState(film.scene ?? "");
-  const [spoiler, setSpoiler] = useState(film.spoiler ?? false);
-  const [publish, setPublish] = useState(film.take !== undefined);
 
   const toggle = (tag: Tag) => {
     setTags((current) =>
@@ -92,20 +87,17 @@ export function TagSheet({
 
   const cleanedNote = cleanNote(note);
   const cleanedScene = cleanScene(scene);
-  // Read off what is on screen rather than off `film`, which is this sheet's
-  // input and is one save behind everything the person has just typed.
-  const said = tags.length > 0 || cleanedNote !== undefined || cleanedScene !== undefined;
-  // The words a spoiler warning would actually be covering.
-  const hideable = cleanedNote !== undefined || cleanedScene !== undefined;
-  const locked = isHard(film);
 
   const done = () => {
     onSave({
       tags,
       note: cleanedNote,
       scene: cleanedScene,
-      spoiler: spoiler && hideable,
-      publish: publish && locked && said,
+      // Carried through untouched rather than dropped. Nothing on this sheet can
+      // change it while sharing is withdrawn, and destroying a flag somebody set
+      // before it was withdrawn would be a data loss nobody asked for. It is
+      // still what marks a scene on the film card.
+      spoiler: film.spoiler === true && (cleanedNote !== undefined || cleanedScene !== undefined),
     });
     onClose();
   };
@@ -182,54 +174,26 @@ export function TagSheet({
           <div className="mt-1 text-label text-dim">{NOTE_MAX - note.length} left</div>
         )}
 
-        {/* ── Both rows are ALWAYS here, and that is a correction ─────────────
-            They used to appear only once you had typed something, on the
-            reasoning that a spoiler warning over two empty boxes is a warning
-            about nothing. True, and beside the point: it also meant that on a
-            freshly locked film — which is when this sheet opens — neither
-            control existed, so the one thing the whole feature is for was
-            invisible until you had already done something else. Reported from a
-            phone, 28 Aug 2026: "I can't see the two options."
+        {/* ── Sharing and the spoiler switch are WITHDRAWN, together ──────────
+            Both shipped here, and both came straight back out on 28 Aug 2026
+            with the Activity screen (see `RIBBON` in lib/ribbon.ts).
 
-            So they are always drawn, and DISABLED until they have something to
-            act on, with the blurb saying what is missing. A control you can see
-            and cannot use yet teaches what to do; a control that is not there
-            teaches nothing. Boxed, because two of them standing alone in a sheet
-            need an edge to read as controls rather than as prose. */}
-        <SettingRow
-          boxed
-          className="mt-6"
-          title="Contains a spoiler"
-          blurb={
-            hideable
-              ? "Your scene and your line stay hidden until somebody taps to read them."
-              : "Write a scene or a line and you can hide it behind a tap."
-          }
-          on={spoiler && hideable}
-          disabled={!hideable}
-          onToggle={() => setSpoiler((v) => !v)}
-        />
+            "Share this" said "It goes on your profile, where people can read it
+            and reply", and not one clause of that was true: there is no takes
+            shelf on a profile, comments were never wired up, and the feed is
+            gone. The switch's only effect was invisible. That is precisely the
+            pattern being retired, so it is not shipping while it is a promise.
 
-        {/* Publishing is a different decision from writing, so it is off unless
-            this take is already published — the answer for anybody who does not
-            read the row is the private one. */}
-        <SettingRow
-          boxed
-          className="mt-3"
-          title="Share this"
-          blurb={
-            !locked
-              ? // The rule is one of the app's own: you get to say why a film is
-                // somewhere once you have committed to where.
-                "Lock this film first, then you can share what you wrote."
-              : said
-                ? "It goes on your profile, where people can read it and reply."
-                : "Pick a tag or write a line first."
-          }
-          on={publish && locked && said}
-          disabled={!locked || !said}
-          onToggle={() => setPublish((v) => !v)}
-        />
+            The spoiler switch went with it rather than staying behind, because
+            it only means anything once somebody else can read the words. Hiding
+            your own scene from yourself is not a feature, and leaving it would
+            be the same half-promise one layer down.
+
+            NOTHING BELOW THEM WAS TOUCHED. `Film.take`, `takesFrom`,
+            `syncTakes`, the `take` table and its migration are all still here
+            and still correct, so restoring this is these two rows plus the
+            `take` line in `AppShell`'s `onSave` — once there is a shelf for a
+            take to land on. */}
 
         {/* `text-bg` navy was the ink here — the only gold button in the app not
             using `--gold-ink`, so this one read a shade colder than every other
