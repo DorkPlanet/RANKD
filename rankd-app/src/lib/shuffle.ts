@@ -22,7 +22,7 @@
 import { confidenceFromSpread, type Belief } from "./bayes";
 import { seedOf } from "./beliefs";
 import { isHard, isPlaced, isSoft } from "./lock";
-import { tierMax, tierMin } from "./tiers";
+import { seedScore, tierMax, tierMin, type Rating } from "./tiers";
 import type { Film } from "./types";
 
 /**
@@ -246,6 +246,96 @@ export function respreadFor(
   let out = [...films];
   for (const tier of tiers) out = respreadTier(out, tier, beliefs, movePlaced);
   return out;
+}
+
+/**
+ * The rating the evidence would have given this film.
+ *
+ * `seedOf` is `rating * 2`, so the belief scale IS the star scale doubled: 4★
+ * seeds at 8.0, 3.5★ at 7.0. Inverting that is the whole rule — the tier whose
+ * seed the belief now sits nearest — and it needs no threshold of its own,
+ * which is the point. A constant invented here would be a second opinion about
+ * where a tier begins, and `tiers.ts` already owns that.
+ *
+ * Clamped to the real scale: a run of losses can push a mean below 1.0, and 0★
+ * is not a rating anybody can give.
+ */
+export function ratingFromBelief(mean: number): Rating {
+  const nearest = Math.round(mean) / 2;
+  return Math.min(5, Math.max(0.5, nearest)) as Rating;
+}
+
+/**
+ * Fix the ratings the evidence says are wrong.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * The user's words: "the original idea for this was to rank all the things yes
+ * but also be able to move them easily when placed wrong in the first place."
+ *
+ * An imported star rating is a FIRST GUESS. It came from Letterboxd or
+ * Goodreads, often years ago, and it is frequently wrong — but until now
+ * nothing in the app could correct it. Tier bands never overlap
+ * (5★ = 9001..10000, 4★ = 7001..8000), so however one-sided the duels were, a
+ * 4★ could never climb past the worst 5★. The evidence had nowhere to go.
+ *
+ * ── Why the RATING moves and the band does not ─────────────────────────────
+ *
+ * The obvious alternative is to let scores leave their band. That breaks the
+ * invariant `list.ts` states plainly — "tier bands never overlap, so a plain
+ * score sort is already tier-correct" — and the tier counts, the profile and
+ * the share cards all inherit it.
+ *
+ * Changing the rating is the honest move anyway. The claim being made is not
+ * "this 3★ outranks your 4★s"; it is "this was never a 3★".
+ *
+ * ── What it refuses to touch ───────────────────────────────────────────────
+ *
+ * · A HARD lock. That is a position the user committed to by hand, and
+ *   re-rating moves the film out of the tier they placed it in. The model may
+ *   revise its own opinions, never the user's.
+ * · Anything without real evidence behind it. Both gates from `placeSettled`
+ *   apply, and here they are required TOGETHER rather than either-or: this
+ *   rewrites something the user said, so a film needs both the duels and the
+ *   confidence, not whichever it reaches first.
+ * · Guests, which are not in the library to re-rate.
+ */
+export function reRate(
+  films: readonly Film[],
+  beliefs: Map<string, Belief>,
+  threshold = PLACE_CONFIDENCE,
+  minDuels = PLACE_DUELS,
+): { films: Film[]; changed: { id: string; from: Rating; to: Rating }[] } {
+  const changed: { id: string; from: Rating; to: Rating }[] = [];
+
+  const next = films.map((f) => {
+    if (f.guest || isHard(f)) return f;
+    if ((f.duels ?? 0) < minDuels) return f;
+
+    const belief = beliefs.get(f.id);
+    if (!belief) return f;
+    if (confidenceFromSpread(belief.spread) < threshold) return f;
+
+    const to = ratingFromBelief(belief.mean);
+    if (to === f.rating) return f;
+
+    changed.push({ id: f.id, from: f.rating, to });
+    // Seeded at the new tier's midpoint rather than placed within it. Its
+    // position among its new neighbours is a question no duel has been asked
+    // yet — the respread below answers it from the belief it already has.
+    return { ...f, rating: to, score: seedScore(to) };
+  });
+
+  if (changed.length === 0) return { films: [...films], changed };
+
+  // Both tiers are now wrong: the one it left has a gap and the one it joined
+  // has an unplaced arrival sitting at the midpoint. Respread settles both.
+  const touched = next.filter((f) => changed.some((c) => c.id === f.id));
+  const fromTiers = changed.map((c) => c.from);
+  let out = respreadFor(next, touched, beliefs, true);
+  for (const tier of new Set(fromTiers)) out = respreadTier(out, tier, beliefs, true);
+
+  return { films: out, changed };
 }
 
 /**

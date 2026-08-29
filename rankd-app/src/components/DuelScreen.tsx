@@ -2003,6 +2003,10 @@ function ShuffleSetup({
 }) {
   const [kind, setKind] = useState<"all" | "tier" | "range">("all");
   const [includeConfirmed, setIncludeConfirmed] = useState(false);
+  // Off every time the panel opens, deliberately not remembered. This rewrites
+  // ratings, so it should be a decision made for THIS run rather than a setting
+  // somebody turned on once and forgot about.
+  const [reRateOn, setReRateOn] = useState(false);
   // ── How big this run is ─────────────────────────────────────────────────
   //
   // FILMS, not minutes, and the third shape this control has taken.
@@ -2136,9 +2140,33 @@ function ShuffleSetup({
         />
       </label>
 
+      {/* ── Letting the run fix a rating ──────────────────────────────────
+          Below "include the ones I've placed" because it is the bigger claim of
+          the two: that one lets the model re-ORDER what you placed, this one
+          lets it disagree with the stars you gave. A tick, not a default, and
+          it says out loud that the thing being changed is yours. */}
+      <label className="mb-1 flex items-center justify-between rounded-xl border border-border px-4 py-3">
+        <span className="min-w-0 pr-3">
+          <span className="block text-body text-text-hi">Fix ratings that look wrong</span>
+          <span className="block text-sub leading-snug text-dim">
+            {reRateOn
+              ? `A ${lex().one} that keeps beating better-rated ones has its stars changed to match.`
+              : `Stars stay exactly as you set them, even when the duels disagree.`}
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={reRateOn}
+          onChange={(e) => setReRateOn(e.target.checked)}
+          className="tickbox"
+        />
+      </label>
+
       <StartButton
         label={`Start · ${plural(batch ? Math.min(batch, unplaced) : count)}`}
-        onClick={() => onStart({ scope, includeConfirmed, batch: batch ?? undefined })}
+        onClick={() =>
+          onStart({ scope, includeConfirmed, reRate: reRateOn, batch: batch ?? undefined })
+        }
         disabled={!playable}
       />
       {!playable && (
@@ -2741,11 +2769,18 @@ const STRIP_KEY = "rankd-strip-open";
  */
 function runSubjects(): string {
   const L = lex();
-  const parts = [`A ${L.maker}`, L.secondRole ? `an ${L.secondRole}` : null, "a genre"].filter(
+  // "A author" is what a naive template produced, and it shipped. The article
+  // has to follow the word, and the word is different per medium — which is
+  // exactly the class of bug the lexicon exists to make impossible, so it is
+  // fixed here rather than by choosing nouns that happen to start with a
+  // consonant.
+  const a = (w: string) => `${/^[aeiou]/i.test(w) ? "an" : "a"} ${w}`;
+  const parts = [a(L.maker), L.secondRole ? a(L.secondRole) : null, "a genre"].filter(
     (p): p is string => p !== null,
   );
   const last = parts.pop()!;
-  return `${parts.join(", ")} or ${last}`;
+  const line = `${parts.join(", ")} or ${last}`;
+  return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
 const TIP_MS = 9500; // dwell

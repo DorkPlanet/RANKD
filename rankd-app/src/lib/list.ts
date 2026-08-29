@@ -15,6 +15,8 @@ import type { Film } from "./types";
 import { isHard, isPlaced } from "./lock";
 import { rankedFilms } from "./ladder";
 import { ORDERED_TIERS, type Rating } from "./tiers";
+import { rankByBelief } from "./people";
+import type { Belief } from "./bayes";
 
 export interface RankedFilm {
   film: Film;
@@ -68,6 +70,49 @@ export function rankMap(films: Film[]): Map<string, number> {
       if (isPlaced(f)) ranks.set(f.id, i + 1);
     });
   return ranks;
+}
+
+/**
+ * The shuffled page's order: what the EVIDENCE says, tiers ignored.
+ *
+ * ── Why this exists, and why it is not `buildList` ────────────────────────
+ *
+ * `buildList` groups by tier and that is correct for everything else in the
+ * app: a star rating is a judgement the user made, and the locked page is a
+ * record of judgements. But Fast Shuffle's whole premise is that the model has
+ * an opinion of its own, and a tier band is a wall it may never climb —
+ * 5★ = 9001..10000, 4★ = 7001..8000, so a 4★ the evidence rates above
+ * everything you own still draws below the worst of your 5★s.
+ *
+ * That is the app hiding its own answer. The model's belief is a single
+ * continuous scale seeded at `rating * 2` and moved by duels, so it can and
+ * does say "this 3★ beats those 4★s" — and until now there was nowhere that
+ * showed it.
+ *
+ * ── Read-only, and that is the point ──────────────────────────────────────
+ *
+ * Nothing here writes. No score moves, no lock changes, no rating is touched.
+ * It is a VIEW over `beliefsFor`, which is what makes it safe to disagree with
+ * the master list: the disagreement is the information.
+ *
+ * The rank numbers are still `rankMap`'s — the film's position in the master
+ * order — so a row means the same thing on both pages and the two screens can
+ * never contradict each other about what a number is. The ORDER differs; the
+ * numbers do not, which is exactly how a reader sees that the model disagrees.
+ *
+ * Unplaced films are left out. They have no evidence behind them, so their
+ * belief is still the seed, and including them would sort a whole untouched
+ * tier into the middle of the answer on the strength of its star rating alone.
+ */
+export function buildBeliefOrder(
+  films: Film[],
+  beliefs: Map<string, Belief>,
+): RankedFilm[] {
+  const ranks = rankMap(films);
+  return rankByBelief(
+    films.filter((f) => ranks.has(f.id)),
+    beliefs,
+  ).map((film) => ({ film, rank: ranks.get(film.id)! }));
 }
 
 export function buildList(films: Film[]): ListModel {

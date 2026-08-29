@@ -23,6 +23,7 @@ import type { Film } from "./types";
 import { isHard } from "./lock";
 import { fingerprint, topPeople } from "./profile";
 import { ORDERED_TIERS, starsFor } from "./tiers";
+import { lex } from "./lexicon";
 
 export interface Achievement {
   id: string;
@@ -73,6 +74,7 @@ export function nextUp(all: readonly Achievement[]): Achievement | null {
 }
 
 export function achievements(films: Film[]): Achievement[] {
+  const L = lex();
   // HARD locks only. These read "Settle 10 films" and one is called Committed —
   // they reward what the user did, so a soft lock the model granted must not
   // quietly unlock them. Running a shuffle session is not settling a film.
@@ -146,21 +148,21 @@ export function achievements(films: Film[]): Achievement[] {
 
   return [
     // ── The library itself ────────────────────────────────────────────────
-    count("library", "Collector", "Have 100 films in your library", films.length, 100),
-    count("big-library", "Archivist", "Have 500 films in your library", films.length, 500),
-    count("huge-library", "Curator emeritus", "Have 1,000 films in your library", films.length, 1000),
+    count("library", "Collector", `Have 100 ${L.many} in your library`, films.length, 100),
+    count("big-library", "Archivist", `Have 500 ${L.many} in your library`, films.length, 500),
+    count("huge-library", "Curator emeritus", `Have 1,000 ${L.many} in your library`, films.length, 1000),
 
     // ── What you have settled ─────────────────────────────────────────────
-    count("first", "First blood", "Settle your first film", placed, 1),
-    count("ten", "Getting somewhere", "Settle 10 films", placed, 10),
-    count("fifty", "In deep", "Settle 50 films", placed, 50),
-    count("hundred", "Committed", "Settle 100 films", placed, 100),
-    count("two-fifty", "Unwavering", "Settle 250 films", placed, 250),
-    count("five-hundred", "Iron opinion", "Settle 500 films", placed, 500),
+    count("first", "First blood", `Settle your first ${L.one}`, placed, 1),
+    count("ten", "Getting somewhere", `Settle 10 ${L.many}`, placed, 10),
+    count("fifty", "In deep", `Settle 50 ${L.many}`, placed, 50),
+    count("hundred", "Committed", `Settle 100 ${L.many}`, placed, 100),
+    count("two-fifty", "Unwavering", `Settle 250 ${L.many}`, placed, 250),
+    count("five-hundred", "Iron opinion", `Settle 500 ${L.many}`, placed, 500),
     flag(
       "all-settled",
       "Nothing left to argue",
-      "Settle every film in your library",
+      `Settle every ${L.one} in your library`,
       films.length > 0 && placed === films.length,
       films.length > 0 ? `${placed} of ${films.length}` : undefined,
     ),
@@ -175,14 +177,14 @@ export function achievements(films: Film[]): Achievement[] {
     flag(
       "tier",
       "Clean sweep",
-      "Settle every film in one tier",
+      `Settle every ${L.one} in one tier`,
       finishedTiers.length > 0,
       "none finished",
     ),
     count(
       "all-tiers",
       "Completionist",
-      "Settle every tier you've seen films in",
+      `Settle every tier you've ${L.seen} ${L.many} in`,
       finishedTiers.length,
       ORDERED_TIERS.filter((t) => films.some((f) => f.rating === t)).length,
     ),
@@ -193,19 +195,19 @@ export function achievements(films: Film[]): Achievement[] {
     count("full-scale", "Full spectrum", "Use all ten star ratings", ratingsUsed, ORDERED_TIERS.length),
 
     // ── The shape of your taste ───────────────────────────────────────────
-    count("decades", "Time traveller", "Own films from 5 different decades", decades.size, 5),
-    count("decades-8", "Archivist of ages", "Own films from 8 different decades", decades.size, 8),
+    count("decades", "Time traveller", `Own ${L.many} from 5 different decades`, decades.size, 5),
+    count("decades-8", "Archivist of ages", `Own ${L.many} from 8 different decades`, decades.size, 8),
     flag(
       "pre-1960",
       "Before your time",
-      "Own a film made before 1960",
+      `Own a ${L.one} made before 1960`,
       oldest < 1960,
       oldest === Infinity ? undefined : `oldest is ${oldest}`,
     ),
-    count("genres", "Omnivore", "Own films across 12 genres", genres.size, 12),
-    count("genre-deep", "House style", "Own 50 films in one genre", biggestGenre, 50),
-    count("one-director", "Devotee", "Own 5 films by one director", biggestDirector, 5),
-    count("one-director-10", "Completist", "Own 10 films by one director", biggestDirector, 10),
+    count("genres", "Omnivore", `Own ${L.many} across 12 genres`, genres.size, 12),
+    count("genre-deep", "House style", `Own 50 ${L.many} in one genre`, biggestGenre, 50),
+    count("one-director", "Devotee", `Own 5 ${L.many} by one ${L.maker}`, biggestDirector, 5),
+    count("one-director-10", "Completist", `Own 10 ${L.many} by one ${L.maker}`, biggestDirector, 10),
     count("one-actor", "Familiar face", "Own 10 films with the same actor", biggestActor, 10),
 
     // ── Time served ───────────────────────────────────────────────────────

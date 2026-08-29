@@ -19,8 +19,21 @@ async function load(stored?: string) {
     setItem: (k: string, v: string) => void store.set(k, v),
     removeItem: (k: string) => void store.delete(k),
   });
-  vi.stubGlobal("window", { localStorage: {}, location: { reload: vi.fn() } });
-  return { mod: await import("@/lib/medium"), store };
+  // `setMedium` fades the page before it reloads, so it needs a document to put
+  // the class on and a timer to fire the navigation. Stubbed rather than mocked
+  // away: the fade is part of the contract now — see the tests below.
+  const root = { dataset: {} as Record<string, string>, classList: { add: vi.fn() } };
+  vi.stubGlobal("document", { documentElement: root });
+  vi.stubGlobal("window", {
+    localStorage: {},
+    location: { reload: vi.fn() },
+    // Fires immediately, so a test does not have to wait out the fade.
+    setTimeout: (fn: () => void) => {
+      fn();
+      return 0;
+    },
+  });
+  return { mod: await import("@/lib/medium"), store, root };
 }
 
 afterEach(() => {
@@ -107,6 +120,44 @@ describe("setMedium", () => {
     expect(window.location.reload).toHaveBeenCalled();
   });
 
+  it("fades the page out before the reload, on the medium being opened", async () => {
+    // Both halves matter. The class is what covers the navigation, and the
+    // attribute is what the fade lands ON — set now rather than after the
+    // reload, so the page fades to the colour of the library being opened
+    // rather than to the one being left.
+    const { mod, root } = await load("film");
+    mod.setMedium("book");
+    expect(root.dataset.medium).toBe("book");
+    expect(root.classList.add).toHaveBeenCalledWith("medium-swap");
+  });
+
+  it("still reloads when the document will not take the class", async () => {
+    // Losing the animation is not worth losing the switch.
+    vi.resetModules();
+    const store = new Map<string, string>([["rankd-medium-v1", "film"]]);
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    vi.stubGlobal("document", {
+      get documentElement(): never {
+        throw new Error("no document");
+      },
+    });
+    const reload = vi.fn();
+    vi.stubGlobal("window", {
+      location: { reload },
+      setTimeout: (fn: () => void) => {
+        fn();
+        return 0;
+      },
+    });
+    const mod = await import("@/lib/medium");
+    mod.setMedium("book");
+    expect(reload).toHaveBeenCalled();
+  });
+
   it("does nothing when the medium is already active", async () => {
     // A stray tap on the medium you are already in must not be a page refresh.
     const { mod } = await load("film");
@@ -125,7 +176,14 @@ describe("setMedium", () => {
       },
     });
     const reload = vi.fn();
-    vi.stubGlobal("window", { location: { reload } });
+    vi.stubGlobal("document", { documentElement: { dataset: {}, classList: { add: vi.fn() } } });
+    vi.stubGlobal("window", {
+      location: { reload },
+      setTimeout: (fn: () => void) => {
+        fn();
+        return 0;
+      },
+    });
     const mod = await import("@/lib/medium");
     mod.setMedium("book");
     expect(reload).not.toHaveBeenCalled();

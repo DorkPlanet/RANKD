@@ -1254,7 +1254,7 @@ export default function AppShell() {
       {showCoach && (
         // Keyed by tour, so moving from the duel's to the list's remounts and
         // re-resolves rather than carrying the old steps and step index across.
-        <Coach key={activeTour} steps={TOURS[activeTour]} onDone={finishTour} />
+        <Coach key={activeTour} steps={TOURS()[activeTour]} onDone={finishTour} />
       )}
 
       {/* `key={veil}` is the whole mechanism: a new element every arrival, so

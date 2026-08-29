@@ -11,6 +11,7 @@
 // the surfaces only. --accent and --gold were already constant across the range.
 
 import { markDirty } from "./syncState";
+import { currentMedium, type Medium } from "./medium";
 
 const KEY = "rankd-brightness";
 export const DEFAULT_BRIGHTNESS = 0;
@@ -34,15 +35,48 @@ function hslHex(h: number, s: number, l: number): string {
   return "#" + hx(255 * f(0)) + hx(255 * f(8)) + hx(255 * f(4));
 }
 
+/**
+ * The hue each library is lit in.
+ *
+ * ── Why a colour and not a badge ──────────────────────────────────────────
+ *
+ * Two libraries look identical: the same tiers, the same chrome, the same
+ * layout, different rows. The wordmark's glyph says which you are in and it is
+ * 16px in a corner. The page itself saying so is unmissable and costs nothing,
+ * because every surface in the app already comes from one hue.
+ *
+ * ── Matched for DARKNESS, deliberately ────────────────────────────────────
+ *
+ * Oxblood over the obvious brown. Measured relative luminance at the deep end:
+ * navy 0.0036, oxblood 0.0037, warm brown 0.0052. The first two are the same
+ * darkness and differ only in hue, which is what makes the switch read as a
+ * different LIBRARY rather than as somebody having nudged the brightness — and
+ * brown drifts further apart as the slider comes up (0.0298 against 0.0197).
+ *
+ * Contrast holds either way: text sits at 13:1 on both, gold at 10:1.
+ *
+ * The text tokens stay cool and stay constant. They are fixed in globals.css so
+ * they remain legible at every brightness, and a cool grey on oxblood is a
+ * deliberate pairing rather than an oversight.
+ *
+ * PROVISIONAL — the behaviour is settled, the exact hue is a taste call and is
+ * two numbers here.
+ */
+const HUES: Record<Medium, { bg: [number, number]; band: [number, number]; surface: [number, number]; border: [number, number] }> = {
+  film: { bg: [218, 72], band: [218, 70], surface: [216, 55], border: [216, 50] },
+  book: { bg: [355, 45], band: [355, 42], surface: [353, 34], border: [353, 30] },
+};
+
 // The brightness-driven tokens at position t (0 deep → 1 bright).
 //
 // Surfaces only. The text tokens are deliberately absent: they are fixed in
 // globals.css and must stay legible at every setting rather than changing hue
 // with the room.
-export function brightnessVars(t: number): Record<string, string> {
+export function brightnessVars(t: number, medium: Medium = currentMedium()): Record<string, string> {
   const c = clamp01(t);
+  const h = HUES[medium];
   return {
-    "--bg": hslHex(218, 72, 6 + 12 * c),
+    "--bg": hslHex(h.bg[0], h.bg[1], 6 + 12 * c),
     // ── The header does NOT slide, and that is the point ────────────────
     //
     // It used to: `hslHex(218, 68, 12 * c)`, a darker shade of the background
@@ -70,9 +104,9 @@ export function brightnessVars(t: number): Record<string, string> {
     // It slides where `--header-bg` does not, and that is the distinction: the
     // header is chrome and stays black, this is part of the surface you are
     // reading and moves with the rest of it.
-    "--band": hslHex(218, 70, 3 + 6 * c),
-    "--surface": hslHex(216, 55, 9 + 15 * c),
-    "--border": hslHex(216, 50, 14 + 16 * c),
+    "--band": hslHex(h.band[0], h.band[1], 3 + 6 * c),
+    "--surface": hslHex(h.surface[0], h.surface[1], 9 + 15 * c),
+    "--border": hslHex(h.border[0], h.border[1], 14 + 16 * c),
   };
 }
 

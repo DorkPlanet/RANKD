@@ -28,7 +28,8 @@ import { backfillPosters, needsMeta, needsPoster, type FilmMeta } from "@/lib/me
 import { isHard, isPlaced } from "@/lib/lock";
 import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { RunStatus } from "./RunStatus";
-import { PLACE_DUELS, countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
+import { PLACE_DUELS, countDuel, placeSettled, reRate, respreadFor } from "@/lib/shuffle";
+import { starsFor, type Rating } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 import { lex } from "@/lib/lexicon";
 
@@ -43,6 +44,20 @@ import { lex } from "@/lib/lexicon";
  * What survives is the part that earns its keep: one undoable judgement.
  */
 const UNDO_MS = 2600;
+
+/**
+ * "Dune is now ★★★★ · Undo", or nothing at all.
+ *
+ * Names one film even when a single answer moved both. Two titles do not fit
+ * the control, and the second is one tap of Undo away from being seen — where a
+ * truncated pair is unreadable and says less than either name alone.
+ */
+function rerateLabel(changed: { id: string; from: Rating; to: Rating }[] | undefined): string | null {
+  if (!changed?.length) return null;
+  const [first] = changed;
+  const more = changed.length > 1 ? ` +${changed.length - 1}` : "";
+  return `now ${starsFor(first.to)}${more} · Undo`;
+}
 
 /** Matches the climb's controls exactly — one language across both modes. */
 const SHUFFLE_CONTROL =
@@ -70,6 +85,20 @@ export interface ShuffleOptions {
    * exactly as it did.
    */
   movePlaced?: boolean;
+  /**
+   * Let the run CORRECT a star rating the evidence says is wrong.
+   *
+   * The tier a film sits in came from a rating, and a rating is usually a first
+   * guess — imported from Letterboxd or Goodreads, often years old. Tier bands
+   * never overlap, so without this the evidence has nowhere to go: however
+   * one-sided the duels, a 3★ can never pass a 4★.
+   *
+   * Off by default and deliberately a tick rather than a setting. It rewrites
+   * something the user said, and the one thing worse than a ranking that cannot
+   * be corrected is one that corrects opinions nobody asked it to. See
+   * `reRate` in lib/shuffle.ts for what it refuses to touch.
+   */
+  reRate?: boolean;
   /**
    * Duel this ONE film for the whole run, against opponents from its tier.
    *
@@ -255,7 +284,23 @@ export default function ShuffleDuel({
   const [count, setCount] = useState(0);
   // One undoable judgement, with the library exactly as it was before it — so
   // taking it back restores the scores too, not just the log row.
-  const [pending, setPending] = useState<{ judgement: Judgement; films: Film[]; pair: [Film, Film] } | null>(null);
+  const [pending, setPending] = useState<{
+    judgement: Judgement;
+    films: Film[];
+    pair: [Film, Film];
+    /**
+     * Ratings this answer CHANGED, if any.
+     *
+     * ── Why this is on `pending` and not its own state ────────────────────
+     *
+     * It has exactly the same lifetime as the undo: it appears when an answer
+     * lands, and it is gone the moment that answer is written or taken back.
+     * A second piece of state with the same lifetime is two things to keep in
+     * step, and the one time they disagreed would be an Undo offering to revert
+     * a rating change that had already been flushed.
+     */
+    rerated?: { id: string; from: Rating; to: Rating }[];
+  } | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The poster row, so an exit animation can find the two <img>s to clone.
   const arenaRef = useRef<HTMLDivElement>(null);
@@ -547,14 +592,29 @@ export default function ShuffleDuel({
     // same reason the climb skips it: that comparison is not evidence about
     // either film's position inside its own tier.
     const counted = crossTier ? films : countDuel(films, [a, b]);
-    const placed = crossTier || readOnly
+    const settled = crossTier || readOnly
       ? counted
       : placeSettled(
           respreadFor(counted, [a, b], nextBeliefs, options.movePlaced ?? options.includeConfirmed),
           nextBeliefs,
         );
 
-    setPending({ judgement, films, pair });
+    // ── Was either of those two rated wrong in the first place? ────────────
+    //
+    // Only the pair, never the whole library: this runs after every answer, and
+    // sweeping 861 films for re-rating candidates on each one would be the same
+    // mistake the credits sweep made when it rewrote the entire library per
+    // film. The two films just duelled are the only ones whose evidence moved.
+    //
+    // Skipped entirely on a cross-tier or read-only run, for the reason those
+    // skip placement: their duels are not evidence about where a film belongs.
+    const rerating =
+      options.reRate && !crossTier && !readOnly
+        ? reRate(settled, nextBeliefs)
+        : null;
+    const placed = rerating ? rerating.films : settled;
+
+    setPending({ judgement, films, pair, rerated: rerating?.changed });
     undoTimer.current = setTimeout(flush, UNDO_MS);
 
     setLog(nextLog);
@@ -881,7 +941,18 @@ export default function ShuffleDuel({
         </button>
         {pending ? (
           <button onClick={undo} className={`${SHUFFLE_CONTROL} text-gold`}>
-            Undo
+            {/* ── Naming what Undo reverts, but only when it is a SURPRISE ──
+                The results feed that used to live below was removed because it
+                narrated your own answer back at you, and the note there is
+                right: Undo already says what it is for.
+
+                A re-rating is not your answer though — it is the app changing a
+                star rating YOU gave, off the back of it. That has to be visible
+                or it is a silent edit to the reader's own data, and an Undo they
+                never knew they wanted. So the label carries it, which stays
+                inside the same principle: this is not a feed, it is the control
+                saying what taking it back would restore. */}
+            {rerateLabel(pending.rerated) ?? "Undo"}
           </button>
         ) : (
           <button onClick={leave} className={`${SHUFFLE_CONTROL} text-gold/70`}>

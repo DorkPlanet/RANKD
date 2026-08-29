@@ -87,6 +87,9 @@ export function currentMedium(): Medium {
  * Switching to the medium already active does nothing rather than reloading, so
  * a stray tap on the current medium is not a page refresh.
  */
+/** How long the page fades before the reload. Matches `.medium-swap` in globals.css. */
+const SWAP_MS = 220;
+
 export function setMedium(m: Medium): void {
   if (typeof window === "undefined") return;
   if (currentMedium() === m) return;
@@ -97,7 +100,33 @@ export function setMedium(m: Medium): void {
     // honest thing is to change nothing rather than to appear to.
     return;
   }
-  window.location.reload();
+
+  // ── Why the reload is COVERED rather than removed ────────────────────────
+  //
+  // Reported as "the transition between the two modes isn't really smooth", and
+  // it was a hard cut: the old library on screen, then white, then a splash.
+  //
+  // Removing the reload is the wrong fix. It is load-bearing — every screen
+  // reads its store once at mount and every in-flight sweep holds a library in
+  // a closure, so swapping the store underneath a live app is the bug the
+  // reload exists to prevent. See the note at the top of this file.
+  //
+  // So the reload stays and stops being visible. Two halves:
+  //
+  //  · The page fades to its own background over `SWAP_MS`, so the last frame
+  //    before the navigation is flat colour rather than a half-torn screen.
+  //  · `data-medium` is set NOW, not after the reload, so that fade lands on
+  //    the colour of the library being opened. The switch reads as the room
+  //    changing colour, which is what it is.
+  try {
+    document.documentElement.dataset.medium = m;
+    document.documentElement.classList.add("medium-swap");
+  } catch {
+    // A document that will not take a class is still a document that can
+    // reload. Losing the animation is not worth losing the switch.
+  }
+
+  window.setTimeout(() => window.location.reload(), SWAP_MS);
 }
 
 /**

@@ -11,7 +11,10 @@
 import { EASE, inShelf, pageAfterSwipe, TURN_MS, type Dir } from "@/lib/ribbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav, Header } from "./DuelScreen";
-import { buildList, searchList, type RankedFilm } from "@/lib/list";
+import { buildBeliefOrder, buildList, searchList, type RankedFilm } from "@/lib/list";
+import { beliefsFor } from "@/lib/beliefs";
+import { loadLog } from "@/lib/log";
+import type { Judgement } from "@/lib/log";
 import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
 import { useVisiblePosters } from "@/lib/useVisiblePosters";
@@ -39,6 +42,61 @@ const ROW_H = 108;
 const HEADER_H = 56;
 const DIVIDER_H = 30;
 const NEAR = 900; // how far beyond the viewport a section mounts
+
+/**
+ * How many rows mount together on the flat page.
+ *
+ * The tiered page windows by SECTION, which works because a tier is a natural
+ * block of a few dozen rows. The flat page has no sections, and mounting 828
+ * rows at once measured a 748ms blocked main thread — the exact reason the
+ * windowing exists at all. So it windows by fixed-size chunk instead, and 25
+ * rows is comfortably more than a screenful at `ROW_H`.
+ */
+const CHUNK = 25;
+
+/**
+ * The shuffled page: one continuous list in belief order.
+ *
+ * Separate from the tiered render rather than folded into it. The two draw the
+ * same `Row` but nothing else about them agrees — no tier headers, no UN-RNKD
+ * divider, different windowing — and a single branchy renderer serving both
+ * would be harder to read than two that each do one thing.
+ *
+ * `showStars` is not decoration here, it is the POINT: the page exists to show
+ * a 3★ sitting above a 4★, and without the stars on the row that is invisible.
+ */
+function FlatRows({
+  rows,
+  view,
+  onInfo,
+}: {
+  rows: RankedFilm[];
+  view: { top: number; height: number };
+  onInfo: (f: Film) => void;
+}) {
+  const chunks: RankedFilm[][] = [];
+  for (let i = 0; i < rows.length; i += CHUNK) chunks.push(rows.slice(i, i + CHUNK));
+
+  return (
+    <>
+      {chunks.map((chunk, i) => {
+        const top = i * CHUNK * ROW_H;
+        const height = chunk.length * ROW_H;
+        const near = top < view.top + view.height + NEAR && top + height > view.top - NEAR;
+        // A spacer of exactly the right height, so the scrollbar, the drift and
+        // every offset behave as if the whole list were mounted.
+        if (!near) return <div key={i} style={{ height }} />;
+        return (
+          <div key={i} style={{ height }}>
+            {chunk.map((r) => (
+              <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} showStars />
+            ))}
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 const sectionHeight = (s: { placed: unknown[]; unplaced: unknown[] }) =>
   HEADER_H +
@@ -95,6 +153,21 @@ export default function ListScreen({
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
+  // ── The model's own opinion, for the shuffled page ───────────────────────
+  //
+  // Loaded rather than passed: the log is 500KB of tuple rows and every other
+  // screen that needs beliefs fetches its own (`PersonSheet`, `ProfileScreen`,
+  // `ShuffleDuel`). Threading it through `AppShell` would put it in the props
+  // of a screen that only wants it on one of its four pages.
+  //
+  // `null` until it lands, which is why the render falls back to tier sections:
+  // a first frame ordered by score and a second ordered by belief is a list
+  // that visibly re-sorts itself, and the two agree often enough that most
+  // readers would only see the jump.
+  const [log, setLog] = useState<Judgement[] | null>(null);
+  useEffect(() => {
+    void loadLog().then(setLog);
+  }, []);
   const scroller = useRef<HTMLDivElement | null>(null);
   // Pressing the list cell while already ON the list has never done anything.
   // It now opens the keyboard on the search field, which is the user's ask and
@@ -211,6 +284,24 @@ export default function ListScreen({
   // Built once per library change, never inside a scroll handler — the
   // prototype re-sorted all 828 films on every scroll tick and it showed.
   const model = useMemo(() => buildList(shown), [shown]);
+
+  // ── What the evidence says, tiers ignored ────────────────────────────────
+  //
+  // The shuffled page only. The locked page is a record of judgements the user
+  // made and must stay in strict tier order; this page is the model's answer,
+  // and a tier band is a wall its answer may never climb — so grouping by tier
+  // here would hide the one thing the page exists to show.
+  //
+  // `null` on every other page and until the log lands, and the render reads
+  // that as "draw sections", so this costs nothing anywhere else.
+  const flat = useMemo(() => {
+    if (only !== "shuffled" || !log) return null;
+    // Beliefs are fitted over the WHOLE library, not over `shown`. A belief is
+    // formed from duels against films in other tiers, so fitting over the
+    // filtered set would answer a different question — and the numbers on these
+    // rows come from the master order, which is the whole library too.
+    return buildBeliefOrder(shown, beliefsFor(films, log));
+  }, [only, log, films, shown]);
   // The band's counts come from the WHOLE library, never the filtered view.
   // They are a key to the list, and a key that changed every time you used it
   // would be describing itself rather than the library.
@@ -458,7 +549,11 @@ export default function ListScreen({
             // the glyph and the last characters are unreadable.
             className={`${FIELD} pr-12`}
           />
+          {/* Hidden on the shuffled page: there are no tier headers to jump to
+              there, so every destination would scroll to a row that is not the
+              one it named. */}
           <button
+            hidden={!!flat}
             onClick={() => setJumpOpen((v) => !v)}
             data-tour="list-jump"
             aria-label="Jump to a tier"
@@ -578,6 +673,8 @@ export default function ListScreen({
               )}
             </div>
           )
+        ) : flat ? (
+          <FlatRows rows={flat} view={view} onInfo={onInfo} />
         ) : (
           model.sections.map((s, i) => {
             const o = offsets[i];

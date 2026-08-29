@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { resolveSteps, TOURS, type TourStep } from "@/lib/tour";
 
-const ALL = [...TOURS.duel, ...TOURS.list];
+const ALL = [...TOURS().duel, ...TOURS().list];
 
 describe("the tours", () => {
   it("teaches the core loop before Rough Cut", () => {
-    expect(TOURS.duel.map((s) => s.id)).toEqual(["pick", "flick", "hold", "strip", "roughcut"]);
+    expect(TOURS().duel.map((s) => s.id)).toEqual(["pick", "flick", "hold", "strip", "roughcut"]);
   });
 
   // The duel is where the game is. If the list ever grew longer than the duel's
   // pass, the teaching would be pointed at the wrong screen.
   it("gives the duel more teaching than the list", () => {
-    expect(TOURS.duel.length).toBeGreaterThan(TOURS.list.length);
+    expect(TOURS().duel.length).toBeGreaterThan(TOURS().list.length);
   });
 
   it("gives every step something to point at and something to say", () => {
@@ -24,7 +24,7 @@ describe("the tours", () => {
   });
 
   it("has no duplicate ids within a tour, so a step counter cannot lie", () => {
-    for (const steps of Object.values(TOURS)) {
+    for (const steps of Object.values(TOURS())) {
       expect(new Set(steps.map((s) => s.id)).size).toBe(steps.length);
     }
   });
@@ -34,7 +34,7 @@ describe("the tours", () => {
   // rather watch, and the first thing a new user reads must not miscast the
   // question they are about to answer several thousand times.
   it("asks which film you prefer, never which is better", () => {
-    const pick = TOURS.duel.find((s) => s.id === "pick")!;
+    const pick = TOURS().duel.find((s) => s.id === "pick")!;
     expect(pick.title).toMatch(/prefer/i);
     expect(pick.body).toMatch(/rather watch/i);
   });
@@ -51,7 +51,7 @@ describe("the tours", () => {
   // "Flick up" alone teaches a motion. Where the card lands is the part nobody
   // can guess, and that it is NOT a duel is what keeps the log honest.
   it("says where a flicked card lands, and that it records nothing", () => {
-    const flick = TOURS.duel.find((s) => s.id === "flick")!;
+    const flick = TOURS().duel.find((s) => s.id === "flick")!;
     expect(flick.body).toMatch(/top/i);
     expect(flick.body).toMatch(/bottom/i);
     expect(flick.body).toMatch(/no duel .{0,8}recorded/i);
@@ -65,13 +65,13 @@ describe("the tours", () => {
   // tier never met it. It is now stated on "row", which points at the list and
   // can never be absent.
   it("explains that rated is not ranked on a step that always fires", () => {
-    const row = TOURS.list.find((s) => s.id === "row")!;
+    const row = TOURS().list.find((s) => s.id === "row")!;
     expect(row.body).toMatch(/tier/i);
     expect(row.body).toMatch(/position/i);
   });
 
   it("still elaborates on UN-RNKD when that divider is there", () => {
-    const unrnkd = TOURS.list.find((s) => s.id === "unrnkd")!;
+    const unrnkd = TOURS().list.find((s) => s.id === "unrnkd")!;
     expect(unrnkd.body).toMatch(/rated/i);
     expect(unrnkd.body).toMatch(/position/i);
   });
@@ -102,18 +102,18 @@ describe("resolveSteps", () => {
   // part of the duel screen and not every mode renders it, and the UN-RNKD
   // divider only exists while a tier still has unplaced films in it.
   it("still runs the duel gestures when the strip is missing", () => {
-    const out = resolveSteps((t) => t !== "strip", TOURS.duel);
+    const out = resolveSteps((t) => t !== "strip", TOURS().duel);
     expect(out.map((s) => s.id)).toEqual(["pick", "flick", "hold", "roughcut"]);
   });
 
   it("drops the UN-RNKD step for someone who has finished ranking", () => {
-    const out = resolveSteps((t) => t !== "list-unrnkd", TOURS.list);
+    const out = resolveSteps((t) => t !== "list-unrnkd", TOURS().list);
     expect(out.map((s) => s.id)).toEqual(["row", "jump"]);
   });
 
   // The regression that mattered: dropping a step must never drop the idea.
   it("still teaches that a rating is not a position with no UN-RNKD divider", () => {
-    const out = resolveSteps((t) => t !== "list-unrnkd", TOURS.list);
+    const out = resolveSteps((t) => t !== "list-unrnkd", TOURS().list);
     const bodies = out.map((s) => s.body).join(" ");
     expect(bodies).toMatch(/tier/i);
     expect(bodies).toMatch(/position/i);

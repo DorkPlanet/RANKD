@@ -1,3 +1,4 @@
+import { lex } from "./lexicon";
 // What the app never told anyone.
 //
 // Marks drawn over the REAL screen, not a slideshow: every gesture here is
@@ -35,6 +36,22 @@
 
 const KEY = "rankd-tour-v1";
 
+/** Shorthand — these steps read the lexicon a dozen times between them. */
+const L = () => lex();
+
+/**
+ * What the long-press card actually lists, for this medium.
+ *
+ * "the year, director, cast" is three things a film has and two of them a book
+ * does not: there is no cast, and `secondRole` is null precisely so nothing
+ * promises one. Reworded by substitution this would have said "the year, author,
+ * cast", teaching a reader to look for something that is never there.
+ */
+function credits(): string {
+  const l = lex();
+  return l.secondRole ? `${l.maker}, ${l.secondRole}s` : l.maker;
+}
+
 export type TourId = "duel" | "list" | "roughcut" | "log";
 
 export interface TourStep {
@@ -59,24 +76,24 @@ export interface TourStep {
  * duels, a 3★ tier holds 185 films, and nothing on the duel screen hints that
  * there is another way through that.
  */
-const DUEL_STEPS: readonly TourStep[] = [
+const DUEL_STEPS = (): readonly TourStep[] => [
   {
     id: "pick",
     target: "card",
     title: "Tap the one you prefer",
-    body: "These two have the same star rating from you. That group is a tier, and Rankd puts it in order. Not which is better, but which you'd rather watch. Tap it.",
+    body: `These two have the same star rating from you. That group is a tier, and Rankd puts it in order. Not which is better, but which you'd rather ${L().verb}. Tap it.`,
   },
   {
     id: "flick",
     target: "card",
     title: "Flick when you already know",
-    body: "Decide if a film belongs at the top or bottom of your tier. Flick up and it parks at the top. Flick down sends it to the bottom. No duel gets recorded, you're skipping the argument.",
+    body: `Decide if a ${L().one} belongs at the top or bottom of your tier. Flick up and it parks at the top. Flick down sends it to the bottom. No duel gets recorded, you're skipping the argument.`,
   },
   {
     id: "hold",
     target: "card",
     title: "Hold for the details",
-    body: "Press and hold a poster for the year, director, cast, and where it sits in your order.",
+    body: `Press and hold a ${L().art} for the year, ${credits()}, and where it sits in your order.`,
   },
   {
     id: "strip",
@@ -88,7 +105,7 @@ const DUEL_STEPS: readonly TourStep[] = [
     id: "roughcut",
     target: "rank",
     title: "Big library? Start with a Rough Cut",
-    body: "A tier of 100 films is 4,950 duels. That's hours. Rough Cut breaks a tier into piles small enough. You'll instinctually know which you enjoy more.",
+    body: `A tier of 100 ${L().many} is 4,950 duels. That's hours. Rough Cut breaks a tier into piles small enough. You'll instinctually know which you enjoy more.`,
   },
 ];
 
@@ -113,18 +130,18 @@ const DUEL_STEPS: readonly TourStep[] = [
  * absent. UN-RNKD keeps its own step and elaborates: same idea, applied to the
  * films that have no number yet.
  */
-const LIST_STEPS: readonly TourStep[] = [
+const LIST_STEPS = (): readonly TourStep[] => [
   {
     id: "row",
     target: "list-row",
     title: "Your ranking, in order",
-    body: "One tier at a time, your favourite first. The stars decide which tier a film is in. The number on the right is a different thing: the position it holds across everything you've ranked. Tap any row to open it.",
+    body: `One tier at a time, your favourite first. The stars decide which tier a ${L().one} is in. The number on the right is a different thing: the position it holds across everything you've ranked. Tap any row to open it.`,
   },
   {
     id: "unrnkd",
     target: "list-unrnkd",
     title: "UN-RNKD is not unrated",
-    body: "Each tier holds films you rated the same. The ones marked UN-RNKD came in from your import and have never been ranked, so they've got no position yet. That's what the duels are for.",
+    body: `Each tier holds ${L().many} you rated the same. The ones marked UN-RNKD came in from your import and have never been ranked, so they've got no position yet. That's what the duels are for.`,
   },
   {
     id: "jump",
@@ -156,30 +173,30 @@ const LIST_STEPS: readonly TourStep[] = [
  * the step teaches three gestures rather than two and an exception, which is
  * both shorter and the truth.
  */
-const ROUGHCUT_STEPS: readonly TourStep[] = [
+const ROUGHCUT_STEPS = (): readonly TourStep[] => [
   {
     id: "rc-card",
     target: "rc-card",
     title: "One at a time",
-    body: "One tier, broken into three piles: upper, middle, lower. This is the film you're placing. There's nothing to compare it against, so go with your gut.",
+    body: `One tier, broken into three piles: upper, middle, lower. This is the ${L().one} you're placing. There's nothing to compare it against, so go with your gut.`,
   },
   {
     id: "rc-targets",
     target: "rc-targets",
     title: "Upper, middle or lower",
-    body: "Tap the pile this film belongs in. The count above it goes up. The poster takes gestures too, if you'd rather not aim.",
+    body: `Tap the pile this ${L().one} belongs in. The count above it goes up. The ${L().art} takes gestures too, if you'd rather not aim.`,
   },
   {
     id: "rc-flick",
     target: "rc-card",
     title: "Or flick it",
-    body: "Flick up for upper, down for lower, or tap the poster for middle. Drag a little first and the target you're aimed at lifts, so you can see where it'll land.",
+    body: `Flick up for upper, down for lower, or tap the ${L().art} for middle. Drag a little first and the target you're aimed at lifts, so you can see where it'll land.`,
   },
   {
     id: "rc-hold",
     target: "rc-card",
     title: "Hold for the details",
-    body: "Press and hold the poster for the year, director, cast, and where it sits in your order.",
+    body: `Press and hold the ${L().art} for the year, ${credits()}, and where it sits in your order.`,
   },
   {
     id: "rc-count",
@@ -208,21 +225,33 @@ const ROUGHCUT_STEPS: readonly TourStep[] = [
  * between them and typing a title would be the tutorial getting in the way of
  * the thing it is explaining.
  */
-const LOG_STEPS: readonly TourStep[] = [
+const LOG_STEPS = (): readonly TourStep[] => [
   {
     id: "log-search",
     target: "log-search",
-    title: "Just watched something?",
+    title: `Just ${L().verbPast} something?`,
     body: "Search for it, give it a rating, and it joins that tier as UN-RNKD. It's in the queue with everything else now.",
   },
 ];
 
-export const TOURS: Record<TourId, readonly TourStep[]> = {
-  duel: DUEL_STEPS,
-  list: LIST_STEPS,
-  roughcut: ROUGHCUT_STEPS,
-  log: LOG_STEPS,
-};
+/**
+ * The coach marks, in this medium's words.
+ *
+ * ── Why this is a function and no longer a constant ───────────────────────
+ *
+ * A module-level constant is built once, when the module is first imported —
+ * which for anything reachable from a client component includes the server pass,
+ * where `lex()` answers with the film words. So a constant would have frozen
+ * "which you'd rather watch" into a book library's tour.
+ *
+ * Same reasoning, and the same fix, as `tips()` in DuelScreen.
+ */
+export const TOURS = (): Record<TourId, readonly TourStep[]> => ({
+  duel: DUEL_STEPS(),
+  list: LIST_STEPS(),
+  roughcut: ROUGHCUT_STEPS(),
+  log: LOG_STEPS(),
+});
 
 /**
  * The steps whose target is actually on screen, in order.
