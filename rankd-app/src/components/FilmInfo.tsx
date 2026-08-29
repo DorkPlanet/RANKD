@@ -209,7 +209,8 @@ export function FilmInfo({
           <div className="min-w-0 flex-1">
             <div className="font-display text-title leading-none tracking-wide text-text-hi">{film.title}</div>
             <div className="mt-1.5 text-label font-bold tracking-[0.14em] text-gold">
-              {film.year} · {film.rating}★{meta?.runtime ? ` · ${meta.runtime}m` : ""}
+              {film.year} · {film.rating}★
+              {meta?.runtime ? ` · ${meta.runtime}${lex().medium === "book" ? "p" : "m"}` : ""}
             </div>
             {/* Where it sits, and WHO PUT IT THERE.
                 The list draws that difference in colour alone — gold and bold
@@ -351,7 +352,7 @@ export function FilmInfo({
                 {/* Only the director opens a filmography: they are the only crew
                     role the library stores per film, so the others have nothing
                     to search on. */}
-                {role === "Director" ? (
+                {role === lex().Maker ? (
                   <button
                     onClick={() => onPerson?.({ name, role: "director", count: 0 })}
                     className="text-right text-text-hi underline decoration-border underline-offset-2 active:text-gold"
@@ -502,7 +503,7 @@ export function FilmInfo({
                 onClick={() => setRefining(true)}
                 className="w-full text-center text-sub font-semibold text-dim active:scale-95"
               >
-                Refine this film
+                Refine this {lex().one}
               </button>
             )}
           </div>

@@ -701,7 +701,7 @@ export default function ProfileScreen({
             {people.directors.length > 0 && (
               <>
                 <div className="mb-1 text-label font-bold tracking-[0.14em] text-dim">
-                  DIRECTORS
+                  {lex().makers.toUpperCase()}
                 </div>
                 <div className="mb-4">
                   {people.directors.map((d) => (
@@ -723,7 +723,7 @@ export default function ProfileScreen({
             )}
             {people.actors.length > 0 && (
               <>
-                <Eyebrow className="mb-1">Actors</Eyebrow>
+                <Eyebrow className="mb-1">{lex().secondRole ? `${lex().secondRole}s` : ""}</Eyebrow>
                 <div>
                   {people.actors.map((a) => (
                     <PersonCard
@@ -796,7 +796,7 @@ export default function ProfileScreen({
                     film={c.films[0]}
                     eyebrow="YOURS"
                     title={c.title}
-                    sub={`${c.films.length} films`}
+                    sub={count(c.films.length)}
                     onClick={() => setOpen({ ...c, numbered: true })}
                   />
                 ))}
@@ -1155,7 +1155,7 @@ export default function ProfileScreen({
                 ))}
               </div>
               <p className="mt-2 text-label leading-snug text-dim">
-                Bar length is how many films you&rsquo;ve seen at that rating. The gold is how many have a position.
+                Bar length is how many {lex().many} you&rsquo;ve {lex().seen} at that rating. The gold is how many have a position.
               </p>
             </Section>
           </div>

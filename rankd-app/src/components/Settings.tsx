@@ -362,7 +362,9 @@ export function Settings({
 
       {/* Required by TMDB's API terms. */}
       <p className="mt-5 text-sub leading-snug text-dim">
-        Film data from TMDB. Not endorsed or certified by TMDB.
+        {lex().medium === "book"
+          ? "Book data from Google Books. Cover art from Open Library."
+          : "Film data from TMDB. Not endorsed or certified by TMDB."}
       </p>
     </Sheet>
   );

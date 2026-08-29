@@ -188,8 +188,8 @@ export function achievements(films: Film[]): Achievement[] {
       finishedTiers.length,
       ORDERED_TIERS.filter((t) => films.some((f) => f.rating === t)).length,
     ),
-    count("top-heavy", "Perfectionist", `Own 10 films at ${starsFor(5)}`, atRating(5), 10),
-    count("bottom-feeder", "No mercy", `Own 10 films at ${starsFor(0.5)}`, atRating(0.5), 10),
+    count("top-heavy", "Perfectionist", `Own 10 ${L.many} at ${starsFor(5)}`, atRating(5), 10),
+    count("bottom-feeder", "No mercy", `Own 10 ${L.many} at ${starsFor(0.5)}`, atRating(0.5), 10),
     // The whole scale used at least once — a library that has actually made up
     // its mind about the bad ones as well as the good.
     count("full-scale", "Full spectrum", "Use all ten star ratings", ratingsUsed, ORDERED_TIERS.length),
@@ -208,35 +208,56 @@ export function achievements(films: Film[]): Achievement[] {
     count("genre-deep", "House style", `Own 50 ${L.many} in one genre`, biggestGenre, 50),
     count("one-director", "Devotee", `Own 5 ${L.many} by one ${L.maker}`, biggestDirector, 5),
     count("one-director-10", "Completist", `Own 10 ${L.many} by one ${L.maker}`, biggestDirector, 10),
-    count("one-actor", "Familiar face", "Own 10 films with the same actor", biggestActor, 10),
+    ...(L.secondRole
+      ? [count("one-actor", "Familiar face", `Own 10 ${L.many} with the same ${L.secondRole}`, biggestActor, 10)]
+      : []),
 
     // ── Time served ───────────────────────────────────────────────────────
-    flag(
-      "long-film",
-      "The long haul",
-      "Own a film over three hours",
-      longest >= 180,
-      longest > 0 ? `longest is ${Math.floor(longest / 60)}h ${longest % 60}m` : undefined,
-    ),
-    count("watch-time", "A month of cinema", "Own 1,000 hours of film", Math.floor(minutes / 60), 1000),
+    ...(L.medium === "book"
+      ? [
+          flag(
+            "long-film",
+            "The long haul",
+            "Own a book over 800 pages",
+            longest >= 800,
+            longest > 0 ? `longest is ${longest} pages` : undefined,
+          ),
+          count("watch-time", "Well read", "Own 100,000 pages", minutes, 100000),
+        ]
+      : [
+          flag(
+            "long-film",
+            "The long haul",
+            "Own a film over three hours",
+            longest >= 180,
+            longest > 0 ? `longest is ${Math.floor(longest / 60)}h ${longest % 60}m` : undefined,
+          ),
+          count(
+            "watch-time",
+            "A month of cinema",
+            "Own 1,000 hours of film",
+            Math.floor(minutes / 60),
+            1000,
+          ),
+        ]),
 
     // ── What the credits know ─────────────────────────────────────────────
-    count("credits", "Well briefed", "Know the credits of 200 films", withCredits, 200),
-    count("credits-500", "Fully briefed", "Know the credits of 500 films", withCredits, 500),
+    count("credits", "Well briefed", `Know the credits of 200 ${L.many}`, withCredits, 200),
+    count("credits-500", "Fully briefed", `Know the credits of 500 ${L.many}`, withCredits, 500),
 
     // Derived from the same fingerprint the profile uses, so the badge and the
     // profile can never disagree about what kind of viewer you are.
     flag(
       "generous",
       "Soft touch",
-      "Rate more generously than the midpoint, across 100+ films",
+      `Rate more generously than the midpoint, across 100+ ${L.many}`,
       films.length >= 100 && print.generosity?.label === "generous",
       films.length < 100 ? `${films.length} of 100` : undefined,
     ),
     flag(
       "harsh",
       "Hard marker",
-      "Rate more harshly than the midpoint, across 100+ films",
+      `Rate more harshly than the midpoint, across 100+ ${L.many}`,
       films.length >= 100 && print.generosity?.label === "harsh",
       films.length < 100 ? `${films.length} of 100` : undefined,
     ),

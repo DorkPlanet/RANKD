@@ -20,6 +20,7 @@ import { useState } from "react";
 import type { Film } from "@/lib/types";
 import { isPlaced } from "@/lib/lock";
 import { FIELD } from "./ui";
+import { lex } from "@/lib/lexicon";
 
 type Status = "idle" | "sending" | "sent" | "error";
 
@@ -121,7 +122,7 @@ export function Feedback({ films, duels }: { films: Film[]; duels: number }) {
           </button>
           {error && <p className="mt-2 text-sub leading-snug text-danger">{error}</p>}
           <p className="mt-2 text-label leading-snug text-dim">
-            Sends your library size and browser. Never film titles or ratings.
+            Sends your library size and browser. Never {lex().one} titles or ratings.
           </p>
         </>
       )}
