@@ -69,6 +69,8 @@ import {
   TrophyIcon,
 } from "./Icons";
 import { BARS } from "@/lib/brand";
+import { MediumSwitch } from "./MediumSwitch";
+import { count as plural, lex } from "@/lib/lexicon";
 import { type Person } from "@/lib/people";
 import { subjectTitle, type RankSubject } from "@/lib/subject";
 import { MIN_GENRE_RUN } from "@/lib/genres";
@@ -1132,7 +1134,7 @@ export default function DuelScreen({
               <div>
                 <p className="font-display text-[26px] leading-tight tracking-wide text-text-hi">
                   {empty ? (
-                    "No films yet"
+                    `No ${lex().many} yet`
                   ) : (
                     // Two sentences, two lines. Left to wrap it broke after
                     // WHAT'S, which splits the question rather than the pair of
@@ -1168,7 +1170,7 @@ export default function DuelScreen({
                   </>
                 ) : (
                   <p className="mt-2 text-sub text-dim tabular-nums">
-                    {state.films.length.toLocaleString()} films &middot; {placedNow.toLocaleString()} placed
+                    {plural(state.films.length)} &middot; {placedNow.toLocaleString()} placed
                   </p>
                 )}
               </div>
@@ -1190,7 +1192,7 @@ export default function DuelScreen({
                       while the same screen WITH films in it offered a full gold
                       pill. */}
                   <ImportButton
-                    label="Import your films"
+                    label={`Import your ${lex().many}`}
                     merge={false}
                     primary
                     onFile={(f) => onImportFile?.(f)}
@@ -1625,7 +1627,7 @@ export function BottomNav({
           could not do at all: the library only ever arrived by CSV, so it knew
           your past and had nothing to say about tonight. Works on every screen,
           unlike the control it replaced. */}
-      <NavItem label="Log a film" active={logging} onClick={onToggleLog} icon={<AddFilmIcon />} />
+      <NavItem label={`Log a ${lex().one}`} active={logging} onClick={onToggleLog} icon={<AddFilmIcon />} />
       <NavItem label="Rank" active={screen === "duel"} onClick={onModes} icon={<RankdMark />} tour="rank" />
       {/* Account owns the profile; Settings moved to the gear on its cover, so
           this slot leads somewhere rather than opening a sheet over the duel. */}
@@ -1733,14 +1735,14 @@ function ModePanel({
             in, rather than the order the modes were built in. */}
         <ModeRow
           title="Rough Cut"
-          blurb="Split a tier into piles, one film at a time. The fastest way to get a big library into shape."
+          blurb={`Split a tier into piles, one ${lex().one} at a time. The fastest way to get a big library into shape.`}
           meta="one pass"
           onClick={() => setChosen("roughcut")}
         />
         <ModeRow
           title="King of the Hill"
-          blurb="One tier at a time. Winner moves on. This is how a film gets a place you locked yourself."
-          meta="locks films"
+          blurb={`One tier at a time. Winner moves on. This is how a ${lex().one} gets a place you locked yourself.`}
+          meta={`locks ${lex().many}`}
           onClick={() => setChosen("koth")}
         />
         {/* The one mode with no pile and no confirm. It asks whichever question
@@ -1750,7 +1752,7 @@ function ModePanel({
             thing that matters: these placements are PROVISIONAL. */}
         <ModeRow
           title="Fast Shuffle"
-          blurb="Two films, no piles, no confirming. Rankd places what it works out, and keeps the right to change its mind."
+          blurb={`Two ${lex().many}, no piles, no confirming. Rankd places what it works out, and keeps the right to change its mind.`}
           meta="provisional"
           onClick={() => setChosen("shuffle")}
         />
@@ -1760,7 +1762,7 @@ function ModePanel({
             so the blurb has to say so, or it reads as a fourth way to rank. */}
         <ModeRow
           title="Curator"
-          blurb="A director, an actor or a genre. Everyone has their favourite. Your main list doesn't move."
+          blurb={`${runSubjects()}. Everyone has their favourite. Your main list doesn't move.`}
           meta="changes nothing"
           onClick={onCurated}
         />
@@ -1810,7 +1812,7 @@ function ModePanel({
           <span className="flex items-baseline gap-2">
             <span className="text-body text-gold">{starsFor(tier)}</span>
             <span className="text-sub text-dim">
-              {inTier} film{inTier === 1 ? "" : "s"} ›
+              {plural(inTier)} ›
             </span>
           </span>
         </button>
@@ -1846,7 +1848,7 @@ function ModePanel({
         </div>
 
         <StartButton
-          label={`Start · ${inTier} film${inTier === 1 ? "" : "s"}`}
+          label={`Start · ${plural(inTier)}`}
           onClick={() => onRoughCut(tier)}
           disabled={inTier < 3}
         />
@@ -1916,7 +1918,7 @@ function ModePanel({
         <span className="flex items-baseline gap-2">
           <span className="text-body text-gold">{starsFor(tier)}</span>
           <span className="text-sub text-dim">
-            {count} film{count === 1 ? "" : "s"} ›
+            {plural(count)} ›
           </span>
         </span>
       </button>
@@ -1949,7 +1951,7 @@ function ModePanel({
 
         {(below > 0 || above > 0) && (
           <p className="mt-2 text-sub leading-snug text-dim">
-            {count} films in range. Every film keeps its own star rating — this only decides which
+            {plural(count)} in range. Every {lex().one} keeps its own star rating — this only decides which
             films meet each other.
           </p>
         )}
@@ -1959,10 +1961,10 @@ function ModePanel({
         <ShuffleRow shuffle={shuffle} onShuffle={onShuffle} />
       </div>
 
-      <StartButton label={`Start · ${count} films`} onClick={() => onKoth(tier)} disabled={!playable} />
+      <StartButton label={`Start · ${plural(count)}`} onClick={() => onKoth(tier)} disabled={!playable} />
       {!playable && (
         <p className="mt-2 text-center text-sub text-gold">
-          Only {count} film{count === 1 ? "" : "s"} in range — widen it or pick another tier.
+          Only {plural(count)} in range — widen it or pick another tier.
         </p>
       )}
       <BackRow onClick={() => setChosen(null)} />
@@ -2054,7 +2056,7 @@ function ShuffleSetup({
     <Sheet title="Fast Shuffle" onClose={onClose}>
       <div className="mb-1.5 text-label font-bold uppercase tracking-[0.14em] text-dim">What to compare</div>
       <div className="mb-3 flex gap-2">
-        <ScopeTab label="All films" active={kind === "all"} onClick={() => setKind("all")} />
+        <ScopeTab label={`All ${lex().many}`} active={kind === "all"} onClick={() => setKind("all")} />
         <ScopeTab label="This tier" active={kind === "tier"} onClick={() => setKind("tier")} />
         <ScopeTab label="Range" active={kind === "range"} onClick={() => setKind("range")} />
       </div>
@@ -2108,7 +2110,7 @@ function ShuffleSetup({
         <p className="mt-1.5 text-center text-sub text-dim">
           {batch === null
             ? "Runs until you stop."
-            : `${Math.min(batch, unplaced)} films to get a number · ${etaLabel(
+            : `${plural(Math.min(batch, unplaced))} to get a number · ${etaLabel(
                 etaSeconds(Math.min(batch, unplaced), paceS, PLACE_DUELS),
               )}`}
         </p>
@@ -2119,11 +2121,11 @@ function ShuffleSetup({
           rather than a default. */}
       <label className="mb-1 flex items-center justify-between rounded-xl border border-border px-4 py-3">
         <span className="min-w-0 pr-3">
-          <span className="block text-body text-text-hi">Include films I&apos;ve already placed</span>
+          <span className="block text-body text-text-hi">Include {lex().many} I&apos;ve already placed</span>
           <span className="block text-sub leading-snug text-dim">
             {includeConfirmed
-              ? "Placed films can move within their star rating."
-              : "Placed films stay exactly where you put them."}
+              ? `Placed ${lex().many} can move within their star rating.`
+              : `Placed ${lex().many} stay exactly where you put them.`}
           </span>
         </span>
         <input
@@ -2135,13 +2137,13 @@ function ShuffleSetup({
       </label>
 
       <StartButton
-        label={batch ? `Start · ${Math.min(batch, unplaced)} films` : `Start · ${count} films`}
+        label={`Start · ${plural(batch ? Math.min(batch, unplaced) : count)}`}
         onClick={() => onStart({ scope, includeConfirmed, batch: batch ?? undefined })}
         disabled={!playable}
       />
       {!playable && (
         <p className="mt-2 text-center text-sub text-gold">
-          Only {count} film{count === 1 ? "" : "s"} in range — widen it or pick another tier.
+          Only {plural(count)} in range — widen it or pick another tier.
         </p>
       )}
       <BackRow onClick={onBack} />
@@ -2247,7 +2249,7 @@ function TierPicker({
             <span className="flex w-full items-center justify-between">
               <span className="text-body text-gold">{starsFor(t)}</span>
               <span className="flex items-center gap-2 text-sub text-dim">
-                {n === 0 ? "none" : `${n} film${n === 1 ? "" : "s"}`}
+                {n === 0 ? "none" : plural(n)}
                 {n === 1 && ", needs 2"}
                 {t === current && <span className="text-gold"><TickIcon /></span>}
               </span>
@@ -2332,9 +2334,9 @@ export function Header({ onSettings, onTrophies }: { onSettings?: () => void; on
         <TrophyIcon />
       </button>
       <div className="text-center">
-        <span className="font-display text-[28px] leading-none tracking-[0.06em] text-gold" style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}>
-          RANKD
-        </span>
+        {/* The wordmark is the medium switch. See MediumSwitch.tsx for why it
+            lives here rather than on the nav. */}
+        <MediumSwitch />
         <div className="mt-1 flex items-center justify-center gap-1">
           {BARS.map((c) => (
             <span key={c} className="h-[3px] w-5 rounded-full" style={{ background: c }} />
@@ -2699,19 +2701,52 @@ function Duel({
 
 // Every mechanic the duel screen understands, cycled one at a time — the screen
 // carries no chrome explaining itself, so this is where the game gets taught.
-const TIPS = [
-  // "Tap the one you like more" is gone — the question under the posters now
-  // says that, and a tip repeating it wastes a turn of the cycle.
-  "Whichever film wins keeps climbing",
-  "Can't separate two? Say so, it counts",
-  "Flick a film up to send it straight to the top",
-  "Flick a film down to send it to the bottom",
-  "Hold a film to see who's in it and what it's about",
-  "Swipe the row below to choose who you face next",
-  "Pull the handle down to hide the row",
-  "Nothing's saved until you lock a film into place",
-];
+//
+// ── Why this is a function and no longer an array ─────────────────────────
+//
+// It names the medium eight times, and a module-level array is built once when
+// the module is first imported — which, for a client component, happens during
+// the server pass as well. `lex()` answers with the film words there, so a
+// constant would have frozen "Flick a film up" into a book library's tips.
+//
+// Rebuilt per call, which is nothing: it is eight strings, behind a `useMemo`
+// in its only caller.
+const tips = (): string[] => {
+  const L = lex();
+  return [
+    // "Tap the one you like more" is gone — the question under the posters now
+    // says that, and a tip repeating it wastes a turn of the cycle.
+    `Whichever ${L.one} wins keeps climbing`,
+    "Can't separate two? Say so, it counts",
+    `Flick a ${L.one} up to send it straight to the top`,
+    `Flick a ${L.one} down to send it to the bottom`,
+    // "who's in it" was a cast question and a book has no cast. "Who made it"
+    // is true of both and is what the card actually leads with.
+    `Hold a ${L.one} to see who made it and what it's about`,
+    "Swipe the row below to choose who you face next",
+    "Pull the handle down to hide the row",
+    `Nothing's saved until you lock a ${L.one} into place`,
+  ];
+};
 const STRIP_KEY = "rankd-strip-open";
+
+/**
+ * "A director, an actor or a genre" — or, for a medium with one credit role,
+ * "An author or a genre".
+ *
+ * Spelled out here rather than inline because the join is the whole point: the
+ * list is a different LENGTH per medium, so the comma and the "or" move. Written
+ * as a substitution it would have read "An author,  or a genre" for books, with
+ * the gap where the actor used to be.
+ */
+function runSubjects(): string {
+  const L = lex();
+  const parts = [`A ${L.maker}`, L.secondRole ? `an ${L.secondRole}` : null, "a genre"].filter(
+    (p): p is string => p !== null,
+  );
+  const last = parts.pop()!;
+  return `${parts.join(", ")} or ${last}`;
+}
 
 const TIP_MS = 9500; // dwell
 const TIP_FADE_MS = 550; // matches the .tip opacity transition
@@ -2736,7 +2771,10 @@ const CONTROL =
 // worth naming, because it is the only one where knowing how close you are
 // changes whether you keep going.
 function Tips({ guidance }: { guidance?: string }) {
-  const items = useMemo(() => (guidance ? [guidance, ...TIPS] : TIPS), [guidance]);
+  const items = useMemo(() => {
+    const t = tips();
+    return guidance ? [guidance, ...t] : t;
+  }, [guidance]);
   const [i, setI] = useState(0);
   const [shown, setShown] = useState(true);
 
@@ -2978,7 +3016,7 @@ function TierComplete({
         finished
           ? pile
             ? "That pile is in order. The rest of the tier is untouched."
-            : "Every film in this tier has found its spot."
+            : `Every ${lex().one} in this tier has found its spot.`
           : "Every answer is kept. Pick this tier back up whenever you like."
       }
       films={ranked}

@@ -23,6 +23,7 @@ import { slugId } from "@/lib/importCsv";
 import { PrimaryButton, Sheet } from "./ui";
 import { loadLog, type Judgement } from "@/lib/log";
 import type { Film } from "@/lib/types";
+import { lex } from "@/lib/lexicon";
 
 export function PersonSheet({
   person,
@@ -148,7 +149,7 @@ export function PersonSheet({
           />
         )}
         <p className="text-label uppercase tracking-wider text-dim">
-          {person.role === "director" ? "Director" : "Actor"} · {mine.length} in your list
+          {person.role === "director" ? lex().Maker : lex().secondRole} · {mine.length} in your list
           {showMissing && credits ? ` · ${missing.length} not logged` : ""}
         </p>
       </div>
@@ -194,7 +195,7 @@ export function PersonSheet({
           lib/types.ts for why that distinction is enforced rather than trusted. */}
       <label className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3">
         <span className="min-w-0">
-          <span className="block text-body text-text-hi">Include films I haven&rsquo;t seen</span>
+          <span className="block text-body text-text-hi">Include {lex().many} I haven&rsquo;t {lex().seen}</span>
           <span className="block text-sub leading-snug text-dim">
             {credits
               ? `${missing.length} more by ${person.name}. They won't be added to your library.`
@@ -216,7 +217,7 @@ export function PersonSheet({
           onClick={() => onRank(person, showMissing ? guests : [], portrait)}
           disabled={showMissing && !credits}
         >
-          {showMissing && !credits ? "Finding their films…" : `Rank these ${total}`}
+          {showMissing && !credits ? `Finding their ${lex().many}…` : `Rank these ${total}`}
         </PrimaryButton>
       )}
 

@@ -1,12 +1,12 @@
 "use client";
 
-// Log a film you have just watched.
+// Log something you have just finished.
 //
-// Until now the only way into the library was a Letterboxd CSV, which means the
-// app could rank your past and had nothing to say about tonight. This is the
-// other door: search, pick the right film, give it stars, and it lands in the
-// library unplaced — ready to be ranked like anything else, rather than being
-// dropped somewhere by a number nobody chose.
+// Until now the only way into the library was a CSV export, which means the app
+// could rank your past and had nothing to say about tonight. This is the other
+// door: search, pick the right one, give it stars, and it lands in the library
+// unplaced — ready to be ranked like anything else, rather than being dropped
+// somewhere by a number nobody chose.
 //
 // It deliberately stops at the star rating. Placing it inside the tier is the
 // climb's job, and doing it here would mean inventing a position from a single
@@ -20,12 +20,21 @@ import { slugId } from "@/lib/importCsv";
 import { requestTour } from "@/lib/tour";
 import { FIELD, Sheet } from "./ui";
 import type { Film } from "@/lib/types";
+import { lex } from "@/lib/lexicon";
+import { currentMedium } from "@/lib/medium";
 
 interface SearchHit {
-  tmdbId: number;
+  /** Medium-neutral identity. See `SearchHit` in the search route. */
+  id: string;
   title: string;
   year: string;
   poster?: string;
+  /**
+   * A film's opening synopsis line, or a book's author.
+   *
+   * The difference matters at the point of ADDING, not only displaying: an
+   * author is a credit worth storing, a synopsis line is not. See `add`.
+   */
   blurb?: string;
 }
 
@@ -73,7 +82,9 @@ export function LogFilm({
     const mine = ++seq.current;
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(query)}&medium=${currentMedium()}`,
+        );
         const data = await res.json();
         if (mine !== seq.current) return;
         setHits(data.results ?? []);
@@ -87,6 +98,8 @@ export function LogFilm({
     return () => clearTimeout(t);
   }, [q]);
 
+  const L = lex();
+
   const add = (hit: SearchHit, rating: Rating) => {
     onAdd({
       id: slugId(hit.title, hit.year),
@@ -97,12 +110,25 @@ export function LogFilm({
       // position, not a verdict — the film shows no rank until it is placed.
       score: seedScore(rating),
       poster: hit.poster,
+      // ── Why the author is kept here and the synopsis is not ──────────────
+      //
+      // For a book the search has already returned the author, and storing it
+      // now means the sweep can send it to `bestBook` on the very first fetch —
+      // which is the signal that stops a novel resolving to its study guide.
+      // Without it, the first fetch of a hand-logged book is title-only: the
+      // weakest search this app ever makes, on the one record the reader was
+      // most deliberate about.
+      //
+      // A film's `blurb` is a synopsis line and goes nowhere. `director` is a
+      // credit, and writing prose into it would put a sentence on the person
+      // shelf and in the search index.
+      ...(L.medium === "book" && hit.blurb ? { director: hit.blurb } : {}),
     });
     onClose();
   };
 
   return (
-    <Sheet title={chosen ? "How was it?" : "Log a film"} onClose={onClose} closing={closing}>
+    <Sheet title={chosen ? "How was it?" : `Log a ${L.one}`} onClose={onClose} closing={closing}>
       {chosen ? (
         <RatingStep hit={chosen} onPick={(r) => add(chosen, r)} onBack={() => setChosen(null)} />
       ) : (
@@ -130,7 +156,7 @@ export function LogFilm({
                 setBusy(true);
               }
             }}
-            placeholder="Search for a film"
+            placeholder={`Search for a ${L.one}`}
             className={FIELD}
           />
 
@@ -142,7 +168,7 @@ export function LogFilm({
               const have = films.find((f) => f.id === slugId(h.title, h.year));
               return (
                 <button
-                  key={h.tmdbId}
+                  key={h.id}
                   onClick={() => setChosen(h)}
                   className="flex items-center gap-3 rounded-xl border border-border px-3 py-2 text-left active:scale-[0.99]"
                 >
@@ -155,7 +181,13 @@ export function LogFilm({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body text-text-hi">{h.title}</span>
                     <span className="block truncate text-sub text-dim">
-                      {h.year}
+                      {/* The author is the line that separates two hits sharing
+                          one title — two editions of a novel share a blurb and a
+                          year, and a novel and its study guide share everything
+                          but this. A film keeps the year alone: its synopsis
+                          line is far too long for the row, and `bestMatch`
+                          already leans on the year to tell remakes apart. */}
+                      {[h.year, L.medium === "book" ? h.blurb : null].filter(Boolean).join(" · ") || "—"}
                       {have ? ` · already in your list at ${starsFor(have.rating)}` : ""}
                     </span>
                   </span>
@@ -166,7 +198,7 @@ export function LogFilm({
             {/* One line, four states, so the panel never sits blank and unexplained. */}
             {q.trim() !== "" && hits.length === 0 && (
               <p className="px-1 py-3 text-center text-sub text-dim">
-                {busy ? "Searching…" : failed ? "Couldn't reach the film database." : "Nothing found."}
+                {busy ? "Searching…" : failed ? `Couldn’t reach ${L.source}.` : "Nothing found."}
               </p>
             )}
           </div>

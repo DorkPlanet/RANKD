@@ -25,6 +25,7 @@ import {
   type ConflictSides,
 } from "@/lib/sync";
 import { isDirty, readSyncState, subscribeSync, clearSyncState } from "@/lib/syncState";
+import type { BackupSummary } from "@/lib/backupFormat";
 
 // Account's own button constant, pointed at the shared shape. It was a third
 // button (`rounded-xl … text-xs`) sitting inside a sheet that already had two.
@@ -41,6 +42,34 @@ function ago(iso: string | null): string {
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
   const days = Math.round(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+
+/**
+ * What a side of the conflict actually holds, in one line.
+ *
+ * ── Why the two libraries are named and not added together ────────────────
+ *
+ * This line is the entire basis for a destructive choice: whichever side loses
+ * is replaced. So it has to describe the side accurately, and "803 films" for a
+ * reader with 800 films and 3 books is not accurate — it is a number that would
+ * make a device holding only books look like it held nothing at all, next to an
+ * account showing hundreds.
+ *
+ * A medium with nothing in it is left out rather than printed as zero. "0 books"
+ * on both sides is noise on a question about films, and it would appear for
+ * every reader who has never opened the second medium, which is most of them.
+ */
+function sizeOf(side: BackupSummary): string {
+  const parts: string[] = [];
+  if (side.films > 0) parts.push(`${side.films} film${side.films === 1 ? "" : "s"}`);
+  if (side.books > 0) parts.push(`${side.books} book${side.books === 1 ? "" : "s"}`);
+  // Both empty is a state the chooser should never reach — a side with no
+  // library cannot be in conflict with anything — but saying so beats printing
+  // a bare comma if it ever does.
+  if (parts.length === 0) parts.push("nothing");
+  parts.push(`${side.judgements.toLocaleString()} duels`);
+  return parts.join(", ");
 }
 
 export function Account({ onConflict }: { onConflict?: (has: boolean) => void } = {}) {
@@ -153,12 +182,10 @@ export function Account({ onConflict }: { onConflict?: (has: boolean) => void } 
         </p>
         <div className="mb-3 space-y-1.5 text-sub leading-snug">
           <p className="text-dim">
-            <span className="text-text-hi">This device</span> · {conflict.local.films} films,{" "}
-            {conflict.local.judgements.toLocaleString()} duels
+            <span className="text-text-hi">This device</span> · {sizeOf(conflict.local)}
           </p>
           <p className="text-dim">
-            <span className="text-text-hi">Your account</span> · {conflict.server.films} films,{" "}
-            {conflict.server.judgements.toLocaleString()} duels · saved{" "}
+            <span className="text-text-hi">Your account</span> · {sizeOf(conflict.server)} · saved{" "}
             {ago(conflict.serverUpdatedAt)}
           </p>
         </div>

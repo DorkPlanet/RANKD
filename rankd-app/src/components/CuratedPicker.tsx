@@ -20,6 +20,7 @@ import { genresIn, MIN_GENRE_RUN, type GenreTally } from "@/lib/genres";
 import { peopleIn, type Person } from "@/lib/people";
 import { Eyebrow, FIELD, ScopeTab, Sheet, StartButton } from "./ui";
 import type { Film } from "@/lib/types";
+import { count as plural, lex } from "@/lib/lexicon";
 
 type Tab = "director" | "actor" | "genre";
 
@@ -60,8 +61,10 @@ export function CuratedPicker({
   return (
     <Sheet title="Curator" onClose={onClose}>
       <div className="mb-3 flex gap-2">
-        <ScopeTab label="Directors" active={tab === "director"} onClick={() => { setTab("director"); setGenre(null); }} />
-        <ScopeTab label="Actors" active={tab === "actor"} onClick={() => { setTab("actor"); setGenre(null); }} />
+        <ScopeTab label={`${lex().Maker}s`} active={tab === "director"} onClick={() => { setTab("director"); setGenre(null); }} />
+        {lex().secondRole && (
+          <ScopeTab label={`${lex().secondRole}s`} active={tab === "actor"} onClick={() => { setTab("actor"); setGenre(null); }} />
+        )}
         <ScopeTab label="Genres" active={tab === "genre"} onClick={() => { setTab("genre"); setGenre(null); }} />
       </div>
 
@@ -87,7 +90,7 @@ export function CuratedPicker({
           <div className="mb-3 rounded-xl border border-border px-4 py-3">
             <div className="text-body text-text-hi">{chosen.name}</div>
             <div className="mt-0.5 text-sub text-dim">
-              {chosen.count} film{chosen.count === 1 ? "" : "s"} in your library
+              {plural(chosen.count)} in your library
             </div>
           </div>
 
@@ -110,7 +113,7 @@ export function CuratedPicker({
           />
           {chosen.count < MIN_GENRE_RUN && (
             <p className="mt-2 text-center text-sub text-gold">
-              Only {chosen.count} film in this genre — there is nothing to compare it to.
+              Only {plural(chosen.count)} in this genre — there is nothing to compare it to.
             </p>
           )}
         </div>
@@ -122,7 +125,7 @@ export function CuratedPicker({
                 ? "Nothing by that name."
                 : // The honest empty state: genres and credits arrive with a
                   // film's artwork, so a young library genuinely knows little.
-                  "Nothing here yet. This fills in as your library learns who made each film."}
+                  `Nothing here yet. This fills in as your library learns who made each ${lex().one}.`}
             </p>
           )}
           {/* Split on the tab rather than sniffing a property off the row: the

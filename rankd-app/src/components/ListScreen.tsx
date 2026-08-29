@@ -21,6 +21,7 @@ import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD } from "./ui";
 import { ChevronIcon } from "./Icons";
+import { lex } from "@/lib/lexicon";
 
 // Fixed row metrics. Building all 828 rows at once measured a 748ms blocked
 // main thread — content-visibility skips their layout and paint but React still
@@ -235,7 +236,7 @@ export default function ListScreen({
     // three states and a fourth hue beside them would read as one; the
     // near-white is the app's colour for "the thing itself" and says total
     // without joining the set.
-    { n: all.total, label: "films", tone: "text-text-hi", key: null },
+    { n: all.total, label: lex().many, tone: "text-text-hi", key: null },
     { n: all.settledCount, label: "locked", tone: "text-gold", key: "locked" as const },
     {
       n: all.placedCount - all.settledCount,
@@ -449,7 +450,10 @@ export default function ListScreen({
             // fields — and the alternative the user ruled out, separate
             // buttons per field, makes you declare what you are looking for
             // before you look.
-            placeholder="Film, director or actor"
+            placeholder={[lex().One, lex().maker, lex().secondRole]
+              .filter(Boolean)
+              .join(", ")
+              .replace(/, ([^,]*)$/, " or $1")}
             // `pr-12` is the arrow's room. Without it a long query runs under
             // the glyph and the last characters are unreadable.
             className={`${FIELD} pr-12`}

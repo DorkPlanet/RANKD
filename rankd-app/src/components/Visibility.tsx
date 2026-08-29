@@ -26,6 +26,7 @@ import { useState } from "react";
 
 import { saveMe, type Me } from "@/lib/account";
 import { SettingRow } from "./ui";
+import { lex } from "@/lib/lexicon";
 
 const ROW = "py-3";
 
@@ -112,7 +113,7 @@ export function Visibility({
             title="Show what you like"
             blurb={
               tasteIsPublic
-                ? "Your top films, who you rate highest, and the shape of your taste."
+                ? `Your top ${lex().many}, who you rate highest, and the shape of your taste.`
                 : "Just your name and your counts. The rest stays yours."
             }
             on={tasteIsPublic}

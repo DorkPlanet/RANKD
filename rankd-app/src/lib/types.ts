@@ -72,6 +72,21 @@ export interface Film {
   noMatch?: boolean;
   // Which TMDb film this is, once anything has resolved it.
   tmdbId?: number;
+  // ── The same question, asked of a book ───────────────────────────────────
+  //
+  // Google Books volume ids are opaque strings, so they cannot share `tmdbId`'s
+  // number without widening a field that is persisted, synced and present in
+  // every backup ever written. A second optional field costs nothing on a film
+  // — it is simply absent — and avoids migrating live data to tidy up a type.
+  //
+  // `isbn` rides along because it is not merely an identifier: it IS the Open
+  // Library cover URL, so a book that has one can be re-dressed without asking
+  // Google anything. Kept for the same reason the credits are — it arrives on
+  // the response that fetches the artwork, so it costs no extra request, and
+  // throwing it away would mean paying for the whole library again to get it
+  // back.
+  bookId?: string;
+  isbn?: string;
   // The user said which film this is, so nothing may guess again.
   //
   // Matching by title is a guess and sometimes a wrong one — a niche title

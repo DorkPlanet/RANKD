@@ -26,8 +26,22 @@
 import type { Bucket } from "./roughCut";
 import type { Rating } from "./tiers";
 import type { Film } from "./types";
+import { keyFor } from "./medium";
 
-const KEY = "rankd-roughcut-v1";
+// ── Why the key below is a function and not a constant ─────────────────────
+//
+// `const KEY = keyFor("…")` would be evaluated once, at module load. Next
+// renders client components on the SERVER first, where there is no
+// `localStorage` and `currentMedium()` therefore answers with the default — so a
+// const would bake in "film" for that pass. The browser bundle evaluates the
+// module again and would get it right, which makes this the kind of bug that
+// shows up in one server-rendered frame and in no test whatsoever.
+//
+// A function asks at the moment of use, when the answer is knowable, and costs
+// a map lookup: `currentMedium` caches after its first read.
+
+// Per medium — it names ids from one library. See lib/medium.ts.
+const KEY = () => keyFor("rankd-roughcut-v1");
 
 /** How a pass looks on disk. Ids only — see the note above. */
 interface StoredPass {
@@ -62,7 +76,7 @@ export function saveRoughCut(pass: ResumedPass | null): void {
   if (typeof window === "undefined") return;
   try {
     if (!pass || pass.at <= 0 || pass.at >= pass.films.length) {
-      localStorage.removeItem(KEY);
+      localStorage.removeItem(KEY());
       return;
     }
     const stored: StoredPass = {
@@ -72,7 +86,7 @@ export function saveRoughCut(pass: ResumedPass | null): void {
       choices: Object.fromEntries(pass.choices),
       n: pass.n,
     };
-    localStorage.setItem(KEY, JSON.stringify(stored));
+    localStorage.setItem(KEY(), JSON.stringify(stored));
   } catch {
     // Storage full or disabled. The pass is still applied on exit, so the cost
     // is the resume, not the work.
@@ -91,7 +105,7 @@ export function saveRoughCut(pass: ResumedPass | null): void {
 export function loadRoughCut(films: readonly Film[], tier: Rating): ResumedPass | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY());
     if (!raw) return null;
     const s = JSON.parse(raw) as StoredPass;
     if (s.tier !== tier || !Array.isArray(s.order)) return null;
@@ -118,7 +132,7 @@ export function loadRoughCut(films: readonly Film[], tier: Rating): ResumedPass 
 export function clearRoughCut(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(KEY());
   } catch {
     // nothing to fall back to
   }

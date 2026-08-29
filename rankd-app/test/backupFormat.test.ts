@@ -22,7 +22,7 @@ const log = (rows: unknown[]) => JSON.stringify({ v: 1, f: ["heat-1995", "collat
 describe("validateBackup", () => {
   it("accepts a minimal library and counts it", () => {
     const { summary } = validateBackup(payload());
-    expect(summary).toEqual({ films: 1, judgements: 0, hadProfile: false });
+    expect(summary).toEqual({ films: 1, books: 0, judgements: 0, hadProfile: false });
   });
 
   it("counts the evidence log and notices a profile", () => {
@@ -32,7 +32,7 @@ describe("validateBackup", () => {
         "rankd-profile-v1": JSON.stringify({ name: "You", bio: "" }),
       }),
     );
-    expect(summary).toEqual({ films: 1, judgements: 2, hadProfile: true });
+    expect(summary).toEqual({ films: 1, books: 0, judgements: 2, hadProfile: true });
   });
 
   it("returns the payload unchanged so the caller can store it verbatim", () => {

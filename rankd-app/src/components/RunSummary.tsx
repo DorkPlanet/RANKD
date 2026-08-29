@@ -24,6 +24,7 @@ import { subjectEyebrow, subjectTitle, type RankSubject } from "@/lib/subject";
 import { starsFor } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
 import { Eyebrow, PrimaryButton, QuietButton } from "./ui";
+import { lex } from "@/lib/lexicon";
 
 type Saving = "idle" | "working" | "saved" | "failed";
 
@@ -116,7 +117,7 @@ export function RunSummary({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-body text-text-hi">{f.title}</span>
                 <span className="block truncate text-sub text-dim">
-                  {[f.year, f.guest ? "not seen" : starsFor(f.rating)].filter(Boolean).join(" · ")}
+                  {[f.year, f.guest ? `not ${lex().seen}` : starsFor(f.rating)].filter(Boolean).join(" · ")}
                 </span>
               </span>
             </div>

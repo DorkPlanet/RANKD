@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { MESSAGE_MAX, shortAgo } from "@/lib/social/feed";
 import type { ThreadMessageItem, ThreadSummary } from "@/lib/social/threads";
 import { FIELD } from "./ui";
+import { lex } from "@/lib/lexicon";
 
 function Conversation({
   thread,
@@ -84,7 +85,7 @@ function Conversation({
           <img src={meta.poster} alt="" aria-hidden className="h-14 w-10 rounded object-cover" />
         )}
         <div className="min-w-0">
-          <div className="truncate text-body font-semibold text-text-hi">{meta.title ?? "A film"}</div>
+          <div className="truncate text-body font-semibold text-text-hi">{meta.title ?? `A ${lex().one}`}</div>
           <div className="text-sub text-dim">
             with{" "}
             <a href={`/@${thread.withHandle}`} className="active:opacity-70">
@@ -222,7 +223,7 @@ export function TalkPanel({ openId, onOpen }: { openId: string | null; onOpen: (
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-body font-semibold text-text-hi">
-                    {meta.title ?? "A film"}
+                    {meta.title ?? `A ${lex().one}`}
                   </div>
                   <div className="text-sub text-dim">
                     {t.withHandle} · {shortAgo(t.lastAt)}

@@ -24,6 +24,8 @@ import { useEffect, useState } from "react";
 import type { SearchHit } from "@/app/api/search/route";
 import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
+import { lex } from "@/lib/lexicon";
+import { currentMedium } from "@/lib/medium";
 
 export function FixMatch({
   film,
@@ -37,7 +39,11 @@ export function FixMatch({
 }) {
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [failed, setFailed] = useState(false);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  // Keyed by the medium-neutral `id`, not `tmdbId`. A book hit has no TMDb id
+  // at all, so the old key was `undefined` for every row — which made every row
+  // look busy at once the moment one was tapped.
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const L = lex();
 
   // Searched on the film's own title, because that is what went wrong — the
   // reader is looking for the film they already named, not a different one. A
@@ -47,7 +53,9 @@ export function FixMatch({
     let live = true;
     void (async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(film.title)}`);
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(film.title)}&medium=${currentMedium()}`,
+        );
         const body = (await res.json()) as { results?: SearchHit[] };
         if (live) setHits(body.results ?? []);
       } catch {
@@ -60,11 +68,11 @@ export function FixMatch({
   }, [film.title]);
 
   const choose = async (hit: SearchHit) => {
-    setBusyId(hit.tmdbId);
+    setBusyId(hit.id);
     try {
       // BY ID, never by title again. Searching a second time could only find
       // its way back to the film being corrected.
-      const res = await fetch(`/api/film?id=${hit.tmdbId}`);
+      const res = await fetch(`/api/film?id=${hit.id}&medium=${currentMedium()}`);
       if (!res.ok) throw new Error("failed");
       onFixed((await res.json()) as FilmMeta);
     } catch {
@@ -76,7 +84,7 @@ export function FixMatch({
   return (
     <div className="border-t border-border px-4 py-3">
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-sub font-semibold text-text-hi">Which film is this?</span>
+        <span className="text-sub font-semibold text-text-hi">Which {L.one} is this?</span>
         <button onClick={onCancel} className="text-label text-dim active:scale-95">
           Cancel
         </button>
@@ -91,14 +99,14 @@ export function FixMatch({
       {hits === null && !failed && <p className="text-sub text-dim">Looking…</p>}
       {hits?.length === 0 && (
         <p className="text-sub leading-snug text-dim">
-          TMDb has nothing under that title. Nothing to swap it for.
+          {L.source} has nothing under that title. Nothing to swap it for.
         </p>
       )}
 
       <div className="flex flex-col gap-1">
         {hits?.map((h) => (
           <button
-            key={h.tmdbId}
+            key={h.id}
             disabled={busyId !== null}
             onClick={() => void choose(h)}
             className="flex items-center gap-2.5 rounded-lg border border-border px-2 py-1.5 text-left active:scale-[0.99] disabled:opacity-40"
@@ -121,7 +129,7 @@ export function FixMatch({
                 {h.blurb ? ` · ${h.blurb}` : ""}
               </span>
             </span>
-            {busyId === h.tmdbId && <span className="text-label text-dim">…</span>}
+            {busyId === h.id && <span className="text-label text-dim">…</span>}
           </button>
         ))}
       </div>

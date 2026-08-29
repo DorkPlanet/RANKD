@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 
 import type { Film } from "@/lib/types";
 import { LockIcon } from "./Icons";
+import { lex } from "@/lib/lexicon";
 
 export function Rolodex({
   lowToHigh,
@@ -133,7 +134,7 @@ export function Rolodex({
             if (dy > 0 === open) onToggle(); // pull down to close, up to open
           }
         }}
-        aria-label={open ? "Hide the film strip" : "Show the film strip"}
+        aria-label={`${open ? "Hide" : "Show"} the ${lex().one} strip`}
         aria-expanded={open}
         data-tour="strip"
         className="mx-auto flex h-7 w-20 items-center justify-center"

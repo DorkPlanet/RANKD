@@ -24,6 +24,7 @@
 // came from nowhere.
 
 import type { Film } from "@/lib/types";
+import { lex } from "@/lib/lexicon";
 
 /** ISO 3166-1 alpha-2 to its flag, by offsetting into the regional indicators. */
 const flagOf = (code: string): string =>
@@ -57,7 +58,7 @@ export function Passport({ films, onPick }: { films: Film[]; onPick?: (code: str
   return (
     <div>
       <p className="mb-3 text-sub leading-snug text-text">
-        Films from <span className="text-gold">{rows.length} countries</span>
+        {lex().Many} from <span className="text-gold">{rows.length} countries</span>
         {". "}
         {Math.round((top.n / known) * 100)}% of them were made in {top.code}.
       </p>

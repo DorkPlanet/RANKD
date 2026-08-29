@@ -30,6 +30,7 @@ import { nextPair, poolFor, type MatchOptions } from "@/lib/matchmaker";
 import { RunStatus } from "./RunStatus";
 import { PLACE_DUELS, countDuel, placeSettled, respreadFor } from "@/lib/shuffle";
 import type { Film } from "@/lib/types";
+import { lex } from "@/lib/lexicon";
 
 /**
  * How long a judgement waits before it is written. Long enough to notice a
@@ -728,7 +729,7 @@ export default function ShuffleDuel({
     return (
       <Centre>
         {pool.length < 2
-          ? "Not enough films in range to compare. Widen the scope and try again."
+          ? `Not enough ${lex().many} in range to compare. Widen the scope and try again.`
           : "Nothing left to ask here."}
         <button
           onClick={leave}
@@ -810,11 +811,11 @@ export default function ShuffleDuel({
             label={options.target - count === 1 ? "duel left" : "duels left"}
           />
         ) : batch ? (
-          <Countdown n={batchLeft} label={batchLeft === 1 ? "film to go" : "films to go"} />
+          <Countdown n={batchLeft} label={`${batchLeft === 1 ? lex().one : lex().many} to go`} />
         ) : (
           <Countdown
             n={Math.max(0, pool.length - workedOut)}
-            label={pool.length - workedOut === 1 ? "film to work out" : "films to work out"}
+            label={`${pool.length - workedOut === 1 ? lex().one : lex().many} to work out`}
           />
         )}
       </div>

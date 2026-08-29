@@ -1,9 +1,12 @@
 import type { Film } from "./types";
+import { currentMedium } from "./medium";
 
-// Extra film detail fetched on demand from TMDb (via /api/film, which keeps the
-// key server-side). Deliberately NOT part of Film: Film is the persisted record
-// and this is derived, re-fetchable data — no reason to bloat localStorage with
-// it or to let a stale synopsis outlive a cache bust.
+// Extra detail fetched on demand from the metadata service for the current
+// medium — TMDb for films, Google Books plus Open Library for books — via
+// /api/film, which keeps the keys server-side. Deliberately NOT part of Film:
+// Film is the persisted record and this is derived, re-fetchable data — no
+// reason to bloat localStorage with it or to let a stale synopsis outlive a
+// cache bust.
 
 export interface FilmMeta {
   /**
@@ -15,10 +18,19 @@ export interface FilmMeta {
    * `pinnedMeta` in types.ts.
    */
   tmdbId?: number;
+  /**
+   * The book equivalents of `tmdbId`, and they carry the same argument: this is
+   * the answer to "which record did we decide this was", and once a person has
+   * corrected a bad match that answer must survive. See `bookId` in types.ts.
+   */
+  bookId?: string;
+  isbn?: string;
   poster?: string;
   synopsis?: string;
+  /** Minutes for a film, pages for a book. `lengthLabel` says which. */
   runtime?: number;
   genres?: string[];
+  /** The director, or — for a book — the author. See `asFilmMeta` in the route. */
   director?: string;
   writer?: string;
   cinematographer?: string;
@@ -38,10 +50,45 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 
   const params = new URLSearchParams({ title: film.title });
   if (film.year) params.set("year", film.year);
+  // ── Two extras a book search needs and a film search does not ────────────
+  //
+  // `medium` picks which service answers. `author` is sent because it is the
+  // signal that separates a novel from its study guide, and `bestBook` weights
+  // it accordingly — a title-only book search returns SparkNotes far too often
+  // to be relied on. It is only ever present when a stored record already knows
+  // it, which after the first sweep is nearly all of them.
+  //
+  // Sent for films too when known, where the route simply ignores it. A
+  // conditional here would be a second place that has to agree with the route
+  // about which medium wants what.
+  if (currentMedium() !== "film") params.set("medium", currentMedium());
+  if (film.director) params.set("author", film.director);
 
+  // ── A FAILURE is not an answer, and is not remembered as one ─────────────
+  //
+  // This cache exists so one record is asked about once per session. That is
+  // right for an answer and wrong for a failure: a rate-limited response would
+  // otherwise be cached as "we asked, there is nothing", and the record would
+  // wear no artwork for the rest of the session even after the limit cleared.
+  //
+  // Not hypothetical. Google Books answers 429 to unauthenticated requests from
+  // an ordinary IP — measured, every query — so on a deployment with no key
+  // this is the common path rather than the rare one. `guard.ts` records the
+  // same failure from the other side, where a 429 was cached as an answer and
+  // "posters stopped and stayed stopped until a reload".
+  //
+  // The empty object is still what the CALLER gets, because a thinner card is
+  // the right way for this to fail. Only the remembering changes.
   const req = fetch(`/api/film?${params}`)
-    .then((r) => (r.ok ? r.json() : {}))
-    .catch(() => ({})); // an unreachable API just means a thinner card, not a crash
+    .then((r) => {
+      if (r.ok) return r.json();
+      cache.delete(film.id);
+      return {};
+    })
+    .catch(() => {
+      cache.delete(film.id);
+      return {};
+    });
 
   cache.set(film.id, req);
   return req;
@@ -71,8 +118,27 @@ export function fetchMeta(film: Film): Promise<FilmMeta> {
 // See `pinnedMeta` in types.ts.
 export const needsPoster = (f: Film): boolean => !f.poster && !f.noMatch && !f.pinnedMeta;
 
-export const needsMeta = (f: Film): boolean =>
-  !f.noMatch && !f.pinnedMeta && (!f.poster || !f.director || !f.genres || !f.keywords || !f.countries);
+// ── Which fields COUNT as complete, per medium ─────────────────────────────
+//
+// This looks like a detail and is the difference between a book library that
+// settles and one that re-fetches itself forever.
+//
+// The film tests below ask for `keywords` and `countries`. Neither exists for a
+// book and neither ever will: Google Books has one flat `categories` list and no
+// production country, so a book that has been fetched perfectly still fails
+// `!f.keywords` — which means `needsMeta` stays true, the sweep re-queues it
+// every session, and 400 books hammer Google forever while `adds` correctly
+// reports that nothing changed each time. Silent, endless, and invisible because
+// the library never visibly breaks.
+//
+// So the question "is this record finished" is asked per medium, of the fields
+// that medium can actually supply. Artwork and the maker are the two both have.
+const wanted = (): ((f: Film) => boolean) =>
+  currentMedium() === "book"
+    ? (f) => !f.poster || !f.director || !f.genres
+    : (f) => !f.poster || !f.director || !f.genres || !f.keywords || !f.countries;
+
+export const needsMeta = (f: Film): boolean => !f.noMatch && !f.pinnedMeta && wanted()(f);
 
 // Who made it, and what kind of thing it is.
 //
@@ -81,7 +147,12 @@ export const needsMeta = (f: Film): boolean =>
 // no credits looks complete on the list screen and is invisible to every one of
 // those questions, which is why the gap went unnoticed for so long.
 export const needsCredits = (f: Film): boolean =>
-  !f.noMatch && !f.pinnedMeta && (!f.director || !f.genres || !f.countries);
+  !f.noMatch &&
+  !f.pinnedMeta &&
+  // `countries` is asked for only where it exists. Same trap as `needsMeta`:
+  // a book can never satisfy it, so including it unconditionally would keep
+  // every finished book permanently in the credits queue.
+  (!f.director || !f.genres || (currentMedium() === "film" && !f.countries));
 
 // Fold a fetched response into the stored film. Only the fields worth persisting
 // are taken — synopsis, runtime and genres stay derived, since they'd bloat
@@ -101,6 +172,10 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
     return {
       ...film,
       tmdbId: meta.tmdbId ?? film.tmdbId,
+      // Both identifiers, unconditionally. A correction is a REPLACEMENT, so a
+      // book id left over from the wrong volume would keep pointing at it.
+      bookId: meta.bookId,
+      isbn: meta.isbn,
       pinnedMeta: true,
       // Cleared: a film that could not be found by title has just been found by
       // hand, and leaving the flag would tell every reader it is still
@@ -123,6 +198,8 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
   return {
     ...film,
     tmdbId: meta.tmdbId ?? film.tmdbId,
+    bookId: meta.bookId ?? film.bookId,
+    isbn: meta.isbn ?? film.isbn,
     noMatch: empty || film.noMatch,
     poster: meta.poster ?? film.poster,
     director: meta.director ?? film.director,
@@ -202,7 +279,9 @@ function adds(film: Film, meta: FilmMeta): boolean {
     (!!meta.countries?.length && !film.countries?.length) ||
     (!!meta.language && !film.language) ||
     (!!meta.runtime && !film.runtime) ||
-    (!!meta.tmdbId && !film.tmdbId)
+    (!!meta.tmdbId && !film.tmdbId) ||
+    (!!meta.bookId && !film.bookId) ||
+    (!!meta.isbn && !film.isbn)
   );
 }
 

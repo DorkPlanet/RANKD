@@ -2,10 +2,28 @@ import type { Film } from "./types";
 import { migrateLock } from "./lock";
 import { markDirty } from "./syncState";
 import { isWiped } from "./wiped";
+import { keyFor } from "./medium";
+
+// ── Why the key below is a function and not a constant ─────────────────────
+//
+// `const KEY = keyFor("…")` would be evaluated once, at module load. Next
+// renders client components on the SERVER first, where there is no
+// `localStorage` and `currentMedium()` therefore answers with the default — so a
+// const would bake in "film" for that pass. The browser bundle evaluates the
+// module again and would get it right, which makes this the kind of bug that
+// shows up in one server-rendered frame and in no test whatsoever.
+//
+// A function asks at the moment of use, when the answer is knowable, and costs
+// a map lookup: `currentMedium` caches after its first read.
 
 // Local-first persistence. The master library lives in localStorage and is
 // mirrored to an account when there is one (see sync.ts).
-const KEY = "rankd-app-v1";
+//
+// One key PER MEDIUM. Films keep `rankd-app-v1` exactly, so no existing library
+// moves and there is nothing to migrate; books live under a suffixed key of
+// their own. See lib/medium.ts for why the medium switches which store is read
+// rather than filtering one shared list.
+const KEY = () => keyFor("rankd-app-v1");
 
 /**
  * The library, or nothing.
@@ -29,7 +47,7 @@ const KEY = "rankd-app-v1";
 export function loadFilms(): Film[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY());
     // Migrated on the way in, so every reader downstream sees `lock` and the
     // legacy `confirmed` flag exists nowhere except this one line.
     if (raw) return (JSON.parse(raw) as Film[]).map(migrateLock);
@@ -54,7 +72,7 @@ export function saveFilms(films: Film[]): void {
   // are holding the library it just deleted. See `wiped.ts`.
   if (isWiped()) return;
   try {
-    localStorage.setItem(KEY, JSON.stringify(films.filter((f) => !f.guest)));
+    localStorage.setItem(KEY(), JSON.stringify(films.filter((f) => !f.guest)));
     markDirty();
   } catch {
     // storage full / disabled — nothing we can do, and nothing to fall back to
@@ -117,6 +135,6 @@ export function isUntouchedSeed(films: readonly Film[]): boolean {
 /** Does this browser hold a library sync should treat as real? */
 export function hasRealLibrary(): boolean {
   if (typeof window === "undefined") return false;
-  if (localStorage.getItem(KEY) === null) return false;
+  if (localStorage.getItem(KEY()) === null) return false;
   return !isUntouchedSeed(loadFilms());
 }

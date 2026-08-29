@@ -21,6 +21,7 @@ import { rankMap } from "@/lib/list";
 import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 import { Eyebrow } from "./ui";
+import { lex } from "@/lib/lexicon";
 
 // ── Why this is a percentage now, when it deliberately was not ─────────────
 //
@@ -164,7 +165,7 @@ export function FilmInfo({
 
   const crew = meta
     ? ([
-        ["Director", meta.director],
+        [lex().Maker, meta.director],
         ["Written by", meta.writer],
         ["Cinematography", meta.cinematographer],
         ["Music", meta.composer],

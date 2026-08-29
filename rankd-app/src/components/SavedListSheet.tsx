@@ -19,6 +19,7 @@ import { cardDataFromFilms } from "@/lib/card/data";
 import { deleteList, filmsOf, hydrate, subjectOf, type SavedList } from "@/lib/lists";
 import { starsFor } from "@/lib/tiers";
 import type { Film } from "@/lib/types";
+import { count, lex } from "@/lib/lexicon";
 
 export default function SavedListSheet({
   list,
@@ -80,7 +81,7 @@ export default function SavedListSheet({
         {list.source && <span className="uppercase tracking-[0.12em]">{list.source}</span>}
         {list.source && saved && " · "}
         {saved && `saved ${saved}`}
-        {` · ${list.entries.length} films`}
+        {` · ${count(list.entries.length)}`}
       </p>
 
       <div className="mb-5 flex gap-2">
@@ -99,7 +100,7 @@ export default function SavedListSheet({
         // before the entry carried a rating whose film has also left the
         // library, so the card genuinely cannot include them.
         <p className="mb-4 text-sub leading-snug text-dim">
-          {dropped} {dropped === 1 ? "film is" : "films are"} missing from the card: they left your
+          {dropped} {dropped === 1 ? `${lex().one} is` : `${lex().many} are`} missing from the card: they left your
           library before it recorded enough to redraw them.
         </p>
       )}

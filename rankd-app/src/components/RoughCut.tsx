@@ -36,6 +36,7 @@ import { Countdown } from "./Countdown";
 import { BottomNav, Header } from "./DuelScreen";
 import { PosterArt } from "./PosterArt";
 import { floatStyle, flyPosterTo } from "./PosterCard";
+import { lex } from "@/lib/lexicon";
 
 /** How far a pointer must travel before it counts as a flick rather than a tap. */
 /**
@@ -519,7 +520,7 @@ export default function RoughCut({
         <div data-tour="rc-count" className="mt-2.5 flex justify-center">
           <Countdown
             n={pool.length - at}
-            label={pool.length - at === 1 ? "film left" : "films left"}
+            label={`${pool.length - at === 1 ? lex().one : lex().many} left`}
             size={26}
             tight
           />

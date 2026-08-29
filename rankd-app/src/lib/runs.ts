@@ -25,9 +25,25 @@
 
 import type { RankSubject } from "./subject";
 import type { Film, PlacementSession } from "./types";
+import { keyFor } from "./medium";
 
-const KEY = "rankd-run-v1";
-const CURATED_KEY = "rankd-run-curated-v1";
+// ── Why the key below is a function and not a constant ─────────────────────
+//
+// `const KEY = keyFor("…")` would be evaluated once, at module load. Next
+// renders client components on the SERVER first, where there is no
+// `localStorage` and `currentMedium()` therefore answers with the default — so a
+// const would bake in "film" for that pass. The browser bundle evaluates the
+// module again and would get it right, which makes this the kind of bug that
+// shows up in one server-rendered frame and in no test whatsoever.
+//
+// A function asks at the moment of use, when the answer is knowable, and costs
+// a map lookup: `currentMedium` caches after its first read.
+
+// Per medium. An in-flight run names ids from one library, so a run resumed
+// under the other medium would point at records that are not there — and the
+// curated key holds whole `Film` objects, guests included. See lib/medium.ts.
+const KEY = () => keyFor("rankd-run-v1");
+const CURATED_KEY = () => keyFor("rankd-run-curated-v1");
 
 /**
  * Is this a run worth keeping, and one we can rebuild from ids alone?
@@ -74,8 +90,8 @@ export function saveRun(session: PlacementSession | null): void {
   if (typeof window === "undefined") return;
   try {
     const keep = session?.promotionQueue ? (session.resumeAfter ?? null) : session;
-    if (!isResumable(keep)) return void localStorage.removeItem(KEY);
-    localStorage.setItem(KEY, JSON.stringify(keep));
+    if (!isResumable(keep)) return void localStorage.removeItem(KEY());
+    localStorage.setItem(KEY(), JSON.stringify(keep));
   } catch {
     // Storage full or disabled. The run is still playable in memory; it just
     // will not survive the tab, which is exactly where this started.
@@ -96,21 +112,21 @@ export function saveRun(session: PlacementSession | null): void {
 export function loadRun(films: readonly Film[]): PlacementSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY());
     if (!raw) return null;
     const s = JSON.parse(raw) as PlacementSession;
     if (!isResumable(s) || !Array.isArray(s.unconfirmed) || !Array.isArray(s.confirmed)) {
-      localStorage.removeItem(KEY);
+      localStorage.removeItem(KEY());
       return null;
     }
     const have = new Set(films.map((f) => f.id));
     if (!idsOf(s).every((id) => have.has(id))) {
-      localStorage.removeItem(KEY);
+      localStorage.removeItem(KEY());
       return null;
     }
     // A climb needs something left to climb. One film cannot duel.
     if (s.unconfirmed.length < 2 && !s.needsConfirm) {
-      localStorage.removeItem(KEY);
+      localStorage.removeItem(KEY());
       return null;
     }
     return s;
@@ -122,7 +138,7 @@ export function loadRun(films: readonly Film[]): PlacementSession | null {
 export function clearRun(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(KEY());
   } catch {
     // Nothing to do; `loadRun` validates anyway.
   }
@@ -176,8 +192,8 @@ export function saveCuratedRun(run: CuratedRun | null): void {
   try {
     const s = run?.session;
     const keep = !!s && s.crossTier && !s.promotionQueue && s.unconfirmed.length >= 2;
-    if (!keep) return void localStorage.removeItem(CURATED_KEY);
-    localStorage.setItem(CURATED_KEY, JSON.stringify(run));
+    if (!keep) return void localStorage.removeItem(CURATED_KEY());
+    localStorage.setItem(CURATED_KEY(), JSON.stringify(run));
   } catch {
     // Storage full or disabled. Playable in memory either way.
   }
@@ -194,7 +210,7 @@ export function saveCuratedRun(run: CuratedRun | null): void {
 export function loadCuratedRun(films: readonly Film[]): CuratedRun | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(CURATED_KEY);
+    const raw = localStorage.getItem(CURATED_KEY());
     if (!raw) return null;
     const run = JSON.parse(raw) as CuratedRun;
     const s = run?.session;
@@ -206,17 +222,17 @@ export function loadCuratedRun(films: readonly Film[]): CuratedRun | null {
       Array.isArray(s.confirmed) &&
       s.crossTier === true;
     if (!shaped) {
-      localStorage.removeItem(CURATED_KEY);
+      localStorage.removeItem(CURATED_KEY());
       return null;
     }
     const have = new Set([...films.map((f) => f.id), ...run.guests.map((f) => f.id)]);
     if (!idsOf(s).every((id) => have.has(id))) {
-      localStorage.removeItem(CURATED_KEY);
+      localStorage.removeItem(CURATED_KEY());
       return null;
     }
     // A climb needs something left to climb. One film cannot duel.
     if (s.unconfirmed.length < 2 && !s.needsConfirm) {
-      localStorage.removeItem(CURATED_KEY);
+      localStorage.removeItem(CURATED_KEY());
       return null;
     }
     return run;
@@ -228,7 +244,7 @@ export function loadCuratedRun(films: readonly Film[]): CuratedRun | null {
 export function clearCuratedRun(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(CURATED_KEY);
+    localStorage.removeItem(CURATED_KEY());
   } catch {
     // Nothing to do; `loadCuratedRun` validates anyway.
   }

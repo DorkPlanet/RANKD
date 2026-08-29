@@ -1,3 +1,5 @@
+import { allKeysFor } from "./medium";
+
 // What a Rankd backup IS, and what makes one trustworthy.
 //
 // Split out of `backup.ts` when accounts arrived. The file path and the network
@@ -19,10 +21,24 @@
 // used the file's set, **every pull would delete your saved rankings**, since
 // the blob deliberately does not contain them.
 
-/** What goes on the wire, and the only thing the server's library blob holds. */
+/**
+ * What goes on the wire, and the only thing the server's library blob holds.
+ *
+ * ── Every medium's library, in one blob ───────────────────────────────────
+ *
+ * `allKeysFor` expands to the film key and the book key, so a single push
+ * carries both. The server's payload column is opaque JSON and does not care;
+ * what would care is leaving a medium OUT, which would mean that library
+ * existed on one device and nowhere else — invisibly, since nothing in the app
+ * reports what did not sync.
+ *
+ * The preference keys are NOT expanded. Brightness and display prefs describe
+ * the reader, not the reader's library, and a per-medium brightness would be a
+ * setting that mysteriously changed when you switched medium.
+ */
 export const SYNC_KEYS = [
-  "rankd-app-v1", // the library — films, scores, placements, duels
-  "rankd-log-v1", // the evidence — every duel ever settled
+  ...allKeysFor("rankd-app-v1"), // the libraries — titles, scores, placements, duels
+  ...allKeysFor("rankd-log-v1"), // the evidence — every duel ever settled
   "rankd-profile-v1", // name, bio, banner, pinned rankings
   "rankd-brightness",
   "rankd-strip-open",
@@ -71,11 +87,43 @@ const FILE_2 = [
   "rankd-review-dismissed-v1",
 ] as const;
 
-export const FILE_KEYS_BY_FORMAT: Record<number, readonly string[]> = { 1: FILE_1, 2: FILE_2 };
+/**
+ * Format 3 adds the second medium.
+ *
+ * ── Why this is a new format and not two more strings in FILE_2 ───────────
+ *
+ * Ownership is what gives a restore permission to CLEAR a key, and that is the
+ * whole reason these sets are recorded per format rather than aliased to the
+ * live one. Every format-2 file in existence was written by a build that had
+ * never heard of books — so declaring the book keys "owned by format 2" would
+ * mean restoring any older backup DELETED the reader's entire book library,
+ * because the file does not mention it and absence reads as "remove this".
+ *
+ * That is the exact bug the note above FILE_1 describes, one medium later. The
+ * fix is the same: a new format owns the new keys, and the old one is left
+ * frozen as the honest record of what a file written by that build could carry.
+ *
+ * `rankd-medium-v1` — which medium the app was last on — rides along because a
+ * restore should land you where you left off. It is the one piece of this that
+ * is a preference rather than work, and it is cheap enough not to argue about.
+ */
+const FILE_3 = [
+  ...FILE_2,
+  "rankd-app-v1:book",
+  "rankd-log-v1:book",
+  "rankd-lists-v1:book",
+  "rankd-medium-v1",
+] as const;
 
-export const FORMAT = 2;
+export const FILE_KEYS_BY_FORMAT: Record<number, readonly string[]> = {
+  1: FILE_1,
+  2: FILE_2,
+  3: FILE_3,
+};
+
+export const FORMAT = 3;
 /** What a file written today carries. */
-export const FILE_KEYS = FILE_2;
+export const FILE_KEYS = FILE_3;
 
 // Deliberately in NEITHER set:
 //
@@ -150,6 +198,14 @@ export interface Backup {
 
 export interface BackupSummary {
   films: number;
+  /**
+   * How many books came back with them.
+   *
+   * Separate from `films` rather than summed into it, because the two are
+   * separate libraries and a reader with 800 films and 3 books has not got 803
+   * of anything. The conflict chooser prints whichever are non-zero.
+   */
+  books: number;
   /** How many recorded duels came back with them; 0 for a pre-log backup. */
   judgements: number;
   hadProfile: boolean;
@@ -177,59 +233,114 @@ export function validateBackup(parsed: unknown): { backup: Backup; summary: Back
   // older files would strand every backup anybody has already saved.
   if (!FILE_KEYS_BY_FORMAT[backup.format as number]) {
     throw new BackupError(
-      `That backup is format ${backup.format ?? "unknown"}; this version reads 1 and ${FORMAT}.`,
+      // Listed from the table rather than named, so adding a format cannot
+      // leave this sentence telling the reader something untrue.
+      `That backup is format ${backup.format ?? "unknown"}; this version reads ${Object.keys(
+        FILE_KEYS_BY_FORMAT,
+      ).join(", ")}.`,
     );
   }
 
-  const raw = backup.keys["rankd-app-v1"];
-  if (!raw) throw new BackupError("That backup has no library in it.");
+  // ── A library in ANY medium, not the film one specifically ──────────────
+  //
+  // This asked for `rankd-app-v1` and refused the file without it, which was
+  // right while there was one library and becomes a wall the moment there are
+  // two: a reader who has only ever ranked books holds no film key at all, so
+  // their own backup would come back "has no library in it" — and `push` runs
+  // the same validator, so their books would never reach their account either.
+  //
+  // The requirement was never "has films". It was "has SOMETHING worth
+  // restoring", and that is what is asked now.
+  let films = 0;
+  let books = 0;
+  let found = false;
+  // A key that was PRESENT and held an empty array. Tracked separately from
+  // `found` so the two failures keep their own message: a file carrying an
+  // empty library is a real backup of nothing, and a file carrying no library
+  // key at all is probably not a backup. Telling somebody the wrong one sends
+  // them looking for the wrong problem.
+  let sawEmpty = false;
 
-  let films: unknown;
-  try {
-    films = JSON.parse(raw);
-  } catch {
-    throw new BackupError("The library inside that backup is corrupt.");
+  for (const key of allKeysFor("rankd-app-v1")) {
+    const raw = backup.keys[key];
+    if (raw === undefined) continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new BackupError("The library inside that backup is corrupt.");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new BackupError("The library inside that backup is corrupt.");
+    }
+    // An empty ARRAY under one medium is fine when the other has something —
+    // it is a reader who has not started that library yet, which is a normal
+    // state and not a broken file. "Empty" is only fatal for the file as a
+    // whole, which is the check after this loop.
+    if (parsed.length === 0) {
+      sawEmpty = true;
+      continue;
+    }
+
+    const ok = parsed.every(
+      (f) =>
+        f &&
+        typeof f === "object" &&
+        typeof (f as { id?: unknown }).id === "string" &&
+        typeof (f as { rating?: unknown }).rating === "number" &&
+        typeof (f as { score?: unknown }).score === "number",
+    );
+    if (!ok) {
+      throw new BackupError("Some entries in that backup are missing an id, rating or score.");
+    }
+
+    found = true;
+    if (key === "rankd-app-v1") films = parsed.length;
+    else books = parsed.length;
   }
-  if (!Array.isArray(films) || films.length === 0) {
-    throw new BackupError("The library inside that backup is empty.");
+
+  if (!found) {
+    throw new BackupError(
+      sawEmpty
+        ? "The library inside that backup is empty."
+        : "That backup has no library in it.",
+    );
   }
-  const ok = films.every(
-    (f) =>
-      f &&
-      typeof f === "object" &&
-      typeof (f as { id?: unknown }).id === "string" &&
-      typeof (f as { rating?: unknown }).rating === "number" &&
-      typeof (f as { score?: unknown }).score === "number",
-  );
-  if (!ok) throw new BackupError("Some films in that backup are missing an id, rating or score.");
 
   // The evidence log, if the payload is new enough to carry one. Checked but not
   // required: a backup written before the log existed is still a perfectly good
   // backup, and refusing it would strand every file saved up to now. Note that
   // restoring such a file DOES clear the log — a restore replaces the app's
   // state wholesale, and a half-restore would be worse than none.
-  const rawLog = backup.keys["rankd-log-v1"];
+  // Summed across mediums. The number is shown in the conflict chooser as "how
+  // much work is on this side", and a book duel is exactly as much work as a
+  // film one — so counting only films would understate a side and could talk
+  // somebody into discarding the larger of the two.
   let judgements = 0;
-  if (rawLog !== undefined) {
+  for (const key of allKeysFor("rankd-log-v1")) {
+    const rawLog = backup.keys[key];
+    if (rawLog === undefined) continue;
     let rows: unknown;
     try {
       rows = JSON.parse(rawLog);
     } catch {
       throw new BackupError("The comparison log inside that backup is corrupt.");
     }
-    // See lib/log.ts for the shape: a version, an interned film-id dictionary,
-    // and tuple rows [id, aIndex, bIndex, outcome, modeCode, at].
+    // See lib/log.ts for the shape: a version, an interned id dictionary, and
+    // tuple rows [id, aIndex, bIndex, outcome, modeCode, at].
     const log = rows as { v?: unknown; f?: unknown; r?: unknown };
     if (!log || typeof log !== "object" || log.v !== 1 || !Array.isArray(log.f) || !Array.isArray(log.r)) {
       throw new BackupError("The comparison log inside that backup isn't in a format this version reads.");
     }
-    judgements = log.r.length;
+    judgements += log.r.length;
   }
 
   return {
     backup: backup as Backup,
     summary: {
-      films: films.length,
+      films,
+      books,
       judgements,
       hadProfile: !!backup.keys["rankd-profile-v1"],
     },

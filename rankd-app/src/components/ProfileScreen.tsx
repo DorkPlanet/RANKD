@@ -61,6 +61,7 @@ import { GenreRing } from "./GenreRing";
 import { Passport } from "./Passport";
 import { TasteChart } from "./TasteChart";
 import type { Film } from "@/lib/types";
+import { count, lex } from "@/lib/lexicon";
 
 /**
  * What a chosen frame is going to become.
@@ -118,6 +119,24 @@ interface Collection {
   blurb: string;
   films: Film[];
   numbered?: boolean;
+}
+
+/**
+ * Where the picture on the banner comes from, said in the medium's own terms.
+ *
+ * A film gives you a FRAME — one still out of a hundred thousand, which is why
+ * the flow is "pick a film, then pick a frame from it". A book gives you its
+ * cover, and there is nothing to pick: one image exists.
+ *
+ * So the two read differently on purpose. Substituting a noun into the film
+ * sentence would have produced "a frame from one of your books", which promises
+ * a choice the book flow does not offer.
+ */
+function artSource(): string {
+  const L = lex();
+  return L.medium === "book"
+    ? `The ${L.art} of one of your ${L.many}`
+    : `A frame from one of your ${L.many}`;
 }
 
 export default function ProfileScreen({
@@ -569,7 +588,7 @@ export default function ProfileScreen({
                 the block sits under a centred name and a centred picture — so
                 the one thing on the band that was not centred was the band. */}
             <div className="grid grid-cols-4 text-center">
-              <Stat n={model.total} label="Films" onClick={onList} />
+              <Stat n={model.total} label={lex().Many} onClick={onList} />
               <Stat n={model.placedCount} label="Ranked" onClick={onList} />
               <Stat n={print.duels} label="Duels" onClick={onDuel} />
               <Stat n={earned} label="Badges" onClick={onTrophies} />
@@ -693,7 +712,7 @@ export default function ProfileScreen({
                       onClick={() =>
                         setOpen({
                           title: d.name,
-                          blurb: "Every film of theirs in your library, your favourite first.",
+                          blurb: `Every ${lex().one} of theirs in your library, your favourite first.`,
                           films: filmsOf(d.name, true),
                         })
                       }
@@ -714,7 +733,7 @@ export default function ProfileScreen({
                       onClick={() =>
                         setOpen({
                           title: a.name,
-                          blurb: "Every film of theirs in your library, your favourite first.",
+                          blurb: `Every ${lex().one} of theirs in your library, your favourite first.`,
                           films: filmsOf(a.name, false),
                         })
                       }
@@ -760,11 +779,11 @@ export default function ProfileScreen({
                   film={topTen[1] ?? hero}
                   eyebrow="RANKED"
                   title="Top ten"
-                  sub={`${topTen.length} films`}
+                  sub={count(topTen.length)}
                   onClick={() =>
                     setOpen({
                       title: "Your top ten",
-                      blurb: "The highest films in your ranking, in order.",
+                      blurb: `The highest ${lex().many} in your ranking, in order.`,
                       films: topTen,
                       numbered: true,
                     })
@@ -822,7 +841,7 @@ export default function ProfileScreen({
                   film={top[0]}
                   eyebrow={subjectEyebrow(subject).toUpperCase()}
                   title={subjectTitle(subject)}
-                  sub={`${top.length} film${top.length === 1 ? "" : "s"}`}
+                  sub={count(top.length)}
                   onClick={() => setOpenLive(subject)}
                 />
               ))}
@@ -832,7 +851,7 @@ export default function ProfileScreen({
                   film={top}
                   eyebrow={pinned ? "PINNED" : (list.source ?? "RANKING").toUpperCase()}
                   title={list.name}
-                  sub={`${list.entries.length} films`}
+                  sub={count(list.entries.length)}
                   onClick={() => {
                     setOpenOnCard(false);
                     setOpenList(list);
@@ -955,7 +974,7 @@ export default function ProfileScreen({
                 <Line
                   label="You keep returning to"
                   value={print.genre.name}
-                  note={`${print.genre.count} films`}
+                  note={count(print.genre.count)}
                   onClick={() =>
                     show(
                       print.genre!.name,
@@ -969,7 +988,7 @@ export default function ProfileScreen({
                 <Line
                   label="More precisely"
                   value={people.subgenre.name}
-                  note={`${people.subgenre.count} films`}
+                  note={count(people.subgenre.count)}
                   onClick={() =>
                     show(
                       people.subgenre!.name,
@@ -983,7 +1002,7 @@ export default function ProfileScreen({
                 <Line
                   label="Your decade"
                   value={print.decade.label}
-                  note={`${print.decade.count} films`}
+                  note={count(print.decade.count)}
                   onClick={() =>
                     show(
                       print.decade!.label,
@@ -1050,7 +1069,7 @@ export default function ProfileScreen({
               </div>
               <p className="mt-1.5 text-center text-label leading-snug text-dim">
                 {!locked
-                  ? "This is what Fast Shuffle worked out. Lock a film and your own shape starts drawing itself in gold beside it."
+                  ? `This is what Fast Shuffle worked out. Lock a ${lex().one} and your own shape starts drawing itself in gold beside it.`
                   : moved
                   ? `${moved.genre} moved this sitting.`
                   : disagree
@@ -1173,7 +1192,7 @@ export default function ProfileScreen({
             <Passport
               films={films}
               onPick={(code) =>
-                show(code, "Everything you've seen from there.", ranked.filter((f) => f.countries?.includes(code)))
+                show(code, `Everything you've ${lex().seen} from there.`, ranked.filter((f) => f.countries?.includes(code)))
               }
             />
           </Section>
@@ -1320,7 +1339,7 @@ export default function ProfileScreen({
       {pickingFor && (
         <FilmPicker
           films={films}
-          title="Pick a film"
+          title={`Pick a ${lex().one}`}
           blurb={
             pickingFor === "banner"
               ? "Then choose a frame from it for the top of your profile."
@@ -1447,15 +1466,17 @@ function AvatarMenu({
     <Sheet title="Your picture and banner" onClose={onClose} scroll>
       <p className="mb-4 text-sub leading-snug text-dim">
         {signedIn
-          ? "A frame from one of your films, or a photo of your own."
-          : "A frame from one of your films. Sign in if you would rather upload a photo."}
+          ? `${artSource()}, or a photo of your own.`
+          : `${artSource()}. Sign in if you would rather upload a photo.`}
       </p>
 
       <button
         onClick={onPickFromFilms}
         className="mb-2 w-full rounded-xl border border-border px-4 py-3 text-left active:scale-[0.99]"
       >
-        <span className="block text-body text-text-hi">Use a frame from a film</span>
+        <span className="block text-body text-text-hi">
+          {lex().medium === "book" ? `Use a ${lex().one}'s ${lex().art}` : "Use a frame from a film"}
+        </span>
         <span className="block text-sub leading-snug text-dim">
           Nothing is uploaded. Works whether or not you have an account.
         </span>
@@ -1894,7 +1915,7 @@ function PersonCard({
       </span>
       <span className="flex-shrink-0 text-sub tabular-nums text-gold">{p.avg.toFixed(1)}★</span>
       <span className="w-[58px] flex-shrink-0 whitespace-nowrap text-right text-label tabular-nums text-dim">
-        {p.count} film{p.count === 1 ? "" : "s"}
+        {count(p.count)}
       </span>
     </button>
   );

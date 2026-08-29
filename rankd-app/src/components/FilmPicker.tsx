@@ -20,6 +20,7 @@ import type { Person } from "@/lib/people";
 import type { Film } from "@/lib/types";
 import { FIELD, IconToggle, Sheet } from "./ui";
 import { ChevronIcon, ChevronRightIcon } from "./Icons";
+import { lex } from "@/lib/lexicon";
 
 // How many rows the picker builds per pass.
 const PICKER_PAGE = 60;
@@ -31,7 +32,10 @@ export function FilmPicker({
   films,
   onClose,
   onPick,
-  title = "Pick a film",
+  // A default rather than a required prop, as it was — but built from the
+  // lexicon, so the sheet is titled for whichever library is open. Defaults are
+  // evaluated per call, so this asks at render time and not at module load.
+  title = `Pick a ${lex().one}`,
   shuffle,
   onShuffle,
   blurb = "Search by title, or by who made it.",
@@ -146,7 +150,7 @@ export function FilmPicker({
       {/* Three ways in. The search box below changes what it asks about rather
           than sitting beside three separate fields. */}
       <div className="mb-2 flex gap-1">
-        {(["film", "director", "actor"] as SearchMode[]).map((m) => (
+        {(["film", "director", ...(lex().secondRole ? ["actor" as const] : [])] as SearchMode[]).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
@@ -154,7 +158,7 @@ export function FilmPicker({
               mode === m ? "border-gold text-gold" : "border-border text-dim"
             }`}
           >
-            {m}
+            {m === "film" ? lex().one : m === "director" ? lex().maker : lex().secondRole}
           </button>
         ))}
       </div>
@@ -163,7 +167,11 @@ export function FilmPicker({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={
-          mode === "film" ? "Search all films" : mode === "director" ? "Search directors" : "Search actors"
+          mode === "film"
+            ? `Search all ${lex().many}`
+            : mode === "director"
+              ? `Search ${lex().makers}`
+              : `Search ${lex().secondRole}s`
         }
         className={`${FIELD} mb-2`}
       />
@@ -212,7 +220,7 @@ export function FilmPicker({
 
         {onShuffle && (
           <IconToggle
-            label={shuffle ? "Facing films in a random order" : "Face films in a random order"}
+            label={`${shuffle ? "Facing" : "Face"} ${lex().many} in a random order`}
             active={shuffle}
             onClick={() => onShuffle(!shuffle)}
             icon={<span className="text-xs">⤨</span>}

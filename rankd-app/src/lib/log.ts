@@ -17,6 +17,19 @@
 // row means. Just what happened, in order.
 
 import { deviceId, markDirty } from "./syncState";
+import { keyFor } from "./medium";
+
+// ── Why the key below is a function and not a constant ─────────────────────
+//
+// `const KEY = keyFor("…")` would be evaluated once, at module load. Next
+// renders client components on the SERVER first, where there is no
+// `localStorage` and `currentMedium()` therefore answers with the default — so a
+// const would bake in "film" for that pass. The browser bundle evaluates the
+// module again and would get it right, which makes this the kind of bug that
+// shows up in one server-rendered frame and in no test whatsoever.
+//
+// A function asks at the moment of use, when the answer is knowable, and costs
+// a map lookup: `currentMedium` caches after its first read.
 
 // Which side won, naming the two ids the row carries: "a" = a beat b, "b" = b
 // beat a. "draw" is a Skip — the user declined to separate them — and is never
@@ -48,7 +61,9 @@ export interface Judgement {
   t: number;
 }
 
-const KEY = "rankd-log-v1";
+// Per medium, like the library it is evidence about. One shared log would fit
+// beliefs from duels between books onto the ranking of films. See lib/medium.ts.
+const KEY = () => keyFor("rankd-log-v1");
 
 // The stored shape. localStorage is one ~5MB budget shared with the whole
 // library, and this file is the only thing in the app that grows without bound —
@@ -230,7 +245,7 @@ export function mergeStoredLogs(mine: string | null | undefined, theirs: string 
 export async function loadLog(): Promise<Judgement[]> {
   if (typeof window === "undefined") return [];
   try {
-    return parseLog(localStorage.getItem(KEY)).judgements;
+    return parseLog(localStorage.getItem(KEY())).judgements;
   } catch {
     // Corrupt or unreadable. An unreadable log must never take the app down with
     // it — the library is what the user would actually mourn, and it lives
@@ -243,7 +258,7 @@ export async function loadLog(): Promise<Judgement[]> {
 function loadTombstones(): string[] {
   if (typeof window === "undefined") return [];
   try {
-    return parseLog(localStorage.getItem(KEY)).tombstones;
+    return parseLog(localStorage.getItem(KEY())).tombstones;
   } catch {
     return [];
   }
@@ -267,7 +282,7 @@ export async function appendJudgements(incoming: readonly Judgement[]): Promise<
     if (fresh.length === 0) return;
     // Tombstones carried through: re-encoding without them would resurrect
     // every undone mis-tap on the next merge.
-    localStorage.setItem(KEY, JSON.stringify(encode([...existing, ...fresh], loadTombstones())));
+    localStorage.setItem(KEY(), JSON.stringify(encode([...existing, ...fresh], loadTombstones())));
     markDirty();
   } catch {
     // Storage full or disabled. The judgement is lost as evidence, but the
@@ -300,7 +315,7 @@ export async function retractJudgements(ids: readonly string[]): Promise<void> {
     // logs can be merged — the other device still holds it, and a union would
     // hand it straight back. See `Stored.x`.
     const tombstones = [...new Set([...loadTombstones(), ...ids])];
-    localStorage.setItem(KEY, JSON.stringify(encode(kept, tombstones)));
+    localStorage.setItem(KEY(), JSON.stringify(encode(kept, tombstones)));
     markDirty();
   } catch {
     // Same reasoning as the append path: the library is the thing worth
@@ -325,7 +340,7 @@ export async function retractJudgements(ids: readonly string[]): Promise<void> {
 export function clearLog(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(KEY);
+    localStorage.removeItem(KEY());
   } catch {
     // Storage disabled. Nothing to fall back to, and the caller has already
     // cleared the placements — the library is consistent, just better-informed

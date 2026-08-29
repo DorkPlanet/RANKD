@@ -22,8 +22,33 @@ import type { RankSubject } from "./subject";
 import type { Rating } from "./tiers";
 import type { Film } from "./types";
 import { markDirty } from "./syncState";
+import { keyFor, allKeysFor, MEDIA, type Medium } from "./medium";
 
-const KEY = "rankd-lists-v1";
+// ── Why the key below is a function and not a constant ─────────────────────
+//
+// `const KEY = keyFor("…")` would be evaluated once, at module load. Next
+// renders client components on the SERVER first, where there is no
+// `localStorage` and `currentMedium()` therefore answers with the default — so a
+// const would bake in "film" for that pass. The browser bundle evaluates the
+// module again and would get it right, which makes this the kind of bug that
+// shows up in one server-rendered frame and in no test whatsoever.
+//
+// A function asks at the moment of use, when the answer is knowable, and costs
+// a map lookup: `currentMedium` caches after its first read.
+
+// Per medium: a saved ranking is OF something in one library. See lib/medium.ts.
+const KEY = () => keyFor("rankd-lists-v1");
+
+/**
+ * The key for a NAMED medium rather than the active one.
+ *
+ * The same rule `keyFor` implements — film is unsuffixed, everything else takes
+ * its own name — restated for a medium chosen by the caller. It has to agree
+ * with `keyFor`, and `allKeysFor` is the shared statement of that rule, so this
+ * reads its answer rather than repeating the string concatenation.
+ */
+const rawKeyFor = (m: Medium): string =>
+  allKeysFor("rankd-lists-v1")[MEDIA.indexOf(m)];
 /**
  * v1 was a bare `SavedList[]`. v2 wraps it so entries can carry the fields a
  * card needs to redraw itself — `rating` above all, without which `statsFor`
@@ -70,12 +95,37 @@ export interface SavedList {
   savedAt: string;
   /** Frozen at save time, best first. */
   entries: SavedEntry[];
+  /**
+   * Which library this is a ranking of.
+   *
+   * ── Why it is ON THE ROW and not implied by the store ──────────────────
+   *
+   * Every other per-medium store is separated by its localStorage key alone,
+   * and that is enough because nothing else ever reads two of them at once.
+   * Saved rankings are the exception: they sync as their OWN ROWS through
+   * `/api/lists`, whose PUT REPLACES THE WHOLE SHELF for the account.
+   *
+   * So a push made while the app was on books would have sent the book shelf
+   * as the entire shelf and deleted every film list on the server — and the
+   * next pull under films would have written those book lists into the film
+   * key. Silent, total, and in both directions.
+   *
+   * Tagging the row means one shelf can hold both and be split again on the
+   * way in. See `pushLists`/`pullLists` in sync.ts.
+   *
+   * ── Absent means film ──────────────────────────────────────────────────
+   *
+   * Every list saved before this field existed is a film list, and there are
+   * real ones on real accounts. Absence is therefore the answer rather than a
+   * missing value, which is what makes this need no migration.
+   */
+  medium?: Medium;
 }
 
 export function loadLists(): SavedList[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY());
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     // v1 was the bare array. Migrated in memory; the next save writes v2.
@@ -90,7 +140,7 @@ export function loadLists(): SavedList[] {
 function writeLists(lists: SavedList[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ v: VERSION, lists } satisfies Stored));
+    localStorage.setItem(KEY(), JSON.stringify({ v: VERSION, lists } satisfies Stored));
     // Saved rankings sync as their OWN ROWS rather than inside the library blob,
     // so this is what tells `sync.ts` there is something new to push.
     markDirty();
@@ -106,6 +156,47 @@ function writeLists(lists: SavedList[]): void {
  */
 export function replaceLists(lists: SavedList[]): void {
   writeLists(lists);
+}
+
+/**
+ * The shelf for a named medium, active or not.
+ *
+ * Sync is the only caller and it needs both at once: a push has to send every
+ * medium's lists because the server's PUT replaces the whole shelf, and a pull
+ * has to put each medium's share back where it belongs. Everything else in the
+ * app only ever wants the medium it is currently in, and calls `loadLists`.
+ *
+ * Deliberately NOT routed through `keyFor`, which answers for the ACTIVE
+ * medium. Asking it for the other one is exactly the bug this exists to avoid.
+ */
+export function loadListsFor(m: Medium): SavedList[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(rawKeyFor(m));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed as SavedList[];
+    const stored = parsed as Stored;
+    return Array.isArray(stored?.lists) ? stored.lists : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Land a pulled shelf on a named medium.
+ *
+ * No `markDirty`, unlike `writeLists`. This is a pull ARRIVING — marking the
+ * browser dirty here would make it immediately push back what it has just been
+ * given, which is how a sync loop starts.
+ */
+export function replaceListsFor(m: Medium, lists: SavedList[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(rawKeyFor(m), JSON.stringify({ v: VERSION, lists } satisfies Stored));
+  } catch {
+    // storage full or disabled — nothing to fall back to
+  }
 }
 
 /**

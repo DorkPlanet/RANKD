@@ -29,6 +29,8 @@ import { Feedback } from "./Feedback";
 import { ImportGuide } from "./ImportGuide";
 import { ImportButton, RestoreButton, SecondaryButton, SettingRow, Sheet } from "./ui";
 import { ChevronIcon } from "./Icons";
+import { count, lex, lexOf } from "@/lib/lexicon";
+import { currentMedium, setMedium, MEDIA } from "@/lib/medium";
 
 /** Stable reference for `useSyncExternalStore`. */
 const noSubscribe = () => () => {};
@@ -150,9 +152,14 @@ export function Settings({
     const { films: parsed, skipped } = result;
     onImport(merge ? mergeFilms(films, parsed) : parsed);
     setNote({
-      text: `${merge ? "Merged" : "Imported"} ${parsed.length} films${skipped ? `, skipped ${skipped}` : ""}.`,
+      text: `${merge ? "Merged" : "Imported"} ${count(parsed.length)}${skipped ? `, skipped ${skipped}` : ""}.`,
     });
   };
+
+  const L = lex();
+  // Read straight rather than through an effect — this sheet only ever exists
+  // over a mounted app. Same reasoning, at more length, in `MediumSwitch`.
+  const medium = currentMedium();
 
   return (
     <Sheet title="Settings" onClose={onClose}>
@@ -195,13 +202,47 @@ export function Settings({
         onToggle={() => onPrefs({ listDrift: !prefs.listDrift })}
       />
 
+      {/* ── The medium, mirrored from the header ──────────────────────────
+          The wordmark is the primary control and this is the second way in,
+          which the user asked for. It is here rather than in a row because it
+          is the same KIND of thing as brightness and the drift toggle: a
+          standing choice about what the app is, decided once and then
+          forgotten — not a task like importing or signing in.
+
+          It sits ABOVE the library row on purpose. That row now counts
+          whichever library is active, so reading them the other way round
+          would show a number before saying what it is a number of. */}
+      <div className="mb-4">
+        <span className="mb-1 block text-body text-text-hi">What you&rsquo;re ranking</span>
+        <span className="mb-2 block text-sub leading-snug text-dim">
+          Two separate libraries. Nothing crosses between them.
+        </span>
+        <div className="flex gap-2">
+          {MEDIA.map((m) => {
+            const active = m === medium;
+            return (
+              <button
+                key={m}
+                aria-pressed={active}
+                onClick={() => setMedium(m)}
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-center text-body active:scale-[0.99] ${
+                  active ? "border-gold/50 text-gold" : "border-border text-dim"
+                }`}
+              >
+                {lexOf(m).Many}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <Row
-        title="Your films"
+        title={`Your ${L.many}`}
         note={`${films.length}`}
         open={open === "library"}
         onToggle={() => toggle("library")}
       >
-        <p className="mb-2.5 text-sub text-dim">Add a Letterboxd export.</p>
+        <p className="mb-2.5 text-sub text-dim">Add a {L.importFrom} export.</p>
         <div className="mb-3 rounded-xl border border-border px-3 py-2.5">
           <ImportGuide compact />
         </div>
@@ -393,7 +434,7 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
 
   return (
     <>
-      <p className="mb-3 text-sub text-dim">Your films and stars are kept. Only the ranking goes.</p>
+      <p className="mb-3 text-sub text-dim">Your {lex().many} and stars are kept. Only the ranking goes.</p>
 
       {soft > 0 && (
         <SecondaryButton
@@ -470,7 +511,7 @@ function StartAgain({ films, onReset }: { films: Film[]; onReset: (films: Film[]
         ) : (
           <>
             <p className="mb-2 text-sub leading-snug text-danger">
-              Removes all {films.length.toLocaleString()} films, every placement, every duel and
+              Removes all {count(films.length)}, every placement, every duel and
               your profile. The app opens as if you had just installed it. Save a backup first if
               you want any of it back.
             </p>

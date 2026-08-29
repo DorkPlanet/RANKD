@@ -1582,3 +1582,73 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
   - **The lesson, which is why this is kept rather than deleted:** every claim here was true
     when written and none was re-checked. Three separate register entries turned out the
     same way in one afternoon. A note about the state of the code has a shelf life.
+
+---
+
+## Books: the second medium (29 Aug 2026)
+
+Films and books are ranked by the same engine and share no list. The switch is
+the RANKD wordmark, mirrored in Settings.
+
+**The medium switches the STORE, it does not filter one.** `lib/medium.ts`
+holds the active medium; every per-medium module names its key through
+`keyFor()`. Films keep their existing keys byte-for-byte and books take a
+`:book` suffix, so there is no migration and no build can lose anybody's films.
+The alternative — one library with a `medium` field and a filter at every read —
+was rejected because a filter forgotten anywhere shows books inside a film
+ranking, and `loadFilms()` is taken whole by the tier counts, the profile, the
+taste chart and the duel pool.
+
+**`Film` is still called `Film`, and a book is stored in one.** `director` holds
+the author, `runtime` holds the page count. This is a wart and it is deliberate:
+renaming the type across 115 files is a large mechanical diff with nothing to
+gain, and the reader never sees the word "director" because every label comes
+from `lib/lexicon.ts`. The rename is available later as its own change.
+
+**Copy comes from a lexicon, not a find-and-replace.** Most strings in this app
+are sentences, and "which you'd rather watch" is not "which you'd rather read"
+with a noun swapped. `lex()` supplies the words; the sentences stay written out
+at each site. `secondRole` is `null` for books — a book has one credit role, so
+the actor tab and the actor run are ABSENT rather than empty.
+
+### Two things measured, not assumed
+
+**Google Books refuses unauthenticated search.** Not a lower quota — 429, on
+every query tried from an ordinary IP. `GOOGLE_BOOKS_API_KEY` is optional in the
+code (so a missing key degrades rather than 500s) and required in practice. The
+cover half is genuinely keyless: Open Library returned 200 and real artwork for
+every ISBN tried, 182–325px wide, aspect ratios 0.60–0.67 against the 2:3 the
+poster frames assume.
+
+**A rate limit must never be recorded as "no such book".** `searchBooks` returns
+`null` for "could not ask" and `[]` for "asked, nothing there"; only the second
+may become `noMatch`, which is permanent. `fetchMeta` no longer caches a failed
+response either. `guard.ts` records the same bug from the TMDb side — a 429 that
+was cached as an answer, after which "posters stopped and stayed stopped".
+
+### The two data-loss paths that had to be closed first
+
+**Saved lists sync as a whole-shelf replace.** Pushing from the book medium
+would have declared the book shelf to be the entire shelf and deleted every film
+list on the account, and the next pull under films would have written those book
+lists into the film key. Each row now carries its medium and `pushLists` sends
+both; `pullLists` splits them again.
+
+**A backup format owns the keys it may CLEAR.** The book keys are in a new
+FORMAT 3 rather than added to FILE_2, because every format-2 file was written by
+a build that had never heard of books — declaring the book keys owned by format
+2 would mean restoring any older backup silently deleted the book library.
+`validateBackup` also no longer requires a film library, or a books-only reader
+could neither back up nor sync.
+
+### What is NOT done
+
+- **The profile, the share cards and the taste chart are film-shaped.** They
+  render for books and lean on genre and country data that Google Books does not
+  supply. Genre in particular: TMDb's tidy 19 labels vs Google's coarse, noisy
+  `categories`. Worth a pass before books are shown to anybody.
+- **The public profile (`/u/[handle]`) is film-only** and says "Films". It is
+  server-rendered and describes somebody else's library, so it needs the medium
+  on the wire before it can say anything else.
+- **`Person.role` is still `"director" | "actor"`** on stored, synced data. Only
+  the labels change.
