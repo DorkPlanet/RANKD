@@ -14,6 +14,7 @@ import { beliefsWhenIdle, seedOf } from "@/lib/beliefs";
 import { loadLog, logFor } from "@/lib/log";
 import { fetchMeta, type FilmMeta } from "@/lib/meta";
 import { FixMatch } from "./FixMatch";
+import { CoverPicker } from "./CoverPicker";
 import { LockIcon } from "./Icons";
 import { confidenceOf, settledness } from "@/lib/shuffle";
 import { isHard } from "@/lib/lock";
@@ -52,6 +53,7 @@ export function FilmInfo({
   onPerson,
   onRemove,
   onFixMatch,
+  onPickCover,
   onRefine,
   onTags,
 }: {
@@ -64,6 +66,14 @@ export function FilmInfo({
   onRemove?: (film: Film) => void;
   /** Replace this film's artwork and credits with another TMDb film's. */
   onFixMatch?: (film: Film, meta: FilmMeta) => void;
+  /**
+   * Keep the record and swap only the artwork.
+   *
+   * Absent for a medium whose artwork is canonical — see `CoverPicker` for why
+   * that is films — so the control does not appear where there is nothing to
+   * choose between.
+   */
+  onPickCover?: (film: Film, poster: string) => void;
   /**
    * Duel this one film for a run of `duels` answers.
    *
@@ -84,6 +94,12 @@ export function FilmInfo({
   // Whether the remove control has been armed by a first tap.
   const [armed, setArmed] = useState(false);
   const [fixing, setFixing] = useState(false);
+  // Its own flag rather than a second value on `fixing`. The two sheets answer
+  // different questions and only one may be open, which a pair of booleans
+  // states badly — but the alternative is a union type for two mutually
+  // exclusive panels in a card that has no other modes, and each opener closes
+  // the other, so the rule holds where it is written.
+  const [picking, setPicking] = useState(false);
   useEffect(() => {
     let live = true;
     fetchMeta(film).then((m) => {
@@ -363,7 +379,41 @@ export function FilmInfo({
             Somebody looking at a poster that is not their film reaches for the
             nearest control, and if the only one is "Remove from library" they
             will delete a film they own to get rid of artwork that is wrong. */}
+        {/* ── Right book, wrong cover ────────────────────────────────────
+            Above "Wrong book?" because it is the gentler answer to the same
+            feeling, exactly as that control sits above "Remove". Somebody
+            looking at artwork that is not the edition they own reaches for the
+            nearest thing, and if the nearest thing REPLACES THE RECORD they
+            will retire their book from the metadata queue to fix a picture. */}
+        {onPickCover &&
+          !fixing &&
+          (picking ? (
+            <CoverPicker
+              film={film}
+              onCancel={() => setPicking(false)}
+              onPick={(poster) => {
+                onPickCover(film, poster);
+                setPicking(false);
+                // NOT closed, unlike a match correction. That one is showing a
+                // different book's credits and has to go; this one has changed
+                // a single image, and the card behind it is still true — so it
+                // stays open with the new artwork already on it, which is the
+                // confirmation.
+              }}
+            />
+          ) : (
+            <div className="border-t border-border px-4 py-3">
+              <button
+                onClick={() => setPicking(true)}
+                className="w-full text-center text-sub font-semibold text-dim active:scale-95"
+              >
+                Change {lex().art}
+              </button>
+            </div>
+          ))}
+
         {onFixMatch &&
+          !picking &&
           (fixing ? (
             <FixMatch
               film={film}
@@ -384,7 +434,7 @@ export function FilmInfo({
                 onClick={() => setFixing(true)}
                 className="w-full text-center text-sub font-semibold text-dim active:scale-95"
               >
-                Wrong film?
+                Wrong {lex().one}?
               </button>
             </div>
           ))}

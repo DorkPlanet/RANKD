@@ -193,6 +193,10 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
       // hand, and leaving the flag would tell every reader it is still
       // unmatched — including the queue, which would then skip it forever.
       noMatch: false,
+      // Cleared with everything else. A correction means this is a DIFFERENT
+      // book, so a cover chosen for the old one is not a preference to carry
+      // over — it is the wrong book's artwork.
+      pinnedArt: false,
       poster: meta.poster,
       director: meta.director,
       cast: meta.cast,
@@ -213,7 +217,13 @@ export function withMeta(film: Film, meta: FilmMeta, pinned = false): Film {
     bookId: meta.bookId ?? film.bookId,
     isbn: meta.isbn ?? film.isbn,
     noMatch: empty || film.noMatch,
-    poster: meta.poster ?? film.poster,
+    // ── A pinned cover is the one field a backfill may not touch ───────────
+    //
+    // Without this the sweep would quietly undo the choice: `meta.poster` is
+    // whatever `coverFor` picked, which is precisely the answer the user
+    // rejected. They would watch their cover revert and have no idea why —
+    // the same failure `pinnedMeta` exists to prevent, one field down.
+    poster: film.pinnedArt ? film.poster : (meta.poster ?? film.poster),
     director: meta.director ?? film.director,
     cast: meta.cast?.length ? meta.cast : film.cast,
     genres: meta.genres?.length ? meta.genres : film.genres,
@@ -282,8 +292,13 @@ export async function backfillPosters(
  * write of the whole library.
  */
 function adds(film: Film, meta: FilmMeta): boolean {
+  // A pinned cover can never be "added", so a response whose ONLY news is
+  // artwork must not trigger a write. Left out, every sweep over a pinned
+  // record would rewrite the whole library to change nothing — which is the
+  // half-megabyte-per-film write that locked the device once already.
+  if (film.pinnedArt && !film.poster) return false;
   return (
-    (!!meta.poster && !film.poster) ||
+    (!!meta.poster && !film.poster && !film.pinnedArt) ||
     (!!meta.director && !film.director) ||
     (!!meta.cast?.length && !film.cast?.length) ||
     (!!meta.genres?.length && !film.genres?.length) ||

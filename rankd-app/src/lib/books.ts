@@ -60,6 +60,7 @@ import { normalise } from "./tmdbMatch";
 const GOOGLE = "https://www.googleapis.com/books/v1";
 const COVERS = "https://covers.openlibrary.org/b/isbn";
 const COVER_BY_ID = "https://covers.openlibrary.org/b/id";
+const COVER_BY_OLID = "https://covers.openlibrary.org/b/olid";
 const OL_SEARCH = "https://openlibrary.org/search.json";
 const DAY = 60 * 60 * 24;
 
@@ -274,6 +275,76 @@ export async function coverFor(v: Volume): Promise<string | undefined> {
   }
 
   return bigThumb(info.imageLinks?.thumbnail);
+}
+
+/**
+ * Several covers for one book, best first.
+ *
+ * ── Why books need this and films do not ──────────────────────────────────
+ *
+ * A film has one poster. A book has as many covers as it has had printings, and
+ * they are not interchangeable to the person who owns one: the edition on your
+ * shelf is the edition you picture. `coverFor` picks the most likely single
+ * answer, and "most likely" is not "the one you meant" — so there has to be a
+ * way to say which.
+ *
+ * ── Two sources, and why both ─────────────────────────────────────────────
+ *
+ *  · `cover_i` from the work SEARCH. One per matching work, and they need no
+ *    verification — it is Open Library's own id for an image it holds, so it
+ *    cannot point at a gap. Measured: 5 distinct covers for Dune, 1 for Circe.
+ *  · The EDITIONS of the best-matching work. This is where the variety is for a
+ *    book with one work entry — Circe returned 6 usable covers this way and 1
+ *    from the search. These DO need checking: only 3 to 6 of any 8 editions
+ *    have artwork, and a missing one answers with a blank rather than a 404
+ *    unless asked properly.
+ *
+ * Deduped by URL, because the same image legitimately arrives from both.
+ */
+export async function coverCandidates(
+  title: string,
+  author?: string,
+  limit = 12,
+): Promise<string[]> {
+  const u = new URL(OL_SEARCH);
+  u.searchParams.set("title", title);
+  if (author) u.searchParams.set("author", author);
+  u.searchParams.set("limit", "5");
+  u.searchParams.set("fields", "cover_i,title,edition_key");
+
+  let docs: { cover_i?: number; title?: string; edition_key?: string[] }[] = [];
+  try {
+    const r = await fetch(u, { next: { revalidate: DAY } });
+    if (r.ok) docs = ((await r.json()) as { docs?: typeof docs }).docs ?? [];
+  } catch {
+    return [];
+  }
+
+  // Same title check `workCover` makes, and for the same reason: this is a
+  // fuzzy search, and a picker full of the wrong book's covers is worse than an
+  // empty one — somebody would choose from it.
+  const want = normalise(title);
+  const mine = docs.filter((d) => normalise(d.title ?? "") === want);
+
+  const out: string[] = [];
+  const add = (url: string) => {
+    if (out.length < limit && !out.includes(url)) out.push(url);
+  };
+
+  for (const d of mine) if (d.cover_i) add(`${COVER_BY_ID}/${d.cover_i}-L.jpg`);
+
+  // Editions of the best match only. Walking every work's editions would be
+  // dozens of requests for a sheet somebody opened to glance at.
+  const editions = (mine[0]?.edition_key ?? []).slice(0, 10);
+  const checked = await Promise.all(
+    editions.map(async (k) => {
+      const url = noBlanks(`${COVER_BY_OLID}/${k}-L.jpg`);
+      return (await exists(url)) ? url : null;
+    }),
+  );
+  for (const url of checked) if (url) add(url);
+
+  return out;
 }
 
 /**

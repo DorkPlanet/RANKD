@@ -24,6 +24,7 @@ import Trophies from "./Trophies";
 import { loadProfile, saveProfile, EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { filmsFromFile } from "@/lib/importCsv";
 import { loadFilms, saveFilms } from "@/lib/store";
+import { currentMedium } from "@/lib/medium";
 import { loadCuratedRun, loadRun } from "@/lib/runs";
 import { syncOnOpen } from "@/lib/startupSync";
 import { startSync } from "@/lib/sync";
@@ -672,6 +673,28 @@ export default function AppShell() {
       return { ...s, films };
     });
 
+  /**
+   * Keep the record, swap the artwork, and make it stick.
+   *
+   * Deliberately NOT routed through `withMeta`. That function's job is to fold a
+   * FETCHED response into a record, and this is neither fetched nor a response —
+   * it is a person pointing at one of several covers and saying "that one".
+   * Passing it as a meta object would drag in the whole replace-or-fill
+   * question, when the answer here is one field.
+   *
+   * `pinnedArt` is what stops the credits sweep undoing it on its next pass. See
+   * the flag's own note in lib/types.ts for why it is not `pinnedMeta`.
+   */
+  const pickCover = (film: Film, poster: string) =>
+    setState((s) => {
+      if (!s) return s;
+      const films = s.films.map((f) =>
+        f.id === film.id ? { ...f, poster, pinnedArt: true } : f,
+      );
+      saveFilms(films);
+      return { ...s, films };
+    });
+
   // The hold is a floor, not a duration: the splash leaves when the deliberate
   // time is up AND there is an app behind it to reveal. On any real device the
   // library (<92ms) is long since in hand and the hold is the only thing being
@@ -1142,6 +1165,20 @@ export default function AppShell() {
           // Same reasoning as removal: a guest is not in the library, so there
           // is nothing to correct and the fix would be written to nothing.
           onFixMatch={overlay.film.guest ? undefined : fixMatch}
+          // ── Only where there is a choice to make ────────────────────────
+          //
+          // A film has one canonical poster, so offering to change it would be
+          // a control with an empty sheet behind it. A book has as many covers
+          // as it has had printings. `secondRole` in the lexicon draws the same
+          // kind of line for the same reason: a medium that lacks a thing says
+          // so, rather than showing an affordance that never pays off.
+          //
+          // A guest is somebody else's book, borrowed for one run and never
+          // saved — so there is nothing of theirs to pin, exactly as with the
+          // three controls above.
+          onPickCover={
+            overlay.film.guest || currentMedium() !== "book" ? undefined : pickCover
+          }
           // A guest belongs to somebody's filmography, not to your library, so
           // there is no position of theirs to refine — the same reasoning as
           // the two above.

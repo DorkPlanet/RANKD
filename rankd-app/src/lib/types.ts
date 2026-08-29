@@ -101,6 +101,26 @@ export interface Film {
   // the fix — which is worse than never offering one, because the user would
   // watch their correction evaporate and not know why.
   pinnedMeta?: boolean;
+  /**
+   * The user chose this artwork, so nothing may replace it.
+   *
+   * ── Why this is separate from `pinnedMeta` ──────────────────────────────
+   *
+   * `pinnedMeta` answers "which record is this", and it stops the whole sweep:
+   * a corrected record is finished, whatever fields it is missing. That is far
+   * too much to freeze over a cover. Somebody who picks a different edition's
+   * artwork has not said the book is wrong, and the app should still go and
+   * learn its page count and its categories.
+   *
+   * So this pins ONE field. `withMeta` keeps the stored poster when it is set
+   * and takes everything else as usual, and the record still qualifies for the
+   * queue — which is the difference between "I like this cover better" and "you
+   * have the wrong book".
+   *
+   * Cleared by a match correction, because that IS a different book and its
+   * cover belongs to the old one. See `withMeta`.
+   */
+  pinnedArt?: boolean;
   // How many duels this film has been through. Cheap to keep, and it's the only
   // record of how much evidence sits behind a placement.
   duels?: number;
