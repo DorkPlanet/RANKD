@@ -694,7 +694,7 @@ export default function RoughCut({
             style={{
               aspectRatio: "2 / 3",
               containerType: "inline-size",
-              boxShadow: "0 8px 26px rgba(0, 0, 0, 0.55)",
+              boxShadow: "0 8px 26px var(--shadow)",
             }}
           >
             {/* Was `film.poster && <img>`, so a film with no artwork got an

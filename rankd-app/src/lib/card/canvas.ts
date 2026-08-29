@@ -98,17 +98,39 @@ export async function loadFonts(specs: string[]): Promise<void> {
 
 // ── Colour ─────────────────────────────────────────────────────────────────
 
+/**
+ * The card's own colours. Fixed, and no longer read from the page.
+ *
+ * ── Why a share card does not follow the theme ────────────────────────────
+ *
+ * It used to read the live CSS variables, which was right while every theme was
+ * dark. The book theme's paper regime breaks it in a way that cannot be patched
+ * downstream: this whole renderer assumes a dark ground. `lift()` forces every
+ * poster-derived accent up to max-channel 170 because — as the note above it
+ * says — "a genuinely dark accent on a dark background is not an accent". On a
+ * beige card every one of those accents is too pale to see, and the near-white
+ * type is simply gone.
+ *
+ * Converting it means reworking `accentFrom`, `lift`, `classic`, `marquee`,
+ * `paulAllen` and `charts`. That is a real piece of work and it buys little: a
+ * card is its OWN artifact with its own ground, not a screenshot of the app.
+ * `paulAllen` already prints a cream card on a dark one deliberately, which is
+ * the same instinct.
+ *
+ * So the card is dark for both mediums, on purpose, and says so here rather
+ * than tracking a theme by accident. Revisiting is a decision, not a repair.
+ */
+const CARD: Palette = {
+  bg: "#040c1a",
+  surface: "#0a1424",
+  gold: "#e7b53e",
+  text: "#eaf0fa",
+  dim: "#8ca0c0",
+  border: "#122036",
+};
+
 export function readPalette(): Palette {
-  const css = typeof window !== "undefined" ? getComputedStyle(document.documentElement) : null;
-  const read = (name: string, fallback: string) => css?.getPropertyValue(name).trim() || fallback;
-  return {
-    bg: read("--bg", "#040c1a"),
-    surface: read("--surface", "#0a1424"),
-    gold: read("--gold", "#e7b53e"),
-    text: read("--text-hi", "#eaf0fa"),
-    dim: read("--dim", "#8ca0c0"),
-    border: read("--border", "#122036"),
-  };
+  return { ...CARD };
 }
 
 /**

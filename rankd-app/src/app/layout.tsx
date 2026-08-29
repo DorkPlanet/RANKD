@@ -110,6 +110,30 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${sourceSerif.variable} ${bebas.variable} h-full antialiased`}
     >
+      <head>
+        {/* ── The medium, before the first paint ────────────────────────────
+            `:root[data-medium="book"]` in globals.css carries the book ground,
+            but only once something has set the attribute. React cannot: this
+            page is server-rendered and localStorage does not exist there, so
+            anything React does happens AFTER the browser has already painted
+            the default navy. A book reader would see a navy flash on every
+            single open.
+
+            So it is done here, synchronously, before the body exists. This is
+            the standard no-flash theme script and it is deliberately tiny: one
+            storage read and one attribute write, wrapped in a try because a
+            browser with storage disabled must still render the app rather than
+            an error page.
+
+            `applyBrightness` takes over once the app mounts and agrees with the
+            CSS at brightness 0 — see `brightnessVars`. */}
+        <script
+          // eslint-disable-next-line @next/next/no-sync-scripts
+          dangerouslySetInnerHTML={{
+            __html: `try{var m=localStorage.getItem("rankd-medium-v1");if(m==="book")document.documentElement.dataset.medium=m}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );

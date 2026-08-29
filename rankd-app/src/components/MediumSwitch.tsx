@@ -80,7 +80,7 @@ export function MediumSwitch() {
       >
         <span
           className="font-display text-[28px] leading-none tracking-[0.06em] text-gold"
-          style={{ textShadow: "0 2px 20px rgba(231,181,62,0.22)" }}
+          style={{ textShadow: "0 2px 20px var(--glow)" }}
         >
           RANKD
         </span>

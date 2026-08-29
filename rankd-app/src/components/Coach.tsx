@@ -168,7 +168,7 @@ export default function Coach({
         className="absolute"
         style={{
           pointerEvents: "none",
-          boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.78), inset 0 0 0 1.5px var(--gold)",
+          boxShadow: "0 0 0 9999px var(--scrim), inset 0 0 0 1.5px var(--gold)",
         }}
       />
 

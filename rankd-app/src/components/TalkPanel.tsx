@@ -110,13 +110,13 @@ function Conversation({
                 className="max-w-[80%] rounded-2xl px-3 py-2"
                 style={{
                   background: m.mine ? "var(--gold)" : "var(--surface)",
-                  color: m.mine ? "var(--bg)" : "var(--text)",
+                  color: m.mine ? "var(--gold-ink)" : "var(--text)",
                 }}
               >
                 <p className="text-sub leading-snug">{m.body}</p>
                 <p
                   className="mt-1 text-label"
-                  style={{ opacity: 0.6, color: m.mine ? "var(--bg)" : "var(--dim)" }}
+                  style={{ opacity: 0.6, color: m.mine ? "var(--gold-ink)" : "var(--dim)" }}
                 >
                   {shortAgo(m.createdAt)}
                 </p>

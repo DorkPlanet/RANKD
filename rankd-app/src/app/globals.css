@@ -61,6 +61,24 @@
      the 0.02 between the first two is exactly the amount that reads as "these
      are slightly different things" without ever reading as a decision. */
   --wash: rgba(255, 255, 255, 0.06);
+
+  /* ── Depth, as a token rather than as a literal ──────────────────────────
+     These were written out as `rgba(0,0,0,0.5)` in nine places, which is fine
+     while every page is near-black and wrong the moment one is not: the same
+     shadow that reads as soft depth on navy reads as dirt on beige. Two
+     weights cover every use, and `brightnessVars` swaps them per medium.
+
+     `--scrim` is the wash behind a sheet, and `--glow` is the gold halo on the
+     wordmark. Both are dark-ground devices; on paper the first lightens and
+     the second is spent entirely. */
+  --shadow: rgba(0, 0, 0, 0.55);
+  --shadow-strong: rgba(0, 0, 0, 0.75);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --glow: rgba(231, 181, 62, 0.22);
+
+  /* Whether the page is currently light. Films are never. Read by the rules
+     below so they can key off the regime rather than re-deriving it. */
+  --on-paper: 0;
 }
 
 /* Expose the palette + fonts to Tailwind so utilities like bg-bg, text-accent,
@@ -322,7 +340,7 @@ button * {
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid var(--surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px var(--shadow);
 }
 .range::-moz-range-thumb {
   width: 18px;
@@ -330,7 +348,7 @@ button * {
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid var(--surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px var(--shadow);
 }
 .range:disabled {
   opacity: 0.4;
@@ -367,7 +385,7 @@ button * {
   border-radius: 50%;
   background: var(--gold);
   border: 2px solid var(--surface);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px var(--shadow);
   cursor: pointer;
 }
 .dual-range input[type="range"]::-moz-range-track {
@@ -380,7 +398,7 @@ button * {
   border: 2px solid var(--surface);
   border-radius: 50%;
   background: var(--gold);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 4px var(--shadow);
   cursor: pointer;
 }
 /* Half-star stops, so the stepping reads as deliberate rather than juddery. */
@@ -549,7 +567,7 @@ button * {
   /* Tightened from 0 6px 16px. That reached 22px below the artwork and the row
      only has 16px of clearance to give, so the tail was being cut square by the
      paint containment above. This fits. */
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 10px var(--shadow-strong), 0 2px 4px var(--shadow);
 }
 
 /* Every so often one poster on screen gives a shake and settles. Nothing is
@@ -770,7 +788,7 @@ button * {
 .rol-poster {
   transform: scale(0.85);
   transform-origin: bottom center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px var(--shadow);
   transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
   will-change: transform;
 }
@@ -925,7 +943,7 @@ button * {
    jumps to the right-hand half of the screen for the length of the animation. */
 .coach-card {
   animation: coach-card-in 0.26s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 18px 44px var(--shadow-strong);
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-hole { transition: none; }
@@ -954,7 +972,7 @@ button * {
 }
 .resume-card {
   animation: resume-card-in 0.28s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 24px 60px var(--shadow-strong);
 }
 @media (prefers-reduced-motion: reduce) {
   .resume-card { animation: none; }
@@ -1134,4 +1152,51 @@ button * {
 @media (prefers-reduced-motion: reduce) {
   .page-slide,
   .page-slide main > :not(header):not(nav):not(.chrome-hold) { animation-duration: 0.01s; }
+}
+
+/* ── The book library is lit differently ────────────────────────────────────
+   Two libraries look identical — same tiers, same chrome, same layout — so the
+   page itself says which one you are in. The wordmark carries a 16px glyph;
+   this is the unmissable version of the same fact.
+
+   These are the DEFAULT position of the ramp in `lib/brightness.ts` — its
+   darkest, which is where `DEFAULT_BRIGHTNESS` sits — so they are what paints
+   before any script has run and there is no navy flash on the way into a book
+   library. The inline script in `layout.tsx` sets the attribute before first
+   paint; `applyBrightness` takes over once the app is up and agrees with these
+   at brightness 0.
+
+   Nothing here is hand-picked. Every value is what `brightnessVars(0, "book")`
+   returns, and `test/bookTheme.test.ts` is what keeps the two in step. */
+:root[data-medium="book"] {
+  --bg: #13100c;
+  --band: #0d0b08;
+  --surface: #211d18;
+  --border: #2f2a23;
+  --text: #e6ddcc;
+  --text-hi: #fbf7ef;
+  --dim: #b3a691;
+  --gold: #e7b53e;
+  --gold-ink: #1c1405;
+  --accent: #7fb0ff;
+  --wash: rgba(255, 255, 255, 0.06);
+  --shadow: rgba(0, 0, 0, 0.55);
+  --shadow-strong: rgba(0, 0, 0, 0.75);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --glow: rgba(231, 181, 62, 0.22);
+  --on-paper: 0;
+}
+
+/* The fade that covers the reload a medium switch needs. Beside the colours it
+   fades between; `SWAP_MS` in lib/medium.ts is the same duration and must stay
+   in step. Opacity on the ROOT rather than a veil element, so nothing has to be
+   mounted in a document that is about to be thrown away. */
+.medium-swap {
+  opacity: 0;
+  transition: opacity 0.22s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .medium-swap {
+    transition-duration: 0.01s;
+  }
 }

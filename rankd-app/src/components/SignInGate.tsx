@@ -51,7 +51,7 @@ export default function SignInGate() {
           as the splash settling rather than as a second screen arriving. */}
       <span
         className="block font-display text-[44px] leading-none text-gold"
-        style={{ textShadow: "0 2px 26px rgba(231,181,62,0.28)" }}
+        style={{ textShadow: "0 2px 26px var(--glow)" }}
       >
         RANKD
       </span>

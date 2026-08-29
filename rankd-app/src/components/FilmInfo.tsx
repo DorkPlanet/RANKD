@@ -191,7 +191,7 @@ export function FilmInfo({
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center backdrop-blur-sm"
-      style={{ background: "rgba(0, 0, 0, 0.7)", padding: "1.5rem" }}
+      style={{ background: "var(--scrim)", padding: "1.5rem" }}
       onClick={onClose}
     >
       <div

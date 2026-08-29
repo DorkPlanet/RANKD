@@ -234,7 +234,7 @@ export default function HandleGate({
           reads as one more beat of arriving rather than a new screen. */}
       <span
         className="block font-display text-[44px] leading-none text-gold"
-        style={{ textShadow: "0 2px 26px rgba(231,181,62,0.28)" }}
+        style={{ textShadow: "0 2px 26px var(--glow)" }}
       >
         RANKD
       </span>

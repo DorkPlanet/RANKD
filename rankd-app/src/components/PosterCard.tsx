@@ -154,7 +154,7 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
   const uy = vy / mag;
   const travel = Math.max(window.innerWidth, window.innerHeight);
   const spin = tilt + ux * 22; // start from the card's lean, then lean into the throw
-  const clone = posterClone(el, poster, "0 0 0 3px #e7b53e,0 16px 44px rgba(231,181,62,.5)");
+  const clone = posterClone(el, poster, "0 0 0 3px #e7b53e,0 16px 44px var(--glow)");
   playOnce(clone, [
         { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1, offset: 0 },
         {
@@ -176,7 +176,7 @@ function flyPosterAway(el: HTMLElement, poster: string, vx: number, vy: number, 
 // against it. Defaults to the challenger's lean, which is every caller but the
 // left-hand card in Fast Shuffle.
 export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TILT) {
-  const clone = posterClone(el, poster, "0 8px 26px rgba(0, 0, 0, 0.55)");
+  const clone = posterClone(el, poster, "0 8px 26px var(--shadow)");
   playOnce(clone, [
         { transform: `translate(0,0) rotate(${tilt}deg) scale(1)`, opacity: 1 },
         { transform: `translate(0,18px) rotate(${tilt}deg) scale(0.94)`, opacity: 0 },
@@ -211,7 +211,7 @@ export function fadeLoserOut(el: HTMLElement, poster: string, tilt: number = TIL
 export function flyPosterTo(fromEl: HTMLElement, toEl: HTMLElement, poster: string) {
   const a = centreOf(fromEl);
   const b = centreOf(toEl);
-  const clone = posterClone(fromEl, poster, "0 10px 30px rgba(0, 0, 0, 0.55)");
+  const clone = posterClone(fromEl, poster, "0 10px 30px var(--shadow)");
   playOnce(clone, [
         { transform: "translate(0,0) scale(1)", opacity: 1, offset: 0 },
         // Lifts slightly on the way, so the path is an arc rather than a slide.
@@ -229,7 +229,7 @@ export function flyPosterAcross(fromImg: HTMLElement, toImg: HTMLElement, poster
   const b = centreOf(toImg);
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px rgba(0, 0, 0, 0.6)");
+  const clone = posterClone(fromImg, poster, "0 0 0 3px #e7b53e,0 14px 38px var(--shadow-strong)");
   playOnce(clone, [
         // Leaves at the challenger's lean and arrives at the climber's, so it
         // settles flush against the card it is replacing rather than crooked.
@@ -410,7 +410,7 @@ export function PosterCard({
           // lines — the whole name is the point, it's what you're choosing between.
           fontSize: film.title.length > 44 ? 22 : film.title.length > 28 ? 26 : 32,
           minHeight: "2.3em",
-          textShadow: "0 2px 8px rgba(0, 0, 0, 0.8)",
+          textShadow: "0 2px 8px var(--shadow-strong)",
         }}
       >
         {film.title}
@@ -441,7 +441,7 @@ export function PosterCard({
             background: "var(--surface)",
             boxShadow: pick
               ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
-              : "0 8px 26px rgba(0, 0, 0, 0.55)",
+              : "0 8px 26px var(--shadow)",
           }}
         >
           <PosterArt film={film} />
@@ -472,7 +472,10 @@ export function PosterCard({
 // on the timestamp so it replays even when the same film wins twice running.
 // Beaten films read in a cool silver-blue — clearly not the gold of a winner,
 // but still legible rather than faded out.
-export const LOSER = "#9db4d6";
+export // Was `#9db4d6`, a pale silver-blue picked against navy and ~1.3:1 on a beige
+// page — the losing title effectively erased. `--dim` is the app own quieter
+// ink and follows the page, which is what this always wanted.
+const LOSER = "var(--dim)";
 
 export function LastResult({ results }: { results: { won: string; lost: string; at: number; drew?: boolean }[] }) {
   // No fixed height: with one, padding only squeezed the text inside the box and

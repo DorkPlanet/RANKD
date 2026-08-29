@@ -85,7 +85,7 @@ export function SessionEnd({
                   src={f.poster}
                   alt={f.title}
                   className="w-full rounded-md object-cover"
-                  style={{ aspectRatio: "2 / 3", boxShadow: i === 0 ? "0 0 0 2px var(--gold)" : "0 4px 14px rgba(0, 0, 0, 0.5)" }}
+                  style={{ aspectRatio: "2 / 3", boxShadow: i === 0 ? "0 0 0 2px var(--gold)" : "0 4px 14px var(--shadow)" }}
                 />
               ) : (
                 <span className="w-full rounded-md bg-border" style={{ aspectRatio: "2 / 3" }} />

@@ -135,8 +135,11 @@ export function Sheet({
   };
   return (
     <div
-      className={`fixed inset-x-0 top-0 z-30 flex items-end justify-center bg-black/50 backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
-      style={{ bottom: "var(--nav-h, 0px)" }}
+      className={`fixed inset-x-0 top-0 z-30 flex items-end justify-center backdrop-blur-sm ${closing ? "scrim-out" : "scrim-in"}`}
+      // The scrim was `bg-black/50`, which is a Tailwind literal and cannot
+      // follow a page that turns beige — 50% black over cream is a bruise. The
+      // token carries the same weight on night and lightens on paper.
+      style={{ bottom: "var(--nav-h, 0px)", background: "var(--scrim)" }}
       onClick={onBackdrop}
     >
       <div

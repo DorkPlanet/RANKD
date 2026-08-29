@@ -36,7 +36,7 @@ export default function Splash({ leaving }: { leaving: boolean }) {
       <div className="text-center">
         <span
           className="splash-mark block font-display text-[44px] leading-none text-gold"
-          style={{ textShadow: "0 2px 26px rgba(231,181,62,0.28)" }}
+          style={{ textShadow: "0 2px 26px var(--glow)" }}
         >
           RANKD
         </span>
