@@ -72,15 +72,15 @@ function FlatRows({
   view,
   onInfo,
   carried,
-  landing,
+  carriedBy,
 }: {
   rows: RankedFilm[];
   view: { top: number; height: number };
   onInfo: (f: Film) => void;
   /** The row under the finger. */
   carried?: string | null;
-  /** The row the line is drawn above. */
-  landing?: string | null;
+  /** How far it has travelled with the finger. */
+  carriedBy?: number;
 }) {
   const chunks: RankedFilm[][] = [];
   for (let i = 0; i < rows.length; i += CHUNK) chunks.push(rows.slice(i, i + CHUNK));
@@ -104,7 +104,7 @@ function FlatRows({
                 onInfo={onInfo}
                 showStars
                 carried={carried === r.film.id}
-                markAbove={landing === r.film.id}
+                carriedBy={carriedBy}
               />
             ))}
           </div>
@@ -196,9 +196,15 @@ export default function ListScreen({
    * recomputed on every move, drawn as an insertion line, and only acted on when
    * the finger lifts.
    */
-  const [drag, setDrag] = useState<{ id: string; from: number; to: number; dy: number } | null>(
-    null,
-  );
+  const [drag, setDrag] = useState<{
+    id: string;
+    from: number;
+    to: number;
+    /** Where the finger went down, so the carried row can follow it. */
+    startY: number;
+    /** Where the finger is now, in client coordinates. */
+    y: number;
+  } | null>(null);
   /**
    * Whether a locked row may be dragged.
    *
@@ -505,7 +511,46 @@ export default function ListScreen({
   // pages and the flat one. An index would have to be counted through tier
   // headers and UN-RNKD dividers on one page and not on the other.
   const carriedId = drag?.id ?? null;
-  const landingId = drag ? (displayOrder[drag.to]?.id ?? null) : null;
+  // How far the carried row has travelled. It lifted but never moved before,
+  // which is most of what "it also looks a little off" was about: the row
+  // stayed put while the finger left it behind.
+  const carriedBy = drag ? drag.y - drag.startY : 0;
+
+  /**
+   * Hold the list still and follow the thumb.
+   *
+   * ── Why this is not a React handler ───────────────────────────────────────
+   *
+   * It was one, and the list scrolled anyway. Two reasons, and only the second
+   * is fixable from inside React:
+   *
+   *  · `touch-action: none` applied when the drag starts is too late. The
+   *    browser reads that property at TOUCHSTART and does not re-read it.
+   *  · A `touchmove` listener has to be NON-PASSIVE for `preventDefault` to
+   *    mean anything, and React gives no way to say so.
+   *
+   * Registering it here works because of the hold: the finger has been still for
+   * `HOLD_MS`, so no scroll has started yet, and a non-passive listener attached
+   * before the first movement can still cancel it. This is what every drag
+   * library does and it is the only thing that reliably works.
+   */
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: TouchEvent) => {
+      // The whole point. Without it the list scrolls under the row being
+      // carried and the drag is unusable.
+      e.preventDefault();
+      const t = e.touches[0];
+      if (!t) return;
+      const to = rowAt(t.clientY);
+      setDrag((d) => (d ? { ...d, y: t.clientY, to: to === -1 ? d.to : to } : d));
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    return () => document.removeEventListener("touchmove", onMove);
+    // `rowAt` reads `displayOrder`, which changes only when the library does —
+    // never mid-drag, since nothing is written until the finger lifts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag !== null]);
 
   const jumpTo = (tier: Rating) => {
     setJumpOpen(false);
@@ -739,8 +784,17 @@ export default function ListScreen({
         // overflow-x hidden as well as y: setting one axis to auto computes the
         // other to auto, and the pane mid-turn would be reachable sideways.
         className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-6"
-        // `none` only while dragging: the browser must keep owning the scroll
-        // every other moment, or the list becomes unusable to get anywhere.
+        // ── This alone does NOT stop the scroll, and that was the bug ──────
+        //
+        // Reported: "the list scrolls with my thumb so I cant actually move it".
+        // `touch-action` is latched by the browser at TOUCHSTART. Setting it
+        // once a drag has begun changes nothing about the gesture already in
+        // flight, and by the time `preventDefault` was reached the compositor
+        // owned the scroll and ignored it.
+        //
+        // Kept because it is still correct for anything that starts while a
+        // drag is up. The thing that actually holds the list still is the
+        // non-passive native listener in the effect beside `dropAt`.
         style={{ touchAction: drag ? "none" : undefined }}
         onTouchStart={(e) => {
           // Same guard as everywhere else. The list has no sideways strips today
@@ -763,7 +817,7 @@ export default function ListScreen({
             if (row && (moveLocked || !isHard(row))) {
               holdTimer.current = setTimeout(() => {
                 holdTimer.current = null;
-                setDrag({ id: row.id, from: at, to: at, dy: 0 });
+                setDrag({ id: row.id, from: at, to: at, startY: t.clientY, y: t.clientY });
                 // A short buzz, where the device offers one: the row has left
                 // the list and nothing else on screen says so yet.
                 navigator.vibrate?.(12);
@@ -774,19 +828,9 @@ export default function ListScreen({
         onTouchMove={(e) => {
           const from = touch.current;
 
-          // ── Dragging owns the gesture completely ──────────────────────────
-          //
-          // No page turn, no scroll, no axis test. Those all belong to a finger
-          // that is travelling somewhere; this one has already arrived.
-          if (drag) {
-            e.preventDefault();
-            const t = e.touches[0];
-            const to = rowAt(t.clientY);
-            setDrag((d) =>
-              d ? { ...d, dy: t.clientY - (from?.y ?? t.clientY), to: to === -1 ? d.to : to } : d,
-            );
-            return;
-          }
+          // Dragging is handled by a NATIVE listener, not here — see the effect
+          // next to `dropAt`. React's handler cannot stop the scroll.
+          if (drag) return;
 
           if (!from || turning.current) return;
           // Moving at all means this was a scroll or a swipe, not a hold.
@@ -869,7 +913,7 @@ export default function ListScreen({
             </div>
           )
         ) : flat ? (
-          <FlatRows rows={flat} view={view} onInfo={onInfo} carried={carriedId} landing={landingId} />
+          <FlatRows rows={flat} view={view} onInfo={onInfo} carried={carriedId} carriedBy={carriedBy} />
         ) : (
           model.sections.map((s, i) => {
             const o = offsets[i];
@@ -885,7 +929,7 @@ export default function ListScreen({
                     rank={r.rank}
                     onInfo={onInfo}
                     carried={carriedId === r.film.id}
-                    markAbove={landingId === r.film.id}
+                    carriedBy={carriedBy}
                   />
                 ))}
                 {s.unplaced.length > 0 && (
@@ -908,6 +952,30 @@ export default function ListScreen({
         )}
         </div>
       </div>
+
+      {/* ── The landing line, at the thumb ───────────────────────────────
+          Reported: "I think the line itself should shadow the thumb movement".
+          It was a border on whichever row was the target, so it jumped a whole
+          row at a time and sat wherever that row happened to be rather than
+          where the finger was.
+
+          `fixed`, at the finger's own client Y, so it tracks continuously and
+          needs no conversion between client, scroller and content coordinates —
+          three frames that all differ here, and the scroller can move under it.
+          Safe because nothing on this screen is transformed while a drag is up:
+          the page turn and the drag cannot both be happening. */}
+      {drag && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed inset-x-3 z-30"
+          style={{
+            top: drag.y,
+            height: 2,
+            background: "var(--gold)",
+            boxShadow: "0 0 10px var(--gold)",
+          }}
+        />
+      )}
 
       <BottomNav
         screen="list"
@@ -1016,7 +1084,7 @@ function Row({
   onInfo,
   showStars,
   carried,
-  markAbove,
+  carriedBy = 0,
 }: {
   film: Film;
   rank?: number;
@@ -1024,8 +1092,8 @@ function Row({
   showStars?: boolean;
   /** This row is the one under the finger. */
   carried?: boolean;
-  /** The dragged row would land here — draw the line above this one. */
-  markAbove?: boolean;
+  /** How far the finger has travelled since the drag began, in px. */
+  carriedBy?: number;
 }) {
   return (
     <button
@@ -1044,9 +1112,19 @@ function Row({
       style={{
         height: ROW_H,
         ...(carried
-          ? { opacity: 0.9, transform: "scale(1.02)", boxShadow: "0 10px 30px var(--shadow)" }
+          ? {
+              // Travels with the finger. It used to lift and stay put, so the
+              // thumb walked away from the thing it was carrying — reported as
+              // "it also looks a little off", and it was the biggest part of it.
+              transform: `translateY(${carriedBy}px) scale(1.02)`,
+              opacity: 0.92,
+              boxShadow: "0 10px 30px var(--shadow-strong)",
+              // Above its neighbours while it is off the ground, or the rows it
+              // passes over paint on top of it.
+              position: "relative",
+              zIndex: 20,
+            }
           : null),
-        ...(markAbove ? { borderTop: "2px solid var(--gold)" } : null),
       }}
       // Every row carries it; the tour points at whichever is first on screen.
       data-tour="list-row"
