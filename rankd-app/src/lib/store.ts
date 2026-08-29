@@ -2,7 +2,7 @@ import type { Film } from "./types";
 import { migrateLock } from "./lock";
 import { markDirty } from "./syncState";
 import { isWiped } from "./wiped";
-import { keyFor } from "./medium";
+import { keyFor, allKeysFor } from "./medium";
 
 // ── Why the key below is a function and not a constant ─────────────────────
 //
@@ -132,9 +132,57 @@ export function isUntouchedSeed(films: readonly Film[]): boolean {
   return films.every((f) => set.has(f.id));
 }
 
-/** Does this browser hold a library sync should treat as real? */
+/**
+ * Does this browser hold a library sync should treat as real?
+ *
+ * ── ANY medium, not the one currently on screen ────────────────────────────
+ *
+ * This asked `KEY()`, which is the ACTIVE medium's key, and that produced an
+ * infinite reload loop the moment anybody switched to books:
+ *
+ *   1. Switching to books leaves `rankd-app-v1:book` absent — nothing has
+ *      written it yet.
+ *   2. This returned false, so `reconcile` was told the browser holds no
+ *      library at all.
+ *   3. With a library on the server that means "a new phone, take the account's
+ *      copy" — an unambiguous `pull`.
+ *   4. `pull()` ends in `window.location.reload()`.
+ *   5. The app reopens still in books, the book library is still empty, and it
+ *      is step 2 again. Splash screen, forever, with no way back to the header
+ *      to switch out of it.
+ *
+ * Films never hit this because `saveFilms` writes their key on the first run,
+ * so it exists even when it holds `[]`.
+ *
+ * The mistake was answering a question narrower than the one being asked. Sync
+ * spans every medium — `SYNC_KEYS` carries both libraries — so what it needs to
+ * know is whether this browser holds anything worth protecting ANYWHERE, not
+ * whether the medium being looked at happens to have something in it.
+ *
+ * Per-medium semantics are otherwise unchanged: an absent key is nothing, the
+ * legacy sample set is nothing (see `isUntouchedSeed`), and a present key is a
+ * real library. Only the OR across mediums is new, so a film-only browser gets
+ * exactly the answer it got before.
+ */
 export function hasRealLibrary(): boolean {
   if (typeof window === "undefined") return false;
-  if (localStorage.getItem(KEY()) === null) return false;
-  return !isUntouchedSeed(loadFilms());
+
+  return allKeysFor("rankd-app-v1").some((key) => {
+    const raw = localStorage.getItem(key);
+    // Absent is nothing. Present-but-empty is deliberately NOT nothing: that is
+    // a browser the app has run on, which is the state that kept films out of
+    // the loop above, and narrowing it here would put them in it.
+    if (raw === null) return false;
+
+    // The legacy sample set only ever existed for films, so it is the only
+    // medium that can be "present but not worth protecting".
+    if (key !== "rankd-app-v1") return true;
+    try {
+      return !isUntouchedSeed((JSON.parse(raw) as Film[]).map(migrateLock));
+    } catch {
+      // Unreadable is not the same as absent. Something is stored here, and
+      // claiming otherwise invites the pull that overwrites it.
+      return true;
+    }
+  });
 }
