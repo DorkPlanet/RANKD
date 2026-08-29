@@ -129,27 +129,80 @@ function isbnOf(v: Volume): string | undefined {
   return pick("ISBN_13") ?? pick("ISBN_10");
 }
 
+/** Google's "no cover available" image, in bytes. Measured — see `hasRealImage`. */
+const GOOGLE_PLACEHOLDER_BYTES = 46838;
+
 /**
- * Google's thumbnail, made as large as that endpoint will go.
+ * Google's cover for this exact volume, at a size worth looking at.
  *
- * `zoom=1` is roughly 300px against the default's 128, and `edge=curl` draws a
- * fake page-curl over the corner of the image — charming in a search result and
- * wrong on a card the app treats as artwork. Both are query parameters on a URL
- * Google hands back, so this rewrites rather than constructs: the token in the
- * path is theirs and must be carried through untouched.
+ * ── `zoom=1` was making the image SMALLER ──────────────────────────────────
  *
- * Forced to https. Google still returns http on some volumes, and a page served
- * over https drops the image without a word.
+ * The previous version set `zoom=1` and this comment claimed it was "roughly
+ * 300px against the default's 128". Measured against the live endpoint, that is
+ * simply false — `zoom=1` and `zoom=5` both return **128x196**, and it was the
+ * smallest thing on offer:
+ *
+ *     zoom=1   128x196     12 kB
+ *     zoom=0  1744x2674   667 kB
+ *     w=800    800x1227   163 kB
+ *
+ * `w=800` is the one worth having. `zoom=0` is a two-thirds-of-a-megabyte
+ * download per book, which on an imported library is not a cover strategy.
+ *
+ * ── Why the URL is REWRITTEN rather than built from the id ─────────────────
+ *
+ * `imageLinks` is only present on a volume Google actually holds artwork for,
+ * so starting from that URL means a volume with no cover produces no URL and
+ * the whole branch falls through by itself. Building
+ * `books.google.com/books/content?id=…` from the id instead would always
+ * produce a URL, and Google answers those with a placeholder rather than a 404.
+ *
+ * `edge=curl` draws a fake page-curl over the corner — charming in a search
+ * result and wrong on something the app treats as artwork. Forced to https:
+ * Google still returns http on some volumes, and a page served over https drops
+ * the image without a word.
  */
 function bigThumb(url: string | undefined): string | undefined {
   if (!url) return undefined;
   try {
     const u = new URL(url.replace(/^http:/, "https:"));
     u.searchParams.delete("edge");
-    u.searchParams.set("zoom", "1");
+    // Both, because they fight: `zoom` pins a step size and `w` asks for a width.
+    u.searchParams.delete("zoom");
+    u.searchParams.set("w", "800");
     return u.toString();
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Is this Google URL a real cover, or the grey "no cover available" card?
+ *
+ * Google does not 404 a missing cover; it serves a placeholder with a 200, which
+ * is the same trap Open Library sets with its 1x1 GIF and needs the same kind of
+ * answer. The placeholder is byte-identical across volumes — two different books
+ * returned the same MD5 — and `content-length` tells it apart from a real cover
+ * without downloading anything:
+ *
+ *     placeholder   46,838 bytes  (exactly, every time)
+ *     real covers   74,000 – 180,000 bytes
+ *
+ * An exact size from a third party is a heuristic and it is written down as one.
+ * It fails SAFE: if Google changes the placeholder this stops recognising it and
+ * a handful of books wear a grey card, which is what they wore before any of
+ * this. It cannot cause a wrong cover.
+ */
+async function hasRealImage(url: string): Promise<boolean> {
+  try {
+    const r = await fetch(url, { method: "HEAD", next: { revalidate: DAY } });
+    if (!r.ok) return false;
+    const len = Number(r.headers.get("content-length") ?? 0);
+    // A missing length is not evidence of a placeholder, but it is not evidence
+    // of a cover either — and there are two good fallbacks below.
+    return len > 0 && len !== GOOGLE_PLACEHOLDER_BYTES;
+  } catch {
+    return false;
   }
 }
 
@@ -262,19 +315,46 @@ export async function coverFor(v: Volume): Promise<string | undefined> {
   const info = v.volumeInfo ?? {};
   const isbn = isbnOf(v);
 
+  // ── 1. Google's own cover, for the volume it actually matched ────────────
+  //
+  // Reported: "my top one Annihilation is currently a photo of the trilogy, not
+  // the individual book". Google had matched it correctly — 192 pages, "the
+  // first volume of the Southern Reach Trilogy" — and then the ARTWORK came
+  // from somewhere else and was wrong.
+  //
+  // The ISBN cover 404s for that edition, so it fell through to the work
+  // search, which found the right WORK and returned `cover_i`. That field is
+  // Open Library's default cover for a work, chosen once across all 26 of its
+  // editions, and for Annihilation the choice is a trilogy-branded omnibus.
+  //
+  // Google's `imageLinks` belongs to the exact volume the metadata came from,
+  // so it cannot disagree with the title, author and page count shown beside
+  // it. Measured, it is also the biggest of the three at 800x1227 against Open
+  // Library's ~320x500. Correct AND sharper, so it goes first.
+  const byGoogle = bigThumb(info.imageLinks?.thumbnail);
+  if (byGoogle && (await hasRealImage(byGoogle))) return byGoogle;
+
+  // ── 2. The ISBN cover — same edition, from the other library ─────────────
   if (isbn) {
     const byIsbn = noBlanks(`${COVERS}/${isbn}-L.jpg`);
     if (await exists(byIsbn)) return byIsbn;
   }
 
+  // ── 3. The work's default cover — right book, possibly wrong edition ─────
+  //
+  // Last, now, and this is the demotion that fixes the report. It is still
+  // worth having: it rescued eight of twelve books when the ISBN missed. But it
+  // answers "what does this WORK look like" rather than "what does this edition
+  // look like", and those differ exactly when a work has an omnibus.
+  //
+  // No `exists` check: `cover_i` is Open Library's own id for an image it
+  // holds, so unlike an ISBN it cannot point at a gap.
   if (info.title) {
     const byWork = await workCover(info.title, info.authors?.[0]);
-    // No `exists` check: `cover_i` is Open Library's own id for an image it
-    // holds, so unlike an ISBN it cannot point at a gap.
     if (byWork) return byWork;
   }
 
-  return bigThumb(info.imageLinks?.thumbnail);
+  return undefined;
 }
 
 /**

@@ -110,6 +110,70 @@ function writeScores(films: Film[], s: PlacementSession): void {
   }
 }
 
+/**
+ * A climb that spanned tiers gets to correct the ratings it spanned.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * King of the Hill can reach either side of its tier — `spanBelow` and
+ * `spanAbove` — so its pile deliberately mixes ratings, and it asks a question
+ * no single-tier run can: is this 3★ actually better than your 4★s? The answer
+ * used to be thrown away. `writeScores` groups by rating and writes each film
+ * inside its OWN band, so a 3★ that beat every 4★ went back to being the best
+ * of the 3★s — below all of them.
+ *
+ * ── Redistribution, not promotion, and the first draft got this wrong ──────
+ *
+ * The obvious rule is "a film that beat a better-rated one is promoted to that
+ * rating". It was written, and a trace of a three-film pile showed what it
+ * really does:
+ *
+ *     b(3★) beats high(4★)  ->  b promoted to 4★
+ *     a(3★) beats high(4★)  ->  a promoted to 4★
+ *     high(4★) confirmed last, now sitting under two 4★s  ->  unchanged
+ *
+ * Three 4★s out of a pile that held one. Ratings can only ever go UP under that
+ * rule, because the winners are promoted before the loser is judged, and by then
+ * everything above it matches its own rating. A spanned run would inflate a
+ * library a little every time it ran.
+ *
+ * So the pile keeps the ratings it came in with and hands them out in the order
+ * the climb produced. The MULTISET is preserved — one 4★ in, one 4★ out — and
+ * the only thing that changes is who holds which. `b` takes the 4★ and `high`
+ * takes a 3★, which is the swap the duels actually argued for, and the library's
+ * shape is untouched.
+ *
+ * That is also the thing that was asked for: not a promotion ladder, but being
+ * "able to move them easily when placed wrong in the first place".
+ *
+ * ── Why the RATING moves and the band never does ───────────────────────────
+ *
+ * Tier bands must stay non-overlapping — `list.ts` states that a plain score
+ * sort is tier-correct because of it, and the counts, the profile and the cards
+ * all inherit that. `writeScores` runs immediately after this and reads
+ * `f.rating` to pick the band, so setting the rating here is the whole job.
+ *
+ * ── Why this needs no toggle, where Fast Shuffle does ─────────────────────
+ *
+ * Fast Shuffle re-rates off a belief fit nobody sees, which is why it asks
+ * first. Spanning a climb is already an explicit act — you set the reach on the
+ * way in — and every duel behind this was answered by hand, just now. An
+ * unspanned pile is all one rating, so the multiset is one value repeated and
+ * redistribution cannot change anything. That inertness is structural.
+ */
+function redistributeRatings(films: Film[], order: readonly string[]): void {
+  const inPile = order
+    .map((id) => films.find((f) => f.id === id))
+    .filter((f): f is Film => f !== undefined);
+  if (inPile.length < 2) return;
+
+  // Best first, so position i takes the i-th best rating the pile held.
+  const ratings = inPile.map((f) => f.rating).sort((a, b) => b - a);
+  inPile.forEach((f, i) => {
+    f.rating = ratings[i];
+  });
+}
+
 // ── Public API ──────────────────────────────────────────────────────────
 
 // Start placing the given tier. Throws if there aren't enough films (fail fast).
@@ -351,6 +415,13 @@ export function confirm(state: RankState): RankState {
   if (!s.crossTier) {
     const champ = films.find((f) => f.id === championId);
     if (champ) champ.lock = "hard";
+    // ── Ratings settle at the END of the pile, not per confirm ─────────────
+    //
+    // Redistribution needs the finished order: it hands the pile's own ratings
+    // out by position, and half an order would hand them out by half a
+    // position. Doing it per confirm was the first draft's mistake and it could
+    // only ever inflate — see `redistributeRatings`.
+    if (s.unconfirmed.length === 0) redistributeRatings(films, s.confirmed);
     writeScores(films, s);
   }
   if (s.unconfirmed.length === 0) return { films, session: null, journal: state.journal }; // tier fully placed

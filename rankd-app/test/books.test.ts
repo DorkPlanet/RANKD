@@ -110,7 +110,10 @@ describe("metaOf", () => {
         imageLinks: { thumbnail: "http://books.google.com/books/content?id=x&zoom=5&edge=curl" },
       }),
     );
-    expect(m.poster).toContain("zoom=1");
+    // `w=800` measures 800x1227. `zoom=1` measured 128x196 — the SMALLEST
+    // option Google offers, despite the comment that once claimed otherwise.
+    expect(m.poster).toContain("w=800");
+    expect(m.poster).not.toContain("zoom=");
     expect(m.poster).not.toContain("edge=curl");
     // http would be dropped silently by a page served over https.
     expect(m.poster?.startsWith("https://")).toBe(true);
