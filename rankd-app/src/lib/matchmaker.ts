@@ -27,6 +27,7 @@ import type { Belief } from "./bayes";
 import { PRIOR_SPREAD } from "./bayes";
 import { isHard } from "./lock";
 import type { Judgement } from "./log";
+import { pairKey } from "./relations";
 import type { Rating } from "./tiers";
 import type { Film } from "./types";
 
@@ -130,8 +131,9 @@ export function poolFor(films: readonly Film[], opts: MatchOptions): Film[] {
   return opts.includeConfirmed ? scoped : scoped.filter((f) => !isHard(f));
 }
 
-/** The unordered key for a pair, so (A,B) and (B,A) guard identically. */
-const pairKey = (a: string, b: string): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
+// The unordered pair key lives in lib/relations.ts now — one definition, so the
+// repetition guard here and the closure there can never disagree about what
+// counts as the same pair.
 
 // A film as selection reads it. A film the model has never seen reads at the wide
 // prior — maximally unsettled — so fresh films are served first.

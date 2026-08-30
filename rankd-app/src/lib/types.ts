@@ -1,7 +1,22 @@
 import type { Rating } from "./tiers";
 import type { Judgement } from "./log";
 import type { Lock } from "./lock";
+import type { Oracle } from "./relations";
 import type { Take } from "./social/takes";
+
+/**
+ * A duel the climb settled from the record instead of putting on screen.
+ *
+ * Reported so the saving can be shown ("skipped 6 you'd already decided") rather
+ * than happening invisibly. Carries no judgement id because it MINTED no
+ * judgement: the user answered this pair once already, and writing a second row
+ * saying so would be fabricating evidence out of the act of reading it.
+ */
+export interface AutoStep {
+  a: string;
+  b: string;
+  o: "a" | "b" | "draw";
+}
 
 export interface Film {
   id: string;
@@ -155,6 +170,32 @@ export interface PlacementSession {
   challengerId: string; // the film directly above it (its opponent); "" at the top
   needsConfirm: boolean; // contender reached the top → awaiting the user's confirm
 
+  /**
+   * Films the user has gathered to travel together, held contiguously in
+   * `unconfirmed`.
+   *
+   * The fatigue this exists to answer: ten minutes into a climb you can see five
+   * films that plainly belong beside each other, and the pile makes you carry
+   * each of them up separately. A cluster carries them up once. One duel places
+   * all five against an outsider instead of five near-identical climbs.
+   *
+   * ── What a cluster does and does not claim ────────────────────────────────
+   *
+   * It claims ADJACENCY — "these belong together" — and nothing about the order
+   * inside it. That order is whatever the pile already had, which is to say
+   * Rough Cut's scores plus whatever duels have been fought; `nudgeConfirmed`
+   * corrects it. This is deliberately the same footing `flickToTop` and
+   * `skipToFilm` stand on: a user assertion, supplied directly rather than
+   * earned a duel at a time, committing nothing until a confirm.
+   *
+   * Which is why grouping writes NO judgements. There is no evidence that five
+   * films are adjacent — there is only the user saying so — and minting rows for
+   * pairs nobody was shown would put fabricated evidence into the log that
+   * lib/relations.ts then reads back as fact. Only the block's face fights, and
+   * only the face's duel is recorded.
+   */
+  clusters?: string[][];
+
   // A promotion run in progress: the contender is working through the weakest
   // films of the tier above, weakest first. Clearing them earns the promotion.
   promotionQueue?: string[];
@@ -195,4 +236,25 @@ export interface RankState {
   // it does no IO — so it hands judgements up here and the shell drains them.
   // Every row carries an id, so draining twice writes once (see lib/log.ts).
   journal: Judgement[];
+  /**
+   * What the user has already decided, so the climb stops asking twice.
+   *
+   * Built from the evidence log by lib/relations.ts and handed in by the shell,
+   * which keeps the engine pure — it consults this, it never reads storage. Duels
+   * whose answer this already holds are settled from the record instead of being
+   * put on screen.
+   *
+   * OPTIONAL, and that is load-bearing: with no oracle the climb behaves exactly
+   * as it always has, which is what lets every existing test stand unchanged and
+   * gives the feature an off switch that is a single undefined.
+   */
+  oracle?: Oracle;
+  /**
+   * Duels THIS transition settled from the record — for the receipt on screen.
+   *
+   * Transient, and deliberately not on `PlacementSession`: `saveRun` serialises
+   * the session, so a field there would round-trip through localStorage and
+   * re-announce "skipped 6" every time the run was resumed.
+   */
+  resolved?: readonly AutoStep[];
 }

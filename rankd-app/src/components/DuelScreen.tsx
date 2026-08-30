@@ -23,7 +23,15 @@ import {
   promoteDirect,
   promotionWon,
   completePromotion,
+  clusterOf,
+  decidedRest,
+  finishDecided,
+  groupFilms,
+  nudgeConfirmed,
+  reorderCluster,
+  ungroupFilm,
 } from "@/lib/ladder";
+import { buildRelations } from "@/lib/relations";
 import { ORDERED_TIERS, starsFor, tierCounts, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
 import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/lib/log";
@@ -228,6 +236,16 @@ export default function DuelScreen({
   // storage round trip per judgement to learn something this screen already
   // knows — it is the thing that just wrote it.
   const [log, setLog] = useState<Judgement[]>([]);
+  // The pile the user chose to keep playing rather than finish outright, and the
+  // count of duels this run settled from the record — the receipt for the strip.
+  const [playOnFor, setPlayOnFor] = useState("");
+  // Stamped with a counter rather than a bare count, so skipping six twice
+  // running shows twice instead of the second being swallowed as "no change".
+  // A counter and not a clock: `commit` is an ordinary function in the render
+  // body, and reading the clock there is impure whether or not it is only ever
+  // reached from a handler.
+  const [skipped, setSkipped] = useState<{ n: number; at: number } | null>(null);
+  const [skippedRun, setSkippedRun] = useState(0);
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
@@ -540,8 +558,55 @@ export default function DuelScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rcKey]);
 
+  // ── What the user has already decided ─────────────────────────────────────
+  //
+  // The evidence log has always been written and never read back. This is where
+  // it starts being read: the closure over the current pile, handed to the
+  // engine so a duel the user already answered is settled from the record rather
+  // than put on screen again. See lib/relations.ts.
+  //
+  // Keyed on pile MEMBERSHIP rather than order — the pile reorders on every
+  // duel, and an order-keyed memo would rebuild hundreds of times a run for no
+  // reason — and on the log by reference, which changes exactly when a judgement
+  // is written or retracted. Undo therefore rebuilds rather than patches, which
+  // is the only way a retracted row can un-derive what it implied.
+  const pileKeySet = state?.session
+    ? [...state.session.confirmed, ...state.session.unconfirmed].slice().sort().join(",")
+    : "";
+  const oracle = useMemo(
+    () => (pileKeySet ? buildRelations(pileKeySet.split(","), log) : undefined),
+    [pileKeySet, log],
+  );
+
+  // The receipt is transient. Long enough to read, short enough not to become
+  // furniture over the posters.
+  useEffect(() => {
+    if (!skipped) return;
+    const t = setTimeout(() => setSkipped(null), 2600);
+    return () => clearTimeout(t);
+  }, [skipped]);
+
   if (!state) return null;
   const { session } = state;
+
+  // Every engine call goes through this, so the oracle can never be forgotten at
+  // one call site and silently turn the saving off for that path.
+  const armed: RankState = { ...state, oracle };
+
+  // ── The oracle a run is STARTED with ──────────────────────────────────────
+  //
+  // `oracle` above is scoped to the pile currently being climbed, which is the
+  // right scope for every transition inside a run and the wrong one for starting
+  // a new one: at that moment the session still describes the run being left, or
+  // there is no session at all. Passing it to `startRun` handed the new pile an
+  // oracle that knew nothing about it, so a run opened by asking a duel the user
+  // had already answered and only started remembering from the second tap.
+  //
+  // Built over the whole library instead, because `startRun` chooses its own
+  // pool from a tier and a reach and this is the only set guaranteed to contain
+  // it. One Warshall pass at run start — tens of milliseconds on a large
+  // library, against the hours the run itself takes.
+  const startingOracle = () => buildRelations(state.films.map((f) => f.id), log);
 
   // The one way a state from the engine reaches the screen.
   //
@@ -553,6 +618,20 @@ export default function DuelScreen({
   // instant it is answered, whatever happens to the run afterwards.
   const commit = (next: RankState, persist = true) => {
     if (persist) saveFilms(next.films);
+    // Duels this transition settled from the record. Shown as a receipt, not
+    // celebrated — the user is being told what was skipped and why, not scored.
+    // `resolved` lives on RankState and never on the session, so it cannot
+    // round-trip through localStorage and re-announce itself on a resume.
+    const auto = next.resolved?.length ?? 0;
+    if (auto > 0) {
+      setSkipped((s) => ({ n: auto, at: (s?.at ?? 0) + 1 }));
+      setSkippedRun((n) => n + auto);
+    }
+    // A new run starts its own tally.
+    if (!state.session && next.session) {
+      setSkippedRun(auto);
+      setPlayOnFor("");
+    }
     // ── Catching the end of a run wherever it happens ────────────────────────
     //
     // A run ends two ways: you press Done, or `confirm` empties the pile and
@@ -653,15 +732,34 @@ export default function DuelScreen({
   // A duel result is written straight away. Placements still only commit on
   // confirm — what's saved here is the record that the comparison happened,
   // which is the one thing an abandoned run should still leave behind.
-  const decide = (winnerId: string) => commitUndoable(choose(state, winnerId));
+  const decide = (winnerId: string) => commitUndoable(choose(armed, winnerId));
   // Same shape as a decision, because that is what it is — a recorded answer of
   // "neither". The climb steps the contender in below the challenger.
-  const declineToCall = () => commitUndoable(skipPair(state));
+  const declineToCall = () => commitUndoable(skipPair(armed));
   // Assertions, not judgements: they reorder the pile and record nothing, so
   // there is never a journal to drain and nothing to persist until a confirm.
-  const flick = (filmId: string) => commit(flickToTop(state, filmId), false);
-  const sink = (filmId: string) => commit(flickToBottom(state, filmId), false);
+  const flick = (filmId: string) => commit(flickToTop(armed, filmId), false);
+  const sink = (filmId: string) => commit(flickToBottom(armed, filmId), false);
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
+  // Gathering and releasing are assertions like the flicks — they reorder the
+  // pile, record nothing, and commit nothing until a confirm. `persist` false
+  // for the same reason: there are no scores to write yet.
+  const gatherFilms = (ids: string[], anchorId: string) =>
+    commit(groupFilms(armed, ids, anchorId), false);
+  const releaseFilm = (filmId: string) => commit(ungroupFilm(armed, filmId), false);
+  /**
+   * One control, two meanings, decided by where the film is.
+   *
+   * On the shelf it is a real correction to a placed ranking, so it writes the
+   * move to the log the way a drag does. Inside a group it is only rearranging
+   * an assertion nobody has committed yet, so it writes nothing — see
+   * `reorderCluster` for why minting rows there would poison the oracle.
+   */
+  const nudge = (filmId: string, delta: number) => {
+    if (!session) return;
+    if (session.confirmed.includes(filmId)) return commitUndoable(nudgeConfirmed(armed, filmId, delta));
+    commit(reorderCluster(armed, filmId, delta), false);
+  };
   // The films behind an id list, in that order. Read from the run's own films
   // rather than the library, because a person run's pile can hold borrowed ones
   // the library has never heard of.
@@ -693,7 +791,7 @@ export default function DuelScreen({
     // session, and the contender is what the tag prompt is for.
     const locked = session?.contenderId ?? null;
     // Winning the promotion duels banks a new star rating instead of a position.
-    const next = promotionWon(state) ? completePromotion(state) : confirm(state);
+    const next = promotionWon(armed) ? completePromotion(armed) : confirm(armed);
     // Offered after the commit, so the placement is already safe. A prompt that
     // could cost somebody their lock would be worse than no prompt.
     if (locked) setTimeout(() => onLocked?.(locked), 0);
@@ -704,7 +802,7 @@ export default function DuelScreen({
     }
     commit(next);
   };
-  const backOut = () => commit(stepBackFromConfirm(state), false);
+  const backOut = () => commit(stepBackFromConfirm(armed), false);
 
   // Returns whether a run actually started, so the setup panel can stay open and
   // say why instead of dropping you on a "tier complete" screen that was really
@@ -713,7 +811,7 @@ export default function DuelScreen({
     // startRun builds a state from films alone, so any duels not yet drained to
     // the log are carried across by hand rather than dropped.
     try {
-      commit({ ...startRun(films, tier, { shuffle, below, above }), journal: state.journal }, false);
+      commit({ ...startRun(films, tier, { shuffle, below, above, oracle: startingOracle() }), journal: state.journal }, false);
       onRunBegan?.();
       return true;
     } catch {
@@ -835,9 +933,17 @@ export default function DuelScreen({
     }
   };
 
-  const promoteTo = promotionTarget(state);
-  const takeOnTierAbove = () => commit(startPromotionDuel(state), false);
-  const assertPromotion = () => commit(promoteDirect(state));
+  // ── Not offered for a champion the record carried to the top ──────────────
+  //
+  // `promotionTarget` says the claim is that a film "beat every other film you
+  // own at that rating, one at a time". Transitively is a weaker claim than that
+  // sentence, and a reward screen arriving after zero taps reads as the app
+  // handing out a star rating on its own. If the record already knows this film
+  // tops its tier, the promotion still gets offered — the next time it earns the
+  // top with duels actually fought.
+  const promoteTo = (state.resolved?.length ?? 0) > 0 ? undefined : promotionTarget(state);
+  const takeOnTierAbove = () => commit(startPromotionDuel(armed), false);
+  const assertPromotion = () => commit(promoteDirect(armed));
 
   // Rough Cut takes the whole surface, like Fast Shuffle: it has no pile, no
   // climb and no confirm, so none of the branches below apply to it. Placed
@@ -863,7 +969,7 @@ export default function DuelScreen({
           saveFilms(films);
           setRoughCutTier(null);
           try {
-            commit({ ...startRun(films, roughCutTier, { only: ids }), journal: state.journal }, false);
+            commit({ ...startRun(films, roughCutTier, { only: ids, oracle: startingOracle() }), journal: state.journal }, false);
           } catch {
             // Fewer than two films left in the pile — nothing to climb. The cut
             // itself is already saved, so this is a no-op rather than a loss.
@@ -937,7 +1043,7 @@ export default function DuelScreen({
             setShuffleRun(null);
             closeSetup();
             try {
-              commit({ ...startRun(state.films, setupTier, { only: ids }), journal: state.journal }, false);
+              commit({ ...startRun(state.films, setupTier, { only: ids, oracle: startingOracle() }), journal: state.journal }, false);
             } catch {
               /* fewer than two films left in the pile */
             }
@@ -1061,6 +1167,7 @@ export default function DuelScreen({
           films={state.films}
           tier={endedTier}
           runIds={endedIds ?? undefined}
+          skipped={skippedRun}
           onPickTier={() => {
             setEndedTier(null);
             setEndedIds(null);
@@ -1071,7 +1178,7 @@ export default function DuelScreen({
           // moment the new session exists, so this branch stands itself down.
           onRankPile={(ids) => {
             try {
-              commit({ ...startRun(state.films, endedTier, { only: ids }), journal: state.journal }, false);
+              commit({ ...startRun(state.films, endedTier, { only: ids, oracle: startingOracle() }), journal: state.journal }, false);
             } catch {
               /* fewer than two films left in the pile — the buttons already guard this */
             }
@@ -1246,6 +1353,21 @@ export default function DuelScreen({
   const pair = getPair(state);
   const champion = pendingConfirm(state);
 
+  // ── Nothing left to decide ────────────────────────────────────────────────
+  //
+  // Checked BEFORE the confirm branch, and that ordering is the whole feature.
+  // Once the climb reads the record, a fully settled pile costs no duels — but
+  // it still costs one Lock in tap per film, because the engine walks to a
+  // confirm, and confirm restarts the climb and walks to the next one. On a
+  // re-ranked 200-film tier that is 200 taps for 200 foregone conclusions.
+  // Offered, never automatic: placing fifty films unasked is the app deciding
+  // for you, which is the one thing this is built not to do.
+  // "Keep playing anyway" is remembered against the PILE, so declining once
+  // silences the offer for the rest of that run rather than for one render —
+  // and a different pile, which is a different run, gets asked again.
+  const settledRest = playOnFor === pileKeySet ? null : decidedRest(armed);
+  const finishAll = () => commit(finishDecided(armed));
+
   return (
     <main className="relative flex h-app flex-col overflow-hidden select-none">
       <Header onSettings={onSettings} onTrophies={onTrophies} />
@@ -1290,6 +1412,23 @@ export default function DuelScreen({
             )
           }
         />
+      )}
+
+      {/* The receipt. One dim line saying what was skipped and why — the saving
+          has to be legible or the pile appears to move on its own. Deliberately
+          not celebratory: this is being told what happened, not scored for it.
+          Absolutely positioned so it cannot push the arena around as it comes
+          and goes. */}
+      {skipped && !activeRun && !runResult && (
+        <div
+          key={skipped.at}
+          className="tip pointer-events-none absolute left-0 right-0 z-10 text-center"
+          style={{ top: "var(--nav-h)" }}
+        >
+          <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
+            {`Skipped ${skipped.n} you’d already decided`}
+          </span>
+        </div>
       )}
 
       {/* A finished cross-tier order takes the surface for the same reason Fast
@@ -1364,6 +1503,14 @@ export default function DuelScreen({
           // beside it.
           onAgainSize={(size) => startShuffle({ ...activeRun, batch: size })}
         />
+      ) : settledRest && session ? (
+        <AllDecided
+          films={filmsOf(settledRest)}
+          from={(session.confirmed.length ?? 0) + 1}
+          onFinish={finishAll}
+          onKeepPlaying={() => setPlayOnFor(pileKeySet)}
+          onDone={endRun}
+        />
       ) : champion ? (
         <ConfirmView
           champion={champion}
@@ -1403,6 +1550,10 @@ export default function DuelScreen({
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
+          clusterFor={(id) => (session ? clusterOf(session, id) : null)}
+          onGroup={gatherFilms}
+          onUngroup={releaseFilm}
+          onNudge={nudge}
           onInfo={onInfo}
           stripOpen={stripOpen}
           onToggleStrip={toggleStrip}
@@ -1417,13 +1568,14 @@ export default function DuelScreen({
         <TierComplete
           films={state.films}
           tier={session?.tier ?? DEFAULT_TIER}
+          skipped={skippedRun}
           runIds={session ? [...session.confirmed, ...session.unconfirmed] : undefined}
           onPickTier={() => setTierOpen(true)}
           onList={onList}
           onRankPile={(ids) => {
             try {
               commit(
-                { ...startRun(state.films, session?.tier ?? DEFAULT_TIER, { only: ids }), journal: state.journal },
+                { ...startRun(state.films, session?.tier ?? DEFAULT_TIER, { only: ids, oracle: startingOracle() }), journal: state.journal },
                 false,
               );
             } catch {
@@ -2592,6 +2744,10 @@ function Duel({
   onInfo,
   stripOpen,
   onToggleStrip,
+  clusterFor,
+  onGroup,
+  onUngroup,
+  onNudge,
 }: {
   contender: Film;
   challenger: Film;
@@ -2607,6 +2763,12 @@ function Duel({
   onFlick: (id: string) => void;
   onSink: (id: string) => void;
   onScrub: (id: string) => void;
+  // Gathering and correcting both live in the strip rather than the arena: the
+  // compare screen shows two posters and a choice, and it stays that way.
+  clusterFor?: (id: string) => string[] | null;
+  onGroup?: (ids: string[], anchorId: string) => void;
+  onUngroup?: (id: string) => void;
+  onNudge?: (id: string, delta: number) => void;
   onInfo: (film: Film) => void;
   stripOpen: boolean;
   onToggleStrip: () => void;
@@ -2891,6 +3053,10 @@ function Duel({
         onScrub={onScrub}
         open={stripOpen}
         onToggle={onToggleStrip}
+        clusterFor={clusterFor}
+        onGroup={onGroup}
+        onUngroup={onUngroup}
+        onNudge={onNudge}
       />
     </>
   );
@@ -3052,6 +3218,75 @@ function RankFace({ from, to, total }: { from: number | null; to: number | null;
 // Exported for ShuffleDuel, which needs the poster interaction exactly as it is
 // but none of the pile machinery around it. (DuelScreen is due a split — see the
 // plan's Phase 3 — at which point this and LastResult get their own file.)
+// ── Nothing left to decide ──────────────────────────────────────────────────
+//
+// The record already settles every remaining pair, so there is no duel left to
+// fight and no judgement left to make — only taps. This turns those taps into
+// one, and it is the difference between the climb being fast and the climb being
+// over.
+//
+// It is an OFFER. The order is shown before it is taken, and "keep playing" is
+// always there: the point of reading the evidence log is to stop asking
+// questions the user answered, not to start answering them on their behalf.
+function AllDecided({
+  films,
+  from,
+  onFinish,
+  onKeepPlaying,
+  onDone,
+}: {
+  films: Film[];
+  /** The rank the first of them will take. */
+  from: number;
+  onFinish: () => void;
+  onKeepPlaying: () => void;
+  onDone?: () => void;
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 text-center">
+      <span className="text-label font-bold tracking-[0.14em] text-gold">✓ NOTHING LEFT TO DECIDE</span>
+      {/* The order itself, not just a count. A promise to place forty films is
+          one the user should be able to check before they accept it — and
+          seeing their own ranking is the reassurance that nothing was invented. */}
+      <div className="flex w-full max-w-sm justify-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {films.slice(0, 8).map((f, i) => (
+          <div key={f.id} className="flex w-[46px] flex-shrink-0 flex-col items-center gap-1">
+            <div
+              className="w-full overflow-hidden rounded-md bg-surface"
+              style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+            </div>
+            <span className="text-label font-bold tabular-nums text-dim">{from + i}</span>
+          </div>
+        ))}
+      </div>
+      <div>
+        <div className="font-serif text-xl font-bold text-text-hi">
+          {films.length} {films.length === 1 ? lex().one : lex().many}
+        </div>
+        <div className="mt-1 text-sub text-dim">
+          Every one of these is already settled by duels you&rsquo;ve fought.
+        </div>
+      </div>
+      <PrimaryButton wide onClick={onFinish}>
+        Finish &middot; lock in {films.length}
+      </PrimaryButton>
+      {/* Never buried. Declining has to be as easy as accepting, or the offer is
+          not really an offer. */}
+      <button onClick={onKeepPlaying} className="text-sub text-dim underline underline-offset-4 active:scale-95">
+        Keep playing anyway
+      </button>
+      {onDone && (
+        <button onClick={onDone} className="text-label font-bold uppercase tracking-[0.14em] text-dim/70 active:scale-95">
+          Done for now
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── The confirm moment: the champion tops the pile, take a real number ─────
 function ConfirmView({
   champion,
@@ -3155,6 +3390,7 @@ function TierComplete({
   onPickTier,
   onList,
   onRankPile,
+  skipped,
 }: {
   films: Film[];
   tier: Rating;
@@ -3173,6 +3409,14 @@ function TierComplete({
   onList: () => void;
   /** Climb another of this tier's Rough Cut piles. */
   onRankPile?: (ids: string[]) => void;
+  /**
+   * Duels this run settled from the evidence log instead of asking.
+   *
+   * Reported because it is the answer to "why was that so much quicker than last
+   * time", and because a saving nobody is told about looks like the app skipping
+   * work rather than remembering theirs.
+   */
+  skipped?: number;
 }) {
   const inTier = films.filter((f) => f.rating === tier);
   const scope = runIds ? inTier.filter((f) => runIds.includes(f.id)) : inTier;
@@ -3228,6 +3472,7 @@ function TierComplete({
         { label: "placed", value: String(ranked.length) },
         ...(left > 0 ? [{ label: "still to place", value: String(left) }] : []),
         ...(duels > 0 ? [{ label: "duels", value: String(duels) }] : []),
+        ...(skipped && skipped > 0 ? [{ label: "already decided", value: String(skipped) }] : []),
       ]}
       onList={onList}
       onAgain={onPickTier}

@@ -68,6 +68,10 @@ const idsOf = (s: PlacementSession): string[] => [
   ...s.unconfirmed,
   ...(s.contenderId ? [s.contenderId] : []),
   ...(s.challengerId ? [s.challengerId] : []),
+  // Gathered groups are part of the session and resume with it, so their members
+  // are checked like any other id. A cluster naming a film the library no longer
+  // holds would leave the engine computing a block that spans a hole in the pile.
+  ...(s.clusters ?? []).flat(),
 ];
 
 /**
