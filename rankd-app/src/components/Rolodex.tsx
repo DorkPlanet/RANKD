@@ -55,8 +55,12 @@ function PileCell({
       onPointerUp={() => onPressEnd(film.id)}
       onPointerCancel={onPressCancel}
       onPointerLeave={onPressCancel}
+      onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
       className="rol-cell flex w-[50px] flex-shrink-0 flex-col items-center gap-1 [scroll-snap-align:center]"
-      style={{ touchAction: "pan-x" }}
+      // `touch-callout` as well as the handler: preventDefault on contextmenu does
+      // not cover iOS Safari's "Save image" callout, and this cell is a div, so
+      // the global `button` rule in globals.css does not reach it either.
+      style={{ touchAction: "pan-x", WebkitTouchCallout: "none", userSelect: "none" }}
     >
       <div
         className="rol-poster w-full overflow-hidden rounded-md bg-surface"
