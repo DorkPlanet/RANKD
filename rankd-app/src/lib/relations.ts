@@ -36,9 +36,44 @@ export const pairKey = (a: string, b: string): string => (a < b ? `${a}:${b}` : 
 /** What the record implies about a pair. `null` means "undecided — go and ask". */
 export type Known = "a" | "b" | "draw" | null;
 
+/**
+ * How the record settles a pair, and the evidence for it.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * `known` answers "yes, and the winner is A". That is all the climb needs and it
+ * turned out to be nowhere near enough for the person watching. Reported as a
+ * silent jump it reads as the app deciding on its own; the two cases below are
+ * completely different experiences and were collapsed into one.
+ *
+ *  · DIRECT — you judged this exact pair, on a date, and won it. Playing it back
+ *    is showing you your own answer.
+ *  · INFERRED — you never saw this pair. It follows from a chain: you put A over
+ *    B and B over C. There is no duel to remember, which is exactly why an
+ *    unexplained jump here feels arbitrary — and the chain is the explanation.
+ */
+export interface Why {
+  o: "a" | "b" | "draw";
+  /** The user judged this exact pair. `at` is when (epoch ms, newest row). */
+  direct?: { at: number };
+  /**
+   * No direct row: the shortest run of real duels that implies it, winner first,
+   * so `[a, …, b]` reads "a beat this, which beat that, which beat b".
+   */
+  chain?: string[];
+}
+
 export interface Oracle {
   /** What the record already implies. `a`/`b` name the argument that won. */
   known(a: string, b: string): Known;
+  /**
+   * The same answer with its evidence attached, for showing the user.
+   *
+   * Always agrees with `known` — a test sweeps random logs asserting they never
+   * disagree, because a screen explaining one thing while the pile does another
+   * is worse than no explanation at all.
+   */
+  explain(a: string, b: string): Why | null;
 }
 
 export interface Relations extends Oracle {
@@ -111,6 +146,14 @@ export function buildRelations(
   // answers, because two rows that disagree are a fact about the record and not
   // a tie to be broken here.
   const direct = new Map<string, Set<"a" | "b" | "draw">>();
+  // When the pair was last judged, so `explain` can say "you picked this in
+  // March" rather than just "you picked this". Newest wins: if you answered a
+  // pair twice the recent one is the one you would remember.
+  const judgedAt = new Map<string, number>();
+  // Direct win edges as an adjacency list, kept alongside the bitset. The
+  // closure is transitive and retains no paths, so a witness chain has to be
+  // walked over the ORIGINAL edges — see `explain`.
+  const wins: number[][] = Array.from({ length: n }, () => []);
 
   let edges = 0;
   const consider = (j: Judgement) => {
@@ -126,6 +169,7 @@ export function buildRelations(
     const seen = direct.get(key) ?? new Set<"a" | "b" | "draw">();
     seen.add(j.o === "draw" ? "draw" : flip ? (j.o === "a" ? "b" : "a") : j.o);
     direct.set(key, seen);
+    judgedAt.set(key, Math.max(judgedAt.get(key) ?? 0, j.t));
 
     // A draw creates no edge — see `known` below for why that is not negotiable.
     if (j.o === "draw") return;
@@ -134,6 +178,7 @@ export function buildRelations(
     const bit = 1 << (l & 31);
     if ((adj[word] & bit) === 0) {
       adj[word] |= bit;
+      wins[w].push(l);
       edges++;
     }
   };
@@ -211,11 +256,63 @@ export function buildRelations(
     return null;
   };
 
+  /**
+   * The shortest chain of real duels running from `from` to `to`.
+   *
+   * BFS over the DIRECT edges, not the closure — the closure is transitive and
+   * has forgotten how it got anywhere, which is precisely the information the
+   * user is asking for when they say they cannot tell what is being jumped.
+   *
+   * Shortest matters: it is the most convincing version of the argument, and it
+   * is the only one short enough to put on a line under the posters. Called once
+   * per replayed step, over a pile of at most a few hundred, so the cost is
+   * irrelevant next to the animation it labels.
+   */
+  const pathBetween = (from: number, to: number): string[] | null => {
+    if (from === to) return null;
+    const prev = new Int32Array(n).fill(-1);
+    const seen = new Uint8Array(n);
+    seen[from] = 1;
+    const queue = [from];
+    for (let head = 0; head < queue.length; head++) {
+      const at = queue[head];
+      for (const next of wins[at]) {
+        if (seen[next]) continue;
+        seen[next] = 1;
+        prev[next] = at;
+        if (next === to) {
+          const out: string[] = [];
+          for (let cur = to; cur !== -1; cur = prev[cur]) out.push(ids[cur]);
+          return out.reverse();
+        }
+        queue.push(next);
+      }
+    }
+    return null;
+  };
+
+  const explain = (a: string, b: string): Why | null => {
+    const o = known(a, b);
+    if (o === null) return null;
+
+    // A direct row answers for itself and never needs a chain — `known` already
+    // prefers it over the closure, so this branch mirrors that ordering exactly.
+    const key = pairKey(a, b);
+    if (direct.has(key)) return { o, direct: { at: judgedAt.get(key) ?? 0 } };
+
+    // Inferred: walk the real duels from whichever side won.
+    const ai = index.get(a)!;
+    const bi = index.get(b)!;
+    const chain = o === "a" ? pathBetween(ai, bi) : pathBetween(bi, ai);
+    return chain ? { o, chain } : { o };
+  };
+
   let decidedCache: number | undefined;
 
   return {
     ids,
     known,
+    explain,
     beats,
     contested,
     stats: {

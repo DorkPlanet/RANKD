@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { choose, confirm, pendingConfirm, startRun } from "@/lib/ladder";
+import { choose, confirm, peekKnown, pendingConfirm, replayStep, startRun } from "@/lib/ladder";
 import type { Judgement } from "@/lib/log";
 import { buildRelations, decidedOrder } from "@/lib/relations";
 import { tierMax, tierMin, type Rating } from "@/lib/tiers";
@@ -118,6 +118,18 @@ export interface RunCost {
   order: string[];
   /** Milliseconds spent rebuilding the closure, summed over the whole run. */
   oracleMs: number;
+  /**
+   * How many remembered duels ran back-to-back, per uninterrupted stretch.
+   *
+   * The number the replay's pacing lives or dies by. The total saving says
+   * nothing about what watching it FEELS like: a hundred streaks of two is a
+   * pleasant rhythm, and two streaks of a hundred is a cutscene the user cannot
+   * skip. Reported as a distribution for that reason.
+   */
+  streaks: number[];
+  /** Replayed duels the user actually fought before, versus deduced ones. */
+  direct: number;
+  inferred: number;
 }
 
 interface PlayOpts {
@@ -161,9 +173,29 @@ function playRun(
 
   let st: RankState = startRun(films, RATING, { oracle: build() });
   let shown = 0;
-  let auto = st.resolved?.length ?? 0;
+  let auto = 0;
   let confirms = 0;
+  let direct = 0;
+  let inferred = 0;
+  const streaks: number[] = [];
   const finished: string[] = [];
+
+  // What the screen does between real decisions: play the remembered duels one
+  // at a time. Counted as a streak, because that is the unit the user watches.
+  const replay = () => {
+    let n = 0;
+    for (;;) {
+      const step = peekKnown(st);
+      if (!step) break;
+      if (step.via === "direct") direct++;
+      else inferred++;
+      st = replayStep(st);
+      n++;
+    }
+    auto += n;
+    if (n > 0) streaks.push(n);
+  };
+  replay();
 
   // A run over n films terminates in n(n-1)/2 + n transitions at the very most;
   // the cap is an assertion that it did, not a mechanism for making it.
@@ -188,18 +220,18 @@ function playRun(
       confirms++;
       finished.push(st.session.unconfirmed[0]);
       st = confirm(st);
-      auto += st.resolved?.length ?? 0;
+      replay();
       continue;
     }
 
     shown++;
     st = choose(st, answer(st.session.contenderId, st.session.challengerId));
-    auto += st.resolved?.length ?? 0;
     log = [...log, ...st.journal];
     st = { ...st, journal: [], oracle: build() };
+    replay();
   }
 
-  return { shown, auto, confirms, order: finished, oracleMs };
+  return { shown, auto, confirms, order: finished, oracleMs, streaks, direct, inferred };
 }
 
 // ── The table ───────────────────────────────────────────────────────────────
@@ -277,14 +309,22 @@ describe("climb cost — reading the record the app already keeps", () => {
           autoFinish: true,
         });
         const cut = ((1 - after.shown / base) * 100).toFixed(1);
+        const sorted = [...after.streaks].sort((x, y) => x - y);
+        const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))] ?? 0;
+        const mean = sorted.length ? after.auto / sorted.length : 0;
+        const pctDirect = after.auto ? Math.round((after.direct / after.auto) * 100) : 0;
         rows.push(
           `  n=${String(n).padStart(3)}  ${seed.padEnd(8)}` +
             `  was ${String(base).padStart(6)}` +
             `  now ${String(after.shown).padStart(6)}` +
             `  (-${cut.padStart(5)}%)` +
             `  auto ${String(after.auto).padStart(6)}` +
-            `  taps ${String(after.confirms).padStart(4)}` +
-            `  oracle ${after.oracleMs.toFixed(0)}ms`,
+            `  streaks ${String(sorted.length).padStart(4)}` +
+            ` avg ${mean.toFixed(1).padStart(4)}` +
+            ` p50 ${String(at(0.5)).padStart(3)}` +
+            ` p95 ${String(at(0.95)).padStart(3)}` +
+            ` max ${String(sorted[sorted.length - 1] ?? 0).padStart(3)}` +
+            `  direct ${String(pctDirect).padStart(3)}%`,
         );
       }
     }

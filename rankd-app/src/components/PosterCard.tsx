@@ -270,6 +270,7 @@ export function PosterCard({
   pick,
   side,
   pairId,
+  tone = "gold",
   onPick,
   onFlick,
   onSink,
@@ -296,6 +297,18 @@ export function PosterCard({
    * for anything rendering a single poster.
    */
   pairId?: string;
+  /**
+   * Which state the card is in, as a colour.
+   *
+   * `gold` is the live climb — popcorn, hero, a decision being made right now.
+   * `blue` is a duel being REPLAYED from the record: one the user already
+   * settled, playing itself back so the pile is never seen to move on its own.
+   * The distinction has to be visible at a glance or a replay is indistinguish-
+   * able from the app ranking films by itself, which is exactly the complaint
+   * this exists to answer. Deliberately not `--danger`: a remembered duel is
+   * not an error.
+   */
+  tone?: "gold" | "blue";
   onPick: (id: string) => void;
   /** Send it to the top of the pile. Absent in a mode with no pile — see the
    *  throw handler for why that is not the same as a no-op. */
@@ -305,6 +318,9 @@ export function PosterCard({
   onInfo: (film: Film) => void;
 }) {
   const pair = pairId ?? film.id;
+  // One token drives the ring and the badge fill together, so a replayed duel
+  // can never be half gold and half blue.
+  const ink = tone === "blue" ? "accent" : "gold";
   const tilt = side ? (side === "left" ? -TILT : TILT) : pick ? -TILT : TILT;
   const start = useRef<{ x: number; y: number } | null>(null);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -440,8 +456,13 @@ export function PosterCard({
             containerType: "inline-size",
             background: "var(--surface)",
             boxShadow: pick
-              ? "0 0 0 3px var(--gold), 0 10px 30px color-mix(in srgb, var(--gold) 35%, transparent)"
-              : "0 8px 26px var(--shadow)",
+              ? `0 0 0 3px var(--${ink}), 0 10px 30px color-mix(in srgb, var(--${ink}) 35%, transparent)`
+              : tone === "blue"
+                // A replayed loser is still part of the remembered duel, so it
+                // carries a quiet version of the same colour rather than the
+                // plain drop shadow a live opponent gets.
+                ? "0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent), 0 8px 26px var(--shadow)"
+                : "0 8px 26px var(--shadow)",
           }}
         >
           <PosterArt film={film} />
@@ -455,7 +476,9 @@ export function PosterCard({
             className="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 translate-y-1/2 whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold tracking-[0.07em]"
             style={
               pick
-                ? { color: "var(--gold-ink)", background: "var(--gold)" }
+                ? tone === "blue"
+                  ? { color: "var(--bg)", background: "var(--accent)" }
+                  : { color: "var(--gold-ink)", background: "var(--gold)" }
                 : { color: "var(--dim)", background: "var(--surface)", border: "1px solid var(--border)" }
             }
           >

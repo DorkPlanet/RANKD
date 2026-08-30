@@ -36,13 +36,24 @@ import { Visibility } from "./Visibility";
 import type { Me } from "@/lib/account";
 import { Feedback } from "./Feedback";
 import { ImportGuide } from "./ImportGuide";
-import { ImportButton, RestoreButton, SecondaryButton, SettingRow, Sheet } from "./ui";
+import { ImportButton, RestoreButton, SecondaryButton, SettingRow, Sheet, Tabs } from "./ui";
 import { ChevronIcon } from "./Icons";
 import { count, lex, lexOf } from "@/lib/lexicon";
 import { currentMedium, setMedium, MEDIA } from "@/lib/medium";
 
 /** Stable reference for `useSyncExternalStore`. */
 const noSubscribe = () => () => {};
+
+// The replay control's three states, in the order they read: most shown to
+// least. `Tabs` is index-based, so the order lives here once rather than being
+// implied by two places that could drift apart.
+const REPLAY_ORDER = ["watch", "quick", "silent"] as const;
+const REPLAY_LABELS = ["Watch", "Quick", "Skip"] as const;
+const REPLAY_BLURB: Record<Prefs["replay"], string> = {
+  watch: "Every one plays out in full",
+  quick: "Plays fast, and speeds up through a long run",
+  silent: "Resolved without showing anything",
+};
 
 // The BTN constant that used to live here is gone. It was `rounded-xl … text-xs`
 // — neither of the two shapes the rest of the app uses — so every control in this
@@ -210,6 +221,27 @@ export function Settings({
         on={prefs.listDrift}
         onToggle={() => onPrefs({ listDrift: !prefs.listDrift })}
       />
+
+      {/* ── Duels you have already settled ──────────────────────────────────
+          Three states rather than a switch, because the middle one is the
+          answer and a switch cannot hold it. Ranking used to re-ask duels you
+          had already fought; now it plays them back instead, and the only real
+          question is how much of that you want to sit through. "Skip silently"
+          is what shipped first and it was the wrong default — the pile jumped
+          several places between taps with nothing on screen to say why. */}
+      <div className="mb-4">
+        <p className="mb-1.5 text-sub font-bold text-text-hi">Duels you&rsquo;ve already settled</p>
+        <p className="mb-2.5 text-sub text-dim">
+          Ranking replays them instead of asking again
+        </p>
+        <Tabs
+          nested
+          labels={REPLAY_LABELS}
+          at={REPLAY_ORDER.indexOf(prefs.replay)}
+          onPick={(i) => onPrefs({ replay: REPLAY_ORDER[i] })}
+        />
+        <p className="mt-2 text-center text-label text-dim">{REPLAY_BLURB[prefs.replay]}</p>
+      </div>
 
       {/* ── The medium, mirrored from the header ──────────────────────────
           The wordmark is the primary control and this is the second way in,

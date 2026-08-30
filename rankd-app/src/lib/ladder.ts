@@ -143,28 +143,24 @@ function applyOutcome(s: PlacementSession, outcome: "a" | "b" | "draw"): void {
 }
 
 /**
- * Recompute the challenger, then keep going while the answer is already known.
+ * Does the record already settle the duel that is on screen right now?
  *
- * The sibling of `refresh`, not a replacement for it: `refresh` has one narrow
- * job that nine call sites depend on, and turning it into something that moves
- * the pile would change the meaning of all of them.
+ * A PEEK. It mutates nothing and decides nothing — it reports what the evidence
+ * says about the current pair so the screen can play that duel back to the user
+ * rather than performing it behind their back.
  *
- * ── Termination, proved rather than guarded ────────────────────────────────
+ * ── Why this is a peek and not a loop ──────────────────────────────────────
  *
- * Let Φ = unconfirmed.indexOf(contenderId). `refresh` aims the contender at
- * unconfirmed[Φ-1], so:
+ * This replaced an `advance()` that resolved every known duel in one atomic
+ * call, inside the engine, before the screen ever rendered. It was correct, it
+ * was fast, and it was the wrong shape: the pile leapt several places between
+ * taps with nothing to watch, so the person playing could not see what had been
+ * decided for them, could not check it, and could not stop it. Reported as
+ * "jumping places without knowing why or what it's jumping".
  *
- *   · contender wins  — it is spliced in at Φ-1, same film climbing.  Φ' = Φ-1
- *   · contender loses — it is spliced back at Φ and the challenger, now at Φ-1,
- *     takes over the climb.                                          Φ' = Φ-1
- *
- * Every step drops Φ by exactly one, and at Φ = 0 `refresh` sets `needsConfirm`
- * and the loop breaks. So it runs at most unconfirmed.length - 1 times even
- * against an oracle answering at random. The counter below asserts that; it is
- * not what makes it true.
- *
- * (That same invariant is why the unaided climb costs exactly n(n-1)/2 duels —
- * every pass over m films is m-1 of them. See test/climbCost.test.ts.)
+ * Resolving one step at a time is what makes the pass showable and — the part
+ * that actually matters — interruptible. The user takes any duel back simply by
+ * answering it themselves.
  *
  * ── Who opts out ───────────────────────────────────────────────────────────
  *
@@ -174,21 +170,59 @@ function applyOutcome(s: PlacementSession, outcome: "a" | "b" | "draw"): void {
  * A promotion attempt is one film against a different tier, and its loss branch
  * restores `resumeAfter`, which a pile-move helper has no way to express.
  */
-function advance(s: PlacementSession, oracle?: Oracle): AutoStep[] {
+export function peekKnown(state: RankState): AutoStep | null {
+  const { session, oracle } = state;
+  if (!session || !oracle) return null;
+  if (session.crossTier || session.promotionQueue) return null;
+  if (session.needsConfirm || !session.challengerId || !session.contenderId) return null;
+  const why = oracle.explain(session.contenderId, session.challengerId);
+  if (!why) return null;
+  return {
+    a: session.contenderId,
+    b: session.challengerId,
+    o: why.o,
+    via: why.direct ? "direct" : "inferred",
+    at: why.direct?.at,
+    chain: why.chain,
+  };
+}
+
+/**
+ * Play out ONE duel the record already settles.
+ *
+ * ── Termination, proved rather than guarded ────────────────────────────────
+ *
+ * The screen loops on this, so the proof that used to live in `advance` lives
+ * here. Let Φ = unconfirmed.indexOf(contenderId). `refresh` aims the contender
+ * at unconfirmed[Φ-1], so:
+ *
+ *   · contender wins  — it is spliced in at Φ-1, same film climbing.  Φ' = Φ-1
+ *   · contender loses — it is spliced back at Φ and the challenger, now at Φ-1,
+ *     takes over the climb.                                          Φ' = Φ-1
+ *
+ * Every step drops Φ by exactly one, and at Φ = 0 `refresh` sets `needsConfirm`,
+ * at which point `peekKnown` returns null and the caller's loop ends. So a
+ * replay runs at most unconfirmed.length - 1 times even against an oracle
+ * answering at random.
+ *
+ * (That same invariant is why the unaided climb costs exactly n(n-1)/2 duels —
+ * every pass over m films is m-1 of them. See test/climbCost.test.ts.)
+ *
+ * Routes through `applyOutcome`, which never receives `Film[]` or the journal
+ * and therefore cannot mint an evidence row or bump a duel count. Replaying a
+ * remembered duel must leave no trace: the user answered it once, and a second
+ * row saying so would be the act of reading the log fabricating evidence for it.
+ */
+export function replayStep(state: RankState): RankState {
+  const step = peekKnown(state);
+  const { session } = state;
+  if (!step || !session) return state;
+  const s: PlacementSession = { ...session, unconfirmed: [...session.unconfirmed] };
+  applyOutcome(s, step.o);
+  // A loss or a draw hands the climb to the winner, exactly as `settle` does.
+  if (step.o !== "a") s.contenderId = s.challengerId;
   refresh(s);
-  const steps: AutoStep[] = [];
-  if (!oracle || s.crossTier || s.promotionQueue) return steps;
-  for (let guard = s.unconfirmed.length; guard > 0; guard--) {
-    if (s.needsConfirm || !s.challengerId) break;
-    const o = oracle.known(s.contenderId, s.challengerId);
-    if (o === null) break;
-    steps.push({ a: s.contenderId, b: s.challengerId, o });
-    applyOutcome(s, o);
-    // A loss or a draw hands the climb to the winner, exactly as `settle` does.
-    if (o !== "a") s.contenderId = s.challengerId;
-    refresh(s);
-  }
-  return steps;
+  return { ...state, session: s, resolved: [step] };
 }
 
 // Spread the run's films across their score bands in [...confirmed,
@@ -214,7 +248,7 @@ function advance(s: PlacementSession, oracle?: Oracle): AutoStep[] {
 // Only set for an `only` run that is not cross-tier; a cross-tier run writes no
 // scores at all, and a whole-tier run should have the whole tier.
 function writeScores(films: Film[], s: PlacementSession): void {
-  const order = [...s.confirmed, ...s.unconfirmed]; // best → worst overall
+  const order = [...s.confirmed, ...s.unconfirmed, ...(s.confirmedTail ?? [])]; // best → worst overall
   const byRating = new Map<number, string[]>();
   for (const id of order) {
     const f = films.find((ff) => ff.id === id);
@@ -363,8 +397,8 @@ export function startRun(
     challengerId: "",
     needsConfirm: false,
   };
-  const resolved = advance(s, oracle);
-  return { films: f, session: s, journal: [], oracle, resolved };
+  refresh(s);
+  return { films: f, session: s, journal: [], oracle };
 }
 
 // The current duel: contender vs the film directly above it. null while a film
@@ -470,8 +504,8 @@ function settle(state: RankState, winnerId: string | null): RankState {
   applyOutcome(s, contenderWon ? "a" : "b");
 
   if (contenderWon) {
-    const resolved = advance(s, state.oracle);
-    return { films, session: s, journal, oracle: state.oracle, resolved };
+    refresh(s);
+    return { films, session: s, journal, oracle: state.oracle };
   }
 
   // ── Losing a promotion duel ends the promotion ────────────────────────────
@@ -499,8 +533,8 @@ function settle(state: RankState, winnerId: string | null): RankState {
   }
 
   s.contenderId = s.challengerId; // the winner carries the climb on
-  const resolved = advance(s, state.oracle);
-  return { films, session: s, journal, oracle: state.oracle, resolved };
+  refresh(s);
+  return { films, session: s, journal, oracle: state.oracle };
 }
 
 // Lock the top film into the ranked shelf, then restart the climb from the
@@ -552,7 +586,9 @@ export function confirm(state: RankState): RankState {
     // out by position, and half an order would hand them out by half a
     // position. Doing it per confirm was the first draft's mistake and it could
     // only ever inflate — see `redistributeRatings`.
-    if (s.unconfirmed.length === 0) redistributeRatings(films, s.confirmed);
+    if (s.unconfirmed.length === 0) {
+      redistributeRatings(films, [...s.confirmed, ...(s.confirmedTail ?? [])]);
+    }
     writeScores(films, s);
   }
   if (s.unconfirmed.length === 0) {
@@ -563,8 +599,206 @@ export function confirm(state: RankState): RankState {
   // relations among exactly these films, so the climb back up from the bottom is
   // the part the record can most often replay outright — which is the same thing
   // as saying this line is why the run felt repetitive.
-  const resolved = advance(s, state.oracle);
-  return { films, session: s, journal: state.journal, oracle: state.oracle, resolved };
+  refresh(s);
+  return { films, session: s, journal: state.journal, oracle: state.oracle };
+}
+
+// ── Placing films by hand ───────────────────────────────────────────────────
+//
+// Duels are one way to place a film and they are not always the easiest one.
+// "This is the worst of these", "this belongs about here", "that one is a slot
+// too high" are all things a person knows instantly and could only say, until
+// now, by playing a duel for every intervening film.
+//
+// Each of these is a user ASSERTION, on the footing `flickToTop` already stands
+// on: it moves the pile, it records no judgement, and — except where it locks —
+// it commits nothing. The user supplies the ordering directly rather than
+// earning it a duel at a time.
+
+/**
+ * Lock the bottom film of the pile into last place.
+ *
+ * The mirror of `confirm`, and the reason it exists: reaching the TOP is how a
+ * film earns a position, which is right for the best of a pile and absurd for
+ * the worst. Saying "this is the weakest of what's left" used to require the
+ * film to climb past everything above it first — a full pass of duels to reach
+ * a position nobody was arguing about.
+ *
+ * The pile now fills from both ends and the run ends when they meet.
+ *
+ * Writes scores and a hard lock exactly as `confirm` does, because it is the
+ * same act of commitment pointed the other way. A cross-tier run writes neither,
+ * for the reasons set out in `confirm`.
+ */
+export function confirmLast(state: RankState): RankState {
+  const { session } = state;
+  if (!session || session.promotionQueue) return state;
+  if (session.unconfirmed.length < 2) return state; // nothing to separate it from
+  const films = clone(state.films);
+  const s: PlacementSession = {
+    ...session,
+    confirmed: [...session.confirmed],
+    unconfirmed: [...session.unconfirmed],
+    confirmedTail: [...(session.confirmedTail ?? [])],
+  };
+
+  // The whole block, if the bottom film is travelling in a cluster: a gathered
+  // group is placed as one thing wherever it is placed from.
+  const block = blockAt(s, s.unconfirmed[s.unconfirmed.length - 1]);
+  const taking = block.top >= 0 && block.top + block.size === s.unconfirmed.length ? block.size : 1;
+  const going = s.unconfirmed.splice(s.unconfirmed.length - taking, taking);
+  s.confirmedTail = [...going, ...s.confirmedTail!];
+  if (s.clusters && going.length > 1) {
+    const gone = new Set(going);
+    const rest = s.clusters.filter((c) => !c.some((id) => gone.has(id)));
+    s.clusters = rest.length > 0 ? rest : undefined;
+  }
+
+  if (!s.crossTier) {
+    const locking = new Set(going);
+    for (const f of films) if (locking.has(f.id)) f.lock = "hard";
+    if (s.unconfirmed.length === 0) {
+      redistributeRatings(films, [...s.confirmed, ...s.confirmedTail]);
+    }
+    writeScores(films, s);
+  }
+  if (s.unconfirmed.length === 0) {
+    return { films, session: null, journal: state.journal, oracle: state.oracle };
+  }
+  // The climb restarts from the new bottom, which is what the pile now is.
+  s.contenderId = s.unconfirmed[s.unconfirmed.length - 1];
+  refresh(s);
+  return { films, session: s, journal: state.journal, oracle: state.oracle };
+}
+
+/**
+ * Put a film at a given position in the pile, directly.
+ *
+ * `flickToTop` and `flickToBottom` are this operation at the two extremes, and
+ * the extremes are the two cases a person is least often sure about. "It belongs
+ * around here" is the common one and had no way to be said.
+ *
+ * Provisional and free: it reorders `unconfirmed` and touches nothing else, so
+ * it can be adjusted as often as the user likes until the run ends. `index` is a
+ * position in the pile, best-first, clamped rather than rejected.
+ */
+export function placeAt(state: RankState, filmId: string, index: number): RankState {
+  const { session } = state;
+  if (!session) return state;
+  const block = blockAt(session, filmId);
+  if (block.top < 0) return state; // not in the pile
+
+  const s: PlacementSession = { ...session, unconfirmed: [...session.unconfirmed] };
+  s.unconfirmed.splice(block.top, block.size);
+  const at = Math.max(0, Math.min(s.unconfirmed.length, index));
+  s.unconfirmed.splice(at, 0, ...block.ids);
+  // Moving the climber does not hand the climb to anyone else — it is still the
+  // film being placed, now placed somewhere else. Moving anything ELSE leaves
+  // the climb alone. Either way `refresh` re-aims from where the contender sits.
+  refresh(s);
+  return { films: state.films, session: s, journal: state.journal, oracle: state.oracle };
+}
+
+/**
+ * The longest run from the top of the pile that the record already settles.
+ *
+ * `decidedRest` answers the same question about the WHOLE pile and returns an
+ * order or nothing. This is its prefix: how many films from the top are both
+ * totally ordered among themselves and known to beat everything below them.
+ *
+ * Both conditions are needed. Ordered-among-themselves alone would happily lock
+ * a top three that some film further down beats, which is a claim the record
+ * does not make.
+ *
+ * Returns the ids in order, or null when the top two are not settled — there is
+ * no point offering to batch a single film, which is what `confirm` already is.
+ */
+export function settledPrefix(state: RankState): string[] | null {
+  const { session, oracle } = state;
+  if (!session || !oracle) return null;
+  if (session.crossTier || session.promotionQueue) return null;
+  const pile = session.unconfirmed;
+  if (pile.length < 3) return null; // the whole-pile case is `decidedRest`
+
+  // Grow the prefix while the next film is beaten by every film already in it
+  // and beats every film below. Stops at the first one that is not.
+  const taken: string[] = [];
+  for (let k = 0; k < pile.length - 1; k++) {
+    const rest = pile.slice(k + 1);
+    const beatsAllBelow = rest.every((id) => oracle.known(pile[k], id) === "a");
+    if (!beatsAllBelow) break;
+    const underAllTaken = taken.every((id) => oracle.known(id, pile[k]) === "a");
+    if (!underAllTaken) break;
+    taken.push(pile[k]);
+  }
+  return taken.length > 1 ? taken : null;
+}
+
+/**
+ * Lock in a settled run from the top of the pile, in one go.
+ *
+ * Routes every film through the ordinary `confirm`, deliberately: that is what
+ * keeps the hard locks, the band confinement a Rough Cut pile depends on, and
+ * the end-of-pile rating redistribution correct by construction rather than by
+ * being written out a second time here.
+ */
+export function confirmPrefix(state: RankState): RankState {
+  const order = settledPrefix(state);
+  if (!order || !state.session) return state;
+  let s = state;
+  for (const id of order) {
+    const session = s.session;
+    if (!session) break;
+    const rest = [id, ...session.unconfirmed.filter((x) => x !== id)];
+    s = confirm({
+      ...s,
+      session: { ...session, unconfirmed: rest, contenderId: id, challengerId: "", needsConfirm: true },
+    });
+  }
+  return { ...s, resolved: undefined };
+}
+
+/**
+ * Take a film back off the shelf and return it to the pile.
+ *
+ * Being stuck with a placement until the run ends is what makes people abandon
+ * runs — and abandoning is far more destructive than a wrong position, because
+ * the pile's whole working order goes with it. `nudgeConfirmed` handles "one
+ * slot out"; this is for "that should not be placed at all yet".
+ *
+ * The lock goes with it. A number in the list means the user committed to a
+ * position, and this is them taking that back; leaving the lock would show a
+ * rank for a film that is once again unplaced.
+ */
+export function reopenConfirmed(state: RankState, filmId: string): RankState {
+  const { session } = state;
+  if (!session) return state;
+  const fromHead = session.confirmed.includes(filmId);
+  const fromTail = (session.confirmedTail ?? []).includes(filmId);
+  if (!fromHead && !fromTail) return state;
+
+  const films = clone(state.films);
+  const s: PlacementSession = {
+    ...session,
+    confirmed: session.confirmed.filter((id) => id !== filmId),
+    unconfirmed: [...session.unconfirmed],
+    confirmedTail: (session.confirmedTail ?? []).filter((id) => id !== filmId),
+  };
+  // Back to the end it came from, so it re-enters the pile where it was placed
+  // rather than somewhere it has to be argued out of.
+  if (fromHead) s.unconfirmed.unshift(filmId);
+  else s.unconfirmed.push(filmId);
+  // Dropped rather than left empty, so a run that never used the tail is
+  // serialised the way it always was and reads back identically.
+  if (s.confirmedTail?.length === 0) s.confirmedTail = undefined;
+
+  if (!s.crossTier) {
+    const back = films.find((f) => f.id === filmId);
+    if (back) delete back.lock;
+    writeScores(films, s);
+  }
+  refresh(s);
+  return { films, session: s, journal: state.journal, oracle: state.oracle };
 }
 
 // ── Small corrections, without restarting anything ──────────────────────────
@@ -698,8 +932,8 @@ export function groupFilms(state: RankState, ids: readonly string[], anchorId: s
   const s: PlacementSession = { ...session, unconfirmed, clusters };
   // The climb carries on from wherever it was; if the contender was swept into
   // the block, `refresh` normalises it to the block's face.
-  const resolved = advance(s, state.oracle);
-  return { films: state.films, session: s, journal: state.journal, oracle: state.oracle, resolved };
+  refresh(s);
+  return { films: state.films, session: s, journal: state.journal, oracle: state.oracle };
 }
 
 /**
@@ -947,7 +1181,7 @@ function resumeWithout(
   };
   // `back` is the ordinary climb the attempt interrupted — captured before the
   // queue was added — so this advances as any other restart does.
-  advance(s, oracle);
+  refresh(s);
   return s;
 }
 
@@ -1007,8 +1241,8 @@ export function flickToTop(state: RankState, filmId: string): RankState {
   if (filmId === s.contenderId && unconfirmed.length > 1) {
     s.contenderId = unconfirmed[unconfirmed.length - 1];
   }
-  const resolved = advance(s, state.oracle);
-  return { films, session: s, journal: state.journal, oracle: state.oracle, resolved };
+  refresh(s);
+  return { films, session: s, journal: state.journal, oracle: state.oracle };
 }
 
 // Mirror of flickToTop: throw a film to the BOTTOM of the pile. Same deal — a
@@ -1024,8 +1258,8 @@ export function flickToBottom(state: RankState, filmId: string): RankState {
   unconfirmed.push(filmId);
   const s: PlacementSession = { ...session, unconfirmed };
   // Sending the climber to the bottom just means it starts its climb from there.
-  const resolved = advance(s, state.oracle);
-  return { films, session: s, journal: state.journal, oracle: state.oracle, resolved };
+  refresh(s);
+  return { films, session: s, journal: state.journal, oracle: state.oracle };
 }
 
 // Back out of a pending confirm: drop the champion one place so it has to win

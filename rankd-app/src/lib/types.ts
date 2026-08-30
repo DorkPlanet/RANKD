@@ -5,17 +5,32 @@ import type { Oracle } from "./relations";
 import type { Take } from "./social/takes";
 
 /**
- * A duel the climb settled from the record instead of putting on screen.
+ * A duel the record already settles, and the evidence for it.
  *
- * Reported so the saving can be shown ("skipped 6 you'd already decided") rather
- * than happening invisibly. Carries no judgement id because it MINTED no
- * judgement: the user answered this pair once already, and writing a second row
- * saying so would be fabricating evidence out of the act of reading it.
+ * Carries no judgement id because it MINTS no judgement: the user answered this
+ * pair once already, and writing a second row saying so would be fabricating
+ * evidence out of the act of reading it.
+ *
+ * ── Why this carries its reasons ───────────────────────────────────────────
+ *
+ * The first version was `{a, b, o}` and the screen consumed only the LENGTH of
+ * the list, to say "skipped 6". That is what made the feature feel like the app
+ * ranking films on its own: the pile jumped and nothing on screen could say what
+ * had been decided or why. Everything below `o` exists to be drawn.
+ *
+ * `via` splits the two cases the user experiences completely differently — a
+ * duel they actually fought, versus one deduced from a chain they never saw.
  */
 export interface AutoStep {
   a: string;
   b: string;
   o: "a" | "b" | "draw";
+  /** `direct` = the user judged this exact pair. `inferred` = deduced. */
+  via: "direct" | "inferred";
+  /** When the direct duel was fought (epoch ms). Absent when inferred. */
+  at?: number;
+  /** The chain of real duels that implies it, winner first. Absent when direct. */
+  chain?: string[];
 }
 
 export interface Film {
@@ -166,6 +181,19 @@ export interface PlacementSession {
   spanAbove: number;
   confirmed: string[]; // committed ranking, top → down (confirmed[0] = #1)
   unconfirmed: string[]; // live order, index 0 = top of the pile, last = bottom
+  /**
+   * Films locked into the BOTTOM of the run, worst last.
+   *
+   * The pile fills from both ends and the run ends when they meet. "This is the
+   * worst of what's left" is exactly as easy to know as "this is the best", and
+   * before this it cost a full climb to the top to say so — the film had to beat
+   * everything above it to earn a position that was never in question.
+   *
+   * Worst-last, so it reads in the same direction as `confirmed` and the whole
+   * order is `[...confirmed, ...unconfirmed, ...confirmedTail]`. Absent on runs
+   * that never used it, which is what keeps every existing session valid.
+   */
+  confirmedTail?: string[];
   contenderId: string; // the film currently climbing
   challengerId: string; // the film directly above it (its opponent); "" at the top
   needsConfirm: boolean; // contender reached the top → awaiting the user's confirm

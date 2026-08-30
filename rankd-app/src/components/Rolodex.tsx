@@ -26,6 +26,9 @@ const GATHER_MS = 450;
  */
 function PileCell({
   film,
+  onLast,
+  placing,
+  onPlace,
   gathering,
   picked,
   anchor,
@@ -36,6 +39,11 @@ function PileCell({
   onUngroup,
 }: {
   film: Film;
+  /** Present only on the bottom film: lock it into last place. */
+  onLast?: () => void;
+  /** The climber is looking for a slot, so this cell is a place to put it. */
+  placing: boolean;
+  onPlace: () => void;
   gathering: boolean;
   picked: boolean;
   anchor: boolean;
@@ -50,9 +58,9 @@ function PileCell({
       // No data-fid while gathering: a tap means "add to the group" then, and
       // letting the scrub-on-settle fire as well would aim the next duel
       // somewhere nobody asked for.
-      {...(gathering ? {} : { "data-fid": film.id })}
-      onPointerDown={() => onPressStart(film.id)}
-      onPointerUp={() => onPressEnd(film.id)}
+      {...(gathering || placing ? {} : { "data-fid": film.id })}
+      onPointerDown={() => !placing && onPressStart(film.id)}
+      onPointerUp={() => (placing ? onPlace() : onPressEnd(film.id))}
       onPointerCancel={onPressCancel}
       onPointerLeave={onPressCancel}
       onContextMenu={(e) => e.preventDefault()} // holding must not raise the OS menu
@@ -73,6 +81,9 @@ function PileCell({
             : grouped
               ? "0 0 0 1.5px color-mix(in srgb, var(--gold) 60%, transparent)"
               : undefined,
+          // Placing lifts every slot to full strength: they are all equally
+          // valid answers to "where does this go", so dimming any of them would
+          // be the app having an opinion it has not got.
           opacity: gathering && !picked ? 0.45 : 1,
           transition: "opacity 0.18s var(--ease)",
         }}
@@ -93,6 +104,18 @@ function PileCell({
         >
           GROUPED
         </button>
+      ) : onLast ? (
+        // The bottom of the pile is the one place a film can be settled without
+        // duelling anything: it is already where it would finish, and the climb
+        // ahead of it exists only to prove a position nobody disputes.
+        <button
+          onClick={onLast}
+          aria-label={`Lock ${film.title} into last place`}
+          className="text-label font-bold tracking-wide active:scale-95"
+          style={{ color: "var(--accent)" }}
+        >
+          MAKE LAST
+        </button>
       ) : (
         <span className="text-label font-bold tracking-wide text-dim/70">UN-RNKD</span>
       )}
@@ -112,6 +135,10 @@ export function Rolodex({
   onGroup,
   onUngroup,
   onNudge,
+  onPlaceAt,
+  onReopen,
+  onLast,
+  lockedTail = [],
 }: {
   lowToHigh: Film[];
   locked: { film: Film; rank: number }[];
@@ -127,6 +154,21 @@ export function Rolodex({
   onUngroup?: (id: string) => void;
   /** Move a placed film, or one inside a group, a slot at a time. */
   onNudge?: (id: string, delta: number) => void;
+  /** Drop the climbing film straight into a slot, best-first. See `placeAt`. */
+  onPlaceAt?: (index: number) => void;
+  /** Take a locked film back off the shelf and into the pile. */
+  onReopen?: (id: string) => void;
+  /**
+   * Lock the bottom film of the pile into last place. See `confirmLast`.
+   *
+   * It lives HERE as well as in the arena because the climber is only the bottom
+   * film for a moment at the start of each pass — after that the arena has
+   * nothing to offer it about, while the strip can always show you the film you
+   * are condemning.
+   */
+  onLast?: () => void;
+  /** Films locked into LAST place, worst last. Drawn before the pile. */
+  lockedTail?: Film[];
 }) {
   // ── Gather mode ───────────────────────────────────────────────────────────
   //
@@ -173,6 +215,25 @@ export function Rolodex({
   const commitGather = () => {
     if (gather && gather.ids.length > 1) onGroup?.(gather.ids, gather.anchor);
     setGather(null);
+  };
+
+  // ── Placing the climber by hand ───────────────────────────────────────────
+  //
+  // Duelling a film up the pile is how it EARNS a position. Sometimes you simply
+  // know where it goes, and every duel between here and there is a formality.
+  //
+  // Hold the climbing poster, then tap where it belongs. Deliberately the same
+  // shape as gathering — hold to arm, tap to act — rather than a drag: the track
+  // scrolls horizontally, so a horizontal drag would be fighting the scroller
+  // for every gesture.
+  const [placing, setPlacing] = useState(false);
+  const startClimberHold = () => {
+    if (!onPlaceAt) return;
+    held.current = false;
+    holdTimer.current = setTimeout(() => {
+      held.current = true;
+      setPlacing(true);
+    }, GATHER_MS);
   };
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -313,13 +374,48 @@ export function Rolodex({
           onWheel={markUserScroll}
           className="rol-track flex items-end gap-2.5 overflow-x-auto pb-2 pt-7 px-[calc(50%-25px)] [-webkit-overflow-scrolling:touch] [scrollbar-width:none] [scroll-snap-type:x_proximity] [&::-webkit-scrollbar]:hidden"
         >
+        {/* The bottom shelf, at the bottom end of the strip. Same padlock and
+            same reopen control as the top shelf — they are the same act of
+            commitment, pointed the other way. */}
+        {lockedTail.map((film) => (
+          <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
+            <span className="text-gold"><LockIcon /></span>
+            <div
+              className="w-full overflow-hidden rounded-md bg-surface"
+              style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+            </div>
+            {onReopen ? (
+              <button
+                onClick={() => onReopen(film.id)}
+                aria-label={`Unlock ${film.title} and put it back in the pile`}
+                className="text-label font-bold leading-none text-dim active:scale-90"
+              >
+                &times;
+              </button>
+            ) : (
+              <span className="text-label leading-none text-transparent">.</span>
+            )}
+          </div>
+        ))}
         {lowToHigh.map((f) =>
           f.id === contenderId ? (
             // The climbing film sits IN the strip at its real position, so it
             // occupies layout space — overlaying it caused it to stack on top of
             // whichever cell happened to scroll under it. No data-fid: it must
             // never be pickable as its own challenger.
-            <div key={f.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
+            <div
+              key={f.id}
+              onPointerDown={startClimberHold}
+              onPointerUp={endHold}
+              onPointerCancel={endHold}
+              onPointerLeave={endHold}
+              onContextMenu={(e) => e.preventDefault()}
+              className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1"
+              style={{ WebkitTouchCallout: "none", userSelect: "none" }}
+            >
               <div
                 className="w-full overflow-hidden rounded-md"
                 style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 70%, transparent)" }}
@@ -327,7 +423,9 @@ export function Rolodex({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="font-serif text-label font-bold tracking-wide text-gold">YOU</span>
+              <span className="font-serif text-label font-bold tracking-wide text-gold">
+                {placing ? "MOVING" : "YOU"}
+              </span>
             </div>
           ) : (
             // Every film in the pile is a live opponent: a climb rules nothing
@@ -335,6 +433,16 @@ export function Rolodex({
             <PileCell
               key={f.id}
               film={f}
+              // Worst-first, so the first cell IS the bottom of the pile.
+              onLast={!gather && !placing && f === lowToHigh[0] ? onLast : undefined}
+              placing={placing}
+              onPlace={() => {
+                // `lowToHigh` runs worst-first, so its index has to be turned
+                // back into a position in the pile, which is best-first.
+                const at = lowToHigh.length - 1 - lowToHigh.indexOf(f);
+                setPlacing(false);
+                onPlaceAt?.(at);
+              }}
               gathering={!!gather}
               picked={gather?.ids.includes(f.id) ?? false}
               anchor={gather?.anchor === f.id}
@@ -372,6 +480,18 @@ export function Rolodex({
                 Sits under the poster it moves, so there is nothing to find. */}
             {onNudge ? (
               <div className="flex items-center gap-1.5">
+                {/* Taking a placement back, where the placement is. Being stuck
+                    with one until the run ends is what makes people abandon a
+                    run, and abandoning costs the whole pile's working order. */}
+                {onReopen && (
+                  <button
+                    onClick={() => onReopen(film.id)}
+                    aria-label={`Unlock ${film.title} and put it back in the pile`}
+                    className="text-dim active:scale-90"
+                  >
+                    <span className="text-label font-bold leading-none">&times;</span>
+                  </button>
+                )}
                 <button
                   onClick={() => onNudge(film.id, -1)}
                   aria-label={`Move ${film.title} up one place`}
@@ -398,20 +518,29 @@ export function Rolodex({
       </div>
       {/* The gather bar. Only ever on screen while gathering, and it says what
           will happen rather than naming a mode — the count IS the instruction. */}
-      {gather && (
+      {(gather || placing) && (
         <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 border-t border-border bg-surface/95 py-2 backdrop-blur">
           <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
-            {gather.ids.length < 2 ? "Tap the ones that belong here" : `${gather.ids.length} travelling together`}
+            {placing
+              ? "Tap where it belongs"
+              : gather!.ids.length < 2
+                ? "Tap the ones that belong here"
+                : `${gather!.ids.length} travelling together`}
           </span>
+          {gather && (
+            <button
+              onClick={commitGather}
+              disabled={gather.ids.length < 2}
+              className="rounded-full bg-gold px-3 py-1 text-label font-bold uppercase tracking-[0.14em] text-gold-ink active:scale-95 disabled:opacity-40"
+            >
+              Group
+            </button>
+          )}
           <button
-            onClick={commitGather}
-            disabled={gather.ids.length < 2}
-            className="rounded-full bg-gold px-3 py-1 text-label font-bold uppercase tracking-[0.14em] text-gold-ink active:scale-95 disabled:opacity-40"
-          >
-            Group
-          </button>
-          <button
-            onClick={() => setGather(null)}
+            onClick={() => {
+              setGather(null);
+              setPlacing(false);
+            }}
             className="text-label font-bold uppercase tracking-[0.14em] text-dim active:scale-95"
           >
             Cancel

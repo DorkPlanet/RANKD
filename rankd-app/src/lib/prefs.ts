@@ -36,10 +36,30 @@ export interface Prefs {
    * OS level — a different, narrower ask than accessibility.
    */
   listDrift: boolean;
+  /**
+   * What happens when the climb reaches a duel you have already settled.
+   *
+   *  · "watch"  — play it back slowly. Every one, at a readable pace.
+   *  · "quick"  — play it back fast, accelerating through a long run. Default.
+   *  · "silent" — resolve it without showing anything.
+   *
+   * "silent" was the only behaviour when this shipped and it was wrong as a
+   * default: the pile leapt several places between taps with nothing on screen
+   * to say what had been decided, which reads as the app ranking films on its
+   * own. It survives as a choice for people who have made their peace with it.
+   */
+  replay: ReplayMode;
 }
+
+export type ReplayMode = "watch" | "quick" | "silent";
+
+const REPLAY_MODES: readonly string[] = ["watch", "quick", "silent"];
 
 export const DEFAULT_PREFS: Prefs = {
   listDrift: true,
+  // Fast enough not to be a cutscene, visible enough that nothing moves
+  // unexplained. See the field's own note for why this is not "silent".
+  replay: "quick",
 };
 
 export function loadPrefs(): Prefs {
@@ -54,6 +74,13 @@ export function loadPrefs(): Prefs {
       // stored value says off.
       listDrift:
         typeof parsed.listDrift === "boolean" ? parsed.listDrift : DEFAULT_PREFS.listDrift,
+      // Same rule as above, one step wider: an unrecognised string — a value
+      // from a future build, or junk — falls back rather than being trusted,
+      // because it reaches a `switch` on the duel screen that would otherwise
+      // match nothing and leave the replay neither playing nor resolving.
+      replay: REPLAY_MODES.includes(parsed.replay as string)
+        ? (parsed.replay as ReplayMode)
+        : DEFAULT_PREFS.replay,
     };
   } catch {
     return DEFAULT_PREFS;

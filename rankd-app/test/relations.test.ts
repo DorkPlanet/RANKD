@@ -8,13 +8,13 @@ import { buildRelations, decidedOrder, pairKey } from "@/lib/relations";
 import type { Judgement, LogMode, Outcome } from "@/lib/log";
 
 let seq = 0;
-const j = (a: string, b: string, o: Outcome, m: LogMode = "koth"): Judgement => ({
+const j = (a: string, b: string, o: Outcome, m: LogMode = "koth", t = ++seq): Judgement => ({
   id: `r${seq++}`,
   a,
   b,
   o,
   m,
-  t: seq,
+  t,
 });
 
 /** a beat b. */
@@ -266,5 +266,98 @@ describe("cost", () => {
     // Rebuilt on every duel, so the budget is a frame and the target is nowhere
     // near it. Generous bound — this is a regression guard, not a benchmark.
     expect(built).toBeLessThan(60);
+  });
+});
+
+describe("explain", () => {
+  it("never disagrees with known", () => {
+    // The screen puts `explain` on the poster and the pile moves on `known`. If
+    // they can differ, the app is captioning one decision while making another,
+    // which is worse than saying nothing at all.
+    let s = 987;
+    const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 0x100000000);
+    const ids = Array.from({ length: 7 }, (_, i) => `f${i}`);
+
+    for (let trial = 0; trial < 300; trial++) {
+      const log: Judgement[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        for (let k = i + 1; k < ids.length; k++) {
+          const roll = rand();
+          if (roll < 0.5) continue;
+          if (roll < 0.56) log.push(j(ids[i], ids[k], "draw"));
+          else if (roll < 0.8) log.push(beat(ids[i], ids[k]));
+          else log.push(beat(ids[k], ids[i]));
+        }
+      }
+      const r = buildRelations(ids, log);
+      for (const a of ids) {
+        for (const b of ids) {
+          if (a === b) continue;
+          const why = r.explain(a, b);
+          expect(why?.o ?? null).toBe(r.known(a, b));
+        }
+      }
+    }
+  });
+
+  it("reports a pair the user judged as direct, with when", () => {
+    const r = buildRelations(["a", "b"], [j("a", "b", "a", "koth", 55)]);
+    expect(r.explain("a", "b")).toEqual({ o: "a", direct: { at: 55 } });
+    // And from the other side, the same duel with the answer flipped.
+    expect(r.explain("b", "a")).toEqual({ o: "b", direct: { at: 55 } });
+  });
+
+  it("keeps the most recent date when a pair was judged twice", () => {
+    const r = buildRelations(["a", "b"], [j("a", "b", "a", "koth", 10), j("a", "b", "a", "koth", 90)]);
+    expect(r.explain("a", "b")!.direct!.at).toBe(90);
+  });
+
+  it("hands back the chain for a deduced pair, winner first", () => {
+    const r = buildRelations(["a", "b", "c", "d"], [beat("a", "b"), beat("b", "c"), beat("c", "d")]);
+    const why = r.explain("a", "d")!;
+    expect(why.o).toBe("a");
+    expect(why.direct).toBeUndefined();
+    expect(why.chain).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("orients the chain to whichever side won, not to the argument order", () => {
+    const r = buildRelations(["a", "b", "c"], [beat("a", "b"), beat("b", "c")]);
+    // Asked the losing way round, the chain still runs from the winner.
+    const why = r.explain("c", "a")!;
+    expect(why.o).toBe("b");
+    expect(why.chain).toEqual(["a", "b", "c"]);
+  });
+
+  it("takes the shortest route, not the first one found", () => {
+    // a beats d directly through x, and also the long way through p→q→r.
+    const r = buildRelations(
+      ["a", "x", "p", "q", "r", "d"],
+      [beat("a", "x"), beat("x", "d"), beat("a", "p"), beat("p", "q"), beat("q", "r"), beat("r", "d")],
+    );
+    expect(r.explain("a", "d")!.chain).toEqual(["a", "x", "d"]);
+  });
+
+  it("prefers the direct answer, and then has no chain to give", () => {
+    const r = buildRelations(["a", "b", "c"], [beat("a", "b"), beat("b", "c"), j("a", "c", "b", "koth", 7)]);
+    const why = r.explain("a", "c")!;
+    expect(why.o).toBe("b");
+    expect(why.direct).toEqual({ at: 7 });
+    expect(why.chain).toBeUndefined();
+  });
+
+  it("says nothing about an undecided pair", () => {
+    const r = buildRelations(["a", "b", "c"], [beat("a", "b")]);
+    expect(r.explain("a", "c")).toBeNull();
+  });
+
+  it("says nothing about a pair inside a cycle it had to deduce", () => {
+    const ids = ["a", "b", "c", "d"];
+    const r = buildRelations(ids, [beat("a", "b"), beat("b", "c"), beat("c", "d"), beat("d", "a")]);
+    expect(r.explain("a", "c")).toBeNull();
+  });
+
+  it("reports a remembered draw as a draw, not a winner", () => {
+    const r = buildRelations(["a", "b"], [j("a", "b", "draw", "koth", 12)]);
+    expect(r.explain("a", "b")).toEqual({ o: "draw", direct: { at: 12 } });
   });
 });

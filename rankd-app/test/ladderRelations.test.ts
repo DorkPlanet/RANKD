@@ -1,13 +1,17 @@
 // The climb, once it is allowed to read what the user already decided.
 //
-// Two properties matter more than any of the specifics here:
+// Three properties matter more than any of the specifics here:
 //
 //   · with no oracle the engine behaves exactly as it always has (every test in
-//     ladder.test.ts and kothReRate.test.ts is that assertion, unchanged), and
-//   · with one, it never reaches an order the unaided climb would not have.
+//     ladder.test.ts and kothReRate.test.ts is that assertion, unchanged),
+//   · with one, it never reaches an order the unaided climb would not have, and
+//   · it resolves ONE step at a time, so the screen can show each one and the
+//     user can interrupt.
 //
-// Everything else in this file is about the engine REFUSING to help in the
-// places where helping would be wrong.
+// That last property is the reason this file was rewritten. The first version
+// resolved every known duel inside a single engine call, which was correct and
+// unwatchable: the pile leapt several places between taps with nothing on screen
+// to say what had been decided. Everything here now goes a step at a time.
 
 import { describe, expect, it } from "vitest";
 
@@ -17,14 +21,16 @@ import {
   decidedRest,
   finishDecided,
   getPair,
+  peekKnown,
   pendingConfirm,
+  replayStep,
   startRun,
   stepBackFromConfirm,
 } from "@/lib/ladder";
 import type { Judgement, LogMode, Outcome } from "@/lib/log";
 import { buildRelations } from "@/lib/relations";
 import { tierMax, tierMin, type Rating } from "@/lib/tiers";
-import type { Film, RankState } from "@/lib/types";
+import type { AutoStep, Film, RankState } from "@/lib/types";
 
 const RATING: Rating = 4;
 
@@ -38,13 +44,13 @@ const tier = (n: number): Film[] =>
   }));
 
 let seq = 0;
-const j = (a: string, b: string, o: Outcome, m: LogMode = "koth"): Judgement => ({
+const j = (a: string, b: string, o: Outcome, m: LogMode = "koth", t = ++seq): Judgement => ({
   id: `r${seq++}`,
   a,
   b,
   o,
   m,
-  t: seq,
+  t,
 });
 /** a beat b. */
 const beat = (a: string, b: string) => j(a, b, "a");
@@ -54,80 +60,79 @@ const chain = (ids: readonly string[]): Judgement[] => ids.slice(0, -1).map((id,
 
 const oracleFor = (films: Film[], log: Judgement[]) => buildRelations(films.map((f) => f.id), log);
 
+/**
+ * What the screen does: play remembered duels one at a time until a real
+ * decision is reached. Returns the steps so tests can assert what was shown.
+ */
+function replayAll(start: RankState): { state: RankState; steps: AutoStep[] } {
+  let state = start;
+  const steps: AutoStep[] = [];
+  for (let guard = 0; guard < 1000; guard++) {
+    const step = peekKnown(state);
+    if (!step) break;
+    steps.push(step);
+    state = replayStep(state);
+  }
+  return { state, steps };
+}
+
 describe("no oracle means no change", () => {
   it("starts the climb at the bottom and asks, exactly as before", () => {
     const s = startRun(tier(5), RATING);
     expect(s.session!.contenderId).toBe("f4");
     expect(s.session!.challengerId).toBe("f3");
-    expect(s.resolved).toEqual([]);
+    expect(peekKnown(s)).toBeNull();
     expect(getPair(s)).not.toBeNull();
   });
 
   it("offers no finish, however complete the record", () => {
-    // The evidence exists; without an oracle handed in, the engine cannot see it.
     const films = tier(5);
     const s = startRun(films, RATING);
     expect(decidedRest(s)).toBeNull();
     expect(finishDecided(s)).toBe(s);
   });
+
+  it("replayStep is a no-op", () => {
+    const s = startRun(tier(5), RATING);
+    expect(replayStep(s)).toBe(s);
+  });
 });
 
-describe("auto-resolve", () => {
-  it("walks straight to a confirm when the record decides the pile", () => {
-    const films = tier(6);
-    const ids = films.map((f) => f.id);
-    const s = startRun(films, RATING, { oracle: oracleFor(films, chain(ids)) });
-
-    // Nothing to ask: the climb has already carried the best film to the top.
-    expect(getPair(s)).toBeNull();
-    expect(pendingConfirm(s)!.id).toBe("f0");
-    expect(s.resolved).toHaveLength(5); // one per rung it climbed
-  });
-
-  it("mints no evidence and counts no duels for what it replays", () => {
-    // The whole safety property. An auto-resolved duel that wrote a row would be
-    // fabricating evidence out of the act of reading it, and that row would feed
-    // straight back into the oracle that produced it.
-    const films = tier(6);
-    const s = startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) });
-    expect(s.journal).toEqual([]);
-    expect(s.films.every((f) => (f.duels ?? 0) === 0)).toBe(true);
-  });
-
-  it("stops at the first pair the user has not settled", () => {
+describe("peekKnown", () => {
+  it("reports the current pair when the record settles it", () => {
     const films = tier(5);
-    // f3 vs f4 is known; nothing else is.
     const s = startRun(films, RATING, { oracle: oracleFor(films, [beat("f3", "f4")]) });
-    expect(s.resolved).toHaveLength(1);
-    const pair = getPair(s)!;
-    // f3 won its way up one rung and now faces f2, which nobody has judged.
-    expect(pair.contender.id).toBe("f3");
-    expect(pair.opponent.id).toBe("f2");
+    expect(peekKnown(s)).toMatchObject({ a: "f4", b: "f3", o: "b", via: "direct" });
   });
 
-  it("carries on after a real answer", () => {
+  it("says nothing while the pair is open", () => {
     const films = tier(5);
-    // Everything above f2 is settled; f4 vs f3 is not.
-    const log = [beat("f0", "f1"), beat("f1", "f2"), beat("f2", "f3")];
-    let s = startRun(films, RATING, { oracle: oracleFor(films, log) });
-    expect(getPair(s)!.contender.id).toBe("f4");
-    expect(getPair(s)!.opponent.id).toBe("f3");
-
-    s = choose(s, "f3"); // the user says f3 is better
-    // f3 now climbs, and the record already says f2, f1 and f0 all beat it.
-    expect(pendingConfirm(s)!.id).toBe("f0");
-    expect(s.journal).toHaveLength(1); // only the duel actually fought
+    const s = startRun(films, RATING, { oracle: oracleFor(films, [beat("f0", "f1")]) });
+    expect(peekKnown(s)).toBeNull();
   });
 
-  it("respects a remembered draw", () => {
-    const films = tier(3);
-    const s = startRun(films, RATING, { oracle: oracleFor(films, [j("f2", "f1", "draw")]) });
-    // A draw places like a loss, so f1 takes over the climb and faces f0.
-    expect(s.resolved).toEqual([{ a: "f2", b: "f1", o: "draw" }]);
-    expect(getPair(s)!.contender.id).toBe("f1");
+  it("marks a deduced pair as inferred, and carries the chain", () => {
+    // f4 has never met f3. It follows: f3 beat x, x beat f4.
+    const films = tier(5);
+    const log = [beat("f3", "f2"), beat("f2", "f4")];
+    const s = startRun(films, RATING, { oracle: oracleFor(films, log) });
+    const step = peekKnown(s)!;
+    expect(step.via).toBe("inferred");
+    // Winner first, so it reads "f3 beat f2, which beat f4".
+    expect(step.chain).toEqual(["f3", "f2", "f4"]);
+    expect(step.at).toBeUndefined();
   });
 
-  it("declines to help a cross-tier run", () => {
+  it("carries when a direct duel happened, for the explanation", () => {
+    const films = tier(5);
+    const s = startRun(films, RATING, { oracle: oracleFor(films, [j("f3", "f4", "a", "koth", 1234)]) });
+    const step = peekKnown(s)!;
+    expect(step.via).toBe("direct");
+    expect(step.at).toBe(1234);
+    expect(step.chain).toBeUndefined();
+  });
+
+  it("declines a cross-tier run", () => {
     // Those record nothing by design; reading the library's log to skip their
     // duels would import exactly the leak that ban exists to prevent.
     const films = tier(4);
@@ -136,21 +141,109 @@ describe("auto-resolve", () => {
       crossTier: true,
       oracle: oracleFor(films, chain(films.map((f) => f.id))),
     });
-    expect(s.resolved).toEqual([]);
+    expect(peekKnown(s)).toBeNull();
     expect(getPair(s)).not.toBeNull();
+  });
+
+  it("says nothing at a confirm", () => {
+    const films = tier(3);
+    const { state } = replayAll(startRun(films, RATING, { oracle: oracleFor(films, chain(["f0", "f1", "f2"])) }));
+    expect(pendingConfirm(state)).not.toBeNull();
+    expect(peekKnown(state)).toBeNull();
+  });
+});
+
+describe("replaying, one step at a time", () => {
+  it("climbs a rung per step rather than all at once", () => {
+    const films = tier(6);
+    const ids = films.map((f) => f.id);
+    let s = startRun(films, RATING, { oracle: oracleFor(films, chain(ids)) });
+
+    // The run does NOT open at a confirm — that was the old behaviour.
+    expect(pendingConfirm(s)).toBeNull();
+    expect(getPair(s)!.contender.id).toBe("f5");
+
+    s = replayStep(s);
+    expect(s.resolved).toHaveLength(1);
+    expect(getPair(s)!.contender.id).toBe("f4"); // the winner carries the climb on
+  });
+
+  it("reaches the same place the old atomic pass did", () => {
+    const films = tier(6);
+    const { state, steps } = replayAll(
+      startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) }),
+    );
+    expect(steps).toHaveLength(5); // one per rung
+    expect(pendingConfirm(state)!.id).toBe("f0");
+  });
+
+  it("mints no evidence and counts no duels for what it replays", () => {
+    // The whole safety property. An auto-resolved duel that wrote a row would be
+    // fabricating evidence out of the act of reading it, and that row would feed
+    // straight back into the oracle that produced it.
+    const films = tier(6);
+    const { state } = replayAll(
+      startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) }),
+    );
+    expect(state.journal).toEqual([]);
+    expect(state.films.every((f) => (f.duels ?? 0) === 0)).toBe(true);
+  });
+
+  it("stops at the first pair the user has not settled", () => {
+    const films = tier(5);
+    const { state, steps } = replayAll(
+      startRun(films, RATING, { oracle: oracleFor(films, [beat("f3", "f4")]) }),
+    );
+    expect(steps).toHaveLength(1);
+    const pair = getPair(state)!;
+    expect(pair.contender.id).toBe("f3");
+    expect(pair.opponent.id).toBe("f2");
+  });
+
+  it("carries on after a real answer", () => {
+    const films = tier(5);
+    const log = [beat("f0", "f1"), beat("f1", "f2"), beat("f2", "f3")];
+    let s = startRun(films, RATING, { oracle: oracleFor(films, log) });
+    expect(peekKnown(s)).toBeNull(); // f4 vs f3 is open
+    s = choose(s, "f3");
+    const { state } = replayAll(s);
+    expect(pendingConfirm(state)!.id).toBe("f0");
+    expect(state.journal).toHaveLength(1); // only the duel actually fought
+  });
+
+  it("respects a remembered draw", () => {
+    const films = tier(3);
+    const s = startRun(films, RATING, { oracle: oracleFor(films, [j("f2", "f1", "draw")]) });
+    const step = peekKnown(s)!;
+    expect(step).toMatchObject({ a: "f2", b: "f1", o: "draw", via: "direct" });
+    // A draw places like a loss, so f1 takes over the climb.
+    expect(getPair(replayStep(s))!.contender.id).toBe("f1");
+  });
+
+  it("hands control back the moment the user answers instead", () => {
+    // The interrupt. The screen simply stops calling replayStep and calls
+    // choose; the engine needs no mode and holds no replay state.
+    const films = tier(5);
+    const s = startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) });
+    expect(peekKnown(s)).not.toBeNull();
+    const taken = choose(s, "f4"); // the user overrules and picks the climber
+    expect(taken.journal).toHaveLength(1);
+    expect(taken.journal[0].m).toBe("koth");
   });
 
   it("does not re-climb a film the user deliberately stepped back", () => {
     // "Not yet — keep playing" un-parks the champion on purpose. The record
-    // agrees it beats everything below it, so an advancing step-back would walk
-    // it back to the top and re-serve the identical confirm screen forever.
+    // agrees it beats everything below it, so a replay that fired here would
+    // walk it back to the top and re-serve the identical confirm screen.
     const films = tier(4);
-    const s = startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) });
-    expect(pendingConfirm(s)!.id).toBe("f0");
+    const { state } = replayAll(
+      startRun(films, RATING, { oracle: oracleFor(films, chain(films.map((f) => f.id))) }),
+    );
+    expect(pendingConfirm(state)!.id).toBe("f0");
 
-    const back = stepBackFromConfirm(s);
+    const back = stepBackFromConfirm(state);
     expect(pendingConfirm(back)).toBeNull();
-    expect(getPair(back)).not.toBeNull(); // a real duel, not another confirm
+    expect(getPair(back)).not.toBeNull();
     expect(getPair(back)!.contender.id).toBe("f0");
   });
 });
@@ -181,7 +274,6 @@ describe("finishDecided", () => {
     const ids = films.map((f) => f.id);
     const log = chain(ids);
 
-    // By hand, no oracle: answer every duel the way the log says.
     const rank = new Map(ids.map((id, i) => [id, i]));
     let byHand: RankState = startRun(films, RATING);
     while (byHand.session) {
@@ -199,11 +291,8 @@ describe("finishDecided", () => {
   });
 
   it("keeps a Rough Cut pile inside the slice it already occupied", () => {
-    // The band confinement is the thing that makes "rank a pile" safe, and
-    // finishing a pile in one tap has to honour it or the cut the user made by
-    // hand is scattered back through the other two thirds.
     const films = tier(9);
-    const pile = ["f3", "f4", "f5"]; // the middle third, by score
+    const pile = ["f3", "f4", "f5"];
     const lo = Math.min(...pile.map((id) => films.find((f) => f.id === id)!.score));
     const hi = Math.max(...pile.map((id) => films.find((f) => f.id === id)!.score));
 
@@ -218,7 +307,6 @@ describe("finishDecided", () => {
       expect(f.score).toBeGreaterThanOrEqual(lo);
       expect(f.score).toBeLessThanOrEqual(hi);
     }
-    // And the films outside the pile were not touched.
     for (const id of ["f0", "f8"]) {
       expect(done.films.find((x) => x.id === id)!.score).toBe(films.find((x) => x.id === id)!.score);
     }

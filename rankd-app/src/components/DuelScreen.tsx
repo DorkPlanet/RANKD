@@ -24,7 +24,14 @@ import {
   promotionWon,
   completePromotion,
   clusterOf,
+  confirmLast,
+  confirmPrefix,
+  settledPrefix,
   decidedRest,
+  peekKnown,
+  placeAt,
+  reopenConfirmed,
+  replayStep,
   finishDecided,
   groupFilms,
   nudgeConfirmed,
@@ -89,7 +96,8 @@ const EMPTY_GUESTS: readonly Film[] = [];
 /** Two films is the floor for a climb: one has nothing to be ranked against. */
 const MIN_CURATED_RUN = 2;
 import { CuratedPicker } from "./CuratedPicker";
-import type { Film, RankState } from "@/lib/types";
+import type { AutoStep, Film, RankState } from "@/lib/types";
+import type { ReplayMode } from "@/lib/prefs";
 
 const DEFAULT_TIER = 4 as const;
 
@@ -99,6 +107,7 @@ type ChosenMode = "koth" | "shuffle" | "roughcut" | null;
 // The library and the app-wide chrome now live in AppShell — this screen owns
 // only the duel. Everything it still holds is setup state for the next run.
 export default function DuelScreen({
+  replayMode,
   state,
   setState,
   onInfo,
@@ -121,6 +130,13 @@ export default function DuelScreen({
   onRibbon,
   swipeBlocked = false,
 }: {
+  /**
+   * How a duel the record already settles should be shown. See `lib/prefs.ts`.
+   *
+   * Passed down rather than read here, so changing it in Settings takes effect
+   * on the very next duel instead of on the next mount.
+   */
+  replayMode: ReplayMode;
   state: RankState | null;
   setState: React.Dispatch<React.SetStateAction<RankState | null>>;
   onInfo: (film: Film) => void;
@@ -239,13 +255,23 @@ export default function DuelScreen({
   // The pile the user chose to keep playing rather than finish outright, and the
   // count of duels this run settled from the record — the receipt for the strip.
   const [playOnFor, setPlayOnFor] = useState("");
-  // Stamped with a counter rather than a bare count, so skipping six twice
-  // running shows twice instead of the second being swallowed as "no change".
-  // A counter and not a clock: `commit` is an ordinary function in the render
-  // body, and reading the clock there is impure whether or not it is only ever
-  // reached from a handler.
-  const [skipped, setSkipped] = useState<{ n: number; at: number } | null>(null);
+  // How many duels this run settled from the record. Reported once, on the
+  // summary — the per-duel version is now the replay itself, which says far more
+  // than a count ever did.
   const [skippedRun, setSkippedRun] = useState(0);
+  // ── Every commit, counted ────────────────────────────────────────────────
+  //
+  // A replayed duel commits 200ms into the poster's flight and the flight cannot
+  // be cancelled once started, so anything the user does in that window races
+  // it — and the pending commit was computed from the state as it stood BEFORE
+  // their action, so it wins and silently undoes them.
+  //
+  // Keying the guard on the pair being shown was not enough: reopening a locked
+  // film changes the pile without changing the two posters, so the stale commit
+  // sailed through and put the film back on the shelf. A plain counter moves on
+  // every commit whatever it touched, which is the only thing that catches all
+  // of them.
+  const [commitSeq, setCommitSeq] = useState(0);
   useEffect(() => {
     void loadLog().then(setLog);
   }, []);
@@ -578,13 +604,12 @@ export default function DuelScreen({
     [pileKeySet, log],
   );
 
-  // The receipt is transient. Long enough to read, short enough not to become
-  // furniture over the posters.
+  // The run as it stands, for callbacks that fire later than the render that
+  // scheduled them. Written after every render; read through `cur` below.
+  const latest = useRef<RankState | null>(null);
   useEffect(() => {
-    if (!skipped) return;
-    const t = setTimeout(() => setSkipped(null), 2600);
-    return () => clearTimeout(t);
-  }, [skipped]);
+    latest.current = state ? { ...state, oracle } : null;
+  });
 
   if (!state) return null;
   const { session } = state;
@@ -617,16 +642,14 @@ export default function DuelScreen({
   // ever-growing array on every single tap — and it means a duel is evidence the
   // instant it is answered, whatever happens to the run afterwards.
   const commit = (next: RankState, persist = true) => {
+    setCommitSeq((n) => n + 1);
     if (persist) saveFilms(next.films);
-    // Duels this transition settled from the record. Shown as a receipt, not
-    // celebrated — the user is being told what was skipped and why, not scored.
+    // Duels this transition settled from the record — one at a time now, since
+    // the screen plays each one rather than the engine swallowing the lot.
     // `resolved` lives on RankState and never on the session, so it cannot
     // round-trip through localStorage and re-announce itself on a resume.
     const auto = next.resolved?.length ?? 0;
-    if (auto > 0) {
-      setSkipped((s) => ({ n: auto, at: (s?.at ?? 0) + 1 }));
-      setSkippedRun((n) => n + auto);
-    }
+    if (auto > 0) setSkippedRun((n) => n + auto);
     // A new run starts its own tally.
     if (!state.session && next.session) {
       setSkippedRun(auto);
@@ -741,6 +764,42 @@ export default function DuelScreen({
   const flick = (filmId: string) => commit(flickToTop(armed, filmId), false);
   const sink = (filmId: string) => commit(flickToBottom(armed, filmId), false);
   const scrub = (filmId: string) => setState((s) => (s ? skipToFilm(s, filmId) : s));
+  // ── The duel the record already settles ─────────────────────────────────
+  //
+  // A peek, so the arena can SHOW it before anything moves. Committing it is a
+  // separate call the screen makes on a timer, which is what makes the pass
+  // watchable and interruptible — the engine holds no replay state and needs no
+  // mode. See `peekKnown` for why this replaced an atomic resolve loop.
+  //
+  // `persist` false: a replayed duel moves the pile and commits nothing, exactly
+  // like a flick. Only a confirm writes scores.
+  const replay = peekKnown(armed);
+
+  // ── Why these read from a ref and not from `armed` ────────────────────────
+  //
+  // A replayed duel commits 200ms into the poster's flight, and the flight
+  // cannot be cancelled once it has started. So the commit happens well after
+  // the render that scheduled it — and if the user did anything in between (lock
+  // the bottom film, place one by hand, reopen one), a handler holding the
+  // `armed` from that older render would compute from a pile that no longer
+  // exists and write it back, silently undoing them. Observed as "Make last"
+  // locking the film and leaving it in the pile anyway.
+  //
+  // Guarding the commit was tried first and is the wrong shape: it makes a
+  // deferred action a race to be refereed rather than one that simply reads the
+  // current state when it runs. This ref is written after every render, so a
+  // callback fired at any later moment sees the run as it stands.
+  // Falls back to this render's value on the very first render, before the
+  // effect that writes the ref has run.
+  const cur = (): RankState => latest.current ?? armed;
+
+  const playRemembered = () => commit(replayStep(cur()), false);
+  // Locking the bottom film commits — it writes a score and a hard lock, exactly
+  // as a confirm does — so unlike the assertions above it persists.
+  const lockLast = () => commit(confirmLast(cur()));
+  const placeHere = (index: number) =>
+    commit(placeAt(cur(), cur().session?.contenderId ?? "", index), false);
+  const reopen = (filmId: string) => commit(reopenConfirmed(cur(), filmId));
   // Gathering and releasing are assertions like the flicks — they reorder the
   // pile, record nothing, and commit nothing until a confirm. `persist` false
   // for the same reason: there are no scores to write yet.
@@ -1367,6 +1426,9 @@ export default function DuelScreen({
   // and a different pile, which is a different run, gets asked again.
   const settledRest = playOnFor === pileKeySet ? null : decidedRest(armed);
   const finishAll = () => commit(finishDecided(armed));
+  // The batch case: not the whole pile, but a settled run at the top of it.
+  const settled = settledPrefix(armed);
+  const lockSettled = () => commit(confirmPrefix(armed));
 
   return (
     <main className="relative flex h-app flex-col overflow-hidden select-none">
@@ -1414,22 +1476,6 @@ export default function DuelScreen({
         />
       )}
 
-      {/* The receipt. One dim line saying what was skipped and why — the saving
-          has to be legible or the pile appears to move on its own. Deliberately
-          not celebratory: this is being told what happened, not scored for it.
-          Absolutely positioned so it cannot push the arena around as it comes
-          and goes. */}
-      {skipped && !activeRun && !runResult && (
-        <div
-          key={skipped.at}
-          className="tip pointer-events-none absolute left-0 right-0 z-10 text-center"
-          style={{ top: "var(--nav-h)" }}
-        >
-          <span className="text-label font-bold uppercase tracking-[0.14em] text-dim">
-            {`Skipped ${skipped.n} you’d already decided`}
-          </span>
-        </div>
-      )}
 
       {/* A finished cross-tier order takes the surface for the same reason Fast
           Shuffle does: there is no duel to show, and what it holds cannot be
@@ -1516,6 +1562,8 @@ export default function DuelScreen({
           champion={champion}
           rank={(session?.confirmed.length ?? 0) + 1}
           onConfirm={lockIn}
+          batch={settled?.length}
+          onBatch={lockSettled}
           onBack={(session?.unconfirmed.length ?? 0) > 1 ? backOut : undefined}
           promoteTo={promoteTo}
           onTakeOn={takeOnTierAbove}
@@ -1541,6 +1589,7 @@ export default function DuelScreen({
           challenger={pair.opponent}
           pile={session.unconfirmed}
           confirmed={session.confirmed}
+          tail={session.confirmedTail ?? []}
           films={state.films}
           onPick={decide}
           onDraw={declineToCall}
@@ -1550,6 +1599,13 @@ export default function DuelScreen({
           onFlick={flick}
           onSink={sink}
           onScrub={scrub}
+          replay={replay}
+          onReplay={playRemembered}
+          mode={replayMode}
+          onLast={lockLast}
+          onPlaceAt={placeHere}
+          onReopen={reopen}
+          seq={commitSeq}
           clusterFor={(id) => (session ? clusterOf(session, id) : null)}
           onGroup={gatherFilms}
           onUngroup={releaseFilm}
@@ -2732,6 +2788,7 @@ function Duel({
   challenger,
   pile,
   confirmed,
+  tail,
   films,
   onPick,
   onDraw,
@@ -2748,11 +2805,20 @@ function Duel({
   onGroup,
   onUngroup,
   onNudge,
+  replay,
+  onReplay,
+  mode,
+  onLast,
+  onPlaceAt,
+  onReopen,
+  seq,
 }: {
   contender: Film;
   challenger: Film;
   pile: string[]; // unconfirmed, index 0 = top
   confirmed: string[]; // locked shelf, index 0 = #1
+  /** Locked into the bottom of the run, worst last. See `confirmedTail`. */
+  tail: string[];
   films: Film[];
   onPick: (id: string) => void;
   onDraw: () => void;
@@ -2769,6 +2835,25 @@ function Duel({
   onGroup?: (ids: string[], anchorId: string) => void;
   onUngroup?: (id: string) => void;
   onNudge?: (id: string, delta: number) => void;
+  /**
+   * The duel on screen is one the record already settles — play it back.
+   *
+   * Null for an ordinary duel, which is the only state the arena had before.
+   * When set, both posters read blue, the badges say who won last time, and the
+   * line under the arena says why.
+   */
+  replay?: AutoStep | null;
+  /** Commit that replayed step and move on to the next. */
+  onReplay: () => void;
+  mode: ReplayMode;
+  /** Lock the climber into last place instead of climbing it. See `confirmLast`. */
+  onLast?: () => void;
+  /** Drop the climber straight into a slot in the pile. See `placeAt`. */
+  onPlaceAt?: (index: number) => void;
+  /** Take a locked film back off the shelf. See `reopenConfirmed`. */
+  onReopen?: (id: string) => void;
+  /** Bumped on every commit, so a replay in flight can tell it has been overtaken. */
+  seq: number;
   onInfo: (film: Film) => void;
   stripOpen: boolean;
   onToggleStrip: () => void;
@@ -2808,9 +2893,49 @@ function Duel({
   // Intercept a win by the right-hand card so it slides into the climbing seat
   // before the state swap paints. Picking the left card needs none of this — it
   // is already where it is going to be.
-  const pick = (id: string) => {
-    setPlayed(true);
+  // Set while a poster is mid-flight, so one duel cannot be settled twice.
+  const busy = useRef(false);
+  // Set when the user answers by hand: it stops the replay running on without
+  // them. Cleared the moment the climb reaches a duel the record cannot settle,
+  // so taking control back is temporary and needs no mode to turn off again.
+  const halt = useRef(false);
+  // How many remembered duels have run back-to-back, for the pacing ramp.
+  const streak = useRef(0);
+  // ── Which duel is on screen RIGHT NOW ─────────────────────────────────────
+  //
+  // A replayed duel commits 200ms into the poster's flight, and the flight
+  // cannot be cancelled once it has started. So anything the user does during
+  // those 200ms — locking the bottom film from the strip, placing a film by
+  // hand, reopening one — races the pending commit, and the commit was built
+  // from the state as it stood BEFORE their action. It won, silently undoing
+  // them: observed as "Make last" locking the film but leaving it in the pile.
+  //
+  // The guard is identity, not a lock: the pending commit only lands if the pair
+  // it was computed for is still the pair on screen.
+  const seqAt = useRef(seq);
 
+  useEffect(() => {
+    seqAt.current = seq;
+  }, [seq]);
+
+  useEffect(() => {
+    busy.current = false;
+    if (!replay) {
+      // A real decision: the user is being asked something, so the next streak
+      // is theirs to watch again.
+      halt.current = false;
+      streak.current = 0;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contender.id, challenger.id]);
+
+  // ── Moving the posters ────────────────────────────────────────────────────
+  //
+  // Shared by a real answer and a replayed one, deliberately: a duel the record
+  // already settles has to LOOK like a duel, or the pile appears to reorder
+  // itself. The only difference between the two is who chose, and that is said
+  // in colour and in words, never by skipping the animation.
+  const runMove = (winnerId: string, done: () => void) => {
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
     const climbImg = cards?.[0]?.querySelector("img");
@@ -2818,19 +2943,70 @@ function Duel({
 
     // A winning challenger becomes the climber, so it flies into the climbing
     // seat before the state swap paints.
-    if (id === challenger.id && climbImg && challImg) {
+    if (winnerId === challenger.id && climbImg && challImg) {
       flyPosterAcross(challImg, climbImg, challenger.poster ?? "");
-      setTimeout(() => onPick(id), 200); // commit mid-flight, under the clone
+      setTimeout(done, 200); // commit mid-flight, under the clone
       return;
     }
-    if (id === contender.id && challImg) {
+    if (winnerId === contender.id && challImg) {
       // The climber stays put; only the beaten challenger needs to leave.
       fadeLoserOut(challImg, challenger.poster ?? "");
-      onPick(id); // commit at once so the replacement fades up underneath
+      done(); // commit at once so the replacement fades up underneath
       return;
     }
-    onPick(id);
+    done();
   };
+
+  const pick = (id: string) => {
+    // ── The double-tap guard ────────────────────────────────────────────────
+    //
+    // There was none, and the 200ms commit window was short enough to hide it.
+    // A replay holds the same pair on screen for much longer, so a second tap
+    // during the beat would settle the same duel twice — once from the tap and
+    // once from the timer. Cleared on the pair changing, below.
+    if (busy.current) return;
+    busy.current = true;
+    setPlayed(true);
+    // Answering by hand stops the replay. The user is taking the climb back,
+    // which is the whole point of showing it to them; `halted` clears itself
+    // once the run reaches a duel the record cannot settle. See the effect.
+    halt.current = true;
+    runMove(id, () => onPick(id));
+  };
+
+  // ── Playing back a duel the user already settled ──────────────────────────
+  //
+  // Measured on a simulated 100-film tier: half of all streaks are a SINGLE
+  // remembered duel, but the 95th percentile is 28 and the longest seen was 69.
+  // So the common case wants a readable beat and the tail must not become a
+  // cutscene — hence the ramp, and hence a tap always stopping it dead.
+  useEffect(() => {
+    if (!replay || halt.current || busy.current) return;
+    // "Skip silently" is the old behaviour, kept as a choice rather than a
+    // default: resolve without drawing anything. Same one call, no animation.
+    if (mode === "silent") {
+      onReplay();
+      return;
+    }
+    const winner = replay.o === "a" ? contender.id : challenger.id;
+    const n = streak.current;
+    const startedAt = seqAt.current;
+    // First few at a readable pace, then accelerating: a long carry reads as the
+    // film being swept past everything it has already beaten, which is the true
+    // description of what is happening.
+    const wait = mode === "watch" ? 620 : Math.max(110, 300 - n * 26);
+    const t = setTimeout(() => {
+      streak.current = n + 1;
+      busy.current = true;
+      // Only commit if nothing else has committed meanwhile — see `commitSeq`.
+      runMove(winner, () => {
+        if (seqAt.current === startedAt) onReplay();
+      });
+    }, wait);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replay?.a, replay?.b, replay?.o, mode]);
+
 
   // Where a film currently stands in its tier. Locked films hold the top slots,
   // so the pile's own index picks up from the end of the confirmed shelf.
@@ -2855,6 +3031,15 @@ function Duel({
         .map((id, j) => ({ film: films.find((f) => f.id === id)!, rank: confirmed.length - j }))
         .filter((x) => x.film),
     [confirmed, films],
+  );
+
+  // The films locked into the BOTTOM of the run, worst last. They belong at the
+  // far end of the strip, below the pile — the strip reads worst-to-best, so a
+  // film settled into last place has to appear before everything still fighting
+  // or it simply vanishes from the map of where you are.
+  const lockedTail = useMemo(
+    () => tail.map((id) => films.find((f) => f.id === id)!).filter(Boolean),
+    [tail, films],
   );
 
   return (
@@ -2887,15 +3072,30 @@ function Duel({
             className="mt-3 flex flex-col items-center"
             style={{ opacity: stripOpen ? 0 : 1, transition: "opacity 0.18s var(--ease)" }}
           >
-            {/* Only near the end. Announced too early it is noise; at three to
-                go it is the reason you play three more. */}
-            <Tips
-              guidance={
-                pile.length > 0 && pile.length <= RUN_ENDGAME
-                  ? `Only ${pile.length} left in this run`
-                  : undefined
-              }
-            />
+            {/* During a replay this slot says why the duel is settling itself.
+                It takes the tips' place rather than sitting beside them: a hint
+                about how to play is exactly the wrong thing to read while
+                watching a decision you already made, and two lines competing
+                here is what made the old receipt easy to miss. */}
+            {replay ? (
+              <span
+                key={`${replay.a}:${replay.b}`}
+                className="tip text-center text-label font-bold uppercase tracking-[0.14em]"
+                style={{ color: "var(--accent)" }}
+              >
+                {whyLine(replay, films)}
+              </span>
+            ) : (
+              // Only near the end. Announced too early it is noise; at three to
+              // go it is the reason you play three more.
+              <Tips
+                guidance={
+                  pile.length > 0 && pile.length <= RUN_ENDGAME
+                    ? `Only ${pile.length} left in this run`
+                    : undefined
+                }
+              />
+            )}
           </div>
         </div>
       </div>
@@ -2954,8 +3154,33 @@ function Duel({
           className="relative flex items-stretch justify-center gap-3"
           style={{ height: 356, flexShrink: 1, minHeight: 0, marginBottom: 16 }}
         >
-        <PosterCard film={contender} badge="CLIMBING" pick pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
-        <PosterCard film={challenger} badge="UN-RNKD" pairId={contender.id} onPick={pick} onFlick={onFlick} onSink={onSink} onInfo={onInfo} />
+        {/* In a replay the badges stop describing POSITION ("climbing", "not
+            ranked yet") and start describing the RECORD, because that is the
+            question the user is actually asking: what is this and why is it
+            moving. The winner carries the claim; the other card says nothing,
+            which `PosterCard` renders as no pill at all. */}
+        <PosterCard
+          film={contender}
+          badge={replay ? (replay.o === "a" ? wonBadge(replay) : "") : "CLIMBING"}
+          pick={!replay || replay.o === "a"}
+          tone={replay ? "blue" : "gold"}
+          pairId={contender.id}
+          onPick={pick}
+          onFlick={onFlick}
+          onSink={onSink}
+          onInfo={onInfo}
+        />
+        <PosterCard
+          film={challenger}
+          badge={replay ? (replay.o === "a" ? "" : wonBadge(replay)) : "UN-RNKD"}
+          pick={!!replay && replay.o !== "a"}
+          tone={replay ? "blue" : "gold"}
+          pairId={contender.id}
+          onPick={pick}
+          onFlick={onFlick}
+          onSink={onSink}
+          onInfo={onInfo}
+        />
         </div>
         {/* Stays in the layout flow so it can never overlap anything at any
             screen height. It only needs to look right with the strip folded
@@ -3033,6 +3258,17 @@ function Duel({
             >
               Undo
             </button>
+            {/* ── "This is the worst of these" ──────────────────────────────
+                Only while the climber IS the bottom of the pile, because that is
+                exactly when the question is live and the answer is free: the
+                film is already where it would end up, and the whole climb ahead
+                of it exists only to prove a position nobody is arguing about.
+                Anywhere else it would be a claim about films it has passed. */}
+            {onLast && pile[pile.length - 1] === contender.id && !replay && (
+              <button onClick={onLast} className={CONTROL} style={{ color: "var(--accent)" }}>
+                Last
+              </button>
+            )}
             {/* Done is the only one that ENDS something, so it carries a little
                 gold — the same accent the climber wears. Kept to 70% because
                 promoting "stop playing" into the brightest thing on screen
@@ -3057,9 +3293,61 @@ function Duel({
         onGroup={onGroup}
         onUngroup={onUngroup}
         onNudge={onNudge}
+        onPlaceAt={onPlaceAt}
+        onReopen={onReopen}
+        onLast={onLast}
+        lockedTail={lockedTail}
       />
     </>
   );
+}
+
+// ── Saying what a replayed duel is, in the fewest words that are true ───────
+//
+// The complaint this answers was not "it goes too fast", it was "I am jumping
+// places without knowing why or what it's jumping". So the badge names the act
+// and the line underneath names the evidence.
+//
+// Measured on a simulated 100-film tier, essentially every replayed duel is
+// DIRECT — the climb kept re-serving pairs the user had literally already
+// fought, because each pass walks the same neighbours. The inferred wording is
+// still here and still correct, but it is the rare case, not the common one.
+
+/** What the winning poster says while its duel is being played back. */
+function wonBadge(step: AutoStep): string {
+  if (step.o === "draw") return "TOO CLOSE — YOU SAID";
+  return step.via === "direct" ? "YOU PICKED THIS" : "FOLLOWS FROM YOURS";
+}
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/**
+ * The line under the arena: why this duel is settling itself.
+ *
+ * A direct row can name WHEN, which is the thing that makes it feel like the
+ * user's own answer rather than the app's. An inferred one names the film the
+ * decision travelled through — the shortest chain, because it is the most
+ * convincing version of the argument and the only one that fits on a line.
+ */
+function whyLine(step: AutoStep, films: Film[]): string {
+  const title = (id: string) => films.find((f) => f.id === id)?.title ?? "";
+  if (step.via === "direct") {
+    if (step.o === "draw") return "You couldn't separate these two";
+    if (!step.at) return "You've already picked between these two";
+    const d = new Date(step.at);
+    const now = new Date();
+    const when =
+      d.getFullYear() === now.getFullYear()
+        ? MONTHS[d.getMonth()]
+        : `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+    return `You picked this in ${when}`;
+  }
+  // The chain runs winner → … → loser. The middle is the interesting part: it
+  // names the film the user's own two decisions met at.
+  const via = step.chain?.slice(1, -1) ?? [];
+  if (via.length === 0) return "This follows from what you've already said";
+  if (via.length === 1) return `You put it over ${title(via[0])}, and ${title(via[0])} over this`;
+  return `Follows through ${via.map(title).filter(Boolean).join(", ")}`;
 }
 
 // Every mechanic the duel screen understands, cycled one at a time — the screen
@@ -3299,10 +3587,15 @@ function ConfirmView({
   justPromoted,
   earned,
   onDone,
+  batch,
+  onBatch,
 }: {
   champion: Film;
   rank: number;
   onConfirm: () => void;
+  /** How many from the top of the pile the record already settles, if several. */
+  batch?: number;
+  onBatch?: () => void;
   onBack?: () => void;
   promoteTo?: Rating;
   onTakeOn?: () => void;
@@ -3346,6 +3639,22 @@ function ConfirmView({
       >
         {justPromoted ? `Lock in at ${starsFor(won)}` : `Lock in as #${rank}`}
       </button>
+
+      {/* ── The rest of the settled top, in one tap ─────────────────────────
+          Once the record is being read, the top of a pile is often decided
+          several films deep — and each of those still cost a separate Lock in,
+          for a position nothing was arguing about. Offered under the single
+          confirm rather than replacing it, because taking six at once is a
+          bigger claim than taking one and should be the deliberate choice. */}
+      {batch && batch > 1 && !justPromoted && (
+        <button
+          onClick={onBatch}
+          className="text-sub underline underline-offset-4 active:scale-95"
+          style={{ color: "var(--accent)" }}
+        >
+          Lock in all {batch} you&rsquo;ve settled
+        </button>
+      )}
 
       {/* Beating an entire tier is the one moment a star rating can change:
           earn it against the tier above, or assert it outright. `promotionTarget`

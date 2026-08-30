@@ -72,6 +72,10 @@ const idsOf = (s: PlacementSession): string[] => [
   // are checked like any other id. A cluster naming a film the library no longer
   // holds would leave the engine computing a block that spans a hole in the pile.
   ...(s.clusters ?? []).flat(),
+  // Films locked into the bottom of the run. Validated like every other id, for
+  // the same reason: a tail naming a film the library no longer holds would put
+  // a hole in the order `writeScores` spreads.
+  ...(s.confirmedTail ?? []),
 ];
 
 /**

@@ -1016,6 +1016,7 @@ export default function AppShell() {
       >
       {current === "duel" ? (
         <DuelScreen
+          replayMode={prefs.replay}
           state={state}
           setState={setState}
           onInfo={(f) => setOverlay({ kind: "info", film: f })}
