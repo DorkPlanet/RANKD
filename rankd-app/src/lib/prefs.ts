@@ -71,7 +71,20 @@ export interface Prefs {
    * honest if it admits which ones.
    */
   hideStars: boolean;
+  /**
+   * Read the list as a grid of posters rather than one row per film.
+   *
+   * A reading mode, not a different list: same order, same numbers, same tier
+   * rules, several times as many films on screen at once. Rows are the better
+   * shape for reading a film's title, year and maker; a grid is the better shape
+   * for seeing the SHAPE of a stretch of the ranking, which is the question you
+   * are asking when you scroll a long way.
+   *
+   * Dragging stays a rows-only gesture — see the comment at the grid's render.
+   */
+  grid: boolean;
 }
+
 
 export type ReplayMode = "watch" | "quick" | "silent";
 
@@ -85,6 +98,8 @@ export const DEFAULT_PREFS: Prefs = {
   // Off: the stars are how the list has always read, and somebody who wants
   // them gone will say so.
   hideStars: false,
+  // Off: rows are what the list has always been, and they carry more per film.
+  grid: false,
 };
 
 export function loadPrefs(): Prefs {
@@ -110,6 +125,7 @@ export function loadPrefs(): Prefs {
       // truthy, and the toggle would read as on while the value says off.
       hideStars:
         typeof parsed.hideStars === "boolean" ? parsed.hideStars : DEFAULT_PREFS.hideStars,
+      grid: typeof parsed.grid === "boolean" ? parsed.grid : DEFAULT_PREFS.grid,
     };
   } catch {
     return DEFAULT_PREFS;

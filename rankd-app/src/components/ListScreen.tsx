@@ -139,6 +139,137 @@ const sectionHeight = (s: { placed: unknown[]; unplaced: unknown[] }) =>
   s.placed.length * ROW_H +
   (s.unplaced.length ? DIVIDER_H + s.unplaced.length * ROW_H : 0);
 
+// ── Grid geometry ───────────────────────────────────────────────────────────
+//
+// The tiered view's virtualisation is arithmetic and never measured: every
+// section's top is derived from ROW_H, HEADER_H and DIVIDER_H, and `jumpTo`
+// trusts those numbers. A grid cannot use fixed constants the same way, because
+// how many films fit on a line depends on how wide the screen is.
+//
+// So the width is measured once per scroll (it comes free with the height the
+// windowing already reads) and BOTH the layout and the height maths are derived
+// from that one number. They cannot drift apart, because there is only one.
+const GRID_GAP = 8;
+/** Narrower than this and a poster stops being recognisable at a glance. */
+const GRID_MIN_CELL = 96;
+/** The rank numeral under each poster. */
+const GRID_LABEL_H = 20;
+
+/**
+ * How many posters fit on a line, and how tall a line is.
+ *
+ * ── The height is IMPOSED, not derived ─────────────────────────────────────
+ *
+ * The first version computed a cell height from the poster's 2:3 ratio and let
+ * CSS lay the cells out. The two disagreed — CSS puts a gap BETWEEN rows and not
+ * after the last one, and the label's real height was not what the arithmetic
+ * assumed — so a tier declared 1670px of space and drew 886px of posters, and
+ * everything below it sat in the wrong place.
+ *
+ * So the cell height is handed to the grid as `gridAutoRows` and the section
+ * height is computed from the same number. There is one figure and both the
+ * layout and the maths read it, which is the only way they can be guaranteed to
+ * agree.
+ */
+function gridMetrics(width: number): { cols: number; cellH: number } {
+  // `clientWidth` includes the scroller's px-3, which the cells sit inside.
+  const inner = Math.max(GRID_MIN_CELL, width - 24);
+  const cols = Math.max(2, Math.floor((inner + GRID_GAP) / (GRID_MIN_CELL + GRID_GAP)));
+  const cellW = (inner - (cols - 1) * GRID_GAP) / cols;
+  // Posters are 2:3, and the numeral sits under them.
+  return { cols, cellH: Math.round(cellW * 1.5) + GRID_LABEL_H };
+}
+
+/** A block of `n` films: rows of `cellH`, with a gap between them but not after. */
+const gridBlockHeight = (n: number, cols: number, cellH: number) => {
+  if (n === 0) return 0;
+  const rows = Math.ceil(n / cols);
+  return rows * cellH + (rows - 1) * GRID_GAP;
+};
+
+const gridSectionHeight = (
+  s: { placed: unknown[]; unplaced: unknown[] },
+  cols: number,
+  cellH: number,
+) =>
+  HEADER_H +
+  gridBlockHeight(s.placed.length, cols, cellH) +
+  (s.unplaced.length ? DIVIDER_H + gridBlockHeight(s.unplaced.length, cols, cellH) : 0);
+
+/**
+ * A stretch of the list drawn as posters.
+ *
+ * ── What a grid is for, and what it gives up ───────────────────────────────
+ *
+ * Same order, same numbers, same tier rules — several times as many films on
+ * screen. Rows are the better shape for reading one film (title, year, maker);
+ * a grid is the better shape for seeing the SHAPE of a stretch of ranking, which
+ * is the question you are asking when you scroll a long way.
+ *
+ * It gives up the drag. Reordering is row-and-line shaped: `rowAt` hit-tests one
+ * film per horizontal band and the landing line is a horizontal rule. Neither
+ * means anything across two dimensions, and a half-right version would put back
+ * exactly the accidental-move bug the scroll guard exists to prevent. The grid is
+ * a reading mode; switch to rows to rearrange.
+ *
+ * `list-poster` is kept so the idle poster-shake still finds these, and
+ * `data-film-id` is deliberately NOT set — that is what `rowAt` looks for, and a
+ * grid must be invisible to it.
+ */
+function GridRows({
+  films,
+  ranks,
+  cols,
+  cellH,
+  onInfo,
+}: {
+  films: Film[];
+  /** Parallel to `films`. Absent for the un-rnkd block, which has no numbers. */
+  ranks?: number[];
+  cols: number;
+  cellH: number;
+  onInfo: (film: Film) => void;
+}) {
+  if (films.length === 0) return null;
+  return (
+    <div
+      className="grid"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        // Fixed rather than content-sized, so the height this block occupies is
+        // exactly what `gridBlockHeight` said it would be. See `gridMetrics`.
+        gridAutoRows: `${cellH}px`,
+        gap: GRID_GAP,
+      }}
+    >
+      {films.map((film, i) => (
+        <button
+          key={film.id}
+          onClick={() => onInfo(film)}
+          className="flex min-h-0 flex-col items-center active:scale-[0.97]"
+        >
+          <div className="list-poster w-full min-h-0 flex-1 overflow-hidden rounded-md bg-surface">
+            {film.poster ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
+            ) : null}
+          </div>
+          {/* The same gold-for-committed, accent-for-provisional the rows use, so
+              a glance across the grid still says which placements are yours. */}
+          <span
+            className={`flex items-center text-label font-bold leading-none tabular-nums ${
+              ranks ? (isHard(film) ? "text-gold" : "text-accent") : "text-dim/70"
+            }`}
+            style={{ height: GRID_LABEL_H }}
+          >
+            {ranks ? ranks[i] : "UN-RNKD"}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function ListScreen({
   films,
   onInfo,
@@ -154,6 +285,8 @@ export default function ListScreen({
   onToggleLog,
   frozen,
   hideStars,
+  grid = false,
+  onGrid,
 }: {
   films: Film[];
   /**
@@ -182,6 +315,9 @@ export default function ListScreen({
    * silently stopped saying anything.
    */
   hideStars?: boolean;
+  /** Read the list as posters rather than rows. See `Prefs.grid`. */
+  grid?: boolean;
+  onGrid?: (on: boolean) => void;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -447,20 +583,6 @@ export default function ListScreen({
   // question it answers.
   const ranked = new Map(tierProgress(films).map((s) => [s.rating, s.ranked]));
 
-  // Where each section starts, and how tall it is. Derived from the model, never
-  // measured from the DOM — the whole point is that it's known before the rows
-  // exist.
-  const offsets = useMemo(() => {
-    const out: { tier: Rating; top: number; height: number }[] = [];
-    let top = 0;
-    for (const s of model.sections) {
-      const height = sectionHeight(s);
-      out.push({ tier: s.tier, top, height });
-      top += height;
-    }
-    return out;
-  }, [model]);
-
   // Declared up here rather than beside the other drag state, because the scroll
   // listener immediately below is what cancels it.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -469,12 +591,24 @@ export default function ListScreen({
     holdTimer.current = null;
   };
 
-  const [view, setView] = useState({ top: 0, height: 900 });
+  const [view, setView] = useState({ top: 0, height: 900, width: 380 });
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
     const read = () => {
-      setView({ top: el.scrollTop, height: el.clientHeight });
+      // ── Never accept a zero width ────────────────────────────────────────
+      //
+      // The grid's section heights are computed from this, and a zero collapses
+      // every cell to nothing: a tier of 24 films declared 374px of space and
+      // then drew 1294px of posters over the top of the next tier. The screen
+      // can be measured before it has been laid out — this list lives in a
+      // translated pane and is mounted while off to one side — so a 0 here is
+      // "not yet", not "no space".
+      setView((v) => ({
+        top: el.scrollTop,
+        height: el.clientHeight || v.height,
+        width: el.clientWidth || v.width,
+      }));
       // ── If the list moved, you were scrolling ────────────────────────────
       //
       // The touchmove guard cancels a pending hold once the finger has travelled
@@ -497,9 +631,34 @@ export default function ListScreen({
     };
     read();
     el.addEventListener("scroll", read, { passive: true });
-    return () => el.removeEventListener("scroll", read);
+    // Scroll alone is not enough to keep the WIDTH current, and the grid's
+    // geometry is derived from it: rotate the phone, or arrive on this screen
+    // before it has been laid out, and every section would keep declaring a
+    // height computed for a width that is no longer true.
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(read) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener("scroll", read);
+      ro?.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Where each section starts, and how tall it is. Derived from the model, never
+  // measured from the DOM — the whole point is that it's known before the rows
+  // exist.
+  const { cols, cellH } = gridMetrics(view.width);
+  const offsets = useMemo(() => {
+    const out: { tier: Rating; top: number; height: number }[] = [];
+    let top = 0;
+    for (const s of model.sections) {
+      const height = grid ? gridSectionHeight(s, cols, cellH) : sectionHeight(s);
+      out.push({ tier: s.tier, top, height });
+      top += height;
+    }
+    return out;
+  }, [model, grid, cols, cellH]);
+
 
   /**
    * Which row is under this point, as an index into `displayOrder`.
@@ -965,15 +1124,32 @@ export default function ListScreen({
             on the WHOLE library in one order, so offering it from a filtered
             view would promise to cut something the reader cannot see. It needs
             `onFilms` because it writes, and a read-only list has none. */}
-        {onFilms && !searching && !flat && (
-          <button
-            onClick={() => setCutting(true)}
-            aria-label="Set where the tiers begin and end"
-            className="mt-2 w-full rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-[0.99]"
-          >
-            Set tiers
-          </button>
-        )}
+        {/* Beside the cut rather than under it: both act on how the list READS,
+            and a row of two is one line where two rows would be two. The grid
+            toggle stays available while searching and on the flat pages — it is
+            a reading mode and every page has something to read — so it is not
+            behind the same guard. */}
+        <div className="mt-2 flex gap-2">
+          {onFilms && !searching && !flat && (
+            <button
+              onClick={() => setCutting(true)}
+              aria-label="Set where the tiers begin and end"
+              className="flex-1 rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-[0.99]"
+            >
+              Set tiers
+            </button>
+          )}
+          {onGrid && (
+            <button
+              onClick={() => onGrid(!grid)}
+              aria-label={grid ? "Show the list as rows" : "Show the list as a grid"}
+              aria-pressed={grid}
+              className={`${onFilms && !searching && !flat ? "flex-1" : "w-full"} rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-dim active:scale-[0.99]`}
+            >
+              {grid ? "Rows" : "Grid"}
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -1016,7 +1192,7 @@ export default function ListScreen({
           // sheet nobody can see past.
           const onNumeral =
             e.target instanceof Element && !!e.target.closest("[data-lock]");
-          if (onFilms && !searching && !onNumeral) {
+          if (onFilms && !searching && !grid && !onNumeral) {
             const at = rowAt(t.clientY);
             const row = at ? displayOrder[at.at] : undefined;
             // ── Pinned rows drag too ──────────────────────────────────────
@@ -1167,18 +1343,28 @@ export default function ListScreen({
                     which rating they are looking at. HEADER_H is unchanged
                     either way, because every section offset is derived from it. */}
                 <TierRule stars={hideStars ? "" : starsFor(s.tier)} count={s.total} />
-                {s.placed.map((r: RankedFilm) => (
-                  <Row
-                    key={r.film.id}
-                    film={r.film}
-                    rank={r.rank}
+                {grid ? (
+                  <GridRows
+                    films={s.placed.map((r: RankedFilm) => r.film)}
+                    ranks={s.placed.map((r: RankedFilm) => r.rank)}
+                    cols={cols}
+                    cellH={cellH}
                     onInfo={onInfo}
-                    carried={carriedId === r.film.id}
-                    carriedBy={carriedBy}
-                    onUnpin={onFilms ? unpin : undefined}
-                    onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
                   />
-                ))}
+                ) : (
+                  s.placed.map((r: RankedFilm) => (
+                    <Row
+                      key={r.film.id}
+                      film={r.film}
+                      rank={r.rank}
+                      onInfo={onInfo}
+                      carried={carriedId === r.film.id}
+                      carriedBy={carriedBy}
+                      onUnpin={onFilms ? unpin : undefined}
+                      onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
+                    />
+                  ))
+                )}
                 {s.unplaced.length > 0 && (
                   <div
                     className="flex items-center gap-2.5"
@@ -1190,9 +1376,11 @@ export default function ListScreen({
                     <span className="h-px flex-1" style={{ background: "var(--border)" }} />
                   </div>
                 )}
-                {s.unplaced.map((f) => (
-                  <Row key={f.id} film={f} onInfo={onInfo} />
-                ))}
+                {grid ? (
+                  <GridRows films={s.unplaced} cols={cols} cellH={cellH} onInfo={onInfo} />
+                ) : (
+                  s.unplaced.map((f) => <Row key={f.id} film={f} onInfo={onInfo} />)
+                )}
               </section>
             );
           })

@@ -1087,6 +1087,8 @@ export default function AppShell() {
           // Neither may it move when the reader has said they don't want it to.
           frozen={showCoach || !prefs.listDrift}
           hideStars={prefs.hideStars}
+          grid={prefs.grid}
+          onGrid={(on) => changePrefs({ grid: on })}
         />
       ) : (
         <ProfileScreen

@@ -17,6 +17,42 @@ import { lex } from "@/lib/lexicon";
 const GATHER_MS = 450;
 
 /**
+ * The padlock on a settled film, and the way to unsettle it.
+ *
+ * ── Why the padlock and not a separate control ─────────────────────────────
+ *
+ * Reopening used to be a `×` crammed into the label slot beside the two nudge
+ * chevrons — three targets under a 50px poster, reported as awkward, and it
+ * meant locking and unlocking were two unrelated affordances in two places.
+ *
+ * The padlock is already on every settled cell and already means "settled". Tap
+ * it to unsettle. One rule that holds at both ends of the pile: the top shelf
+ * keeps its chevrons in the label slot, the bottom shelf names its state there,
+ * and neither needs a control invented for it.
+ *
+ * The button carries padding rather than sizing the icon up, because the icon is
+ * not a target on its own and the strip is scrolled past constantly.
+ */
+function LockToggle({ film, onReopen }: { film: Film; onReopen?: (id: string) => void }) {
+  if (!onReopen) {
+    return (
+      <span className="text-gold">
+        <LockIcon />
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={() => onReopen(film.id)}
+      aria-label={`Unlock ${film.title} and put it back in the pile`}
+      className="-my-1 px-2 py-1 text-gold active:scale-90"
+    >
+      <LockIcon />
+    </button>
+  );
+}
+
+/**
  * One unplaced film in the strip.
  *
  * Its own component rather than an inline branch because it carries the gather
@@ -379,7 +415,7 @@ export function Rolodex({
             commitment, pointed the other way. */}
         {lockedTail.map((film) => (
           <div key={film.id} className="flex w-[50px] flex-shrink-0 flex-col items-center gap-1">
-            <span className="text-gold"><LockIcon /></span>
+            <LockToggle film={film} onReopen={onReopen} />
             <div
               className="w-full overflow-hidden rounded-md bg-surface"
               style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
@@ -387,17 +423,11 @@ export function Rolodex({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
             </div>
-            {onReopen ? (
-              <button
-                onClick={() => onReopen(film.id)}
-                aria-label={`Unlock ${film.title} and put it back in the pile`}
-                className="text-label font-bold leading-none text-dim active:scale-90"
-              >
-                &times;
-              </button>
-            ) : (
-              <span className="text-label leading-none text-transparent">.</span>
-            )}
+            {/* Names the state, and keeps the shared baseline. With MAKE LAST on
+                the pile cell one slot to the right, the pair reads as one
+                control in two positions: tap to settle, tap the padlock to
+                unsettle, and the poster slides between them. */}
+            <span className="text-label font-bold tracking-wide text-gold/80">LAST</span>
           </div>
         ))}
         {lowToHigh.map((f) =>
@@ -465,7 +495,7 @@ export function Rolodex({
                 The strip's job is "this is settled"; the real number belongs
                 where it can say "#2 overall, #1 in 4★" (overallRank exists for
                 that). */}
-            <span className="text-gold"><LockIcon /></span>
+            <LockToggle film={film} onReopen={onReopen} />
             <div
               className="w-full overflow-hidden rounded-md bg-surface"
               style={{ aspectRatio: "2 / 3", boxShadow: "0 0 0 1.5px var(--gold)" }}
@@ -478,20 +508,11 @@ export function Rolodex({
                 it happens. Until now the only answers were to abandon the run or
                 fix it in the list afterwards, both heavier than the mistake.
                 Sits under the poster it moves, so there is nothing to find. */}
+            {/* Two targets here, not three. Taking the placement back moved to
+                the padlock above — see `LockToggle` — which leaves this row to
+                do the one thing it is shaped for. */}
             {onNudge ? (
               <div className="flex items-center gap-1.5">
-                {/* Taking a placement back, where the placement is. Being stuck
-                    with one until the run ends is what makes people abandon a
-                    run, and abandoning costs the whole pile's working order. */}
-                {onReopen && (
-                  <button
-                    onClick={() => onReopen(film.id)}
-                    aria-label={`Unlock ${film.title} and put it back in the pile`}
-                    className="text-dim active:scale-90"
-                  >
-                    <span className="text-label font-bold leading-none">&times;</span>
-                  </button>
-                )}
                 <button
                   onClick={() => onNudge(film.id, -1)}
                   aria-label={`Move ${film.title} up one place`}

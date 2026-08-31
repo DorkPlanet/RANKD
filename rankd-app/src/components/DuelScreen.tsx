@@ -2846,7 +2846,12 @@ function Duel({
   /** Commit that replayed step and move on to the next. */
   onReplay: () => void;
   mode: ReplayMode;
-  /** Lock the climber into last place instead of climbing it. See `confirmLast`. */
+  /**
+   * Lock the pile's bottom film into last place. See `confirmLast`.
+   *
+   * Only forwarded to the strip — the arena renders no control for it. The pile
+   * is not visible here, so the question it answers cannot be asked here.
+   */
   onLast?: () => void;
   /** Drop the climber straight into a slot in the pile. See `placeAt`. */
   onPlaceAt?: (index: number) => void;
@@ -3258,17 +3263,16 @@ function Duel({
             >
               Undo
             </button>
-            {/* ── "This is the worst of these" ──────────────────────────────
-                Only while the climber IS the bottom of the pile, because that is
-                exactly when the question is live and the answer is free: the
-                film is already where it would end up, and the whole climb ahead
-                of it exists only to prove a position nobody is arguing about.
-                Anywhere else it would be a claim about films it has passed. */}
-            {onLast && pile[pile.length - 1] === contender.id && !replay && (
-              <button onClick={onLast} className={CONTROL} style={{ color: "var(--accent)" }}>
-                Last
-              </button>
-            )}
+            {/* A "Last" control lived here and has gone to the strip. It was
+                gated on the climber BEING the pile's bottom film and on no
+                replay running — conditions that only coincide for the instant a
+                pass starts, which is exactly when a replay is most likely to be
+                running. So it almost never appeared.
+                It was also the wrong home. The arena shows two posters and a
+                choice between them; the pile is not visible here, so "this is
+                the worst of what's left" is not a thought this screen can
+                prompt. The strip is the only place the whole pile is on screen,
+                and that is where MAKE LAST lives now. */}
             {/* Done is the only one that ENDS something, so it carries a little
                 gold — the same accent the climber wears. Kept to 70% because
                 promoting "stop playing" into the brightest thing on screen
