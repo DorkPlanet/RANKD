@@ -13,6 +13,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { exportBackup, importBackup } from "@/lib/backup";
+import { downloadCsv } from "@/lib/exportCsv";
 import { filmsFromFile, mergeFilms } from "@/lib/importCsv";
 import { installRoute, readEnv } from "@/lib/install";
 import { clearLog, loadLog, logSize } from "@/lib/log";
@@ -215,11 +216,30 @@ export function Settings({
           still the right shape for a run OPTION (shuffle this run, let this
           refine move a locked film); see `Switch` in ui.tsx for the line. */}
       <SettingRow
-        className="mb-4"
+        className="mb-1"
         title="Let the list drift"
         blurb="Scrolls slowly on its own when you stop touching it"
         on={prefs.listDrift}
         onToggle={() => onPrefs({ listDrift: !prefs.listDrift })}
+      />
+
+      {/* ── Reading the list without the stars ──────────────────────────────
+          A star is an anchor: with them showing, the eye checks each film
+          against the rating it already has instead of against the film above
+          it. That is the wrong comparison when the question is where a tier
+          should end, which is what "Set tiers" on the list asks.
+
+          The blurb names the surfaces it does NOT cover. A toggle called "hide
+          stars" that leaves them on the profile and every share card is only
+          honest if it says so — and they stay deliberately, because a
+          preference about reading your own list should not quietly rewrite
+          what you publish. */}
+      <SettingRow
+        className="mb-4"
+        title={`Hide ${L.one} ratings`}
+        blurb="Stars off in the list and the film sheet, so you read position instead. Cards and your profile keep them."
+        on={prefs.hideStars}
+        onToggle={() => onPrefs({ hideStars: !prefs.hideStars })}
       />
 
       {/* ── Duels you have already settled ──────────────────────────────────
@@ -320,6 +340,25 @@ export function Settings({
             }}
           />
         </div>
+
+        {/* ── Back to where the library came from ─────────────────────────
+            The backup above is a bridge between two Rankd installs and nothing
+            else can read it. This is the other direction: the ratings you have
+            actually settled, in the file format the service you imported from
+            will take back. It is deliberately underneath, because it is the
+            rarer action and the backup is the load-bearing one. */}
+        <p className="mb-2 mt-4 text-sub text-dim">
+          Send your ratings back to {L.importFrom}. One row per {L.one}, ready to re-upload.
+        </p>
+        <SecondaryButton
+          onClick={() => {
+            downloadCsv(films);
+            setNote({ text: `Saved ${count(films.filter((f) => !f.guest).length)}.` });
+          }}
+          className="w-full"
+        >
+          Export CSV
+        </SecondaryButton>
         {note && (
           <p className={`mt-3 text-sub leading-snug ${note.bad ? "text-danger" : "text-gold"}`}>
             {note.text}

@@ -7,7 +7,7 @@
 // feature does not exist.
 
 import { describe, expect, it } from "vitest";
-import { buildBeliefOrder, buildList } from "@/lib/list";
+import { buildBeliefOrder, buildContinuousOrder, buildList } from "@/lib/list";
 import type { Belief } from "@/lib/bayes";
 import type { Film } from "@/lib/types";
 import type { Rating } from "@/lib/tiers";
@@ -85,5 +85,54 @@ describe("buildBeliefOrder", () => {
 
   it("is empty when nothing has been placed", () => {
     expect(buildBeliefOrder([film("x", 4, { lock: undefined })], beliefs({}))).toEqual([]);
+  });
+});
+
+// ── The whole library, for the screen that cuts it into tiers ──────────────
+//
+// `buildContinuousOrder` differs from `buildBeliefOrder` in exactly two ways,
+// and both are the point: it includes unplaced films, and it numbers positions
+// rather than borrowing the master rank. The tests below pin both, and the last
+// one pins that adding it changed nothing about the page above.
+describe("buildContinuousOrder", () => {
+  it("includes unplaced films, because the cuts rate every film", () => {
+    // `buildBeliefOrder` leaves them out for a good reason. Here a list missing
+    // a third of the library would produce an export missing a third of it.
+    const films = [film("placed", 4), film("never", 5, { lock: undefined })];
+    const out = buildContinuousOrder(films, beliefs({ placed: 8, never: 10 }));
+    expect(out.map((r) => r.film.id)).toEqual(["never", "placed"]);
+  });
+
+  it("numbers positions 1..N with no gaps", () => {
+    // A gap is information everywhere else in the app. Here it would be a lie:
+    // somebody about to say "the top forty are 5-star" needs forty rows and
+    // "#40" to be the same place.
+    const films = [
+      film("a", 5),
+      film("b", 4, { lock: undefined }),
+      film("c", 3),
+      film("d", 2, { lock: undefined }),
+    ];
+    const out = buildContinuousOrder(films, beliefs({}));
+    expect(out.map((r) => r.rank)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("orders by the evidence, not by the tier band", () => {
+    const films = [film("favourite", 5), film("underdog", 3)];
+    const out = buildContinuousOrder(films, beliefs({ underdog: 9.4, favourite: 6.1 }));
+    expect(out.map((r) => r.film.id)).toEqual(["underdog", "favourite"]);
+  });
+
+  it("does not touch the library it is a view over", () => {
+    const films = [film("favourite", 5), film("underdog", 3)];
+    const before = JSON.stringify(films);
+    buildContinuousOrder(films, beliefs({ underdog: 9.4, favourite: 6.1 }));
+    expect(JSON.stringify(films)).toBe(before);
+  });
+
+  it("leaves buildBeliefOrder's contract alone", () => {
+    // The shuffled page still excludes unplaced films.
+    const films = [film("placed", 4), film("never", 5, { lock: undefined })];
+    expect(buildBeliefOrder(films, beliefs({})).map((r) => r.film.id)).toEqual(["placed"]);
   });
 });

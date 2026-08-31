@@ -115,6 +115,37 @@ export function buildBeliefOrder(
   ).map((film) => ({ film, rank: ranks.get(film.id)! }));
 }
 
+/**
+ * The whole library as one continuous order — what the tier cuts are placed on.
+ *
+ * ── Why this is not `buildBeliefOrder` ────────────────────────────────────
+ *
+ * Two differences, and both are the point.
+ *
+ * It includes UNPLACED films. `buildBeliefOrder` leaves them out for a good
+ * reason, written above: their belief is still the seed, so they sort on the
+ * strength of a star rating alone. That reason has not gone away — it is why
+ * the cut screen marks them. But the cuts write a rating to every film in the
+ * library, so every film has to be somewhere in the list being cut. A list that
+ * silently omitted a third of the library would produce an export missing a
+ * third of the library.
+ *
+ * And the number is the POSITION, `1..N` with no gaps, rather than `rankMap`'s
+ * master-order number. Everywhere else a gap is information — it is an unplaced
+ * film you can see sitting there. Here it would be a lie: the reader is about to
+ * say "the top forty are 5★", and if the visible numbers skip, forty rows and
+ * "#40" are different places.
+ *
+ * Read-only, like `buildBeliefOrder`. Nothing here writes; `applyCuts` in
+ * lib/cuts.ts is the only thing that does, and only when asked.
+ */
+export function buildContinuousOrder(
+  films: Film[],
+  beliefs: Map<string, Belief>,
+): RankedFilm[] {
+  return rankByBelief(films, beliefs).map((film, i) => ({ film, rank: i + 1 }));
+}
+
 export function buildList(films: Film[]): ListModel {
   const ranks = rankMap(films);
 

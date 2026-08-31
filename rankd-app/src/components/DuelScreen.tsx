@@ -2527,7 +2527,7 @@ function ShuffleSetup({
           <span className="block text-body text-text-hi">Fix ratings that look wrong</span>
           <span className="block text-sub leading-snug text-dim">
             {reRateOn
-              ? `A ${lex().one} that keeps beating better-rated ones has its stars changed to match.`
+              ? `Stars move both ways: up for a ${lex().one} that keeps beating better-rated ones, down for one that keeps losing.`
               : `Stars stay exactly as you set them, even when the duels disagree.`}
           </span>
         </span>

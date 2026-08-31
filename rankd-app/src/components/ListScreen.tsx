@@ -14,7 +14,7 @@ import { BottomNav, Header } from "./DuelScreen";
 import { buildBeliefOrder, buildList, searchList, type RankedFilm } from "@/lib/list";
 import { beliefsFor } from "@/lib/beliefs";
 import { applyMove, judgementsForMove, ratingAfterMove } from "@/lib/reorder";
-import { appendJudgements, loadLog } from "@/lib/log";
+import { appendJudgements, loadLog, retractJudgements } from "@/lib/log";
 import type { Judgement } from "@/lib/log";
 import { isHard, isPlaced } from "@/lib/lock";
 import { tierProgress } from "@/lib/progress";
@@ -25,6 +25,7 @@ import type { FilmMeta } from "@/lib/meta";
 import type { Film } from "@/lib/types";
 import { FIELD, Sheet } from "./ui";
 import { ChevronIcon } from "./Icons";
+import { TierCut } from "./TierCut";
 import { lex } from "@/lib/lexicon";
 
 // Fixed row metrics. Building all 828 rows at once measured a 748ms blocked
@@ -73,7 +74,10 @@ const CHUNK = 25;
  * hold that means one thing on a row and another on the number inside it must
  * at least take the same length of time.
  */
-const HOLD_MS = 380;
+// Long enough that resting a thumb on a row you are reading is not a gesture.
+// It was 380ms, which is both a comfortable deliberate press AND about how long
+// people pause before flicking a long list — so the two were indistinguishable.
+const HOLD_MS = 500;
 
 function FlatRows({
   rows,
@@ -149,6 +153,7 @@ export default function ListScreen({
   logging,
   onToggleLog,
   frozen,
+  hideStars,
 }: {
   films: Film[];
   /**
@@ -164,6 +169,19 @@ export default function ListScreen({
    * overlay, so nothing the reader does can bump it back to idle either.
    */
   frozen?: boolean;
+  /**
+   * Draw no star ratings on the rows or the tier rules.
+   *
+   * The reader's preference (lib/prefs.ts). A star is an anchor: with them
+   * showing, the eye checks each film against the rating it already has rather
+   * than against the film above it. Off, the list is one run of films.
+   *
+   * The shuffled page IGNORES this and always draws them, because that page
+   * exists to show a 3-star sitting above a 4-star and without the stars on the
+   * row that is invisible — hiding them there would leave a list that has
+   * silently stopped saying anything.
+   */
+  hideStars?: boolean;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -193,6 +211,13 @@ export default function ListScreen({
 }) {
   const [q, setQ] = useState("");
   const [jumpOpen, setJumpOpen] = useState(false);
+  // ── Deciding where the tiers fall, by hand ───────────────────────────────
+  //
+  // A separate screen rather than a fourth page of this one. See the note at
+  // the top of TierCut.tsx: it wants a different list, different rows and no
+  // drag, and threading that through here would have meant teaching every
+  // interaction on this screen to stand down.
+  const [cutting, setCutting] = useState(false);
   // ── The model's own opinion, for the shuffled page ───────────────────────
   //
   // Loaded rather than passed: the log is 500KB of tuple rows and every other
@@ -436,14 +461,44 @@ export default function ListScreen({
     return out;
   }, [model]);
 
+  // Declared up here rather than beside the other drag state, because the scroll
+  // listener immediately below is what cancels it.
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+
   const [view, setView] = useState({ top: 0, height: 900 });
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const read = () => setView({ top: el.scrollTop, height: el.clientHeight });
+    const read = () => {
+      setView({ top: el.scrollTop, height: el.clientHeight });
+      // ── If the list moved, you were scrolling ────────────────────────────
+      //
+      // The touchmove guard cancels a pending hold once the finger has travelled
+      // 8px, and on its own it is not enough: it only fires if a touchmove
+      // ARRIVES before the timer does. Put a finger down, read the row for a
+      // third of a second, then scroll, and the drag arms first — the list
+      // locks, the row follows your thumb, and letting go drops it wherever you
+      // stopped. Reported as "it selects a film as I'm scrolling and then
+      // replaces it, I have no idea where".
+      //
+      // Not a cosmetic slip. `dropAt` appends evidence, CHANGES THE FILM'S STAR
+      // RATING through `ratingAfterMove`, and re-spreads the bands — and until
+      // now this screen had no undo to take any of it back.
+      //
+      // Scroll position is the honest test, and it is the one signal that holds
+      // whoever is driving: a fling belongs to the compositor and it dispatches
+      // touchmove on its own terms, but if `scrollTop` has moved then the
+      // gesture was a scroll and no drag may arm out of it.
+      cancelHold();
+    };
     read();
     el.addEventListener("scroll", read, { passive: true });
     return () => el.removeEventListener("scroll", read);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -482,11 +537,36 @@ export default function ListScreen({
   /** The film whose placement is being changed, and where it currently sits. */
   const [lockFor, setLockFor] = useState<{ film: Film; rank: number } | null>(null);
 
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const cancelHold = () => {
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    holdTimer.current = null;
-  };
+  /**
+   * The last drop, kept so it can be named on screen and taken back.
+   *
+   * Holds the whole pre-move library rather than a way to reverse the move — see
+   * `dropAt` for why an inverse is not exact.
+   */
+  const [lastMove, setLastMove] = useState<{
+    id: string;
+    title: string;
+    to: number;
+    films: Film[];
+    judgements: string[];
+    log: Judgement[];
+    /**
+     * A counter, so two moves in a row each get their own announcement rather
+     * than the second being swallowed as "no change". Not a clock: `dropAt` is
+     * an ordinary function in the render body, and reading the time there is
+     * impure whether or not it is only ever reached from a gesture.
+     */
+    at: number;
+  } | null>(null);
+
+  // Long enough to read and reach, short enough not to sit over the list. The
+  // move is already committed either way — this is a chance to take it back, not
+  // a confirmation the drop is waiting on.
+  useEffect(() => {
+    if (!lastMove) return;
+    const t = setTimeout(() => setLastMove(null), 6000);
+    return () => clearTimeout(t);
+  }, [lastMove]);
 
   /**
    * Land the drag: write the evidence, move the rating if it crossed a
@@ -519,6 +599,44 @@ export default function ListScreen({
     // `lock` is untouched, so the model may still revise this the moment real
     // duels disagree, which is what "for the moment" asks for.
     onFilms?.(applyMove(films, displayOrder, from, to, ratingAfterMove(displayOrder, from, to)));
+
+    // ── Say what just happened, and offer it back ─────────────────────────
+    //
+    // A drop rewrites three things — the order, the evidence, and the film's
+    // STAR RATING — and until now it announced none of them. The rating is the
+    // one that stings: you drag a film two rows and it silently becomes a 4★.
+    //
+    // The whole pre-move library is kept rather than an inverse operation.
+    // `applyMove` re-spreads every affected band, so undoing it by moving the
+    // film back would leave every neighbour's score subtly different from where
+    // it started. Keeping the array is exact, and it is what the duel screen's
+    // undo already does for the same reason.
+    setLastMove({
+      id: moved.id,
+      title: moved.title,
+      to: to + 1,
+      films,
+      judgements: rows.map((r) => r.id),
+      log,
+      at: (lastMove?.at ?? 0) + 1,
+    });
+  };
+
+  /**
+   * Put the library back exactly as it was before the last drop.
+   *
+   * Retracts first, so the evidence and the placement move together: a row left
+   * behind would keep arguing for a position the reader has just taken back, and
+   * `retractJudgements` tombstones it so the retraction survives a device merge
+   * rather than being undone by the next sync.
+   */
+  const undoMove = () => {
+    const m = lastMove;
+    if (!m) return;
+    void retractJudgements(m.judgements);
+    setLog(m.log);
+    onFilms?.(m.films);
+    setLastMove(null);
   };
 
   /**
@@ -835,6 +953,27 @@ export default function ListScreen({
             </>
           )}
         </div>
+
+        {/* ── Where the tiers begin and end ───────────────────────────────
+            Under the search bar rather than inside it: the field already has a
+            control at its trailing edge (the jump arrow is absolutely
+            positioned against that edge), and a second one there would sit on
+            top of it. Its own line is also the honest shape — this opens a
+            screen, where everything else on this row acts on the list in place.
+
+            Hidden while searching and on the shuffled page. The cut is placed
+            on the WHOLE library in one order, so offering it from a filtered
+            view would promise to cut something the reader cannot see. It needs
+            `onFilms` because it writes, and a read-only list has none. */}
+        {onFilms && !searching && !flat && (
+          <button
+            onClick={() => setCutting(true)}
+            aria-label="Set where the tiers begin and end"
+            className="mt-2 w-full rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-[0.99]"
+          >
+            Set tiers
+          </button>
+        )}
       </div>
 
       <div
@@ -996,9 +1135,9 @@ export default function ListScreen({
             <div className="pt-3">
               {results.map((r) =>
                 "rank" in r ? (
-                  <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} showStars />
+                  <Row key={r.film.id} film={r.film} rank={r.rank} onInfo={onInfo} showStars={!hideStars} />
                 ) : (
-                  <Row key={r.id} film={r} onInfo={onInfo} showStars />
+                  <Row key={r.id} film={r} onInfo={onInfo} showStars={!hideStars} />
                 ),
               )}
             </div>
@@ -1020,7 +1159,14 @@ export default function ListScreen({
             if (!near) return <div key={s.tier} style={{ height: o.height }} />;
             return (
               <section key={s.tier} data-tier={s.tier} style={{ height: o.height }}>
-                <TierRule stars={starsFor(s.tier)} count={s.total} />
+                {/* The rule stays whatever the preference says — it is what
+                    keeps the sections apart, and a list of eight hundred rows
+                    with no divisions at all is a different screen. Only the
+                    stars come off it; the count still says how big the block
+                    is, so the reader can see where they are without being told
+                    which rating they are looking at. HEADER_H is unchanged
+                    either way, because every section offset is derived from it. */}
+                <TierRule stars={hideStars ? "" : starsFor(s.tier)} count={s.total} />
                 {s.placed.map((r: RankedFilm) => (
                   <Row
                     key={r.film.id}
@@ -1078,6 +1224,30 @@ export default function ListScreen({
         />
       )}
 
+      {/* ── What just moved, and the way back ────────────────────────────────
+          Sits above the nav rather than at the top of the screen, because it is
+          about the thumb that just did something, not about the list as a whole.
+          Announced for EVERY move, not only large ones: the complaint was never
+          that big moves are unclear, it is that moves happen unannounced. */}
+      {lastMove && (
+        <div
+          key={lastMove.at}
+          className="tip fixed inset-x-3 z-30 flex items-center justify-between gap-3 rounded-xl border border-border px-4 py-3"
+          style={{ bottom: "calc(var(--nav-h) + 12px)", background: "var(--surface)" }}
+        >
+          <span className="min-w-0 flex-1 text-sub text-text-hi">
+            <span className="truncate font-bold">{lastMove.title}</span>
+            <span className="text-dim"> moved to #{lastMove.to}</span>
+          </span>
+          <button
+            onClick={undoMove}
+            className="flex-shrink-0 text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-95"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
       {lockFor && (
         <LockSheet
           film={lockFor.film}
@@ -1102,6 +1272,14 @@ export default function ListScreen({
         logging={logging}
         onToggleLog={onToggleLog}
       />
+
+      {/* Mounted only while it is open, so the belief fit it does on the way in
+          happens when the reader asks for it and not on every list render. It
+          needs the log, which arrives asynchronously — the button is drawn
+          before then, so this guards rather than assuming. */}
+      {cutting && log && onFilms && (
+        <TierCut films={films} log={log} onFilms={onFilms} onClose={() => setCutting(false)} />
+      )}
     </main>
   );
 }

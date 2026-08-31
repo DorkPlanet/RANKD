@@ -642,11 +642,21 @@ export default function ShuffleDuel({
     // mistake the credits sweep made when it rewrote the entire library per
     // film. The two films just duelled are the only ones whose evidence moved.
     //
+    // That paragraph described the INTENT and not the code. `reRate` swept
+    // whatever array it was handed and `settled` is the whole library, so every
+    // eligible film was re-rated on every tap — and since the refit below moves
+    // every mean at once, the tap after a refit emptied out a chunk of a tier.
+    // The pair is passed explicitly now; see the `candidates` note on reRate.
+    //
+    // `movePlaced` goes with it. A re-rating respreads the tier it left and the
+    // tier it joined, and it used to do both with hard locks unpinned whatever
+    // the user had ticked.
+    //
     // Skipped entirely on a cross-tier or read-only run, for the reason those
     // skip placement: their duels are not evidence about where a film belongs.
     const rerating =
       options.reRate && !crossTier && !readOnly
-        ? reRate(settled, nextBeliefs)
+        ? reRate(settled, [a, b], nextBeliefs, options.movePlaced ?? options.includeConfirmed)
         : null;
     const placed = rerating ? rerating.films : settled;
 

@@ -22,7 +22,7 @@
 import { confidenceFromSpread, type Belief } from "./bayes";
 import { seedOf } from "./beliefs";
 import { isHard, isPlaced, isSoft } from "./lock";
-import { seedScore, tierMax, tierMin, type Rating } from "./tiers";
+import { tierMax, tierMin, type Rating } from "./tiers";
 import type { Film } from "./types";
 
 /**
@@ -118,6 +118,32 @@ export const PLACE_CONFIDENCE = 0.55;
  */
 export const PLACE_DUELS = 5;
 
+/**
+ * How far past the rounding boundary a belief must sit before it may overturn a
+ * star the user gave.
+ *
+ * ── Why a plain round was not enough ───────────────────────────────────────
+ *
+ * `ratingFromBelief` is `Math.round(mean) / 2`, the honest inverse of the seed,
+ * and as a READING of a belief it is correct. As a TRIGGER it was far too
+ * sensitive: 4.5★ seeds at 9.0, so a film flipped to 4★ the moment its mean
+ * touched 8.499 — a distance of half a point on a scale whose prior spread is
+ * 3 (`PRIOR_SPREAD`) and whose prior precision is therefore only 1/9. Five
+ * duels move a mean much further than that, so a densely-duelled tier had
+ * roughly its bottom half sitting the wrong side of the boundary by
+ * construction, and one tap re-rated the lot.
+ *
+ * The margin moves the trigger from 0.5 away from the seed to 1.0 — a full
+ * tier of separation on the doubled scale. The claim being made is "this was
+ * never a 4.5★", and that claim should need a tier's worth of evidence, not a
+ * rounding error's worth.
+ *
+ * Symmetric by design. An asymmetric rule — freer to promote than demote — is
+ * the trap `redistributeRatings` in lib/ladder.ts was written to avoid: ratings
+ * that can only travel one way inflate a library a little every run.
+ */
+export const RERATE_MARGIN = 0.5;
+
 // ── Stage two: how settled a film is, on a scale that can actually reach 1 ──
 //
 // Raw confidence CANNOT reach 1. `confidenceFromSpread` is 1 - spread/PRIOR,
@@ -197,7 +223,21 @@ export function respreadTier(
   const inTier = films.filter((f) => f.rating === tier);
   if (inTier.length === 0) return [...films];
 
-  const byBelief = (a: Film, b: Film) => meanOf(b, beliefs) - meanOf(a, beliefs) || a.id.localeCompare(b.id);
+  // ── Why the tie-break is the score and not the id ────────────────────────
+  //
+  // `meanOf` falls back to `seedOf` — rating × 2 — for a film with no belief,
+  // and every film in a tier has the same rating by definition. So EVERY
+  // undueled film in the tier ties at exactly the same mean, and an id
+  // tie-break laid the untouched majority out in ALPHABETICAL order on every
+  // respread. Rough Cut writes scores and deliberately sets no lock, so the
+  // films a user had just hand-sorted were precisely the ones with nothing
+  // pinning them — their cut was scattered by a duel between two other films.
+  //
+  // Falling back to the existing score makes an untouched tier a no-op: the
+  // order it already had IS the order it keeps. The id compare stays as the
+  // last resort so the sort is still total and deterministic.
+  const byBelief = (a: Film, b: Film) =>
+    meanOf(b, beliefs) - meanOf(a, beliefs) || b.score - a.score || a.id.localeCompare(b.id);
 
   let ordered: Film[];
   if (movePlaced) {
@@ -299,16 +339,36 @@ export function ratingFromBelief(mean: number): Rating {
  *   rewrites something the user said, so a film needs both the duels and the
  *   confidence, not whichever it reaches first.
  * · Guests, which are not in the library to re-rate.
+ * · Any film that was not just duelled. See `candidates`.
+ * · A belief that has not cleared `RERATE_MARGIN`.
+ *
+ * ── `candidates`, and the bug that made it required ────────────────────────
+ *
+ * This used to sweep whatever array it was handed, and the shuffle hands it the
+ * WHOLE LIBRARY. So every eligible film in the library was re-rated on every
+ * single answer — and because the run re-derives the entire model from the
+ * entire log every `REFIT_EVERY` answers, every mean moved at once and the very
+ * next tap could re-rate dozens of films the user had never seen on screen.
+ * That is the reported bug: a 4.5★ tier emptying out in one session.
+ *
+ * The call site's own comment already said what should happen — "only the pair,
+ * never the whole library" — so this is the parameter that makes that true.
+ * Only films named here are ASKED; every refusal above still decides the
+ * answer, and every other film passes through untouched.
  */
 export function reRate(
   films: readonly Film[],
+  candidates: readonly Film[],
   beliefs: Map<string, Belief>,
+  movePlaced: boolean,
   threshold = PLACE_CONFIDENCE,
   minDuels = PLACE_DUELS,
 ): { films: Film[]; changed: { id: string; from: Rating; to: Rating }[] } {
   const changed: { id: string; from: Rating; to: Rating }[] = [];
+  const asked = new Set(candidates.map((f) => f.id));
 
   const next = films.map((f) => {
+    if (!asked.has(f.id)) return f;
     if (f.guest || isHard(f)) return f;
     if ((f.duels ?? 0) < minDuels) return f;
 
@@ -318,22 +378,37 @@ export function reRate(
 
     const to = ratingFromBelief(belief.mean);
     if (to === f.rating) return f;
+    // Past the boundary is not enough — see RERATE_MARGIN. `seedOf` is where
+    // this film's own stars sit on the belief scale, so this asks how far the
+    // evidence has actually travelled from what the user said.
+    if (Math.abs(belief.mean - seedOf(f)) < 0.5 + RERATE_MARGIN) return f;
 
     changed.push({ id: f.id, from: f.rating, to });
-    // Seeded at the new tier's midpoint rather than placed within it. Its
-    // position among its new neighbours is a question no duel has been asked
-    // yet — the respread below answers it from the belief it already has.
-    return { ...f, rating: to, score: seedScore(to) };
+    // Landed at the EDGE of the new band nearest where it came from, not the
+    // midpoint. `seedScore` is the midpoint, and using it dropped a film that
+    // had just barely lost its 4.5★ into the middle of the 4★s — below films it
+    // has never been compared with and may well beat. The edge is the smallest
+    // move consistent with the claim being made. The respread below still
+    // settles its real position from the belief; this only decides where it
+    // starts from if the belief has nothing to say about its new neighbours.
+    return { ...f, rating: to, score: to < f.rating ? tierMax(to) : tierMin(to) };
   });
 
   if (changed.length === 0) return { films: [...films], changed };
 
   // Both tiers are now wrong: the one it left has a gap and the one it joined
-  // has an unplaced arrival sitting at the midpoint. Respread settles both.
+  // has an unplaced arrival sitting at the edge. Respread settles both.
+  //
+  // `movePlaced` is threaded rather than hardcoded to `true`, which is what it
+  // was. `true` unpins HARD locks (see respreadTier), so a single demotion
+  // re-sorted every placement the user had committed in BOTH tiers by belief —
+  // while the tickbox above it in the sheet promised those films would stay
+  // exactly where they were put. A re-rating is the model revising its own
+  // opinion; it does not license revising the user's.
   const touched = next.filter((f) => changed.some((c) => c.id === f.id));
   const fromTiers = changed.map((c) => c.from);
-  let out = respreadFor(next, touched, beliefs, true);
-  for (const tier of new Set(fromTiers)) out = respreadTier(out, tier, beliefs, true);
+  let out = respreadFor(next, touched, beliefs, movePlaced);
+  for (const tier of new Set(fromTiers)) out = respreadTier(out, tier, beliefs, movePlaced);
 
   return { films: out, changed };
 }

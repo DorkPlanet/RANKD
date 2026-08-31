@@ -1086,6 +1086,7 @@ export default function AppShell() {
           // A tutorial is a held moment. Nothing behind it may move.
           // Neither may it move when the reader has said they don't want it to.
           frozen={showCoach || !prefs.listDrift}
+          hideStars={prefs.hideStars}
         />
       ) : (
         <ProfileScreen

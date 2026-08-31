@@ -86,6 +86,32 @@ describe("respreadTier", () => {
     expect(orderOf(once, 4)).toEqual(orderOf(twice, 4));
   });
 
+  it("breaks a tie on the order the tier already had, not on the id", () => {
+    // Idempotence — the test above — is not enough, and this is the gap it left.
+    // `meanOf` falls back to `seedOf` (rating × 2) for a film with no belief,
+    // and every film in a tier has the same rating, so EVERY undueled film ties
+    // at exactly the same mean. An id tie-break therefore laid the untouched
+    // majority of a tier out ALPHABETICALLY on every respread — and Rough Cut
+    // writes scores while deliberately setting no lock, so the films a user had
+    // just hand-sorted were exactly the ones with nothing pinning them. Their
+    // cut was scattered by a duel between two other films.
+    //
+    // Ids ascending, scores descending: if the id ever wins, this flips.
+    const library = [film("a", 4, 7100), film("b", 4, 7500), film("c", 4, 7900)];
+    const none = beliefs({});
+    expect(orderOf(respreadTier(library, 4, none, true), 4)).toEqual(["c", "b", "a"]);
+    expect(orderOf(respreadTier(library, 4, none, false), 4)).toEqual(["c", "b", "a"]);
+  });
+
+  it("is a no-op on a tier no duel has touched", () => {
+    // The consequence that matters to the person using it: playing a duel in
+    // one part of the library must not renumber a tier it never asked about.
+    const library = [film("a", 4, 7100), film("b", 4, 7500), film("c", 4, 7900)];
+    const before = orderOf(library, 4);
+    const after = orderOf(respreadTier(library, 4, beliefs({}), false), 4);
+    expect(after).toEqual(before);
+  });
+
   describe("when the run has NOT opted into moving placed films", () => {
     it("keeps HARD-locked films in their existing order, whatever the model thinks", () => {
       const library = [

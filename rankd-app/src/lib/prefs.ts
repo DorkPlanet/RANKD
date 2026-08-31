@@ -49,6 +49,28 @@ export interface Prefs {
    * own. It survives as a choice for people who have made their peace with it.
    */
   replay: ReplayMode;
+  /**
+   * Whether the list shows the star rating on each row and its tier headers.
+   *
+   * ── Why somebody would want this ───────────────────────────────────────
+   *
+   * A star is an anchor. Reading down a list with them showing, the eye checks
+   * each film against the rating it already has rather than against the film
+   * above it — which is exactly the wrong comparison when the question is
+   * "where does this tier actually end". Off, the list is one continuous run of
+   * films and the boundaries are the reader's to place.
+   *
+   * ── Deliberately not everywhere ────────────────────────────────────────
+   *
+   * This covers the surfaces read WHILE RANKING: the list rows, the tier rules,
+   * the film sheet. It does not touch share cards, the profile or achievements.
+   * Those are outbound artifacts — a starless card is a different design
+   * question, and a preference about how you read your own list has no business
+   * silently rewriting what you publish. The setting's blurb says so, because a
+   * toggle called "hide stars" that leaves them on four other screens is only
+   * honest if it admits which ones.
+   */
+  hideStars: boolean;
 }
 
 export type ReplayMode = "watch" | "quick" | "silent";
@@ -60,6 +82,9 @@ export const DEFAULT_PREFS: Prefs = {
   // Fast enough not to be a cutscene, visible enough that nothing moves
   // unexplained. See the field's own note for why this is not "silent".
   replay: "quick",
+  // Off: the stars are how the list has always read, and somebody who wants
+  // them gone will say so.
+  hideStars: false,
 };
 
 export function loadPrefs(): Prefs {
@@ -81,6 +106,10 @@ export function loadPrefs(): Prefs {
       replay: REPLAY_MODES.includes(parsed.replay as string)
         ? (parsed.replay as ReplayMode)
         : DEFAULT_PREFS.replay,
+      // Per-field for the same reason `listDrift` is: a stored "false" is
+      // truthy, and the toggle would read as on while the value says off.
+      hideStars:
+        typeof parsed.hideStars === "boolean" ? parsed.hideStars : DEFAULT_PREFS.hideStars,
     };
   } catch {
     return DEFAULT_PREFS;
