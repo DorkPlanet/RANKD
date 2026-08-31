@@ -50,6 +50,7 @@ export interface Prefs {
   /**
    * What happens when the climb reaches a duel you have already settled.
    *
+   *  · "ask"    — show it, and wait. The app decides nothing on its own.
    *  · "watch"  — play it back slowly. Every one, at a readable pace.
    *  · "quick"  — play it back fast, accelerating through a long run. Default.
    *  · "fast"   — as fast as the animation allows and still be seen at all.
@@ -98,7 +99,7 @@ export interface Prefs {
 }
 
 
-export type ReplayMode = "watch" | "quick" | "fast" | "silent";
+export type ReplayMode = "ask" | "watch" | "quick" | "fast" | "silent";
 
 export type DriftSpeed = "slow" | "medium" | "fast";
 
@@ -111,7 +112,7 @@ export const DRIFT_PX_PER_SEC: Record<DriftSpeed, number> = {
 
 const DRIFT_SPEEDS: readonly string[] = ["slow", "medium", "fast"];
 
-const REPLAY_MODES: readonly string[] = ["watch", "quick", "fast", "silent"];
+const REPLAY_MODES: readonly string[] = ["ask", "watch", "quick", "fast", "silent"];
 
 export const DEFAULT_PREFS: Prefs = {
   listDrift: true,

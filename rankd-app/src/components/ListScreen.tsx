@@ -226,6 +226,8 @@ function GridRows({
   onInfo,
   carried,
   carriedBy,
+  carriedAcross,
+  target,
 }: {
   films: Film[];
   /** Parallel to `films`. Absent for the un-rnkd block, which has no numbers. */
@@ -233,9 +235,12 @@ function GridRows({
   cols: number;
   cellH: number;
   onInfo: (film: Film) => void;
-  /** The cell under the finger, and how far it has travelled with it. */
+  /** The cell under the finger, and how far it has travelled with it — both axes. */
   carried?: string | null;
   carriedBy?: number;
+  carriedAcross?: number;
+  /** The cell the drop would take the place of. It is the whole indicator. */
+  target?: string | null;
 }) {
   if (films.length === 0) return null;
   return (
@@ -259,8 +264,26 @@ function GridRows({
           className={`flex min-h-0 flex-col items-center ${carried === film.id ? "" : "active:scale-[0.97]"}`}
           style={
             carried === film.id
-              ? { transform: `translateY(${carriedBy ?? 0}px) scale(1.04)`, zIndex: 20, position: "relative" }
-              : undefined
+              ? {
+                  // Follows the thumb in BOTH axes. It moved on Y alone before,
+                  // which read as sliding on a rail while the finger went where
+                  // it liked. `pointer-events: none` so the carried cell can
+                  // never hit-test as its own destination.
+                  transform: `translate(${carriedAcross ?? 0}px, ${carriedBy ?? 0}px) scale(1.06)`,
+                  zIndex: 20,
+                  position: "relative",
+                  pointerEvents: "none",
+                }
+              : target === film.id
+                ? {
+                    // The target says "me" by making room, rather than a mark
+                    // being drawn beside it. Shrinking is what reads as room:
+                    // a ring alone looks like selection, and selection is not
+                    // what is about to happen to it.
+                    transform: "scale(0.92)",
+                    transition: "transform 0.14s var(--ease)",
+                  }
+                : undefined
           }
         >
           {/* Deliberately NOT `.list-poster`. That class belongs to the row
@@ -269,7 +292,16 @@ function GridRows({
               cropped into a 190px box with a chasm of gap either side. It was
               only borrowed to inherit the idle poster-shake, which is not worth
               a broken grid. */}
-          <div className="w-full min-h-0 flex-1 overflow-hidden rounded-md bg-surface">
+          <div
+            className="w-full min-h-0 flex-1 overflow-hidden rounded-md bg-surface"
+            style={
+              carried === film.id
+                ? { boxShadow: "0 12px 30px var(--shadow-strong)" }
+                : target === film.id
+                  ? { boxShadow: "0 0 0 2px var(--gold), 0 0 16px color-mix(in srgb, var(--gold) 55%, transparent)" }
+                  : undefined
+            }
+          >
             {film.poster ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
@@ -401,9 +433,17 @@ export default function ListScreen({
     id: string;
     from: number;
     to: number;
-    /** Where the finger went down, so the carried row can follow it. */
+    /**
+     * Where the finger went down, so what is carried can follow it.
+     *
+     * Both axes. A row is the full width of the screen and only its Y means
+     * anything, but a grid cell has neighbours on four sides — carrying it on a
+     * vertical rail while the thumb moves freely is what "very rigid" was.
+     */
+    startX: number;
     startY: number;
     /** Where the finger is now, in client coordinates. */
+    x: number;
     y: number;
     /**
      * Where the landing line is drawn, in client coordinates.
@@ -416,17 +456,6 @@ export default function ListScreen({
      * merely the question.
      */
     lineY: number;
-    /**
-     * The left edge and height of the target cell, for the grid's indicator.
-     *
-     * A horizontal rule across the screen means "it lands between these two
-     * rows", which is the truth in a list and a lie in a grid — three films
-     * share every band there, so the same line would be claiming all of them.
-     * The grid draws a vertical bar down the leading edge of the one cell
-     * instead. Absent in rows, where the rule is right.
-     */
-    lineX?: number;
-    lineH?: number;
   } | null>(null);
   useEffect(() => {
     void loadLog().then(setLog);
@@ -866,6 +895,13 @@ export default function ListScreen({
   // which is most of what "it also looks a little off" was about: the row
   // stayed put while the finger left it behind.
   const carriedBy = drag ? drag.y - drag.startY : 0;
+  // Sideways travel. Rows ignore it — a row spans the screen, so moving one left
+  // means nothing — but a grid cell has neighbours on four sides, and carrying it
+  // on a vertical rail while the thumb moves freely is what "very rigid" was.
+  const carriedAcross = drag ? drag.x - drag.startX : 0;
+  // The film the drop would take the place of. In a grid this IS the indicator:
+  // the cell itself says "me" by making room, instead of a mark drawn beside it.
+  const targetId = drag && grid ? (displayOrder[drag.to]?.id ?? null) : null;
 
   /**
    * Hold the list still and follow the thumb.
@@ -896,16 +932,12 @@ export default function ListScreen({
       setDrag((d) => {
         if (!d) return d;
         const hit = rowAt(t.clientY, d.id, grid ? t.clientX : undefined);
+        // BOTH axes, always. Only the grid draws with the x, but recording it
+        // costs nothing and leaving it out is what pinned the carried cell to a
+        // vertical rail while the thumb went where it liked.
         return hit
-          ? {
-              ...d,
-              y: t.clientY,
-              to: hit.at,
-              lineY: hit.top,
-              lineX: hit.left,
-              lineH: hit.height,
-            }
-          : { ...d, y: t.clientY };
+          ? { ...d, x: t.clientX, y: t.clientY, to: hit.at, lineY: hit.top }
+          : { ...d, x: t.clientX, y: t.clientY };
       });
     };
     document.addEventListener("touchmove", onMove, { passive: false });
@@ -1285,7 +1317,9 @@ export default function ListScreen({
                   id: row.id,
                   from: at.at,
                   to: at.at,
+                  startX: t.clientX,
                   startY: t.clientY,
+                  x: t.clientX,
                   y: t.clientY,
                   lineY: at.top,
                 });
@@ -1396,6 +1430,8 @@ export default function ListScreen({
               onInfo={onInfo}
               carried={carriedId}
               carriedBy={carriedBy}
+              carriedAcross={carriedAcross}
+              target={targetId}
             />
           ) : (
             <FlatRows
@@ -1432,6 +1468,8 @@ export default function ListScreen({
                     onInfo={onInfo}
                     carried={carriedId}
                     carriedBy={carriedBy}
+                    carriedAcross={carriedAcross}
+                    target={targetId}
                   />
                 ) : (
                   s.placed.map((r: RankedFilm) => (
@@ -1481,31 +1519,25 @@ export default function ListScreen({
           three frames that all differ here, and the scroller can move under it.
           Safe because nothing on this screen is transformed while a drag is up:
           the page turn and the drag cannot both be happening. */}
-      {drag && (
+      {/* ── Rows only ────────────────────────────────────────────────────────
+          A rule across the screen means "it lands between these two", which is
+          the truth in a list and a lie in a grid: three films share every band
+          there, so the same mark would be claiming all of them. The grid drew a
+          2px bar down one cell's leading edge instead, which was a rows idea in
+          a grid's clothes and read as "awkward bars". It says nothing now — the
+          target CELL does the talking. See `targetId`. */}
+      {drag && !grid && (
         <div
           aria-hidden
           className="pointer-events-none fixed z-30"
-          style={
-            drag.lineX !== undefined
-              ? {
-                  // Grid: a bar down the leading edge of the cell it will take.
-                  top: drag.lineY,
-                  left: drag.lineX - 3,
-                  width: 2,
-                  height: drag.lineH,
-                  background: "var(--gold)",
-                  boxShadow: "0 0 10px var(--gold)",
-                }
-              : {
-                  // Rows: the gap it will land in, across the screen.
-                  top: drag.lineY,
-                  left: 12,
-                  right: 12,
-                  height: 2,
-                  background: "var(--gold)",
-                  boxShadow: "0 0 10px var(--gold)",
-                }
-          }
+          style={{
+            top: drag.lineY,
+            left: 12,
+            right: 12,
+            height: 2,
+            background: "var(--gold)",
+            boxShadow: "0 0 10px var(--gold)",
+          }}
         />
       )}
 

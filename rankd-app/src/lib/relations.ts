@@ -133,9 +133,21 @@ export function buildRelations(
   ids: readonly string[],
   log: readonly Judgement[],
   journal: readonly Judgement[] = [],
-  opts: { modes?: ReadonlySet<LogMode> } = {},
+  opts: { modes?: ReadonlySet<LogMode>; directOnly?: boolean } = {},
 ): Relations {
   const modes = opts.modes ?? EVIDENCE_MODES;
+  // ── Only pairs that actually met ──────────────────────────────────────────
+  //
+  // Normally a pair the user never saw still counts as settled when a chain
+  // implies it — that is the whole saving. One run wants the opposite reading:
+  // "rank this again, and find me match-ups I have never actually watched
+  // decide each other". There, an inference is not an answer, it is the very
+  // thing worth asking about.
+  //
+  // So this narrows `known` to the direct rows and never consults the closure.
+  // It is per-run, because the oracle is per-run state on `RankState` — nothing
+  // about the log or any other run changes.
+  const directOnly = opts.directOnly ?? false;
   const index = new Map<string, number>();
   ids.forEach((id, i) => index.set(id, i));
   const n = ids.length;
@@ -240,7 +252,9 @@ export function buildRelations(
       return a < b ? only : only === "a" ? "b" : "a";
     }
 
-    // 2. Never asked. Consult the closure.
+    // 2. Never asked. Consult the closure — unless this run only counts pairs
+    //    that have genuinely met, in which case there is nothing more to say.
+    if (directOnly) return null;
     const ab = reach(ai, bi);
     const ba = reach(bi, ai);
     // A cycle makes the closure claim BOTH directions. Acting on whichever was

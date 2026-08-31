@@ -468,6 +468,39 @@ export function SettingRow({
   );
 }
 
+/**
+ * "Only new match-ups" — rank a tier again and see films that never met.
+ *
+ * ── Why this needs the shuffle, and turns it on ────────────────────────────
+ *
+ * Re-ranking a finished tier does nothing today: the pile opens in score order,
+ * so every adjacent pair is one already judged, the replay settles the lot and
+ * you land on "nothing left to decide" without answering anything. New
+ * adjacencies are the entire supply of new questions, and only a reshuffle
+ * produces them — so ticking this ticks that, rather than silently doing nothing.
+ *
+ * It also narrows what counts as answered: normally a pair implied by a chain is
+ * settled, and here that is precisely the thing worth asking. See `directOnly`
+ * in lib/relations.ts.
+ *
+ * Deliberately says it will ASK more. This deepens the evidence rather than
+ * finishing a tier, and a setup sheet that implied otherwise would be lying.
+ */
+export function FreshPairsRow({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="mb-3 flex items-center justify-between rounded-xl border border-border px-4 py-3">
+      <span>
+        <span className="block text-body text-text-hi">Only new match-ups</span>
+        <span className="block text-sub leading-snug text-dim">
+          Shuffles the pile and asks only about films that have never actually met. Expect more
+          duels, not fewer.
+        </span>
+      </span>
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} className="tickbox" />
+    </label>
+  );
+}
+
 export function ShuffleRow({ shuffle, onShuffle }: { shuffle: boolean; onShuffle: (v: boolean) => void }) {
   return (
     <label className="mb-3 flex items-center justify-between rounded-xl border border-border px-4 py-3">

@@ -47,7 +47,7 @@ import { rankingState, stateAction, stateDetail, stateWhy } from "@/lib/stage";
 import { callFilms, libraryOpenCalls } from "@/lib/uncertain";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
-import { PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
+import { LastResult, PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
 import { Rolodex } from "./Rolodex";
 import { SessionEnd } from "./SessionEnd";
 import { RunSummary } from "./RunSummary";
@@ -68,6 +68,7 @@ import {
   SCRIM_ARM_MS,
   Sheet,
   SHEET_EXIT_MS,
+  FreshPairsRow,
   ShuffleRow,
   StartButton,
 } from "./ui";
@@ -236,6 +237,9 @@ export default function DuelScreen({
   };
 
   const [shuffle, setShuffle] = useState(false);
+  // Rank a tier again, seeing only pairings that have never actually met. See
+  // `FreshPairsRow` in ui.tsx for why it implies the shuffle.
+  const [freshPairs, setFreshPairs] = useState(false);
   // How far either side of the chosen tier to pull films in from, set
   // independently so a 1★ run can reach down to 0.5★ and up to 1.5★.
   const [below, setBelow] = useState(0);
@@ -261,6 +265,14 @@ export default function DuelScreen({
   // summary — the per-duel version is now the replay itself, which says far more
   // than a count ever did.
   const [skippedRun, setSkippedRun] = useState(0);
+  // ── What the replay actually did ────────────────────────────────────────
+  //
+  // `resolved` is one step long and never persisted, by design, so the moment
+  // the replay moves on there is no record of what it played. That is fine
+  // while it is on screen and useless afterwards: the count said six and could
+  // not say WHICH six. Kept for the run, cleared when a new one starts.
+  const [replayed, setReplayed] = useState<AutoStep[]>([]);
+  const [recapOpen, setRecapOpen] = useState(false);
   // ── Every commit, counted ────────────────────────────────────────────────
   //
   // A replayed duel commits 200ms into the poster's flight and the flight cannot
@@ -613,9 +625,18 @@ export default function DuelScreen({
   const pileKeySet = state?.session
     ? [...state.session.confirmed, ...state.session.unconfirmed].slice().sort().join(",")
     : "";
+  // Rebuilt on every render, so it has to know what the RUN decided about
+  // inferences. Without this it overwrites the direct-only oracle the run was
+  // started with — `armed` replaces `state.oracle` wholesale — and "only new
+  // match-ups" silently reverts to an ordinary replay that finishes without
+  // asking anything. See `PlacementSession.directOnly`.
+  const runDirectOnly = state?.session?.directOnly ?? false;
   const oracle = useMemo(
-    () => (pileKeySet ? buildRelations(pileKeySet.split(","), log) : undefined),
-    [pileKeySet, log],
+    () =>
+      pileKeySet
+        ? buildRelations(pileKeySet.split(","), log, [], { directOnly: runDirectOnly })
+        : undefined,
+    [pileKeySet, log, runDirectOnly],
   );
 
   // The run as it stands, for callbacks that fire later than the render that
@@ -645,7 +666,10 @@ export default function DuelScreen({
   // pool from a tier and a reach and this is the only set guaranteed to contain
   // it. One Warshall pass at run start — tens of milliseconds on a large
   // library, against the hours the run itself takes.
-  const startingOracle = () => buildRelations(state.films.map((f) => f.id), log);
+  // `directOnly` narrows the run to pairs that have genuinely met — see
+  // lib/relations.ts. Per run, because the oracle is per-run state.
+  const startingOracle = (directOnly = false) =>
+    buildRelations(state.films.map((f) => f.id), log, [], { directOnly });
 
   // The one way a state from the engine reaches the screen.
   //
@@ -663,10 +687,15 @@ export default function DuelScreen({
     // `resolved` lives on RankState and never on the session, so it cannot
     // round-trip through localStorage and re-announce itself on a resume.
     const auto = next.resolved?.length ?? 0;
-    if (auto > 0) setSkippedRun((n) => n + auto);
+    if (auto > 0) {
+      setSkippedRun((n) => n + auto);
+      const steps = next.resolved ?? [];
+      setReplayed((r) => [...steps, ...r]);
+    }
     // A new run starts its own tally.
     if (!state.session && next.session) {
       setSkippedRun(auto);
+      setReplayed(next.resolved ? [...next.resolved] : []);
       setPlayOnFor("");
     }
     // ── Catching the end of a run wherever it happens ────────────────────────
@@ -884,7 +913,19 @@ export default function DuelScreen({
     // startRun builds a state from films alone, so any duels not yet drained to
     // the log are carried across by hand rather than dropped.
     try {
-      commit({ ...startRun(films, tier, { shuffle, below, above, oracle: startingOracle() }), journal: state.journal }, false);
+      commit(
+        {
+          ...startRun(films, tier, {
+            shuffle: shuffle || freshPairs,
+            below,
+            above,
+            oracle: startingOracle(freshPairs),
+            directOnly: freshPairs,
+          }),
+          journal: state.journal,
+        },
+        false,
+      );
       onRunBegan?.();
       return true;
     } catch {
@@ -1085,6 +1126,21 @@ export default function DuelScreen({
   // `sheets` or its buttons do nothing.
   const sheets = (
     <>
+      {/* ── What the replay played, on request ──────────────────────────────
+          Quiet by choice: the count sits in the run's status line and nothing
+          appears unless it is tapped. The alternative — showing every replayed
+          duel as it happened — is the receipt that was tried and removed, and it
+          competed with the thing it was describing. */}
+      {recapOpen && (
+        <Sheet title="Already decided" onClose={() => setRecapOpen(false)}>
+          <p className="mb-2 text-sub leading-snug text-dim">
+            {replayed.length === 1
+              ? "One duel this run settled itself from what you had already answered."
+              : `${replayed.length} duels this run settled themselves from what you had already answered.`}
+          </p>
+          <LastResult results={replayLines(replayed, state.films)} />
+        </Sheet>
+      )}
       {modeOpen && (
         <ModePanel
           films={state.films}
@@ -1093,6 +1149,8 @@ export default function DuelScreen({
           onChoose={setChosenMode}
           shuffle={shuffle}
           onShuffle={setShuffle}
+          freshPairs={freshPairs}
+          onFreshPairs={setFreshPairs}
           below={below}
           above={above}
           onBelow={setBelow}
@@ -1579,6 +1637,8 @@ export default function DuelScreen({
           // saying KING OF THE HILL over it would be describing the climb it
           // interrupted rather than the three duels actually on screen.
           title={session?.promotionQueue ? "GOING UP A TIER" : "KING OF THE HILL"}
+          replayed={replayed.length}
+          onRecap={() => setRecapOpen(true)}
           run={{
             done: session?.confirmed.length ?? 0,
             total: (session?.confirmed.length ?? 0) + (session?.unconfirmed.length ?? 0),
@@ -2012,6 +2072,8 @@ function ModePanel({
   onChoose,
   shuffle,
   onShuffle,
+  freshPairs,
+  onFreshPairs,
   below,
   above,
   onBelow,
@@ -2031,6 +2093,8 @@ function ModePanel({
   onChoose: (v: ChosenMode) => void;
   shuffle: boolean;
   onShuffle: (v: boolean) => void;
+  freshPairs: boolean;
+  onFreshPairs: (v: boolean) => void;
   below: number;
   above: number;
   onBelow: (v: number) => void;
@@ -2288,7 +2352,9 @@ function ModePanel({
       </div>
 
       <div className="mt-2">
-        <ShuffleRow shuffle={shuffle} onShuffle={onShuffle} />
+        {/* Ticked by the row below, because that option is inert without it. */}
+        <ShuffleRow shuffle={shuffle || freshPairs} onShuffle={onShuffle} />
+        <FreshPairsRow on={freshPairs} onChange={onFreshPairs} />
       </div>
 
       <StartButton label={`Start · ${plural(count)}`} onClick={() => onKoth(tier)} disabled={!playable} />
@@ -3135,6 +3201,14 @@ function Duel({
       onReplay();
       return;
     }
+    // ── "Ask" schedules nothing ─────────────────────────────────────────────
+    //
+    // Everything the reader sees is already drawn from `replay` — the blue
+    // rings, the badge, the line saying why — so this mode is the absence of a
+    // timer rather than a second way of rendering. The duel sits there marked
+    // until a thumb settles it: tapping the marked winner agrees, tapping the
+    // other overrules, and both already work.
+    if (mode === "ask") return;
     const winner = replay.o === "a" ? contender.id : challenger.id;
     const n = streak.current;
     const startedAt = seqAt.current;
@@ -3480,6 +3554,24 @@ function Duel({
 // DIRECT — the climb kept re-serving pairs the user had literally already
 // fought, because each pass walks the same neighbours. The inferred wording is
 // still here and still correct, but it is the rare case, not the common one.
+
+/**
+ * The replayed duels, in the shape `LastResult` already speaks.
+ *
+ * That component was built for exactly this — newest at the top, older lines
+ * shrinking and fading, draws rendered as neither side winning — exported, and
+ * rendered nowhere until now. Keyed on `at`, so the ids double as the key when a
+ * step has no timestamp (an inferred one never does).
+ */
+function replayLines(steps: readonly AutoStep[], films: Film[]) {
+  const title = (id: string) => films.find((f) => f.id === id)?.title ?? id;
+  return steps.map((s, i) => ({
+    won: title(s.o === "b" ? s.b : s.a),
+    lost: title(s.o === "b" ? s.a : s.b),
+    at: s.at ?? i,
+    drew: s.o === "draw",
+  }));
+}
 
 /** What the winning poster says while its duel is being played back. */
 function wonBadge(step: AutoStep): string {

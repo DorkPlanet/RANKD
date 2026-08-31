@@ -361,3 +361,54 @@ describe("explain", () => {
     expect(r.explain("a", "b")).toEqual({ o: "draw", direct: { at: 12 } });
   });
 });
+
+describe("directOnly — only pairs that actually met", () => {
+  it("refuses a pair the closure would settle", () => {
+    // The whole point of the re-rank mode: an inference is not an answer there,
+    // it is the thing worth asking about.
+    const ids = ["a", "b", "c"];
+    const log = [beat("a", "b"), beat("b", "c")];
+    expect(buildRelations(ids, log).known("a", "c")).toBe("a");
+    expect(buildRelations(ids, log, [], { directOnly: true }).known("a", "c")).toBeNull();
+  });
+
+  it("still answers a pair that was judged", () => {
+    const r = buildRelations(["a", "b"], [beat("a", "b")], [], { directOnly: true });
+    expect(r.known("a", "b")).toBe("a");
+    expect(r.known("b", "a")).toBe("b");
+  });
+
+  it("still honours a remembered draw", () => {
+    // Declining to separate two films is something you did to that exact pair,
+    // so it survives the narrowing that drops inferences.
+    const r = buildRelations(["a", "b"], [j("a", "b", "draw")], [], { directOnly: true });
+    expect(r.known("a", "b")).toBe("draw");
+  });
+
+  it("still refuses a pair the record contradicts itself about", () => {
+    const r = buildRelations(["a", "b"], [beat("a", "b"), beat("b", "a")], [], { directOnly: true });
+    expect(r.known("a", "b")).toBeNull();
+  });
+
+  it("leaves `explain` agreeing with `known`", () => {
+    const ids = ["a", "b", "c"];
+    const r = buildRelations(ids, [beat("a", "b"), beat("b", "c")], [], { directOnly: true });
+    for (const x of ids) {
+      for (const y of ids) {
+        if (x === y) continue;
+        expect(r.explain(x, y)?.o ?? null).toBe(r.known(x, y));
+      }
+    }
+  });
+
+  it("turns a settled pile back into a pile with questions in it", () => {
+    // A finished tier: every adjacent pair judged, so the ordinary oracle calls
+    // the whole thing decided. Reading only what actually met, the pairs that
+    // were never shown come back as open — which is what makes a re-rank worth
+    // starting at all.
+    const ids = Array.from({ length: 6 }, (_, i) => `f${i}`);
+    const log = ids.slice(0, -1).map((id, i) => beat(id, ids[i + 1]));
+    expect(decidedOrder(ids, buildRelations(ids, log))).toEqual(ids);
+    expect(decidedOrder(ids, buildRelations(ids, log, [], { directOnly: true }))).toBeNull();
+  });
+});

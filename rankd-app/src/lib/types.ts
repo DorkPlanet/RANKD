@@ -223,6 +223,18 @@ export interface PlacementSession {
    * only the face's duel is recorded.
    */
   clusters?: string[][];
+  /**
+   * This run only counts pairs that have genuinely met.
+   *
+   * On the session rather than in the screen, because the oracle is rebuilt on
+   * every render from the pile and the log — so a flag held anywhere else is
+   * overwritten the moment anything re-renders, and the run silently goes back
+   * to treating an inference as an answer. It also has to survive a resume: a
+   * run picked up tomorrow is still the run you started.
+   *
+   * See `directOnly` in lib/relations.ts for what it narrows.
+   */
+  directOnly?: boolean;
 
   // A promotion run in progress: the contender is working through the weakest
   // films of the tier above, weakest first. Clearing them earns the promotion.

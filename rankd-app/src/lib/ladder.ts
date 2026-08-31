@@ -352,12 +352,15 @@ export function startRun(
     only,
     crossTier = false,
     oracle,
+    directOnly = false,
   }: {
     below?: number;
     above?: number;
     shuffle?: boolean;
     only?: string[];
     crossTier?: boolean;
+    /** Only count pairs that actually met. Recorded on the session. */
+    directOnly?: boolean;
     // What the user has already decided — see `advance`. A run over a pile that
     // is entirely settled walks straight to its first confirm without asking
     // anything, which is the point.
@@ -390,6 +393,7 @@ export function startRun(
     spanBelow: below,
     spanAbove: above,
     ...(crossTier ? { crossTier: true } : {}),
+    ...(directOnly ? { directOnly: true } : {}),
     ...(band ? { band } : {}),
     confirmed: [],
     unconfirmed,

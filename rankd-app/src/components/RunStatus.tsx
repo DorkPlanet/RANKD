@@ -79,6 +79,8 @@ export function RunStatus({
   /** Centre label: the mode's name. */
   title,
   idleLine,
+  replayed = 0,
+  onRecap,
 }: {
   films: Film[];
   log: readonly Judgement[];
@@ -95,6 +97,9 @@ export function RunStatus({
    * remainder and the two do not collide.
    */
   idleLine?: string;
+  /** How many duels this run settled from the record, and how to see them. */
+  replayed?: number;
+  onRecap?: () => void;
 }) {
   const hardNow = films.filter(isHard).length;
   const [sitting] = useState(() => openSitting(hardNow));
@@ -145,6 +150,19 @@ export function RunStatus({
             whole zone rather than a table above a title. */}
         <p className="mt-2.5 text-center text-label font-bold uppercase tracking-[0.14em] text-dim tabular-nums">
           {line}
+          {/* ── What the replay settled, on request ────────────────────────
+              A count, not a list. Showing every replayed duel as it happened
+              was tried and removed: it competed with the thing it described.
+              This sits in a line the reader already reads and says nothing
+              more unless it is tapped. */}
+          {onRecap && replayed > 0 && (
+            <>
+              <span className="text-dim/50"> · </span>
+              <button onClick={onRecap} className="underline underline-offset-4 text-gold/80 active:scale-95">
+                {replayed} already decided
+              </button>
+            </>
+          )}
         </p>
       </div>
     </div>

@@ -51,9 +51,12 @@ const DRIFT_ORDER = ["slow", "medium", "fast"] as const;
 const DRIFT_LABELS = ["Slow", "Medium", "Fast"] as const;
 
 // The replay control's three states, in the order they read: most shown to least.
-const REPLAY_ORDER = ["watch", "quick", "fast", "silent"] as const;
-const REPLAY_LABELS = ["Watch", "Quick", "Fast", "Skip"] as const;
+// "Ask" and not "Wait", which differs from "Watch" by one letter in a row where
+// the two would sit side by side.
+const REPLAY_ORDER = ["ask", "watch", "quick", "fast", "silent"] as const;
+const REPLAY_LABELS = ["Ask", "Watch", "Quick", "Fast", "Skip"] as const;
 const REPLAY_BLURB: Record<Prefs["replay"], string> = {
+  ask: "Shows what you picked, and waits for you",
   watch: "Every one plays out in full",
   quick: "Plays fast, and speeds up through a long run",
   fast: "Barely pauses — you see it happen, not what it was",
