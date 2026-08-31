@@ -43,6 +43,7 @@ import { ORDERED_TIERS, starsFor, tierCounts, type Rating } from "@/lib/tiers";
 import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
 import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/lib/log";
 import { poolFor } from "@/lib/matchmaker";
+import { rankingState, stateAction, stateDetail, stateWhy } from "@/lib/stage";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
 import { PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
@@ -1275,7 +1276,53 @@ export default function DuelScreen({
   // it against. Any new full-surface return above the shuffle branch needs this
   // guard too.
   if (!session && !runResult && !activeRun) {
-    const placedNow = state.films.filter(isPlaced).length;
+    // ── What this library needs next ────────────────────────────────────────
+    //
+    // Derived, never stored — see lib/stage.ts. The screen reports it and the
+    // primary button acts on it, so the reader is told what the next decision is
+    // rather than asked which of four games they would like to play.
+    const rankState = rankingState(state.films, log);
+
+    /**
+     * Open the tool the stage asks for, with its defaults already chosen.
+     *
+     * Every branch lands on a live run rather than on that mode's setup sheet:
+     * a suggestion that opens another form has not saved anybody anything. The
+     * settings are all pre-filled anyway, and `Pick a mode` underneath is there
+     * for anyone who wants to change them.
+     *
+     * Falls back to the sheet rather than doing nothing if a run cannot start —
+     * `startRun` throws on a pool of fewer than two, and a dead primary button
+     * is worse than a menu.
+     */
+    const startSuggested = () => {
+      if (rankState.next === "import" || rankState.next === null) {
+        if (rankState.stage === "settled") return onList();
+        return setModeOpen(true);
+      }
+      if (rankState.next === "shuffle") {
+        // Every tier at once: this is the only mode that works library-wide, and
+        // that breadth is the entire reason it comes first.
+        return startShuffle({ scope: { kind: "all" }, includeConfirmed: false, batch: 50 });
+      }
+      const tier = rankState.tier;
+      if (tier === undefined) return setModeOpen(true);
+      if (rankState.next === "roughcut") {
+        setShuffleRun(null);
+        setRoughCutRange({ below: 0, above: 0 });
+        setRoughCutTier(tier);
+        return;
+      }
+      try {
+        commit(
+          { ...startRun(state.films, tier, { oracle: startingOracle() }), journal: state.journal },
+          false,
+        );
+      } catch {
+        setModeOpen(true);
+      }
+    };
+
     // ── The screen a brand-new user actually lands on ────────────────────────
     //
     // A new library is now EMPTY rather than pre-seeded, which makes this the
@@ -1335,9 +1382,21 @@ export default function DuelScreen({
                     </div>
                   </>
                 ) : (
-                  <p className="mt-2 text-sub text-dim tabular-nums">
-                    {plural(state.films.length)} &middot; {placedNow.toLocaleString()} placed
-                  </p>
+                  <>
+                    {/* ── What this library needs, rather than what it contains ──
+                        The count was true and inert: "861 films · 232 placed"
+                        tells you where you are and nothing about what to do,
+                        which left the whole question to a menu of four modes
+                        whose blurbs are one line each. This says the next
+                        decision instead — in decisions, not percentages,
+                        because a percentage is a score and a count is work. */}
+                    <p className="mt-2 text-sub text-dim tabular-nums">
+                      {stateDetail(rankState, lex().one, lex().many)}
+                    </p>
+                    <p className="mx-auto mt-4 max-w-[260px] text-label leading-relaxed text-dim/70">
+                      {stateWhy(rankState, lex().one)}
+                    </p>
+                  </>
                 )}
               </div>
             </div>
@@ -1372,22 +1431,37 @@ export default function DuelScreen({
                 </>
               ) : (
                 <>
-                  {/* One way in, not two.
-                      "Pick a tier" sat here as the primary action and started a
-                      King of the Hill climb without ever naming it — so the
-                      choice of MODE was made for you by the button you pressed
-                      to choose a TIER, and the Play sheet underneath offers the
-                      same tier picker anyway. Every mode now begins the same
-                      way, which is also what stops this screen quietly deciding
-                      that the default game is the most expensive one. */}
-                  <PrimaryButton wide onClick={() => setModeOpen(true)}>
-                      Start ranking
-                    </PrimaryButton>
+                  {/* ── One action, and it knows which one ────────────────────
+                      This was "Start ranking", opening a list of four modes.
+                      That is the screen asking a question the reader has no way
+                      to answer: nothing said which mode THIS library needs, or
+                      that Rough Cut and King of the Hill are two halves of one
+                      pipeline rather than two of four peers.
+
+                      A "Pick a tier" button lived here before that and was
+                      removed for choosing King of the Hill on your behalf
+                      WITHOUT SAYING SO. The difference now is that it says so —
+                      the line above names the tool, so nothing is decided
+                      silently, and the sheet is still one tap below. */}
+                  <PrimaryButton wide onClick={startSuggested}>
+                    {stateAction(rankState)}
+                  </PrimaryButton>
+                  {/* The way out of the suggestion, for anyone who would rather
+                      choose. Quiet, because taking the suggestion should be the
+                      path of least resistance — but never absent, because a
+                      screen that only ever offers one door is a screen that has
+                      taken the choice away rather than made it easy. */}
+                  <button
+                    onClick={() => setModeOpen(true)}
+                    className="mt-3 w-full py-2 text-center text-sub text-dim active:scale-95"
+                  >
+                    Pick a mode
+                  </button>
                 </>
               )}
               <button
                 onClick={onProfile}
-                className="mt-3 w-full py-2 text-center text-sub text-dim active:scale-95"
+                className="mt-1 w-full py-2 text-center text-sub text-dim active:scale-95"
               >
                 Your profile
               </button>
