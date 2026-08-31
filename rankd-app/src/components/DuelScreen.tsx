@@ -44,6 +44,7 @@ import { backfillPosters, withMeta, needsMeta } from "@/lib/meta";
 import { appendJudgements, loadLog, retractJudgements, type Judgement } from "@/lib/log";
 import { poolFor } from "@/lib/matchmaker";
 import { rankingState, stateAction, stateDetail, stateWhy } from "@/lib/stage";
+import { callFilms, libraryOpenCalls } from "@/lib/uncertain";
 import { isPlaced } from "@/lib/lock";
 import ShuffleDuel, { type ShuffleOptions } from "./ShuffleDuel";
 import { PosterCard, fadeLoserOut, flyPosterAcross } from "./PosterCard";
@@ -1283,6 +1284,22 @@ export default function DuelScreen({
     // rather than asked which of four games they would like to play.
     const rankState = rankingState(state.films, log);
 
+    // ── The decisions the ranking is waiting on ─────────────────────────────
+    //
+    // Computed here rather than in `rankingState`, which stays free of the
+    // relation layer: the stage is a question about locks and the calls are a
+    // question about evidence, and keeping them apart is what lets `stage.ts`
+    // be tested without building a closure.
+    //
+    // Only worked out at the refining stage. Earlier on, almost every adjacent
+    // pair is open because almost nothing has been judged — the number would be
+    // "799 close calls", which is true, useless, and expensive to produce. The
+    // Warshall pass over a whole library is tens of milliseconds; paying it once
+    // on arrival at the one screen where the answer is small enough to act on is
+    // the whole of the budget for it.
+    const calls =
+      rankState.stage === "refining" ? libraryOpenCalls(state.films, startingOracle()) : [];
+
     /**
      * Open the tool the stage asks for, with its defaults already chosen.
      *
@@ -1314,8 +1331,25 @@ export default function DuelScreen({
         return;
       }
       try {
+        // ── A climb over the open calls, not over the tier ──────────────────
+        //
+        // This is what the whole uncertain layer is for. Walking a tier of 200
+        // to settle 7 pairs is the tedium that started all of this; a run over
+        // just the films those pairs involve asks the same questions and stops.
+        //
+        // Ordered best-first by `callFilms`, so `only` opens the pile in the
+        // standing it already has. Falls back to the whole tier when there is
+        // nothing open — which happens at the moment a library becomes settled,
+        // between the last call being answered and the stage changing.
+        const only = callFilms(calls, state.films).map((f) => f.id);
         commit(
-          { ...startRun(state.films, tier, { oracle: startingOracle() }), journal: state.journal },
+          {
+            ...startRun(state.films, tier, {
+              ...(only.length >= 2 ? { only } : {}),
+              oracle: startingOracle(),
+            }),
+            journal: state.journal,
+          },
           false,
         );
       } catch {
@@ -1390,8 +1424,16 @@ export default function DuelScreen({
                         whose blurbs are one line each. This says the next
                         decision instead — in decisions, not percentages,
                         because a percentage is a score and a count is work. */}
+                    {/* The close-call count replaces the generic line when
+                        there is one, because it is the better answer to the
+                        same question: "12 left to settle" counts films the
+                        model has an opinion about, while "7 close calls" counts
+                        decisions nobody has made. The second is the one that
+                        falls when you play. */}
                     <p className="mt-2 text-sub text-dim tabular-nums">
-                      {stateDetail(rankState, lex().one, lex().many)}
+                      {calls.length > 0
+                        ? `${calls.length.toLocaleString()} close ${calls.length === 1 ? "call" : "calls"} waiting`
+                        : stateDetail(rankState, lex().one, lex().many)}
                     </p>
                     <p className="mx-auto mt-4 max-w-[260px] text-label leading-relaxed text-dim/70">
                       {stateWhy(rankState, lex().one)}

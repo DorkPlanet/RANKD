@@ -149,11 +149,13 @@ const sectionHeight = (s: { placed: unknown[]; unplaced: unknown[] }) =>
 // So the width is measured once per scroll (it comes free with the height the
 // windowing already reads) and BOTH the layout and the height maths are derived
 // from that one number. They cannot drift apart, because there is only one.
-const GRID_GAP = 8;
+// Tight on purpose. The point of a grid is a wall of artwork you can read the
+// shape of at a glance, and generous gutters turn it into a sparse noticeboard.
+const GRID_GAP = 6;
 /** Narrower than this and a poster stops being recognisable at a glance. */
 const GRID_MIN_CELL = 96;
 /** The rank numeral under each poster. */
-const GRID_LABEL_H = 20;
+const GRID_LABEL_H = 18;
 
 /**
  * How many posters fit on a line, and how tall a line is.
@@ -248,7 +250,13 @@ function GridRows({
           onClick={() => onInfo(film)}
           className="flex min-h-0 flex-col items-center active:scale-[0.97]"
         >
-          <div className="list-poster w-full min-h-0 flex-1 overflow-hidden rounded-md bg-surface">
+          {/* Deliberately NOT `.list-poster`. That class belongs to the row
+              layout and carries `width: 54px; height: 76px` and a -4deg tilt —
+              which beat `w-full` and `flex-1`, so every cell drew a 54px sliver
+              cropped into a 190px box with a chasm of gap either side. It was
+              only borrowed to inherit the idle poster-shake, which is not worth
+              a broken grid. */}
+          <div className="w-full min-h-0 flex-1 overflow-hidden rounded-md bg-surface">
             {film.poster ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={film.poster} alt="" className="h-full w-full object-cover" draggable={false} />
@@ -1129,27 +1137,38 @@ export default function ListScreen({
             toggle stays available while searching and on the flat pages — it is
             a reading mode and every page has something to read — so it is not
             behind the same guard. */}
-        <div className="mt-2 flex gap-2">
-          {onFilms && !searching && !flat && (
-            <button
-              onClick={() => setCutting(true)}
-              aria-label="Set where the tiers begin and end"
-              className="flex-1 rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-[0.99]"
-            >
-              Set tiers
-            </button>
-          )}
-          {onGrid && (
-            <button
-              onClick={() => onGrid(!grid)}
-              aria-label={grid ? "Show the list as rows" : "Show the list as a grid"}
-              aria-pressed={grid}
-              className={`${onFilms && !searching && !flat ? "flex-1" : "w-full"} rounded-xl border border-border py-2.5 text-label font-bold uppercase tracking-[0.14em] text-dim active:scale-[0.99]`}
-            >
-              {grid ? "Rows" : "Grid"}
-            </button>
-          )}
-        </div>
+        {/* ── Tools, drawn as tools ────────────────────────────────────────
+            These were two full-width bordered pills, which made the two least
+            important things on the screen the two heaviest — a bordered pill is
+            how this app draws a primary action, and neither of these is one.
+            The list is the point; these are how you change the way you read it.
+
+            So: one slim line, right-aligned, no boxes. It also gives the row
+            back to the search field above it, which is the control people
+            actually reach for. */}
+        {(onGrid || (onFilms && !searching && !flat)) && (
+          <div className="mt-2 flex items-center justify-end gap-4">
+            {onFilms && !searching && !flat && (
+              <button
+                onClick={() => setCutting(true)}
+                aria-label="Set where the tiers begin and end"
+                className="text-label font-bold uppercase tracking-[0.14em] text-gold active:scale-95"
+              >
+                Set tiers
+              </button>
+            )}
+            {onGrid && (
+              <button
+                onClick={() => onGrid(!grid)}
+                aria-label={grid ? "Show the list as rows" : "Show the list as a grid"}
+                aria-pressed={grid}
+                className="text-label font-bold uppercase tracking-[0.14em] text-dim active:scale-95"
+              >
+                {grid ? "Rows" : "Grid"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div
