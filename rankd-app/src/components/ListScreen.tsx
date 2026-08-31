@@ -224,6 +224,8 @@ function GridRows({
   cols,
   cellH,
   onInfo,
+  carried,
+  carriedBy,
 }: {
   films: Film[];
   /** Parallel to `films`. Absent for the un-rnkd block, which has no numbers. */
@@ -231,6 +233,9 @@ function GridRows({
   cols: number;
   cellH: number;
   onInfo: (film: Film) => void;
+  /** The cell under the finger, and how far it has travelled with it. */
+  carried?: string | null;
+  carriedBy?: number;
 }) {
   if (films.length === 0) return null;
   return (
@@ -247,8 +252,16 @@ function GridRows({
       {films.map((film, i) => (
         <button
           key={film.id}
+          // The same hook the rows use, so one hit-test serves both layouts —
+          // see `rowAt`. Without it the grid is invisible to the drag.
+          data-film-id={film.id}
           onClick={() => onInfo(film)}
-          className="flex min-h-0 flex-col items-center active:scale-[0.97]"
+          className={`flex min-h-0 flex-col items-center ${carried === film.id ? "" : "active:scale-[0.97]"}`}
+          style={
+            carried === film.id
+              ? { transform: `translateY(${carriedBy ?? 0}px) scale(1.04)`, zIndex: 20, position: "relative" }
+              : undefined
+          }
         >
           {/* Deliberately NOT `.list-poster`. That class belongs to the row
               layout and carries `width: 54px; height: 76px` and a -4deg tilt —
@@ -295,6 +308,7 @@ export default function ListScreen({
   hideStars,
   grid = false,
   onGrid,
+  driftPx,
 }: {
   films: Film[];
   /**
@@ -326,6 +340,8 @@ export default function ListScreen({
   /** Read the list as posters rather than rows. See `Prefs.grid`. */
   grid?: boolean;
   onGrid?: (on: boolean) => void;
+  /** How fast the list drifts when left alone. See `Prefs.driftSpeed`. */
+  driftPx?: number;
   onInfo: (f: Film) => void;
   onSettings: () => void;
   onDuel: () => void;
@@ -400,6 +416,17 @@ export default function ListScreen({
      * merely the question.
      */
     lineY: number;
+    /**
+     * The left edge and height of the target cell, for the grid's indicator.
+     *
+     * A horizontal rule across the screen means "it lands between these two
+     * rows", which is the truth in a list and a lie in a grid — three films
+     * share every band there, so the same line would be claiming all of them.
+     * The grid draws a vertical bar down the leading edge of the one cell
+     * instead. Absent in rows, where the rule is right.
+     */
+    lineX?: number;
+    lineH?: number;
   } | null>(null);
   useEffect(() => {
     void loadLog().then(setLog);
@@ -578,7 +605,7 @@ export default function ListScreen({
   const searching = q.trim().length > 0;
 
   useVisiblePosters(scroller, films, onPoster);
-  useDriftScroll(scroller, !searching && !jumpOpen && !frozen);
+  useDriftScroll(scroller, !searching && !jumpOpen && !frozen, driftPx);
   usePosterShake(scroller, !searching && !frozen);
 
   const counts = tierCounts(films);
@@ -677,7 +704,11 @@ export default function ListScreen({
    * which does not exist on the shuffled page — and would be wrong in a
    * different way on each. The rows know where they are.
    */
-  const rowAt = (clientY: number, ignore?: string): { at: number; top: number } | null => {
+  const rowAt = (
+    clientY: number,
+    ignore?: string,
+    clientX?: number,
+  ): { at: number; top: number; left?: number; height?: number } | null => {
     const rows = scroller.current?.querySelectorAll<HTMLElement>("[data-film-id]");
     if (!rows) return null;
     for (const row of rows) {
@@ -693,10 +724,16 @@ export default function ListScreen({
       // moved, which hid this completely.
       if (row.dataset.filmId === ignore) continue;
       const r = row.getBoundingClientRect();
-      if (clientY >= r.top && clientY <= r.bottom) {
-        const at = displayOrder.findIndex((f) => f.id === row.dataset.filmId);
-        return at === -1 ? null : { at, top: r.top };
-      }
+      if (clientY < r.top || clientY > r.bottom) continue;
+      // ── Rows need one axis, a grid needs two ──────────────────────────────
+      //
+      // A row spans the width, so being level with it IS being on it. In a grid
+      // three films share that band and only the x tells them apart, which is
+      // why the drag was left out of the grid at first. It is one extra test.
+      if (clientX !== undefined && (clientX < r.left || clientX > r.right)) continue;
+      const at = displayOrder.findIndex((f) => f.id === row.dataset.filmId);
+      if (at === -1) continue;
+      return { at, top: r.top, left: r.left, height: r.height };
     }
     return null;
   };
@@ -858,9 +895,16 @@ export default function ListScreen({
       if (!t) return;
       setDrag((d) => {
         if (!d) return d;
-        const hit = rowAt(t.clientY, d.id);
+        const hit = rowAt(t.clientY, d.id, grid ? t.clientX : undefined);
         return hit
-          ? { ...d, y: t.clientY, to: hit.at, lineY: hit.top }
+          ? {
+              ...d,
+              y: t.clientY,
+              to: hit.at,
+              lineY: hit.top,
+              lineX: hit.left,
+              lineH: hit.height,
+            }
           : { ...d, y: t.clientY };
       });
     };
@@ -1211,8 +1255,10 @@ export default function ListScreen({
           // sheet nobody can see past.
           const onNumeral =
             e.target instanceof Element && !!e.target.closest("[data-lock]");
-          if (onFilms && !searching && !grid && !onNumeral) {
-            const at = rowAt(t.clientY);
+          if (onFilms && !searching && !onNumeral) {
+            // x as well in a grid: three films share every band, so without it
+            // the hold would always pick the leftmost one on that line.
+            const at = rowAt(t.clientY, undefined, grid ? t.clientX : undefined);
             const row = at ? displayOrder[at.at] : undefined;
             // ── Pinned rows drag too ──────────────────────────────────────
             //
@@ -1338,15 +1384,30 @@ export default function ListScreen({
             </div>
           )
         ) : flat ? (
-          <FlatRows
-            rows={flat}
-            view={view}
-            onInfo={onInfo}
-            carried={carriedId}
-            carriedBy={carriedBy}
-            onUnpin={onFilms ? unpin : undefined}
-                    onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
-          />
+          // The grid is a way of READING the list, so it has to reach every page
+          // of it. This one was missed: switching to grid on the shuffled page
+          // left the toggle saying "Rows" over a list that was still rows.
+          grid ? (
+            <GridRows
+              films={flat.map((r) => r.film)}
+              ranks={flat.map((r) => r.rank)}
+              cols={cols}
+              cellH={cellH}
+              onInfo={onInfo}
+              carried={carriedId}
+              carriedBy={carriedBy}
+            />
+          ) : (
+            <FlatRows
+              rows={flat}
+              view={view}
+              onInfo={onInfo}
+              carried={carriedId}
+              carriedBy={carriedBy}
+              onUnpin={onFilms ? unpin : undefined}
+              onLockMenu={onFilms ? (f, r) => setLockFor({ film: f, rank: r }) : undefined}
+            />
+          )
         ) : (
           model.sections.map((s, i) => {
             const o = offsets[i];
@@ -1361,7 +1422,7 @@ export default function ListScreen({
                     is, so the reader can see where they are without being told
                     which rating they are looking at. HEADER_H is unchanged
                     either way, because every section offset is derived from it. */}
-                <TierRule stars={hideStars ? "" : starsFor(s.tier)} count={s.total} />
+                <TierRule stars={hideStars ? "" : starsFor(s.tier)} count={hideStars ? undefined : s.total} />
                 {grid ? (
                   <GridRows
                     films={s.placed.map((r: RankedFilm) => r.film)}
@@ -1369,6 +1430,8 @@ export default function ListScreen({
                     cols={cols}
                     cellH={cellH}
                     onInfo={onInfo}
+                    carried={carriedId}
+                    carriedBy={carriedBy}
                   />
                 ) : (
                   s.placed.map((r: RankedFilm) => (
@@ -1421,13 +1484,28 @@ export default function ListScreen({
       {drag && (
         <div
           aria-hidden
-          className="pointer-events-none fixed inset-x-3 z-30"
-          style={{
-            top: drag.lineY,
-            height: 2,
-            background: "var(--gold)",
-            boxShadow: "0 0 10px var(--gold)",
-          }}
+          className="pointer-events-none fixed z-30"
+          style={
+            drag.lineX !== undefined
+              ? {
+                  // Grid: a bar down the leading edge of the cell it will take.
+                  top: drag.lineY,
+                  left: drag.lineX - 3,
+                  width: 2,
+                  height: drag.lineH,
+                  background: "var(--gold)",
+                  boxShadow: "0 0 10px var(--gold)",
+                }
+              : {
+                  // Rows: the gap it will land in, across the screen.
+                  top: drag.lineY,
+                  left: 12,
+                  right: 12,
+                  height: 2,
+                  background: "var(--gold)",
+                  boxShadow: "0 0 10px var(--gold)",
+                }
+          }
         />
       )}
 
@@ -1493,15 +1571,31 @@ export default function ListScreen({
 
 // Two gradient rules fading out either side of the stars, rather than a solid
 // bar — a tier boundary should read as a seam in the list, not a lid on it.
-function TierRule({ stars, count }: { stars: string; count: number }) {
+/**
+ * The line between two tiers.
+ *
+ * ── Why the count goes when the stars go ───────────────────────────────────
+ *
+ * The first version dropped only the stars and kept the count, on the reasoning
+ * that the reader still needs to see how big a block is. That misses what the
+ * setting is FOR. Hiding the stars is how you stop the eye checking each film
+ * against the rating it already has and start checking it against the film above
+ * — and "12" says which tier you are in just as loudly as "★★★" does. Reported
+ * exactly that way: "I still see the tier numbers when looking through the list".
+ *
+ * The rule itself stays. Eight hundred rows with no divisions at all is a
+ * different screen, and the boundary is the thing the reader is being invited to
+ * move; it just stops announcing which one it is.
+ */
+function TierRule({ stars, count }: { stars: string; count?: number }) {
   return (
     <div className="flex items-center gap-3" style={{ height: HEADER_H }}>
       <span
         className="h-px flex-1"
         style={{ background: "linear-gradient(to right, transparent, var(--border))" }}
       />
-      <span className="text-body tracking-[0.08em] text-gold">{stars}</span>
-      <span className="text-label text-dim">{count}</span>
+      {stars && <span className="text-body tracking-[0.08em] text-gold">{stars}</span>}
+      {count !== undefined && <span className="text-label text-dim">{count}</span>}
       <span
         className="h-px flex-1"
         style={{ background: "linear-gradient(to left, transparent, var(--border))" }}

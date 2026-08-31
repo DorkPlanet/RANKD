@@ -242,19 +242,35 @@ export function TierCut({
               hold that row is listening for; the label itself is inert. */}
           <div className="pointer-events-none absolute inset-x-0 top-0">
             {starts.map((at, i) =>
-              // The first tier starts where the list starts, so it needs no
-              // line — and counts of zero would stack several markers on one
-              // row, each claiming the same boundary.
-              i === 0 || counts[i] === 0 ? null : (
+              // Counts of zero would stack several markers on one row, each
+              // claiming the same boundary.
+              counts[i] === 0 ? null : (
                 <div
                   key={i}
                   className="absolute inset-x-0 flex items-center gap-2"
-                  style={{ top: at * ROW_H, transform: "translateY(-50%)" }}
+                  // ── The top tier gets a label too ──────────────────────────
+                  //
+                  // It used to be skipped entirely, on the reasoning that the
+                  // first tier starts where the list starts and so needs no
+                  // LINE. True of the line and false of the label: the top tier
+                  // is always the best rating, so the effect was that the
+                  // highest rating never appeared anywhere on this screen at
+                  // all. Reported as "it doesn't show 5 stars".
+                  //
+                  // It sits ON the first row rather than half over the edge of
+                  // the list, which is what the translate is for everywhere
+                  // else.
+                  style={{
+                    top: at * ROW_H,
+                    transform: i === 0 ? undefined : "translateY(-50%)",
+                  }}
                 >
                   <span className="rounded-lg bg-surface px-2 py-0.5 text-label font-bold tracking-[0.14em] text-gold">
                     {starsFor(tiers[i])}
                   </span>
-                  <span className="h-px flex-1" style={{ background: "var(--gold)" }} />
+                  {/* No rule above the first tier — there is nothing up there to
+                      separate it from. */}
+                  {i > 0 && <span className="h-px flex-1" style={{ background: "var(--gold)" }} />}
                 </div>
               ),
             )}

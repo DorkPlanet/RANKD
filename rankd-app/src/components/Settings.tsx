@@ -45,14 +45,18 @@ import { currentMedium, setMedium, MEDIA } from "@/lib/medium";
 /** Stable reference for `useSyncExternalStore`. */
 const noSubscribe = () => () => {};
 
-// The replay control's three states, in the order they read: most shown to
-// least. `Tabs` is index-based, so the order lives here once rather than being
-// implied by two places that could drift apart.
-const REPLAY_ORDER = ["watch", "quick", "silent"] as const;
-const REPLAY_LABELS = ["Watch", "Quick", "Skip"] as const;
+// How fast the list drifts. `Tabs` is index-based, so the order lives here once
+// rather than being implied by two places that could drift apart.
+const DRIFT_ORDER = ["slow", "medium", "fast"] as const;
+const DRIFT_LABELS = ["Slow", "Medium", "Fast"] as const;
+
+// The replay control's three states, in the order they read: most shown to least.
+const REPLAY_ORDER = ["watch", "quick", "fast", "silent"] as const;
+const REPLAY_LABELS = ["Watch", "Quick", "Fast", "Skip"] as const;
 const REPLAY_BLURB: Record<Prefs["replay"], string> = {
   watch: "Every one plays out in full",
   quick: "Plays fast, and speeds up through a long run",
+  fast: "Barely pauses — you see it happen, not what it was",
   silent: "Resolved without showing anything",
 };
 
@@ -222,6 +226,21 @@ export function Settings({
         on={prefs.listDrift}
         onToggle={() => onPrefs({ listDrift: !prefs.listDrift })}
       />
+
+      {/* Only worth asking once drifting is on at all. It was one pace — a
+          showcase crawl at 20px a second — which made the switch really "on and
+          too slow" or "off", and reading a long list that way is slower than
+          scrolling it by hand. */}
+      {prefs.listDrift && (
+        <div className="mb-4 -mt-2">
+          <Tabs
+            nested
+            labels={DRIFT_LABELS}
+            at={DRIFT_ORDER.indexOf(prefs.driftSpeed)}
+            onPick={(i) => onPrefs({ driftSpeed: DRIFT_ORDER[i] })}
+          />
+        </div>
+      )}
 
       {/* ── Reading the list without the stars ──────────────────────────────
           A star is an anchor: with them showing, the eye checks each film

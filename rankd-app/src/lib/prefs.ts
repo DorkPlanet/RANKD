@@ -37,10 +37,22 @@ export interface Prefs {
    */
   listDrift: boolean;
   /**
+   * How fast the list drifts when it is left alone.
+   *
+   * A switch was not enough: 20px/s is a showcase pace and reading a long list
+   * at it is slower than scrolling by hand, so the setting was really "on and
+   * too slow" or "off". Asked for directly — "a faster option for the speed
+   * scroll".
+   *
+   * `listDrift` still decides WHETHER it moves, so an existing off stays off.
+   */
+  driftSpeed: DriftSpeed;
+  /**
    * What happens when the climb reaches a duel you have already settled.
    *
    *  · "watch"  — play it back slowly. Every one, at a readable pace.
    *  · "quick"  — play it back fast, accelerating through a long run. Default.
+   *  · "fast"   — as fast as the animation allows and still be seen at all.
    *  · "silent" — resolve it without showing anything.
    *
    * "silent" was the only behaviour when this shipped and it was wrong as a
@@ -86,12 +98,26 @@ export interface Prefs {
 }
 
 
-export type ReplayMode = "watch" | "quick" | "silent";
+export type ReplayMode = "watch" | "quick" | "fast" | "silent";
 
-const REPLAY_MODES: readonly string[] = ["watch", "quick", "silent"];
+export type DriftSpeed = "slow" | "medium" | "fast";
+
+/** Pixels a second. `slow` is the original pace and stays the default. */
+export const DRIFT_PX_PER_SEC: Record<DriftSpeed, number> = {
+  slow: 20,
+  medium: 55,
+  fast: 120,
+};
+
+const DRIFT_SPEEDS: readonly string[] = ["slow", "medium", "fast"];
+
+const REPLAY_MODES: readonly string[] = ["watch", "quick", "fast", "silent"];
 
 export const DEFAULT_PREFS: Prefs = {
   listDrift: true,
+  // The pace the list has always drifted at, so nobody's screen changes speed
+  // without them asking.
+  driftSpeed: "slow",
   // Fast enough not to be a cutscene, visible enough that nothing moves
   // unexplained. See the field's own note for why this is not "silent".
   replay: "quick",
@@ -126,6 +152,9 @@ export function loadPrefs(): Prefs {
       hideStars:
         typeof parsed.hideStars === "boolean" ? parsed.hideStars : DEFAULT_PREFS.hideStars,
       grid: typeof parsed.grid === "boolean" ? parsed.grid : DEFAULT_PREFS.grid,
+      driftSpeed: DRIFT_SPEEDS.includes(parsed.driftSpeed as string)
+        ? (parsed.driftSpeed as DriftSpeed)
+        : DEFAULT_PREFS.driftSpeed,
     };
   } catch {
     return DEFAULT_PREFS;

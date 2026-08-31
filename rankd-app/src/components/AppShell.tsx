@@ -30,7 +30,7 @@ import { syncOnOpen } from "@/lib/startupSync";
 import { startSync } from "@/lib/sync";
 import { isPlaced } from "@/lib/lock";
 import { loadBrightness, saveBrightness, applyBrightness } from "@/lib/brightness";
-import { DEFAULT_PREFS, loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
+import { DEFAULT_PREFS, DRIFT_PX_PER_SEC, loadPrefs, savePrefs, type Prefs } from "@/lib/prefs";
 import { backfillPosters, needsCredits, withMeta, type FilmMeta } from "@/lib/meta";
 import { PersonSheet } from "./PersonSheet";
 import Splash, { SPLASH_FADE_MS, SPLASH_HOLD_MS } from "./Splash";
@@ -1088,6 +1088,7 @@ export default function AppShell() {
           frozen={showCoach || !prefs.listDrift}
           hideStars={prefs.hideStars}
           grid={prefs.grid}
+          driftPx={DRIFT_PX_PER_SEC[prefs.driftSpeed]}
           onGrid={(on) => changePrefs({ grid: on })}
         />
       ) : (

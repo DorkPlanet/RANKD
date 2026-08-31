@@ -3028,10 +3028,24 @@ function Duel({
   // is already where it is going to be.
   // Set while a poster is mid-flight, so one duel cannot be settled twice.
   const busy = useRef(false);
-  // Set when the user answers by hand: it stops the replay running on without
-  // them. Cleared the moment the climb reaches a duel the record cannot settle,
-  // so taking control back is temporary and needs no mode to turn off again.
+  // ── Answering by hand overrules ONE duel, not the mechanism ──────────────
+  //
+  // This was a sticky flag: set on every manual answer, cleared only when the
+  // climb reached a duel the record could NOT settle. The effect was that your
+  // first hand-answered duel killed the replay for the rest of the run — every
+  // remembered duel after it sat there marked "YOU PICKED THIS" waiting for a
+  // tap that the whole feature exists to save you. Reported as "after the first
+  // few it stops, and then it doesn't auto go".
+  //
+  // It clears on every pair change now, so a tap settles the duel in front of
+  // you and the climb carries on. Someone who wants to keep driving simply keeps
+  // tapping; each tap is one duel, which is the same bargain as before without
+  // the mode nobody asked for.
   const halt = useRef(false);
+  // Set by a manual answer so the NEXT remembered duel waits a beat longer than
+  // the ramp would give it. Resuming at 260ms behind a tap reads as the app
+  // racing you for the next decision.
+  const grace = useRef(false);
   // How many remembered duels have run back-to-back, for the pacing ramp.
   const streak = useRef(0);
   // ── Which duel is on screen RIGHT NOW ─────────────────────────────────────
@@ -3053,12 +3067,11 @@ function Duel({
 
   useEffect(() => {
     busy.current = false;
-    if (!replay) {
-      // A real decision: the user is being asked something, so the next streak
-      // is theirs to watch again.
-      halt.current = false;
-      streak.current = 0;
-    }
+    // Per-pair, never per-run — see the note on `halt`.
+    halt.current = false;
+    // A real decision means the run of remembered duels is over, so the ramp
+    // starts again from a readable pace next time there is one.
+    if (!replay) streak.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contender.id, challenger.id]);
 
@@ -3068,7 +3081,7 @@ function Duel({
   // already settles has to LOOK like a duel, or the pile appears to reorder
   // itself. The only difference between the two is who chose, and that is said
   // in colour and in words, never by skipping the animation.
-  const runMove = (winnerId: string, done: () => void) => {
+  const runMove = (winnerId: string, done: () => void, commitAt = 200) => {
     const arena = arenaRef.current;
     const cards = arena?.querySelectorAll<HTMLElement>("button");
     const climbImg = cards?.[0]?.querySelector("img");
@@ -3078,7 +3091,7 @@ function Duel({
     // seat before the state swap paints.
     if (winnerId === challenger.id && climbImg && challImg) {
       flyPosterAcross(challImg, climbImg, challenger.poster ?? "");
-      setTimeout(done, 200); // commit mid-flight, under the clone
+      setTimeout(done, commitAt); // commit mid-flight, under the clone
       return;
     }
     if (winnerId === contender.id && challImg) {
@@ -3100,10 +3113,11 @@ function Duel({
     if (busy.current) return;
     busy.current = true;
     setPlayed(true);
-    // Answering by hand stops the replay. The user is taking the climb back,
-    // which is the whole point of showing it to them; `halted` clears itself
-    // once the run reaches a duel the record cannot settle. See the effect.
+    // Stop the replay for THIS duel — the pair is about to change and the effect
+    // will clear it — and give whatever comes next an unhurried beat.
     halt.current = true;
+    grace.current = true;
+    streak.current = 0;
     runMove(id, () => onPick(id));
   };
 
@@ -3127,14 +3141,36 @@ function Duel({
     // First few at a readable pace, then accelerating: a long carry reads as the
     // film being swept past everything it has already beaten, which is the true
     // description of what is happening.
-    const wait = mode === "watch" ? 620 : Math.max(110, 300 - n * 26);
+    // A beat after a manual answer, so the next remembered duel does not arrive
+    // on the heels of the tap that settled the last one.
+    // ── The floor is the animation, not the timer ────────────────────────
+    //
+    // "Fast" is not simply a smaller wait. Each step also spends 200ms letting
+    // the poster fly before the state swaps underneath it, so a zero wait would
+    // still be a third of a second a duel. Fast shortens BOTH: a token pause so
+    // the pair registers at all, and a commit early enough in the flight that
+    // the next duel is already painting while the clone finishes. Clones overlap
+    // for a moment at that speed, which reads as momentum rather than as a
+    // mistake — but it is why this is a separate mode and not "quick, but more".
+    const wait = grace.current
+      ? 900
+      : mode === "watch"
+        ? 620
+        : mode === "fast"
+          ? 70
+          : Math.max(110, 300 - n * 26);
+    grace.current = false;
     const t = setTimeout(() => {
       streak.current = n + 1;
       busy.current = true;
       // Only commit if nothing else has committed meanwhile — see `commitSeq`.
-      runMove(winner, () => {
-        if (seqAt.current === startedAt) onReplay();
-      });
+      runMove(
+        winner,
+        () => {
+          if (seqAt.current === startedAt) onReplay();
+        },
+        mode === "fast" ? 80 : 200,
+      );
     }, wait);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps

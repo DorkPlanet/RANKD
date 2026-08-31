@@ -11,9 +11,12 @@
 import { useEffect, useRef } from "react";
 
 const IDLE_MS = 2500;
-const PX_PER_SEC = 20;
 
-export function useDriftScroll(ref: React.RefObject<HTMLElement | null>, enabled: boolean) {
+export function useDriftScroll(
+  ref: React.RefObject<HTMLElement | null>,
+  enabled: boolean,
+  pxPerSec = 20,
+) {
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function useDriftScroll(ref: React.RefObject<HTMLElement | null>, enabled
       if (!last) last = t;
       const dt = t - last;
       last = t;
-      carry += (PX_PER_SEC * dt) / 1000;
+      carry += (pxPerSec * dt) / 1000;
       const whole = Math.floor(carry);
       if (whole > 0) {
         carry -= whole;
@@ -78,5 +81,5 @@ export function useDriftScroll(ref: React.RefObject<HTMLElement | null>, enabled
       el.removeEventListener("pointerdown", bump);
       window.removeEventListener("keydown", bump);
     };
-  }, [ref, enabled]);
+  }, [ref, enabled, pxPerSec]);
 }
