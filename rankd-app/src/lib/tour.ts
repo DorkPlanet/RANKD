@@ -99,7 +99,17 @@ const DUEL_STEPS = (): readonly TourStep[] => [
     id: "strip",
     target: "strip",
     title: "The rest of the tier",
-    body: "Pull this up to see everything you're working through. Tap any of them to jump straight there.",
+    body: "Everything you're working through, in order. Tap any of them to face it next, or pull the handle down to hide the row.",
+  },
+  {
+    // The strip stopped being a map and became the place you act on the pile,
+    // and nothing said so. Every one of these is a visible word on a poster
+    // rather than a gesture to memorise — this step is pointing at controls
+    // that are already on screen, not teaching a secret.
+    id: "strip-acts",
+    target: "strip",
+    title: "And where you place them by hand",
+    body: "MAKE LAST settles the worst one without climbing it. MOVE drops the film you're carrying straight where you want it. Tap a padlock to take a placement back.",
   },
   {
     id: "roughcut",

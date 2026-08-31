@@ -374,9 +374,21 @@ export default function DuelScreen({
   // time you came back to the duel — a jarring swap for a preference we already
   // knew. AppShell renders nothing until the library loads, so this only ever
   // runs on the client.
-  const [stripOpen, setStripOpen] = useState(
-    () => typeof window !== "undefined" && localStorage.getItem(STRIP_KEY) === "open",
-  );
+  // ── Open until told otherwise ─────────────────────────────────────────────
+  //
+  // This defaulted to CLOSED, and a drawer that starts shut is a drawer most
+  // people never open. Everything the strip can do — see the whole pile, aim the
+  // next duel, gather films to travel together, place one by hand, lock the
+  // worst into last place, take a placement back — was therefore invisible by
+  // default, which is most of what "there are a lot of hidden systems a user
+  // would have no reason to know exist" was about.
+  //
+  // An explicit choice is still honoured forever, in both directions: this only
+  // changes what happens when the reader has never expressed one.
+  const [stripOpen, setStripOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (localStorage.getItem(STRIP_KEY) ?? "open") === "open";
+  });
   const toggleStrip = () =>
     setStripOpen((v) => {
       localStorage.setItem(STRIP_KEY, v ? "closed" : "open");

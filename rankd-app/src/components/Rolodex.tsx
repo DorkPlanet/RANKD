@@ -453,9 +453,29 @@ export function Rolodex({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={f.poster} alt="" className="h-full w-full object-cover" draggable={false} />
               </div>
-              <span className="font-serif text-label font-bold tracking-wide text-gold">
-                {placing ? "MOVING" : "YOU"}
-              </span>
+              {/* ── The label is the control ──────────────────────────────
+                  Placing the climbing film by hand was reachable only by
+                  pressing and holding this poster, which is a feature nobody
+                  who has not been told about it will ever find. The hold still
+                  works for anyone who does, but the word underneath now does
+                  the same job in the open — the strip already uses this slot to
+                  say what a cell IS and what can be done to it (UN-RNKD,
+                  GROUPED, MAKE LAST), so a verb here reads as one of the family
+                  rather than as new chrome. */}
+              {onPlaceAt && !gather ? (
+                <button
+                  onClick={() => setPlacing((v) => !v)}
+                  aria-label={placing ? "Stop moving this film" : "Move this film to a place in the pile"}
+                  aria-pressed={placing}
+                  className="font-serif text-label font-bold tracking-wide text-gold active:scale-95"
+                >
+                  {placing ? "MOVING" : "MOVE"}
+                </button>
+              ) : (
+                <span className="font-serif text-label font-bold tracking-wide text-gold">
+                  {placing ? "MOVING" : "YOU"}
+                </span>
+              )}
             </div>
           ) : (
             // Every film in the pile is a live opponent: a climb rules nothing

@@ -6,7 +6,16 @@ const ALL = [...TOURS().duel, ...TOURS().list];
 
 describe("the tours", () => {
   it("teaches the core loop before Rough Cut", () => {
-    expect(TOURS().duel.map((s) => s.id)).toEqual(["pick", "flick", "hold", "strip", "roughcut"]);
+    // Rough Cut comes last on purpose: it is the escape hatch from a tier too
+    // big to duel, and it only means anything once you know what a duel costs.
+    expect(TOURS().duel.map((s) => s.id)).toEqual([
+      "pick",
+      "flick",
+      "hold",
+      "strip",
+      "strip-acts",
+      "roughcut",
+    ]);
   });
 
   // The duel is where the game is. If the list ever grew longer than the duel's
