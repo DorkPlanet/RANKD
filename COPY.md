@@ -139,6 +139,106 @@ flags.
 
 ---
 
+## 00 · Added in Session N (31 Aug 2026) — unreviewed
+
+Written during the session and **not passed through `VOICE.md`**. Line numbers move; the
+text is the key. Flagged here rather than merged into the tables below so the review can
+tell new copy from the 460 already waiting.
+
+**The home screen's opinion** (`lib/stage.ts`) — replaces the inert "861 films · 232
+placed". Counts decisions, not percentages, deliberately.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| Continue ranking |  |  |
+| Start ranking / Import / See your list |  |  |
+| Pick a mode |  |  |
+| 38 films waiting |  |  |
+| 23 films still to place |  |  |
+| 32 films placed but not settled |  |  |
+| 12 films left to settle |  |  |
+| Every film settled by hand |  |  |
+| Fast Shuffle — two at a time, no commitment |  |  |
+| Rough Cut — split a tier into piles |  |  |
+| King of the Hill — settle the close calls |  |  |
+| Nothing left to decide. Every film is where you put it. |  |  |
+| 8 close calls waiting | `uncertain.ts` |  |
+
+**Replayed duels** (`DuelScreen.tsx`) — shown while the climb plays back a decision you
+already made. The badge replaces CLIMBING / UN-RNKD for that duel only.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| YOU PICKED THIS |  |  |
+| FOLLOWS FROM YOURS | rare — see `AutoStep.via` |  |
+| TOO CLOSE — YOU SAID |  |  |
+| You picked this in Nov 23 |  |  |
+| You put it over Heat, and Heat over this |  |  |
+| Follows through … |  |  |
+| You couldn't separate these two |  |  |
+| This follows from what you've already said |  |  |
+
+**Nothing left to decide** (`AllDecided`) and the batch confirm.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| ✓ NOTHING LEFT TO DECIDE |  |  |
+| Every one of these is already settled by duels you've fought. |  |  |
+| Finish · lock in 24 |  |  |
+| Keep playing anyway |  |  |
+| Lock in all 6 you've settled |  |  |
+
+**The strip** (`Rolodex.tsx`) — every one of these is a visible label doing the job a
+hidden gesture used to do.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| MAKE LAST |  |  |
+| LAST |  |  |
+| MOVE / MOVING |  |  |
+| GROUPED |  |  |
+| HERE |  |  |
+| Tap where it belongs |  |  |
+| Tap the ones that belong here |  |  |
+| 3 travelling together |  |  |
+| Group / Cancel |  |  |
+
+**The list** (`ListScreen.tsx`).
+
+| Current text | Flag | Your note |
+|---|---|---|
+| Heat moved to #12 |  |  |
+| Undo |  |  |
+| Grid / Rows |  |  |
+| Set tiers | parallel session |  |
+
+**Settings** (`Settings.tsx`) — the replay preference.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| Duels you've already settled |  |  |
+| Ranking replays them instead of asking again |  |  |
+| Watch / Quick / Skip |  |  |
+| Every one plays out in full |  |  |
+| Plays fast, and speeds up through a long run |  |  |
+| Resolved without showing anything |  |  |
+
+**Tour** (`tour.ts`) — one step rewritten, one added.
+
+| Current text | Flag | Your note |
+|---|---|---|
+| Everything you're working through, in order. Tap any of them to face it next, or pull the handle down to hide the row. |  |  |
+| And where you place them by hand |  |  |
+| MAKE LAST settles the worst one without climbing it. MOVE drops the film you're carrying straight where you want it. Tap a padlock to take a placement back. |  |  |
+
+**Run summary** (`TierComplete`).
+
+| Current text | Flag | Your note |
+|---|---|---|
+| already decided | stat label |  |
+
+---
+
 ## 01 · The duel screen (RNK)
 
 **`components/DuelScreen.tsx`**

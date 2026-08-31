@@ -46,6 +46,30 @@ exactly the tier scale, so the export is the same file with new numbers.
 **Parked because:** the decision was to test the current system before complicating it.
 Adjusting from the list view is wanted alongside the full audit, not instead of it.
 
+> **Session N (31 Aug 2026): this is mostly built. Unparking it, with caveats.**
+>
+> Four of the five bullets above now have an answer, and the "assert-it" gap that
+> underpinned all of them is closed — the app has a whole family of user assertions now,
+> each of which moves the pile and records no judgement.
+>
+> | Bullet | Now |
+> |---|---|
+> | unlock and reorder from the list | Drag was already there; Session N added a **move confirmation with Undo**, and fixed a bug where scrolling silently re-rated films |
+> | adjust the order before confirming | `placeAt` (MOVE), `confirmLast` (MAKE LAST), `reorderCluster`, `settledPrefix` |
+> | go back over a finished list | `reopenConfirmed` — tap a padlock to take a placement back |
+> | wrong pile | same, plus clusters |
+> | export back to Letterboxd | `exportCsv.ts` + `TierCut.tsx` — **parallel session, unverified** |
+>
+> **The re-rating requirement the section identifies is exactly right**, and it was the
+> real blocker: a move that crosses a tier boundary must change the star rating, because
+> bands never overlap. Two things now do it — the tier cut (assert it by hand) and Fast
+> Shuffle's re-rate, which a parallel session made **bidirectional** this session, so a
+> rating can finally fall as well as rise.
+>
+> **What is still open:** none of the tier-cut or export work has been tested on a device,
+> and `mergeFilms` still overwrites `rating` on re-import, which would silently revert every
+> boundary a user set. See `REGISTER.md` → Session N → #1.
+
 ---
 
 ## Daily Check
@@ -59,6 +83,13 @@ moving it.
 
 **Parked because:** its final step — "confirm this film should move" — *is* the edit
 mechanic above. Building Daily Check first means building that twice.
+
+> **Session N: the blocker is gone, and half of it exists by accident.** The edit mechanic
+> landed (see above), so the reason for parking no longer holds. More usefully,
+> `uncertain.ts` already answers the hard part: **"a film paired against its neighbours"**
+> is exactly an open call, and `libraryOpenCalls` returns them all. A Daily Check is now
+> mostly a choice about *how many* to serve and *when* to ask — which is also the shape the
+> parked push-notification work needs. If both are picked up, do them together.
 
 ---
 

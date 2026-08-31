@@ -15,6 +15,110 @@ holds what is not built and why.
 
 ---
 
+## Session N (30–31 Aug 2026) — the UX/product feedback, triaged
+
+A long feedback document arrived covering ranking flow, onboarding, navigation,
+discoverability, retention and monetisation, with the instruction to **evaluate it
+rather than implement it**. Verdicts below are against the code, not impressions.
+
+**The theme that runs through all of it and is correct:** the app has far more
+capability than it has surface. `libraryProgress`, `sessionProgress`,
+`duelsInMinutes` and `settlednessOf` were all built, tested and rendered
+**nowhere**; per-film confidence appears in exactly one long-press card. Most of
+what shipped in Session N is a read of data already being written.
+
+| # | Item | Verdict | State |
+|---|---|---|---|
+| 15 | Dashboard home screen | Right — best idea in the document | **DONE** |
+| 4 | Ranking state & progress | Right, already computed | **DONE** |
+| 5 | Don't rank everything equally | Right, highest leverage | **DONE** |
+| 9 | Hidden gestures | Right, and self-inflicted | **DONE** |
+| 11 | KOTH as "final boss" | Falls out of 15/4 | **DONE** |
+| 2 | Import → Shuffle → Rough Cut → KOTH | Right — this IS the pipeline | **DONE** (encoded in `stage.ts`) |
+| 1 | Imported tiers as skeleton, not cage | Right; the cage is structural | `OPEN` — partly built |
+| 6/7 | Onboarding, small first session | Right; a real hole | `OPEN` |
+| 3 | Combine Rough Cut & KOTH | Half right | `RESOLVED` — see below |
+| 8 | Nested menus | **Half wrong** | `RESOLVED` — see below |
+| 12 | Push notifications | Sound, zero infrastructure | `PARKED` |
+| 13/14 | Daily limit / paywall | Argued against | `PARKED` at user's request |
+
+### Where the document was wrong, on the evidence
+
+**#8 "too many menus" is not true of ranking.** Measured from a cold open: Rough
+Cut, King of the Hill and Fast Shuffle are each **three taps** to a live run,
+with every setup field pre-filled. Curator is 5–6 because it must ask *who*. What
+IS buried is Settings (seven collapsible rows) and the Curator path. The real
+complaint under "what the hell do I pick?" was never depth — it was **being asked
+to choose a mode at all**, which is #15 and a different fix.
+
+**#3 — the engines must not merge, but the pipeline should be sold as one.**
+Rough Cut and KOTH are *already* one flow: Rough Cut is tier-scoped and its last
+button starts a KOTH run over a pile. So the complaint is well founded and the
+fix is presentational. What cannot merge is the engines: Rough Cut **writes no
+log rows and sets no locks** because no pair was compared, while KOTH records
+every duel as evidence. Merge them and either Rough Cut mints evidence for duels
+that never happened — poisoning `relations.ts` — or KOTH stops recording.
+
+**A correction I got wrong first.** I initially called the #2 progression
+backwards, on the strength of Rough Cut's own copy ("the fastest way to get a big
+library into shape"). Wrong: `roughCutPool` filters to **one tier**, and Rough
+Cut's terminal action is `startRun`. Fast Shuffle is the only library-wide mode.
+The document had it right.
+
+### #1 · Tiers as skeleton, not cage — `OPEN`, partly built
+
+The diagnosis is correct and worth stating precisely: **star ratings are not a
+label on the list, they are its structure.** Each rating owns a fixed 1000-wide
+score band, bands never overlap, and the master order is a plain score sort — so
+a 3★ film *cannot* outrank a 4★, ever. That is the cage.
+
+The fix is coherent: the list is already one total order, tier boundaries are
+contiguous cuts across it, and re-labelling a run of films while re-spreading
+their scores **preserves the order exactly**.
+
+A parallel session built `TierCut.tsx`, `cuts.ts`, `exportCsv.ts` and a `Set
+tiers` control. **Shipped in `25f340c` and never tested by the session that
+shipped it.** Two things known to bite and not yet confirmed handled:
+- **Re-import silently reverts everything.** `mergeFilms` keeps the whole record
+  but overwrites `rating` from the file.
+- **Goodreads cannot represent half-stars** — 1–5 whole only, `0` means unrated.
+  A book library can only ever occupy five of the ten tiers.
+
+### #6/7 · Onboarding and the small first session — `OPEN`
+
+**A brand-new user with an empty library gets no teaching at all.** All 15 tour
+steps across the four tours are gated on `library.length > 0`, and the Rough Cut
+and log tours additionally require you to have opened those surfaces first. The
+empty screen offers an import guide and a file picker; that is the entire
+first-run experience.
+
+The "small first session" is nearly free: `startRun` already takes an explicit
+`only: string[]`, so dealing ten films instead of eight hundred is a parameter.
+
+### #12 · Push — `PARKED`, and bigger than it sounds
+
+There is **nothing**: no service worker, no VAPID keys, no subscription storage,
+no send route, no dependency. (`pushRetry.test.ts` is about HTTP sync retries.)
+The PWA manifest and install detection exist and are the foundation; everything
+above is greenfield. It also needs the **server** to know your ranking state,
+which today lives in browser storage. Do it after there is a state worth sending
+— which is now `stage.ts`, so the blocker has moved.
+
+### #13/14 · Daily ranking limit — `PARKED` at the user's request
+
+Argued against on product grounds, recorded so it is not re-opened blind:
+1. It taxes the thing that makes the app good — every duel is durable evidence.
+2. The maths is hostile at import scale: 861 films at 25 decisions/day is over a
+   month for one pass.
+3. **"A ranking action" no longer has a clean definition.** KOTH now replays
+   duels you already answered, and a cluster places six films on one tap.
+4. It inverts the pitch: "little by little" is currently a kindness.
+
+**What to sell instead**, all additive: the export/re-upload path, sync across
+devices, share cards and the public profile, the second medium.
+
+---
+
 ## Closed in Session M (20–21 Aug 2026)
 
 Recorded so nobody re-opens them from the sections below, which are left intact

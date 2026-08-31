@@ -58,6 +58,24 @@ person with a fully ranked tier never sees the idea explained at all**.
 
 This is the founding idea of the app. It should not depend on a divider existing.
 
+> **Update, Session N (31 Aug 2026).** Two of the five below have moved, and the sheet
+> should not be written against the old state.
+>
+> - **Item 3 is half closed.** A parallel session made Fast Shuffle's re-rate
+>   bidirectional — *"Stars move both ways: up for a film that keeps beating better-rated
+>   ones, down for one that keeps losing."* Shipped in `25f340c` and **not verified on a
+>   device**. The other half — editing a rating by hand — is the tier cut, also shipped and
+>   also unverified. Confirm both before treating item 3 as closed.
+> - **Item 5 is now half-explained by the app itself.** The home screen names the tool it
+>   is about to open (*"Rough Cut — split a tier into piles"*), and `stage.ts` encodes the
+>   pipeline it belongs to, so a reader now meets Rough Cut in sequence rather than as one
+>   of four peers in a menu. What is still unexplained is what happens *inside* a pile.
+> - **A sixth belongs on this list, and it is new.** The climb now **replays duels you have
+>   already answered** rather than re-asking them — blue posters, "YOU PICKED THIS IN NOV
+>   23", a poster flying across on its own. Nothing prepares anyone for the pile moving
+>   without them, and the one-line explanation under the arena is the only thing that says
+>   why. See `relations.ts` and `Prefs.replay` (watch / quick / silent).
+
 ### 3. A rating can go UP through play and can never come down. That is a gap, not a rule.
 
 `promotionTarget`, `promoteDirect`, `completePromotion` and the **GOING UP A TIER** header

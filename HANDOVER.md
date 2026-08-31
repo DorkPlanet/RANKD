@@ -16,14 +16,29 @@ live JS bundle for a string you just added — a 200 proves nothing**, and "comm
 `env rm`, `blob delete-store` and `project rm`. **The permission file cannot be edited by
 Claude** — self-granting is refused, correctly — so any change to that list is the user's.
 
-**State (21 Aug 2026):** Session M, closed. Everything is committed, pushed to
-`origin/master`, and deployed to production. There is no side branch — `master` is what is
-live. Deploy verified against the live bundle and the deployed commit, never by a 200.
+**State (31 Aug 2026):** Session N, closed. Everything is committed, pushed and deployed.
+Deploy verified against the live bundle, never by a 200.
 
-**505 tests, typecheck clean, lint at 2 errors in `src`, `next build` clean.** The two lint
-errors are still the `AppShell` set-state-in-effect pair described below. That is the
-baseline. Session M added a third twice and removed it twice — an apostrophe in raw JSX
-needs `&rsquo;`, and reassigning a variable during render is rejected here.
+**THE BRANCH IS NO LONGER `master`.** Work is on **`social-phase-1-handles`**, and that is
+what is deployed — Vercel is *not* git-connected, so `git push` ships nothing on its own and
+`npx vercel --prod --yes --scope rankd2` from `rankd-app/` is what makes a change live.
+Head of that branch at close: `44ef500`.
+
+**1,372 tests (2 skipped), typecheck clean, lint at 2 errors in `src`, `next build` clean.**
+The two lint errors are still the `AppShell` set-state-in-effect pair described below —
+unchanged baseline. Session N tripped three *new* lint rules worth knowing about, each
+caught by `npx eslint src/` and none by `tsc`:
+
+- **`Date.now()` in the render body is impure**, even inside a function only ever reached
+  from a handler. Use a counter you increment instead — twice, in two files.
+- **Writing a ref during render** is rejected. Assign it in an effect.
+- **Hooks after an early return** are rejected, which matters here because `DuelScreen`
+  and `ListScreen` both return early for empty states.
+
+**A parallel session was working in the same tree for part of Session N** — the tier cut,
+CSV export and Fast Shuffle's bidirectional re-rate are all its work, landed in `25f340c`
+on the user's explicit instruction to ship everything together. It is **untested by the
+session that shipped it**. See "Not verified" below.
 
 **FOUR NEW DOCUMENTS, and one of them is the important one.**
 - **`REGISTER.md`** — every open idea, complaint and piece of parked work, including the
@@ -123,6 +138,67 @@ the two ways Blob authenticates.
 ---
 
 ## Landed
+
+**Session N — the climb learns to read its own evidence, and the app starts having an
+opinion.** Eight commits, `3d70b3f` → `44ef500`, all deployed and each verified against the
+live bundle. The theme, if there is one: **the app already knew far more than it said.**
+Every feature below is a read of data that was being written and thrown away.
+
+### The big one: the climb stops asking twice
+
+King of the Hill cost **exactly `n(n-1)/2` duels**, provably, independent of the answers —
+`refresh` always aims at the film directly above, and every settle drops the climbing
+film's index by one. A 185-film tier is **17,020 comparisons**; `roughCut.ts` said "several
+thousand" and undersold it threefold. Meanwhile every duel ever answered was in the
+evidence log and `ladder.ts` never read one back.
+
+`src/lib/relations.ts` (new) is the deductive half of that log: a bitset transitive closure
+that answers "have you already decided this?" and refuses whenever the honest answer is
+anything short of yes — a contradiction, a cycle, or a pair judged both ways. Measured in
+`test/climbCost.test.ts` (opt-in, `COST=1`):
+
+| n | seed | before | after |
+|---|---|---|---|
+| 200 | already sorted | 19,900 | **199** |
+| 200 | Rough Cut seeded | 19,900 | **3,390** |
+| 200 | unseeded | 19,900 | **9,798** |
+
+Asserted across every size and seed: **the finished order is identical with the oracle on
+and off.** That is the hard stop and it holds.
+
+### And then it was wrong, and had to be rebuilt
+
+The first version resolved every known duel in **one atomic engine call before the screen
+rendered**. Correct, fast, and the wrong shape: the pile leapt several places between taps
+with nothing to watch. Reported as *"I am jumping places without knowing why or what it's
+jumping."*
+
+`advance()` was deleted and replaced with `peekKnown` + `replayStep` — one step at a time,
+so the screen can **play each remembered duel back**: blue rings, "YOU PICKED THIS IN NOV
+23", the normal poster animation, and a tap stops it dead. Pacing is measured, not guessed:
+half of all replay streaks are a single duel, but p95 is 28 and the longest seen is 69, so
+it accelerates through a long carry. `Prefs.replay` offers watch / quick / silent.
+
+**Lesson worth keeping:** the numbers said the feature was a success and the user said it
+was a failure, and they were both right. Optimising for "fewest duels" was the wrong
+objective; it is "least tedium *while still following what is happening*".
+
+### Everything else
+
+- **Clusters** — gather films in the strip and carry them up as one block. A user
+  assertion, so only the block's face is journalled.
+- **Placement by hand** — `confirmLast` (the pile now fills from **both ends** via
+  `confirmedTail`), `placeAt`, `settledPrefix`/`confirmPrefix`, `reopenConfirmed`.
+- **`src/lib/stage.ts`** — the home screen stopped asking "which of four games?" and now
+  says what to do next. Derived, never stored, from `libraryProgress` which had been built,
+  tested and rendered **nowhere**.
+- **`src/lib/uncertain.ts`** — "8 close calls waiting": adjacent pairs in your ranking the
+  record does not settle. The suggested climb runs over just those films.
+- **A live data-corruption bug on the list.** A hold armed during a scroll, and `dropAt`
+  writes judgements, **changes the film's star rating**, and re-spreads bands — with no undo
+  on that screen. Fixed by cancelling the hold on any scroll, plus a move confirmation with
+  Undo.
+- **Grid view** on the list, and the strip now **opens by default**.
 
 **Session M — the competition, the voice, the profile, and a lockup that took four tries.**
 Everything below is deployed. The open ideas are in `REGISTER.md`, not here.
@@ -1377,6 +1453,30 @@ All of this exists and works. Written down so nobody rediscovers it the hard way
 
 ## Gotchas that have already cost time
 
+- **A geometry that is arithmetic will not tell you when it is wrong (Session N).**
+  `ListScreen` computes every section's height from constants and never measures the DOM —
+  `jumpTo` and every virtualisation spacer trust those numbers. The grid view got them
+  wrong **twice**, and neither was visible by eye in a small library:
+  - `clientWidth` is only read on scroll, and the list mounts inside a translated pane
+    before layout. A **zero width** collapsed every cell: a tier declared 374px and drew
+    1294px of posters over the tier below. Fixed by refusing a zero and adding a
+    `ResizeObserver`, which also covers rotating the phone.
+  - The cell height was **derived** from the poster ratio and CSS then laid it out its own
+    way — gaps go *between* rows, not after each. 1670px declared against 886px drawn.
+    Fixed by **imposing** the height via `gridAutoRows` so one number drives both.
+  - **How to catch it:** in a live browser, compare each `section[data-tier]`'s
+    `style.height` against its last child's measured bottom. It must be 0.
+- **`.list-poster` is a ROW class and reusing it broke the grid (Session N).** It carries
+  `width: 54px; height: 76px; transform: rotate(-4deg)` and beats Tailwind's `w-full` and
+  `flex-1`. It was borrowed purely to inherit the idle poster-shake, and every grid cell
+  drew a 54px sliver cropped tall with a chasm of gap either side.
+- **A deferred callback holding `state` from its own render will clobber the user
+  (Session N).** A replayed duel commits 200ms into the poster's flight and the flight
+  cannot be cancelled, so anything done in that window raced it — and the pending commit,
+  built from the state as it stood *before* the action, won. Seen as "Make last" locking a
+  film and leaving it in the pile anyway. **Guarding the commit was tried first and is the
+  wrong shape**; it makes a deferred action a race to be refereed. The fix is a ref written
+  after every render so callbacks read the run *as it stands when they fire*.
 - **One word for two states, shipped on two screens at once (Session M).** The app
   used "settled" to mean a HARD lock in `RunStatus` ("6 settled", a delta over
   `isHard`) and to mean ANY placement on the profile band, which labelled
