@@ -12,7 +12,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed:canon": "tsx --env-file=.env.local scripts/seedCanon.ts",
-    "backfill:house": "tsx --env-file=.env.local scripts/backfillHouseFollows.ts"
+    "backfill:house": "tsx --env-file=.env.local scripts/backfillHouseFollows.ts",
+    "wipe:users": "tsx --env-file=.env.local scripts/wipeUsers.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0",
